@@ -54,6 +54,12 @@ database with `messagelikeme ingest imessage --json`; pass `--database` only
 when the user names a different source. The ingest is read-only. It stores a
 private normalized corpus and aggregate metrics without changing `chat.db`.
 
+When the user wants AddressBook names attached to direct conversations, run
+`messagelikeme ingest contacts --json`. Pass `--addressbook` only for an
+explicit alternative AddressBook root, source directory, or database. The
+optional enrichment is also read-only, may run before or after Messages
+ingestion, and keeps ambiguous methods and group conversations unresolved.
+
 Use the CLI's aggregate views before requesting message text. Ask for the
 narrowest bounded study packet that answers the question. Prefer stable local
 identifiers over contact names or handles in notes and profile evidence.
@@ -68,8 +74,10 @@ messagelikeme inspect sessions <contact-id> --limit 20 --json
 ```
 
 Use `--private` on a contacts command only when resolving a person is necessary
-for the user's request. It reveals private local labels or participants and
-must not be copied into a profile.
+for the user's request. Prefer the bounded exact-label lookup
+`messagelikeme contacts resolve <query> --private --json`; it does not perform
+fuzzy matching or reveal contact methods. Private views reveal local labels or
+participants and must not be copied into a profile.
 
 For semantic study, write a bounded packet to an explicit private path outside
 Git:

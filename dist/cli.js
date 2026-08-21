@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // @bun
 import {
+  CONTACTS_SCHEMA_VERSION,
   CORPUS_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
@@ -8,11 +9,11 @@ import {
   canonicalJson,
   prettyJson,
   sha256
-} from "./cli-d7rc3h6r.js";
+} from "./cli-mfzpbxsj.js";
 
 // src/commands.ts
 import { lstat as lstat3 } from "fs/promises";
-import { isAbsolute as isAbsolute3, resolve as resolve4 } from "path";
+import { isAbsolute as isAbsolute4, resolve as resolve5 } from "path";
 
 // src/errors.ts
 var EXIT_CODES = {
@@ -44,6 +45,7 @@ function exitCodeFor(error) {
 
 // src/args.ts
 var VALUE_OPTIONS = new Set([
+  "addressbook",
   "burst-gap",
   "data-dir",
   "database",
@@ -126,9 +128,9 @@ function rejectUnused(parsed, allowedOptions, allowedFlags) {
   }
 }
 
-// src/imessage.ts
+// src/contacts.ts
 import { Database } from "bun:sqlite";
-import { createHash, createHmac } from "crypto";
+import { createHmac } from "crypto";
 import {
   chmodSync,
   constants as fsConstants,
@@ -136,12 +138,693 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   rmSync
 } from "fs";
 import { homedir, tmpdir } from "os";
-import { basename, isAbsolute, join, resolve } from "path";
-var DEFAULT_IMESSAGE_DATABASE = join(homedir(), "Library", "Messages", "chat.db");
+import { basename, dirname, isAbsolute, join, resolve } from "path";
+var DEFAULT_CONTACTS_DIRECTORY = join(homedir(), "Library", "Application Support", "AddressBook");
+var DATABASE_NAME = /^AddressBook-v[1-9][0-9]*\.abcddb$/u;
+var MAX_SOURCE_DATABASES = 64;
+var MAX_SOURCE_DATABASE_BYTES = 512 * 1024 * 1024;
+var MAX_TOTAL_SOURCE_BYTES = 4 * 1024 * 1024 * 1024;
+var MAX_SHM_BYTES = 64 * 1024 * 1024;
+var MAX_CONTACTS = 1e5;
+var MAX_METHOD_ROWS = 500000;
+var MAX_TABLES = 512;
+var MAX_COLUMNS_PER_TABLE = 512;
+var MAX_IDENTIFIER_BYTES = 1024;
+var MAX_LABEL_BYTES = 4096;
+var MAX_HANDLE_BYTES = 4096;
+var MAX_TOTAL_TEXT_BYTES = 128 * 1024 * 1024;
+var DEFAULT_PAGE_SIZE = 5000;
+var MAX_PAGE_SIZE = 20000;
+var SNAPSHOT_ATTEMPTS = 5;
+function fail(message) {
+  throw new Error(`Contacts source ${message}`);
+}
+function boundedInteger(value, fallback, minimum, maximum, label) {
+  const result = value ?? fallback;
+  if (!Number.isSafeInteger(result) || result < minimum || result > maximum) {
+    throw new Error(`${label} must be an integer from ${minimum} through ${maximum}`);
+  }
+  return result;
+}
+function keyBytes(value) {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 16 || bytes.byteLength > 1024) {
+    throw new Error("Contacts HMAC key must contain 16 through 1024 bytes");
+  }
+  return Uint8Array.from(bytes);
+}
+function hmac(key, namespace, value) {
+  return createHmac("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
+}
+function owned(stats) {
+  return typeof process.getuid !== "function" || stats.uid === BigInt(process.getuid());
+}
+function sameFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+function optionalStats(path) {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (error) {
+    if (error.code === "ENOENT")
+      return null;
+    throw error;
+  }
+}
+function inspectDirectory(path, label) {
+  if (!isAbsolute(path))
+    return fail(`${label} path must be absolute`);
+  const requested = resolve(path);
+  const before = lstatSync(requested, { bigint: true });
+  if (!before.isDirectory() || before.isSymbolicLink() || before.nlink < 1n || !owned(before)) {
+    return fail(`${label} must be a current-user-owned physical directory`);
+  }
+  const physical = realpathSync(requested);
+  const after = lstatSync(physical, { bigint: true });
+  if (!sameFile(before, after))
+    return fail(`${label} changed identity while resolving`);
+  return physical;
+}
+function inspectDatabase(path, key, maximumBytes) {
+  if (!isAbsolute(path))
+    return fail("database path must be absolute");
+  const requested = resolve(path);
+  const before = lstatSync(requested, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || !owned(before) || before.size < 1n || before.size > BigInt(maximumBytes)) {
+    return fail("database must be one current-user-owned regular non-symlink file within the configured size bound");
+  }
+  const physical = realpathSync(requested);
+  const after = lstatSync(physical, { bigint: true });
+  if (!sameFile(before, after))
+    return fail("database changed identity while resolving");
+  return Object.freeze({ key, path: physical, stats: after });
+}
+function databaseInDirectory(directory, key, maximumBytes) {
+  const candidates = readdirSync(directory, { withFileTypes: true }).filter((entry) => DATABASE_NAME.test(entry.name));
+  if (candidates.length === 0)
+    return null;
+  if (candidates.length !== 1)
+    return fail("one source store contains multiple AddressBook databases");
+  const name = candidates[0]?.name;
+  if (name === undefined)
+    return fail("one source store has no database name");
+  return inspectDatabase(join(directory, name), key, maximumBytes);
+}
+function databasesInSources(sourcesPath, maximumBytes) {
+  const sources = inspectDirectory(sourcesPath, "Sources");
+  const result = [];
+  for (const entry of readdirSync(sources, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name, "en-US"))) {
+    if (entry.isSymbolicLink())
+      return fail("Sources must not contain symbolic-link stores");
+    if (!entry.isDirectory())
+      continue;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(entry.name)) {
+      return fail("source store directory name is invalid");
+    }
+    const storeDirectory = inspectDirectory(join(sources, entry.name), "source store");
+    const source = databaseInDirectory(storeDirectory, entry.name, maximumBytes);
+    if (source !== null)
+      result.push(source);
+  }
+  return result;
+}
+function discoverDatabases(path, maximumBytes) {
+  if (!isAbsolute(path))
+    return fail("AddressBook path must be absolute");
+  const requested = resolve(path);
+  const identity = lstatSync(requested, { bigint: true });
+  let result;
+  if (identity.isFile() || identity.isSymbolicLink()) {
+    if (!DATABASE_NAME.test(basename(requested))) {
+      return fail("explicit database must be named AddressBook-vN.abcddb");
+    }
+    result = [inspectDatabase(requested, basename(dirname(requested)), maximumBytes)];
+  } else {
+    const directory = inspectDirectory(requested, "AddressBook root");
+    if (basename(directory) === "Sources") {
+      result = databasesInSources(directory, maximumBytes);
+    } else {
+      const sourcesStats = optionalStats(join(directory, "Sources"));
+      result = sourcesStats === null ? [] : databasesInSources(join(directory, "Sources"), maximumBytes);
+      if (result.length === 0) {
+        const direct = databaseInDirectory(directory, basename(directory), maximumBytes);
+        result = direct === null ? [] : [direct];
+      }
+    }
+  }
+  result.sort((left, right) => left.key.localeCompare(right.key, "en-US"));
+  if (result.length < 1)
+    return fail("contains no supported AddressBook database");
+  if (result.length > MAX_SOURCE_DATABASES)
+    return fail("contains too many AddressBook databases");
+  const total = result.reduce((bytes, source) => bytes + source.stats.size, 0n);
+  if (total > BigInt(MAX_TOTAL_SOURCE_BYTES))
+    return fail("databases exceed the aggregate source size bound");
+  return Object.freeze(result);
+}
+function validateSidecar(path, stats, maximumBytes) {
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1n || !owned(stats) || stats.size < 0n || stats.size > BigInt(maximumBytes))
+    return fail(`sidecar ${basename(path)} is not a bounded current-user-owned physical file`);
+}
+function snapshotMembers(source, maximumBytes) {
+  const current = inspectDatabase(source.path, source.key, maximumBytes);
+  if (!sameFile(source.stats, current.stats))
+    return fail("database changed identity before isolation");
+  const members = [{ suffix: "", path: source.path, stats: current.stats }];
+  for (const suffix of ["-wal", "-journal"]) {
+    const sidecarPath = `${source.path}${suffix}`;
+    const stats = optionalStats(sidecarPath);
+    if (stats === null)
+      continue;
+    validateSidecar(sidecarPath, stats, maximumBytes);
+    members.push({ suffix, path: sidecarPath, stats });
+  }
+  const shmPath = `${source.path}-shm`;
+  const shm = optionalStats(shmPath);
+  if (shm !== null)
+    validateSidecar(shmPath, shm, MAX_SHM_BYTES);
+  const total = members.reduce((bytes, member) => bytes + member.stats.size, 0n);
+  if (total > BigInt(maximumBytes) * 2n)
+    return fail("database and sidecars exceed the snapshot bound");
+  return Object.freeze(members);
+}
+function sameMembers(left, right) {
+  return left.length === right.length && left.every((member, index) => {
+    const other = right[index];
+    return other !== undefined && member.suffix === other.suffix && sameFile(member.stats, other.stats) && member.stats.size === other.stats.size && member.stats.mtimeNs === other.stats.mtimeNs && member.stats.ctimeNs === other.stats.ctimeNs;
+  });
+}
+function isolateSource(source, maximumBytes) {
+  const temporaryRoot = tmpdir();
+  if (!isAbsolute(temporaryRoot))
+    return fail("requires an absolute temporary directory");
+  const temporaryDirectory = mkdtempSync(join(temporaryRoot, "message-like-me-contacts-"));
+  chmodSync(temporaryDirectory, 448);
+  try {
+    for (let attempt = 0;attempt < SNAPSHOT_ATTEMPTS; attempt += 1) {
+      const before = snapshotMembers(source, maximumBytes);
+      const attemptDirectory = join(temporaryDirectory, `attempt-${attempt}`);
+      mkdirSync(attemptDirectory, { mode: 448 });
+      let raced = false;
+      try {
+        for (const member of before) {
+          const destination = join(attemptDirectory, `${basename(source.path)}${member.suffix}`);
+          copyFileSync(member.path, destination, fsConstants.COPYFILE_EXCL | fsConstants.COPYFILE_FICLONE);
+          chmodSync(destination, 384);
+        }
+      } catch (error) {
+        const code = error.code;
+        if (code === "ENOENT" || code === "ESTALE")
+          raced = true;
+        else
+          throw error;
+      }
+      const after = snapshotMembers(source, maximumBytes);
+      if (!raced && sameMembers(before, after)) {
+        return Object.freeze({
+          source: Object.freeze({ ...source, stats: before[0].stats }),
+          path: join(attemptDirectory, basename(source.path)),
+          temporaryDirectory
+        });
+      }
+      rmSync(attemptDirectory, { recursive: true, force: true });
+    }
+    return fail(`changed during ${SNAPSHOT_ATTEMPTS} snapshot attempts`);
+  } catch (error) {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+    throw error;
+  }
+}
+function allRows(database, sql, ...bindings) {
+  return database.query(sql).all(...bindings);
+}
+function getRow(database, sql, ...bindings) {
+  return database.query(sql).get(...bindings);
+}
+function integer(value, label) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value))
+    return fail(`${label} must be an integer`);
+  return value;
+}
+function flag(value, label) {
+  const result = integer(value, label);
+  if (result !== 0 && result !== 1)
+    return fail(`${label} must be zero or one`);
+  return result;
+}
+function boundedText(value, label, maximumBytes) {
+  if (typeof value !== "string" || value.includes("\x00") || Buffer.byteLength(value, "utf8") < 1 || Buffer.byteLength(value, "utf8") > maximumBytes)
+    return fail(`${label} must be bounded text`);
+  return value;
+}
+function privateLabel(parts) {
+  const clean = parts.map((value) => {
+    if (value === null)
+      return null;
+    if (typeof value !== "string")
+      return fail("contact name field must be text or null");
+    const normalized = value.normalize("NFKC").trim();
+    if (normalized === "")
+      return null;
+    if (/\p{Cc}/u.test(normalized) || Buffer.byteLength(normalized, "utf8") > MAX_LABEL_BYTES) {
+      return fail("contact label exceeds its text bound");
+    }
+    return normalized;
+  });
+  const display = clean[0];
+  if (display !== null && display !== undefined)
+    return { value: display, basis: "display-name" };
+  const personal = clean.slice(1, 4).filter((value) => value !== null).join(" ");
+  if (personal !== "")
+    return { value: personal, basis: "name-parts" };
+  const organization = clean[4] ?? null;
+  return { value: organization, basis: organization === null ? null : "organization" };
+}
+function normalizeContactLabelQuery(value) {
+  const normalized = value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+  if (normalized.length < 1 || /\p{Cc}/u.test(normalized) || Buffer.byteLength(normalized, "utf8") > MAX_LABEL_BYTES)
+    return fail("private label query must be bounded text");
+  return normalized;
+}
+function normalizeEmail(value) {
+  if (value.length > 254 || !/^[\x21-\x7e]+$/u.test(value) || value.includes("\x00"))
+    return null;
+  const separator = value.indexOf("@");
+  if (separator < 1 || separator !== value.lastIndexOf("@"))
+    return null;
+  const local = value.slice(0, separator);
+  const domain = value.slice(separator + 1);
+  if (local.length > 64 || local.startsWith(".") || local.endsWith(".") || local.includes("..") || !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/u.test(local))
+    return null;
+  const labels = domain.split(".");
+  if (domain.length > 253 || labels.length < 2 || labels.some((label) => label.length < 1 || label.length > 63 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(label)))
+    return null;
+  return value.toLocaleLowerCase("en-US");
+}
+function normalizeContactHandle(value) {
+  const trimmed = value.trim();
+  const email = normalizeEmail(trimmed);
+  if (email !== null) {
+    return Object.freeze({
+      kind: "email",
+      normalizedValue: email
+    });
+  }
+  const text = trimmed.normalize("NFKC");
+  if (text === "" || /\p{Cc}/u.test(text) || Buffer.byteLength(text, "utf8") > MAX_HANDLE_BYTES) {
+    return null;
+  }
+  const extension = text.match(/(?:\s*(?:ext\.?|extension|x|#)\s*\d{1,12})$/iu);
+  const number = text.startsWith("+") ? text.slice(1) : text;
+  if (extension !== null || !/^[0-9().\-\s]+$/u.test(number))
+    return null;
+  const international = text.startsWith("+") || text.startsWith("00");
+  const digits = text.replaceAll(/[^0-9]/gu, "");
+  const canonicalDigits = text.startsWith("00") ? digits.slice(2) : digits;
+  if (canonicalDigits.length < 7 || canonicalDigits.length > 15)
+    return null;
+  return Object.freeze({
+    kind: "phone",
+    normalizedValue: international ? `+${canonicalDigits}` : canonicalDigits
+  });
+}
+function contactHandleMatchId(hmacKey, handle) {
+  return hmac(keyBytes(hmacKey), "contact-handle", `${handle.kind}\x00${handle.normalizedValue}`);
+}
+function tableNames(database) {
+  const rows = allRows(database, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+  if (rows.length > MAX_TABLES)
+    return fail("schema contains too many tables");
+  return new Set(rows.map((row) => boundedText(row.name, "table name", 256)));
+}
+function tableColumns(database, table) {
+  const rows = allRows(database, "SELECT name FROM pragma_table_info(?) ORDER BY cid", table);
+  if (rows.length > MAX_COLUMNS_PER_TABLE)
+    return fail(`${table} contains too many columns`);
+  return rows.map((row) => boundedText(row.name, `${table} column name`, 256));
+}
+function requireColumns(database, table, required) {
+  const columns = new Set(tableColumns(database, table));
+  for (const column of required) {
+    if (!columns.has(column))
+      return fail(`${table} is missing required column ${column}`);
+  }
+  return columns;
+}
+function boundedColumn(columns, column, alias, maximumBytes) {
+  if (!columns.has(column))
+    return `NULL AS ${alias}, 0 AS ${alias}_over_bound`;
+  return `CASE WHEN ${column} IS NULL OR length(CAST(${column} AS BLOB)) <= ${maximumBytes}
+      THEN ${column} ELSE NULL END AS ${alias},
+    CASE WHEN ${column} IS NOT NULL AND length(CAST(${column} AS BLOB)) > ${maximumBytes}
+      THEN 1 ELSE 0 END AS ${alias}_over_bound`;
+}
+function countRows(database, table, maximum) {
+  const count = integer(getRow(database, `SELECT count(*) AS value FROM ${table}`)?.value, `${table} row count`);
+  if (count < 0 || count > maximum)
+    return fail(`${table} exceeds its row bound`);
+  return count;
+}
+function contactEntityIds(database, columns) {
+  const rows = allRows(database, `
+    SELECT Z_ENT,Z_NAME,${columns.has("Z_SUPER") ? "Z_SUPER" : "NULL AS Z_SUPER"}
+    FROM Z_PRIMARYKEY ORDER BY Z_ENT
+  `);
+  if (rows.length > MAX_TABLES)
+    return fail("Z_PRIMARYKEY exceeds its entity bound");
+  const parsed = rows.map((row) => ({
+    entity: integer(row.Z_ENT, "AddressBook entity ID"),
+    name: boundedText(row.Z_NAME, "AddressBook entity name", 256),
+    parent: row.Z_SUPER === null ? null : integer(row.Z_SUPER, "AddressBook parent entity ID")
+  }));
+  const roots = parsed.filter((row) => row.name === "ABCDContact").map((row) => row.entity);
+  if (roots.length !== 1 || roots[0] < 1)
+    return fail("has no unique ABCDContact entity");
+  const result = new Set(roots);
+  for (;; ) {
+    let changed = false;
+    for (const row of parsed) {
+      if (row.parent !== null && result.has(row.parent) && !result.has(row.entity)) {
+        result.add(row.entity);
+        changed = true;
+      }
+    }
+    if (!changed)
+      break;
+  }
+  return Object.freeze([...result].sort((left, right) => left - right));
+}
+function readContactRows(database, columns, entities, maximumContacts, pageSize) {
+  const placeholders = entities.map(() => "?").join(",");
+  const count = integer(getRow(database, `SELECT count(*) AS value FROM ZABCDRECORD WHERE Z_ENT IN (${placeholders})`, ...entities)?.value, "contact row count");
+  if (count < 0 || count > maximumContacts)
+    return fail("contact rows exceed their bound");
+  const result = [];
+  const identifiers = new Set;
+  let after = 0;
+  let textBytes = 0;
+  for (;; ) {
+    const rows = allRows(database, `SELECT Z_PK AS primary_key,
+      ${boundedColumn(columns, "ZUNIQUEID", "unique_id", MAX_IDENTIFIER_BYTES)},
+      ${boundedColumn(columns, "ZNAME", "display_name", MAX_LABEL_BYTES)},
+      ${boundedColumn(columns, "ZFIRSTNAME", "first_name", MAX_LABEL_BYTES)},
+      ${boundedColumn(columns, "ZMIDDLENAME", "middle_name", MAX_LABEL_BYTES)},
+      ${boundedColumn(columns, "ZLASTNAME", "last_name", MAX_LABEL_BYTES)},
+      ${boundedColumn(columns, "ZORGANIZATION", "organization", MAX_LABEL_BYTES)}
+      FROM ZABCDRECORD WHERE Z_ENT IN (${placeholders}) AND Z_PK > ? ORDER BY Z_PK LIMIT ?`, ...entities, after, pageSize);
+    if (rows.length === 0)
+      break;
+    for (const row of rows) {
+      const primaryKey = integer(row.primary_key, "contact primary key");
+      if (primaryKey <= after)
+        return fail("contact paging did not advance");
+      for (const alias of ["unique_id", "display_name", "first_name", "middle_name", "last_name", "organization"]) {
+        if (flag(row[`${alias}_over_bound`], `${alias} bound flag`) === 1) {
+          return fail(`contact ${alias} exceeds its text bound`);
+        }
+      }
+      const identifier = boundedText(row.unique_id, "contact identifier", MAX_IDENTIFIER_BYTES);
+      if (identifiers.has(identifier))
+        return fail("contact identifiers are duplicated");
+      identifiers.add(identifier);
+      const label = privateLabel([
+        row.display_name,
+        row.first_name,
+        row.middle_name,
+        row.last_name,
+        row.organization
+      ]);
+      textBytes += Buffer.byteLength(identifier, "utf8");
+      for (const alias of ["display_name", "first_name", "middle_name", "last_name", "organization"]) {
+        const value = row[alias];
+        if (typeof value === "string")
+          textBytes += Buffer.byteLength(value, "utf8");
+      }
+      if (label.value !== null)
+        textBytes += Buffer.byteLength(label.value, "utf8");
+      if (textBytes > MAX_TOTAL_TEXT_BYTES)
+        return fail("contact text exceeds its aggregate bound");
+      result.push(Object.freeze({
+        primaryKey,
+        identifier,
+        privateLabel: label.value,
+        privateLabelBasis: label.basis
+      }));
+      after = primaryKey;
+    }
+  }
+  if (result.length !== count)
+    return fail("contact paging count changed during its transaction");
+  return Object.freeze({ rows: Object.freeze(result), textBytes });
+}
+function methodColumns(database, table) {
+  const value = table === "ZABCDEMAILADDRESS" ? "ZADDRESS" : "ZFULLNUMBER";
+  const columns = requireColumns(database, table, ["Z_PK", "ZOWNER", value]);
+  return Object.freeze({ columns, owner: "ZOWNER", value });
+}
+function readMethods(database, table, pageSize) {
+  const expectedRows = countRows(database, table, MAX_METHOD_ROWS);
+  const shape = methodColumns(database, table);
+  const grouped = new Map;
+  let after = 0;
+  let invalid = 0;
+  let textBytes = 0;
+  let rowsRead = 0;
+  for (;; ) {
+    const rows = allRows(database, `SELECT Z_PK AS primary_key, ${shape.owner} AS owner,
+      ${boundedColumn(shape.columns, shape.value, "method_value", MAX_HANDLE_BYTES)}
+      FROM ${table} WHERE Z_PK > ? ORDER BY Z_PK LIMIT ?`, after, pageSize);
+    if (rows.length === 0)
+      break;
+    for (const row of rows) {
+      const primaryKey = integer(row.primary_key, `${table} primary key`);
+      if (primaryKey <= after)
+        return fail(`${table} paging did not advance`);
+      const owner = integer(row.owner, `${table} owner`);
+      if (owner < 1)
+        return fail(`${table} owner is invalid`);
+      if (flag(row.method_value_over_bound, `${table} value bound flag`) === 1) {
+        return fail(`${table} value exceeds its text bound`);
+      }
+      if (row.method_value !== null && typeof row.method_value !== "string") {
+        return fail(`${table} value must be text or null`);
+      }
+      const raw = row.method_value;
+      if (raw !== null) {
+        textBytes += Buffer.byteLength(raw, "utf8");
+        if (textBytes > MAX_TOTAL_TEXT_BYTES)
+          return fail("contact methods exceed their aggregate text bound");
+      }
+      const handle = raw === null ? null : normalizeContactHandle(raw);
+      const expectedKind = table === "ZABCDEMAILADDRESS" ? "email" : "phone";
+      if (handle === null || handle.kind !== expectedKind)
+        invalid += 1;
+      else {
+        const values = grouped.get(owner) ?? new Map;
+        values.set(`${handle.kind}\x00${handle.normalizedValue}`, handle);
+        grouped.set(owner, values);
+      }
+      after = primaryKey;
+      rowsRead += 1;
+    }
+  }
+  if (rowsRead !== expectedRows)
+    return fail(`${table} paging count changed during its transaction`);
+  return Object.freeze({
+    byOwner: new Map([...grouped.entries()].map(([owner, values]) => [
+      owner,
+      Object.freeze([...values.values()].sort((left, right) => {
+        const kind = left.kind.localeCompare(right.kind, "en-US");
+        return kind !== 0 ? kind : left.normalizedValue.localeCompare(right.normalizedValue, "en-US");
+      }))
+    ])),
+    invalid,
+    rows: rowsRead,
+    textBytes
+  });
+}
+function modifiedAt(stats) {
+  const milliseconds = Number(stats.mtimeMs);
+  if (!Number.isFinite(milliseconds))
+    return fail("database modification time is invalid");
+  return new Date(milliseconds).toISOString();
+}
+function readStore(source, key, maximumBytes, maximumContacts, pageSize) {
+  const isolated = isolateSource(source, maximumBytes);
+  let database = null;
+  let transactionOpen = false;
+  try {
+    database = new Database(isolated.path, { strict: true });
+    database.exec("PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0; PRAGMA query_only=ON");
+    if (getRow(database, "PRAGMA query_only")?.query_only !== 1) {
+      return fail("could not enable query-only mode");
+    }
+    database.exec("BEGIN");
+    transactionOpen = true;
+    const names = tableNames(database);
+    if (!names.has("Z_PRIMARYKEY") || !names.has("ZABCDRECORD")) {
+      return fail("has an unsupported AddressBook schema");
+    }
+    const primaryColumns = requireColumns(database, "Z_PRIMARYKEY", ["Z_ENT", "Z_NAME"]);
+    const recordColumns = requireColumns(database, "ZABCDRECORD", ["Z_PK", "Z_ENT", "ZUNIQUEID"]);
+    const entities = contactEntityIds(database, primaryColumns);
+    const schema = [...names].sort((left, right) => left.localeCompare(right, "en-US")).map((table) => ({ table, columns: tableColumns(database, table) }));
+    const schemaSha256 = sha256(canonicalJson(schema));
+    const contactRead = readContactRows(database, recordColumns, entities, maximumContacts, pageSize);
+    const emails = names.has("ZABCDEMAILADDRESS") ? readMethods(database, "ZABCDEMAILADDRESS", pageSize) : { byOwner: new Map, invalid: 0, rows: 0, textBytes: 0 };
+    const phones = names.has("ZABCDPHONENUMBER") ? readMethods(database, "ZABCDPHONENUMBER", pageSize) : { byOwner: new Map, invalid: 0, rows: 0, textBytes: 0 };
+    if (emails.rows + phones.rows > MAX_METHOD_ROWS) {
+      return fail("contact methods exceed their aggregate row bound");
+    }
+    if (contactRead.textBytes + emails.textBytes + phones.textBytes > MAX_TOTAL_TEXT_BYTES) {
+      return fail("contact data exceeds its aggregate text bound");
+    }
+    const contactRows = contactRead.rows;
+    const contactPrimaryKeys = new Set(contactRows.map((contact) => contact.primaryKey));
+    for (const owner of [...emails.byOwner.keys(), ...phones.byOwner.keys()]) {
+      if (!contactPrimaryKeys.has(owner))
+        return fail("contact method references a missing contact");
+    }
+    const contacts = contactRows.map((contact) => {
+      const handles = [
+        ...emails.byOwner.get(contact.primaryKey) ?? [],
+        ...phones.byOwner.get(contact.primaryKey) ?? []
+      ].sort((left, right) => {
+        const kind = left.kind.localeCompare(right.kind, "en-US");
+        return kind !== 0 ? kind : left.normalizedValue.localeCompare(right.normalizedValue, "en-US");
+      }).map((handle) => Object.freeze({
+        ...handle,
+        matchId: contactHandleMatchId(key, handle)
+      }));
+      return Object.freeze({
+        id: hmac(key, "addressbook-contact", `${source.key}\x00${contact.identifier}`),
+        privateLabel: contact.privateLabel,
+        privateLabelBasis: contact.privateLabelBasis,
+        handles: Object.freeze(handles)
+      });
+    }).sort((left, right) => left.id.localeCompare(right.id, "en-US"));
+    database.exec("COMMIT");
+    transactionOpen = false;
+    return Object.freeze({
+      contacts: Object.freeze(contacts),
+      source: Object.freeze({
+        physicalPath: isolated.source.path,
+        device: isolated.source.stats.dev.toString(),
+        inode: isolated.source.stats.ino.toString(),
+        bytes: Number(isolated.source.stats.size),
+        modifiedAt: modifiedAt(isolated.source.stats),
+        schemaSha256
+      }),
+      invalidEmails: emails.invalid,
+      invalidPhones: phones.invalid,
+      withoutHandles: contacts.filter((contact) => contact.handles.length === 0).length,
+      methodRows: emails.rows + phones.rows,
+      textBytes: contactRead.textBytes + emails.textBytes + phones.textBytes
+    });
+  } finally {
+    if (transactionOpen && database !== null) {
+      try {
+        database.exec("ROLLBACK");
+      } catch {}
+    }
+    try {
+      database?.close();
+    } finally {
+      rmSync(isolated.temporaryDirectory, { recursive: true, force: true });
+    }
+  }
+}
+function readMacOSContacts(path, options) {
+  const key = keyBytes(options.hmacKey);
+  const maximumBytes = boundedInteger(options.maxDatabaseBytes, MAX_SOURCE_DATABASE_BYTES, 1, MAX_SOURCE_DATABASE_BYTES, "maxDatabaseBytes");
+  const maximumContacts = boundedInteger(options.maxContacts, MAX_CONTACTS, 1, MAX_CONTACTS, "maxContacts");
+  const pageSize = boundedInteger(options.pageSize, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE, "pageSize");
+  const sources = discoverDatabases(path, maximumBytes);
+  const initialMembers = sources.map((source) => snapshotMembers(source, maximumBytes));
+  const reads = [];
+  let aggregateContacts = 0;
+  let aggregateHandles = 0;
+  let aggregateMethodRows = 0;
+  let aggregateTextBytes = 0;
+  for (const source of sources) {
+    const read = readStore(source, key, maximumBytes, maximumContacts, pageSize);
+    reads.push(read);
+    aggregateContacts += read.contacts.length;
+    aggregateHandles += read.contacts.reduce((sum, contact) => sum + contact.handles.length, 0);
+    aggregateMethodRows += read.methodRows;
+    aggregateTextBytes += read.textBytes;
+    if (aggregateContacts > maximumContacts)
+      return fail("contacts exceed their aggregate row bound");
+    if (aggregateHandles > MAX_METHOD_ROWS)
+      return fail("contact methods exceed their aggregate row bound");
+    if (aggregateMethodRows > MAX_METHOD_ROWS)
+      return fail("contact method rows exceed their aggregate bound");
+    if (aggregateTextBytes > MAX_TOTAL_TEXT_BYTES)
+      return fail("contact text exceeds its aggregate bound");
+  }
+  const finalSources = discoverDatabases(path, maximumBytes);
+  if (finalSources.length !== sources.length || finalSources.some((source, index) => {
+    const prior = sources[index];
+    return prior === undefined || source.key !== prior.key || source.path !== prior.path || !sameFile(source.stats, prior.stats);
+  }) || finalSources.some((source, index) => !sameMembers(initialMembers[index] ?? [], snapshotMembers(source, maximumBytes))))
+    return fail("AddressBook store set changed during its snapshot");
+  const contacts = reads.flatMap((read) => read.contacts).sort((left, right) => left.id.localeCompare(right.id, "en-US"));
+  const ids = new Set;
+  for (const contact of contacts) {
+    if (ids.has(contact.id))
+      return fail("contains duplicate pseudonymous contact IDs");
+    ids.add(contact.id);
+  }
+  const warnings = [];
+  const invalidEmails = reads.reduce((sum, read) => sum + read.invalidEmails, 0);
+  const invalidPhones = reads.reduce((sum, read) => sum + read.invalidPhones, 0);
+  const withoutHandles = reads.reduce((sum, read) => sum + read.withoutHandles, 0);
+  if (invalidEmails > 0)
+    warnings.push(`ignored invalid email handles: ${invalidEmails}`);
+  if (invalidPhones > 0)
+    warnings.push(`ignored invalid phone handles: ${invalidPhones}`);
+  if (withoutHandles > 0)
+    warnings.push(`contacts without exact matchable handles: ${withoutHandles}`);
+  const sourceIdentities = reads.map((read) => read.source);
+  const snapshotSha256 = sha256(canonicalJson({
+    schemaVersion: CONTACTS_SCHEMA_VERSION,
+    sources: sources.map((source, index) => ({
+      id: hmac(key, "addressbook-source", source.key),
+      schemaSha256: sourceIdentities[index].schemaSha256
+    })),
+    contacts,
+    warnings
+  }));
+  return Object.freeze({
+    schemaVersion: CONTACTS_SCHEMA_VERSION,
+    snapshotSha256,
+    sources: Object.freeze(sourceIdentities),
+    contacts: Object.freeze(contacts),
+    warnings: Object.freeze(warnings)
+  });
+}
+
+// src/imessage.ts
+import { Database as Database2 } from "bun:sqlite";
+import { createHash, createHmac as createHmac2 } from "crypto";
+import {
+  chmodSync as chmodSync2,
+  constants as fsConstants2,
+  copyFileSync as copyFileSync2,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  mkdtempSync as mkdtempSync2,
+  realpathSync as realpathSync2,
+  rmSync as rmSync2
+} from "fs";
+import { homedir as homedir2, tmpdir as tmpdir2 } from "os";
+import { basename as basename2, isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
+var DEFAULT_IMESSAGE_DATABASE = join2(homedir2(), "Library", "Messages", "chat.db");
 var APPLE_EPOCH_MILLISECONDS = Date.UTC(2001, 0, 1);
 var DEFAULT_MAX_DATABASE_BYTES = 16 * 1024 * 1024 * 1024;
 var MAX_CONFIGURABLE_DATABASE_BYTES = 64 * 1024 * 1024 * 1024;
@@ -151,8 +834,8 @@ var DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 var MAX_CONFIGURABLE_BODY_BYTES = 16 * 1024 * 1024;
 var DEFAULT_MAX_ATTRIBUTED_BODY_BYTES = 8 * 1024 * 1024;
 var MAX_CONFIGURABLE_ATTRIBUTED_BODY_BYTES = 32 * 1024 * 1024;
-var DEFAULT_PAGE_SIZE = 5000;
-var MAX_PAGE_SIZE = 20000;
+var DEFAULT_PAGE_SIZE2 = 5000;
+var MAX_PAGE_SIZE2 = 20000;
 var MAX_HANDLES = 1e6;
 var MAX_CHATS = 1e6;
 var MAX_CHAT_HANDLE_JOINS = 5000000;
@@ -178,7 +861,7 @@ var WARNING_LABELS = Object.freeze([
     label: "unsupported or over-bound attributed bodies"
   }
 ]);
-function fail(message) {
+function fail2(message) {
   throw new Error(`iMessage source ${message}`);
 }
 function stableJson(value) {
@@ -192,8 +875,8 @@ function stableJson(value) {
 function sha2562(value) {
   return createHash("sha256").update(value).digest("hex");
 }
-function hmac(key, namespace, value) {
-  return createHmac("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
+function hmac2(key, namespace, value) {
+  return createHmac2("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
 }
 function hmacKey(value) {
   const key = typeof value === "string" ? new TextEncoder().encode(value) : value;
@@ -202,7 +885,7 @@ function hmacKey(value) {
   }
   return Uint8Array.from(key);
 }
-function boundedInteger(value, fallback, minimum, maximum, label) {
+function boundedInteger2(value, fallback, minimum, maximum, label) {
   const result = value ?? fallback;
   if (!Number.isSafeInteger(result) || result < minimum || result > maximum) {
     throw new Error(`${label} must be an integer from ${minimum} through ${maximum}`);
@@ -212,82 +895,82 @@ function boundedInteger(value, fallback, minimum, maximum, label) {
 function ownedByCurrentUser(stats) {
   return typeof process.getuid !== "function" || stats.uid === BigInt(process.getuid());
 }
-function sameFile(left, right) {
+function sameFile2(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 function inspectSource(path, maximumBytes) {
-  const requested = resolve(path);
-  const requestedStats = lstatSync(requested, { bigint: true });
+  const requested = resolve2(path);
+  const requestedStats = lstatSync2(requested, { bigint: true });
   if (!requestedStats.isFile() || requestedStats.isSymbolicLink() || requestedStats.nlink !== 1n || !ownedByCurrentUser(requestedStats) || requestedStats.size < 1n || requestedStats.size > BigInt(maximumBytes)) {
-    return fail("must be one current-user-owned regular non-symlink file within the configured size bound");
+    return fail2("must be one current-user-owned regular non-symlink file within the configured size bound");
   }
-  const physicalPath = realpathSync(requested);
-  const physicalStats = lstatSync(physicalPath, { bigint: true });
-  if (!sameFile(requestedStats, physicalStats)) {
-    return fail("changed identity while its path was resolved");
+  const physicalPath = realpathSync2(requested);
+  const physicalStats = lstatSync2(physicalPath, { bigint: true });
+  if (!sameFile2(requestedStats, physicalStats)) {
+    return fail2("changed identity while its path was resolved");
   }
   return Object.freeze({ path: physicalPath, stats: physicalStats });
 }
-function optionalStats(path) {
+function optionalStats2(path) {
   try {
-    return lstatSync(path, { bigint: true });
+    return lstatSync2(path, { bigint: true });
   } catch (error) {
     if (error.code === "ENOENT")
       return null;
     throw error;
   }
 }
-function validateSidecar(path, stats, maximumBytes) {
+function validateSidecar2(path, stats, maximumBytes) {
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1n || !ownedByCurrentUser(stats) || stats.size < 0n || stats.size > BigInt(maximumBytes)) {
-    return fail(`sidecar ${basename(path)} must be one current-user-owned regular non-symlink file within its size bound`);
+    return fail2(`sidecar ${basename2(path)} must be one current-user-owned regular non-symlink file within its size bound`);
   }
 }
-function snapshotMembers(source, maximumBytes) {
+function snapshotMembers2(source, maximumBytes) {
   const current = inspectSource(source.path, maximumBytes);
-  if (!sameFile(source.stats, current.stats))
-    return fail("changed identity before its snapshot was isolated");
+  if (!sameFile2(source.stats, current.stats))
+    return fail2("changed identity before its snapshot was isolated");
   const members = [{ suffix: "", path: current.path, stats: current.stats }];
   for (const suffix of ["-wal", "-journal"]) {
     const path = `${source.path}${suffix}`;
-    const stats = optionalStats(path);
+    const stats = optionalStats2(path);
     if (stats === null)
       continue;
-    validateSidecar(path, stats, maximumBytes);
+    validateSidecar2(path, stats, maximumBytes);
     members.push(Object.freeze({ suffix, path, stats }));
   }
   const shmPath = `${source.path}-shm`;
-  const shm = optionalStats(shmPath);
+  const shm = optionalStats2(shmPath);
   if (shm !== null)
-    validateSidecar(shmPath, shm, MAX_SQLITE_SHM_BYTES);
+    validateSidecar2(shmPath, shm, MAX_SQLITE_SHM_BYTES);
   const totalBytes = members.reduce((total, member) => total + member.stats.size, 0n);
   if (totalBytes > BigInt(maximumBytes) * 2n) {
-    return fail("database and transactional sidecars exceed the configured snapshot size bound");
+    return fail2("database and transactional sidecars exceed the configured snapshot size bound");
   }
   return Object.freeze(members);
 }
 function sameSnapshotMembers(left, right) {
   return left.length === right.length && left.every((member, index) => {
     const other = right[index];
-    return other !== undefined && member.suffix === other.suffix && sameFile(member.stats, other.stats) && member.stats.size === other.stats.size && member.stats.mtimeNs === other.stats.mtimeNs && member.stats.ctimeNs === other.stats.ctimeNs;
+    return other !== undefined && member.suffix === other.suffix && sameFile2(member.stats, other.stats) && member.stats.size === other.stats.size && member.stats.mtimeNs === other.stats.mtimeNs && member.stats.ctimeNs === other.stats.ctimeNs;
   });
 }
-function isolateSource(source, maximumBytes) {
-  const temporaryRoot = tmpdir();
-  if (!isAbsolute(temporaryRoot))
-    return fail("requires an absolute temporary directory");
-  const temporaryDirectory = mkdtempSync(join(temporaryRoot, "message-like-me-source-"));
-  chmodSync(temporaryDirectory, 448);
+function isolateSource2(source, maximumBytes) {
+  const temporaryRoot = tmpdir2();
+  if (!isAbsolute2(temporaryRoot))
+    return fail2("requires an absolute temporary directory");
+  const temporaryDirectory = mkdtempSync2(join2(temporaryRoot, "message-like-me-source-"));
+  chmodSync2(temporaryDirectory, 448);
   try {
     for (let attempt = 0;attempt < SOURCE_SNAPSHOT_ATTEMPTS; attempt += 1) {
-      const before = snapshotMembers(source, maximumBytes);
-      const attemptDirectory = join(temporaryDirectory, `attempt-${attempt}`);
-      mkdirSync(attemptDirectory, { mode: 448 });
+      const before = snapshotMembers2(source, maximumBytes);
+      const attemptDirectory = join2(temporaryDirectory, `attempt-${attempt}`);
+      mkdirSync2(attemptDirectory, { mode: 448 });
       let copyFailedForRace = false;
       try {
         for (const member of before) {
-          const destination = join(attemptDirectory, `${basename(source.path)}${member.suffix}`);
-          copyFileSync(member.path, destination, fsConstants.COPYFILE_EXCL | fsConstants.COPYFILE_FICLONE);
-          chmodSync(destination, 384);
+          const destination = join2(attemptDirectory, `${basename2(source.path)}${member.suffix}`);
+          copyFileSync2(member.path, destination, fsConstants2.COPYFILE_EXCL | fsConstants2.COPYFILE_FICLONE);
+          chmodSync2(destination, 384);
         }
       } catch (error) {
         const code = error.code;
@@ -296,58 +979,58 @@ function isolateSource(source, maximumBytes) {
         else
           throw error;
       }
-      const after = snapshotMembers(source, maximumBytes);
+      const after = snapshotMembers2(source, maximumBytes);
       if (!copyFailedForRace && sameSnapshotMembers(before, after)) {
         return Object.freeze({
           source: Object.freeze({ path: source.path, stats: before[0].stats }),
-          path: join(attemptDirectory, basename(source.path)),
+          path: join2(attemptDirectory, basename2(source.path)),
           temporaryDirectory
         });
       }
-      rmSync(attemptDirectory, { recursive: true, force: true });
+      rmSync2(attemptDirectory, { recursive: true, force: true });
     }
-    return fail(`changed during ${SOURCE_SNAPSHOT_ATTEMPTS} attempts to isolate a consistent snapshot`);
+    return fail2(`changed during ${SOURCE_SNAPSHOT_ATTEMPTS} attempts to isolate a consistent snapshot`);
   } catch (error) {
-    rmSync(temporaryDirectory, { recursive: true, force: true });
+    rmSync2(temporaryDirectory, { recursive: true, force: true });
     throw error;
   }
 }
-function allRows(database, sql, ...bindings) {
+function allRows2(database, sql, ...bindings) {
   return database.query(sql).all(...bindings);
 }
-function getRow(database, sql, ...bindings) {
+function getRow2(database, sql, ...bindings) {
   return database.query(sql).get(...bindings);
 }
 function safeInteger(value, label, nullable = false) {
   if (nullable && value === null)
     return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    return fail(`${label} must be a safe integer`);
+    return fail2(`${label} must be a safe integer`);
   }
   return value;
 }
-function flag(value, label, fallback = 0) {
+function flag2(value, label, fallback = 0) {
   if (value === null)
     return fallback;
   const parsed = safeInteger(value, label);
   if (parsed !== 0 && parsed !== 1)
-    return fail(`${label} must be zero or one`);
+    return fail2(`${label} must be zero or one`);
   return parsed;
 }
 function privateText(value, label, nullable = false, allowEmpty = false) {
   if (nullable && value === null)
     return null;
   if (typeof value !== "string" || !allowEmpty && value.length === 0 || Buffer.byteLength(value, "utf8") > MAX_TEXT_IDENTITY_BYTES || value.includes("\x00"))
-    return fail(`${label} must be bounded text`);
+    return fail2(`${label} must be bounded text`);
   return value;
 }
 function bodyText(value, label, maximumBytes) {
   if (value === null)
     return null;
   if (typeof value !== "string")
-    return fail(`${label} must be text or null`);
+    return fail2(`${label} must be text or null`);
   if (Buffer.byteLength(value, "utf8") > maximumBytes) {
-    return fail(`${label} exceeds the configured body bound`);
+    return fail2(`${label} exceeds the configured body bound`);
   }
   return value;
 }
@@ -356,10 +1039,10 @@ function blob(value, label) {
     return null;
   if (value instanceof Uint8Array)
     return Uint8Array.from(value);
-  return fail(`${label} must be binary data or null`);
+  return fail2(`${label} must be binary data or null`);
 }
-function tableColumns(database, table) {
-  return allRows(database, `SELECT cid,name,type,"notnull",dflt_value,pk FROM pragma_table_info('${table}') ORDER BY cid`).map((row) => Object.freeze({
+function tableColumns2(database, table) {
+  return allRows2(database, `SELECT cid,name,type,"notnull",dflt_value,pk FROM pragma_table_info('${table}') ORDER BY cid`).map((row) => Object.freeze({
     cid: safeInteger(row.cid, `${table} column ordinal`),
     name: privateText(row.name, `${table} column name`),
     type: privateText(row.type, `${table} column type`, false, true),
@@ -368,11 +1051,11 @@ function tableColumns(database, table) {
     pk: safeInteger(row.pk, `${table} column primary-key position`)
   }));
 }
-function tableNames(database) {
-  return new Set(allRows(database, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map((row) => privateText(row.name, "table name")));
+function tableNames2(database) {
+  return new Set(allRows2(database, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map((row) => privateText(row.name, "table name")));
 }
 function inspectSchema(database) {
-  const names = tableNames(database);
+  const names = tableNames2(database);
   const required = Object.freeze({
     message: ["ROWID", "guid", "service", "handle_id", "date", "is_from_me"],
     handle: ["ROWID", "id", "service"],
@@ -384,27 +1067,27 @@ function inspectSchema(database) {
   const sets = new Map;
   for (const [table, columns] of Object.entries(required)) {
     if (!names.has(table))
-      return fail(`is missing required table ${table}`);
-    const shape = tableColumns(database, table);
+      return fail2(`is missing required table ${table}`);
+    const shape = tableColumns2(database, table);
     const set = new Set(shape.map((column) => column.name));
     for (const column of columns) {
       if (!set.has(column))
-        return fail(`${table} is missing required column ${column}`);
+        return fail2(`${table} is missing required column ${column}`);
     }
     inspected.set(table, shape);
     sets.set(table, set);
   }
   const messageColumns = sets.get("message");
   if (messageColumns === undefined || !messageColumns.has("text") && !messageColumns.has("attributedBody")) {
-    return fail("message must expose text or attributedBody");
+    return fail2("message must expose text or attributedBody");
   }
   let hasAttachmentJoin = false;
   if (names.has("message_attachment_join")) {
-    const shape = tableColumns(database, "message_attachment_join");
+    const shape = tableColumns2(database, "message_attachment_join");
     const set = new Set(shape.map((column) => column.name));
     for (const column of ["message_id", "attachment_id"]) {
       if (!set.has(column))
-        return fail(`message_attachment_join is missing required column ${column}`);
+        return fail2(`message_attachment_join is missing required column ${column}`);
     }
     inspected.set("message_attachment_join", shape);
     sets.set("message_attachment_join", set);
@@ -414,10 +1097,10 @@ function inspectSchema(database) {
   return Object.freeze({ hash: sha2562(stableJson(serialized)), tables: sets, hasAttachmentJoin });
 }
 function boundedTableCount(database, table, maximum) {
-  const row = getRow(database, `SELECT count(*) AS value FROM ${table}`);
+  const row = getRow2(database, `SELECT count(*) AS value FROM ${table}`);
   const count = safeInteger(row?.value, `${table} row count`);
   if (count === null || count < 0 || count > maximum) {
-    return fail(`${table} exceeds its supported row bound`);
+    return fail2(`${table} exceeds its supported row bound`);
   }
   return count;
 }
@@ -554,17 +1237,17 @@ function boundedBlobExpression(columns, column, maximumBytes) {
 function loadHandles(database, key) {
   boundedTableCount(database, "handle", MAX_HANDLES);
   const result = new Map;
-  for (const row of allRows(database, "SELECT ROWID,id,service FROM handle ORDER BY ROWID")) {
+  for (const row of allRows2(database, "SELECT ROWID,id,service FROM handle ORDER BY ROWID")) {
     const rowId = safeInteger(row.ROWID, "handle ROWID");
     const id = privateText(row.id, "handle identity");
     const service = privateText(row.service, "handle service", true);
     if (result.has(rowId))
-      return fail("contains duplicate handle ROWIDs");
+      return fail2("contains duplicate handle ROWIDs");
     result.set(rowId, Object.freeze({
       rowId,
       id,
       service,
-      participantId: hmac(key, "participant", `${service ?? ""}\x00${id}`)
+      participantId: hmac2(key, "participant", `${service ?? ""}\x00${id}`)
     }));
   }
   return result;
@@ -573,19 +1256,19 @@ function loadChats(database, schema, handles, key) {
   boundedTableCount(database, "chat", MAX_CHATS);
   boundedTableCount(database, "chat_handle_join", MAX_CHAT_HANDLE_JOINS);
   const handleIds = new Map;
-  for (const row of allRows(database, "SELECT chat_id,handle_id FROM chat_handle_join ORDER BY chat_id,handle_id")) {
+  for (const row of allRows2(database, "SELECT chat_id,handle_id FROM chat_handle_join ORDER BY chat_id,handle_id")) {
     const chatId = safeInteger(row.chat_id, "chat participant chat ID");
     const handleId = safeInteger(row.handle_id, "chat participant handle ID");
     if (!handles.has(handleId))
-      return fail("chat participant references a missing handle");
+      return fail2("chat participant references a missing handle");
     const set = handleIds.get(chatId) ?? new Set;
     set.add(handleId);
     handleIds.set(chatId, set);
   }
   const columns = schema.tables.get("chat");
   if (columns === undefined)
-    return fail("chat schema disappeared");
-  const rows = allRows(database, `SELECT ROWID,guid,style,
+    return fail2("chat schema disappeared");
+  const rows = allRows2(database, `SELECT ROWID,guid,style,
     ${columnExpression(columns, "display_name", "display_name", "display_name")},
     ${columnExpression(columns, "service_name", "service_name", "service_name")}
     FROM chat ORDER BY ROWID`);
@@ -595,14 +1278,14 @@ function loadChats(database, schema, handles, key) {
     const rowId = safeInteger(row.ROWID, "chat ROWID");
     const sourceKey = privateText(row.guid, "chat GUID");
     safeInteger(row.style, "chat style", true);
-    const privateLabel = privateText(row.display_name, "chat display name", true, true);
+    const privateLabel2 = privateText(row.display_name, "chat display name", true, true);
     const declaredService = privateText(row.service_name, "chat service", true, true);
     const participants = [...handleIds.get(rowId) ?? new Set].sort((left, right) => left - right).map((handleId) => handles.get(handleId)).filter((handle) => handle !== undefined);
     const services = [...new Set(participants.map((participant) => participant.service).filter((service) => service !== null))].sort();
     const conversation = Object.freeze({
-      id: hmac(key, "conversation", sourceKey),
+      id: hmac2(key, "conversation", sourceKey),
       sourceKey,
-      privateLabel,
+      privateLabel: privateLabel2,
       service: declaredService === null || declaredService === "" ? services.length === 1 ? services[0] : null : declaredService,
       participantCount: participants.length,
       participantIds: Object.freeze(participants.map((participant) => participant.participantId)),
@@ -610,7 +1293,7 @@ function loadChats(database, schema, handles, key) {
       group: participants.length > 1
     });
     if (result.has(rowId) || conversationIds.has(conversation.id)) {
-      return fail("contains duplicate chat identities");
+      return fail2("contains duplicate chat identities");
     }
     result.set(rowId, Object.freeze({ rowId, conversation }));
     conversationIds.add(conversation.id);
@@ -619,7 +1302,7 @@ function loadChats(database, schema, handles, key) {
 }
 function loadChatJoins(database, first, last) {
   const grouped = new Map;
-  for (const row of allRows(database, `SELECT message_id,chat_id
+  for (const row of allRows2(database, `SELECT message_id,chat_id
     FROM chat_message_join WHERE message_id BETWEEN ? AND ? ORDER BY message_id,chat_id`, first, last)) {
     const messageId = safeInteger(row.message_id, "chat-message message ID");
     const chatId = safeInteger(row.chat_id, "chat-message chat ID");
@@ -636,13 +1319,13 @@ function loadAttachmentCounts(database, schema, first, last) {
   if (!schema.hasAttachmentJoin)
     return new Map;
   const result = new Map;
-  for (const row of allRows(database, `SELECT message_id,
+  for (const row of allRows2(database, `SELECT message_id,
     count(DISTINCT attachment_id) AS value FROM message_attachment_join
     WHERE message_id BETWEEN ? AND ? GROUP BY message_id ORDER BY message_id`, first, last)) {
     const messageId = safeInteger(row.message_id, "attachment message ID");
     const count = safeInteger(row.value, "message attachment count");
     if (count < 0)
-      return fail("contains a negative attachment count");
+      return fail2("contains a negative attachment count");
     result.set(messageId, count);
   }
   return result;
@@ -650,8 +1333,8 @@ function loadAttachmentCounts(database, schema, first, last) {
 function messageRows(database, schema, afterRowId, pageSize, maximumBodyBytes, maximumAttributedBodyBytes) {
   const columns = schema.tables.get("message");
   if (columns === undefined)
-    return fail("message schema disappeared");
-  const rows = allRows(database, `SELECT
+    return fail2("message schema disappeared");
+  const rows = allRows2(database, `SELECT
     ROWID AS source_rowid,guid,service,handle_id,CAST(date AS TEXT) AS date_text,is_from_me,
     ${boundedTextExpression(columns, "text", maximumBodyBytes)},
     ${boundedBlobExpression(columns, "attributedBody", maximumAttributedBodyBytes)},
@@ -674,23 +1357,23 @@ function messageRows(database, schema, afterRowId, pageSize, maximumBodyBytes, m
     service: privateText(row.service, "message service", true, true),
     handleId: safeInteger(row.handle_id, "message sender handle ID", true),
     dateText: privateText(row.date_text, "message date", true, true),
-    isFromMe: flag(row.is_from_me, "message direction"),
+    isFromMe: flag2(row.is_from_me, "message direction"),
     text: bodyText(row.message_text, "message text", maximumBodyBytes),
-    textOverBound: flag(row.message_text_over_bound, "message text bound flag"),
+    textOverBound: flag2(row.message_text_over_bound, "message text bound flag"),
     attributedBody: blob(row.attributed_body, "message attributed body"),
-    attributedBodyOverBound: flag(row.attributed_body_over_bound, "message attributed-body bound flag"),
+    attributedBodyOverBound: flag2(row.attributed_body_over_bound, "message attributed-body bound flag"),
     itemType: row.item_type === null ? 0 : safeInteger(row.item_type, "message item type"),
     associatedMessageType: row.associated_message_type === null ? 0 : safeInteger(row.associated_message_type, "message associated-message type"),
     associatedMessageGuid: privateText(row.associated_message_guid, "associated message GUID", true, true),
     threadOriginatorGuid: privateText(row.thread_originator_guid, "thread originator GUID", true, true),
     replyToGuid: privateText(row.reply_to_guid, "reply-to GUID", true, true),
-    isSystemMessage: flag(row.is_system_message, "message system flag"),
-    isServiceMessage: flag(row.is_service_message, "message service flag"),
-    isSpam: flag(row.is_spam, "message spam flag"),
-    isCorrupt: flag(row.is_corrupt, "message corrupt flag"),
+    isSystemMessage: flag2(row.is_system_message, "message system flag"),
+    isServiceMessage: flag2(row.is_service_message, "message service flag"),
+    isSpam: flag2(row.is_spam, "message spam flag"),
+    isCorrupt: flag2(row.is_corrupt, "message corrupt flag"),
     editedDateText: privateText(row.date_edited_text, "message edited date", true, true),
     retractedDateText: privateText(row.date_retracted_text, "message retracted date", true, true),
-    cacheHasAttachments: flag(row.cache_has_attachments, "message attachment cache flag")
+    cacheHasAttachments: flag2(row.cache_has_attachments, "message attachment cache flag")
   }));
 }
 function messageBody(row, maximumAttributedBodyBytes, maximumBodyBytes) {
@@ -717,7 +1400,7 @@ function messageKind(row, body, attachmentCount) {
 function sourceModifiedAt(stats) {
   const milliseconds = Number(stats.mtimeMs);
   if (!Number.isFinite(milliseconds))
-    return fail("has an invalid modification time");
+    return fail2("has an invalid modification time");
   return new Date(milliseconds).toISOString();
 }
 function aggregateWarnings(counts, hasAttachmentJoin) {
@@ -734,22 +1417,22 @@ function aggregateWarnings(counts, hasAttachmentJoin) {
 }
 function readIMessageDatabase(path, options) {
   const key = hmacKey(options.hmacKey);
-  const maximumDatabaseBytes = boundedInteger(options.maxDatabaseBytes, DEFAULT_MAX_DATABASE_BYTES, 1, MAX_CONFIGURABLE_DATABASE_BYTES, "maxDatabaseBytes");
-  const maximumMessages = boundedInteger(options.maxMessages, DEFAULT_MAX_MESSAGES, 1, MAX_CONFIGURABLE_MESSAGES, "maxMessages");
-  const maximumBodyBytes = boundedInteger(options.maxBodyBytes, DEFAULT_MAX_BODY_BYTES, 1, MAX_CONFIGURABLE_BODY_BYTES, "maxBodyBytes");
-  const maximumAttributedBodyBytes = boundedInteger(options.maxAttributedBodyBytes, DEFAULT_MAX_ATTRIBUTED_BODY_BYTES, 1, MAX_CONFIGURABLE_ATTRIBUTED_BODY_BYTES, "maxAttributedBodyBytes");
-  const pageSize = boundedInteger(options.pageSize, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE, "pageSize");
+  const maximumDatabaseBytes = boundedInteger2(options.maxDatabaseBytes, DEFAULT_MAX_DATABASE_BYTES, 1, MAX_CONFIGURABLE_DATABASE_BYTES, "maxDatabaseBytes");
+  const maximumMessages = boundedInteger2(options.maxMessages, DEFAULT_MAX_MESSAGES, 1, MAX_CONFIGURABLE_MESSAGES, "maxMessages");
+  const maximumBodyBytes = boundedInteger2(options.maxBodyBytes, DEFAULT_MAX_BODY_BYTES, 1, MAX_CONFIGURABLE_BODY_BYTES, "maxBodyBytes");
+  const maximumAttributedBodyBytes = boundedInteger2(options.maxAttributedBodyBytes, DEFAULT_MAX_ATTRIBUTED_BODY_BYTES, 1, MAX_CONFIGURABLE_ATTRIBUTED_BODY_BYTES, "maxAttributedBodyBytes");
+  const pageSize = boundedInteger2(options.pageSize, DEFAULT_PAGE_SIZE2, 1, MAX_PAGE_SIZE2, "pageSize");
   const requestedSource = inspectSource(path, maximumDatabaseBytes);
-  const isolated = isolateSource(requestedSource, maximumDatabaseBytes);
+  const isolated = isolateSource2(requestedSource, maximumDatabaseBytes);
   const source = isolated.source;
   let database = null;
   let transactionOpen = false;
   try {
-    database = new Database(isolated.path, { strict: true });
+    database = new Database2(isolated.path, { strict: true });
     database.exec("PRAGMA query_only=ON");
-    const queryOnly = getRow(database, "PRAGMA query_only");
+    const queryOnly = getRow2(database, "PRAGMA query_only");
     if (queryOnly?.query_only !== 1)
-      return fail("could not enable query-only mode");
+      return fail2("could not enable query-only mode");
     database.exec("BEGIN");
     transactionOpen = true;
     const schema = inspectSchema(database);
@@ -774,23 +1457,23 @@ function readIMessageDatabase(path, options) {
       const first = page[0]?.sourceRowId;
       const last = page.at(-1)?.sourceRowId;
       if (first === undefined || last === undefined || first <= afterRowId || last < first) {
-        return fail("message paging order is inconsistent");
+        return fail2("message paging order is inconsistent");
       }
       const joins = loadChatJoins(database, first, last);
       const attachments = loadAttachmentCounts(database, schema, first, last);
       for (const row of page) {
-        const id = hmac(key, "message", row.sourceGuid);
+        const id = hmac2(key, "message", row.sourceGuid);
         if (messageIds.has(id))
-          return fail("contains duplicate message GUIDs");
+          return fail2("contains duplicate message GUIDs");
         if (row.isSpam === 1 || row.isCorrupt === 1) {
           warningCounts.spamOrCorrupt += 1;
           continue;
         }
         if (row.textOverBound === 1) {
-          return fail(`message text ${id} exceeds the configured body bound`);
+          return fail2(`message text ${id} exceeds the configured body bound`);
         }
         if (row.attributedBodyOverBound === 1) {
-          return fail(`attributed body ${id} exceeds the configured attributed-body bound`);
+          return fail2(`attributed body ${id} exceeds the configured attributed-body bound`);
         }
         const sentAt = appleTimestamp(row.dateText);
         if (sentAt === null) {
@@ -808,7 +1491,7 @@ function readIMessageDatabase(path, options) {
         }
         const chat = chats.get(chatId);
         if (chat === undefined)
-          return fail("message references a missing chat");
+          return fail2("message references a missing chat");
         if (row.isFromMe === 0 && row.handleId !== null && !handles.has(row.handleId)) {
           warningCounts.missingSenderHandle += 1;
         }
@@ -874,7 +1557,7 @@ function readIMessageDatabase(path, options) {
     try {
       database?.close();
     } finally {
-      rmSync(isolated.temporaryDirectory, { recursive: true, force: true });
+      rmSync2(isolated.temporaryDirectory, { recursive: true, force: true });
     }
   }
 }
@@ -1545,33 +2228,33 @@ import {
   unlink,
   writeFile
 } from "fs/promises";
-import { homedir as homedir2, platform } from "os";
-import { basename as basename2, dirname, isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
+import { homedir as homedir3, platform } from "os";
+import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute3, join as join3, resolve as resolve3 } from "path";
 function defaultDataDirectory() {
   const override = process.env.XDG_DATA_HOME;
   if (override !== undefined && override.trim() !== "") {
-    if (!isAbsolute2(override)) {
+    if (!isAbsolute3(override)) {
       throw new CliError("unsafe-path", "XDG_DATA_HOME must be absolute");
     }
-    return join2(resolve2(override), "message-like-me");
+    return join3(resolve3(override), "message-like-me");
   }
   if (platform() === "darwin") {
-    return join2(homedir2(), "Library", "Application Support", "Message Like Me");
+    return join3(homedir3(), "Library", "Application Support", "Message Like Me");
   }
-  return join2(homedir2(), ".local", "share", "message-like-me");
+  return join3(homedir3(), ".local", "share", "message-like-me");
 }
 function dataPaths(explicit) {
-  if (explicit !== undefined && !isAbsolute2(explicit)) {
+  if (explicit !== undefined && !isAbsolute3(explicit)) {
     throw new CliError("unsafe-path", "Data directory must be absolute");
   }
-  const root = explicit === undefined ? defaultDataDirectory() : resolve2(explicit);
-  if (!isAbsolute2(root))
+  const root = explicit === undefined ? defaultDataDirectory() : resolve3(explicit);
+  if (!isAbsolute3(root))
     throw new CliError("unsafe-path", "Data directory must be absolute");
   return {
     root,
-    database: join2(root, "message-like-me.sqlite3"),
-    installKey: join2(root, "install.key"),
-    packets: join2(root, "study-packets")
+    database: join3(root, "message-like-me.sqlite3"),
+    installKey: join3(root, "install.key"),
+    packets: join3(root, "study-packets")
   };
 }
 async function existingType(path) {
@@ -1609,11 +2292,11 @@ async function ensurePrivateDirectory(path) {
 }
 async function initializeDataPaths(paths) {
   const physicalRoot = await ensurePrivateDirectory(paths.root);
-  const physicalPackets = await ensurePrivateDirectory(join2(physicalRoot, "study-packets"));
+  const physicalPackets = await ensurePrivateDirectory(join3(physicalRoot, "study-packets"));
   return {
     root: physicalRoot,
-    database: join2(physicalRoot, basename2(paths.database)),
-    installKey: join2(physicalRoot, basename2(paths.installKey)),
+    database: join3(physicalRoot, basename3(paths.database)),
+    installKey: join3(physicalRoot, basename3(paths.installKey)),
     packets: physicalPackets
   };
 }
@@ -1654,9 +2337,9 @@ async function loadOrCreateInstallKey(path) {
   }
 }
 async function atomicWritePrivate(path, bytes) {
-  const parent = await ensurePrivateDirectory(dirname(resolve2(path)));
-  const destination = join2(parent, basename2(path));
-  const temporary = join2(parent, `.${basename2(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
+  const parent = await ensurePrivateDirectory(dirname2(resolve3(path)));
+  const destination = join3(parent, basename3(path));
+  const temporary = join3(parent, `.${basename3(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
   try {
     await writeFile(temporary, bytes, { mode: 384, flag: "wx" });
     await chmod(temporary, 384);
@@ -1672,7 +2355,7 @@ async function atomicWritePrivate(path, bytes) {
 }
 
 // src/profile.ts
-import { constants as fsConstants2 } from "fs";
+import { constants as fsConstants3 } from "fs";
 import { open as open2 } from "fs/promises";
 var MAX_PROFILE_FILE_BYTES = 4 * 1024 * 1024;
 function object(value, label) {
@@ -1834,12 +2517,12 @@ function parseStyleProfile(value) {
 async function readStyleProfile(path) {
   let parsed;
   try {
-    const handle = await open2(path, fsConstants2.O_RDONLY | fsConstants2.O_NOFOLLOW);
+    const handle = await open2(path, fsConstants3.O_RDONLY | fsConstants3.O_NOFOLLOW);
     try {
       const before = await handle.stat();
       const privateMode = (before.mode & 63) === 0;
-      const owned = typeof process.getuid !== "function" || before.uid === process.getuid();
-      if (!before.isFile() || before.nlink !== 1 || !owned || !privateMode) {
+      const owned2 = typeof process.getuid !== "function" || before.uid === process.getuid();
+      if (!before.isFile() || before.nlink !== 1 || !owned2 || !privateMode) {
         throw new CliError("unsafe-path", "Profile must be one current-user-owned regular non-symlink file with private permissions");
       }
       if (!Number.isSafeInteger(before.size) || before.size < 1 || before.size > MAX_PROFILE_FILE_BYTES) {
@@ -1876,8 +2559,8 @@ async function readStyleProfile(path) {
 
 // src/skill-install.ts
 import { cp, lstat as lstat2, mkdir as mkdir2, realpath as realpath2, rm } from "fs/promises";
-import { homedir as homedir3 } from "os";
-import { dirname as dirname2, join as join3, resolve as resolve3 } from "path";
+import { homedir as homedir4 } from "os";
+import { dirname as dirname3, join as join4, resolve as resolve4 } from "path";
 import { fileURLToPath } from "url";
 async function exists(path) {
   try {
@@ -1890,11 +2573,11 @@ async function exists(path) {
   }
 }
 function bundledSkillPath() {
-  return resolve3(dirname2(fileURLToPath(import.meta.url)), "../skills/message-like-me");
+  return resolve4(dirname3(fileURLToPath(import.meta.url)), "../skills/message-like-me");
 }
 function targetRoot(target, scope, projectDirectory) {
   const directory = target === "codex" ? ".codex" : target === "claude" ? ".claude" : ".agents";
-  return scope === "user" ? join3(homedir3(), directory, "skills") : join3(resolve3(projectDirectory), directory, "skills");
+  return scope === "user" ? join4(homedir4(), directory, "skills") : join4(resolve4(projectDirectory), directory, "skills");
 }
 async function installSkill(options) {
   const source = bundledSkillPath();
@@ -1906,7 +2589,7 @@ async function installSkill(options) {
   }
   const root = targetRoot(options.target, options.scope, options.projectDirectory ?? process.cwd());
   await mkdir2(root, { recursive: true, mode: 448 });
-  const destination = join3(root, "message-like-me");
+  const destination = join4(root, "message-like-me");
   if (await exists(destination)) {
     const metadata = await lstat2(destination);
     if (metadata.isSymbolicLink()) {
@@ -1922,8 +2605,8 @@ async function installSkill(options) {
 }
 
 // src/store.ts
-import { Database as Database2 } from "bun:sqlite";
-import { chmodSync as chmodSync2, lstatSync as lstatSync2 } from "fs";
+import { Database as Database3 } from "bun:sqlite";
+import { chmodSync as chmodSync3, lstatSync as lstatSync3 } from "fs";
 var SCHEMA = `
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS metadata (
@@ -1975,6 +2658,31 @@ var SCHEMA = `
     profile_json TEXT NOT NULL,
     applied_at TEXT NOT NULL
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS addressbook_contacts (
+    id TEXT PRIMARY KEY,
+    private_label TEXT,
+    normalized_label TEXT,
+    label_basis TEXT CHECK (label_basis IN ('display-name', 'name-parts', 'organization')),
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS addressbook_handles (
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('email', 'phone')),
+    match_id TEXT NOT NULL,
+    PRIMARY KEY (contact_id, kind, match_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE INDEX IF NOT EXISTS addressbook_handles_lookup
+    ON addressbook_handles(kind, match_id, contact_id);
+  CREATE TABLE IF NOT EXISTS conversation_contact_labels (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    private_label TEXT NOT NULL,
+    normalized_label TEXT NOT NULL,
+    label_basis TEXT NOT NULL CHECK (label_basis IN ('display-name', 'name-parts', 'organization')),
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_contact_labels_lookup
+    ON conversation_contact_labels(normalized_label, conversation_id);
 `;
 function get(database, sql, ...bindings) {
   return database.query(sql).get(...bindings);
@@ -2007,6 +2715,82 @@ function readTransaction(database, operation) {
     throw error;
   }
 }
+function stringArray(value, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} is malformed JSON`, { cause: error });
+  }
+  if (!Array.isArray(parsed) || parsed.length > 1000 || parsed.some((item) => typeof item !== "string" || Buffer.byteLength(item, "utf8") > 4096)) {
+    throw new CliError("invalid-data", `${label} must be a bounded text array`);
+  }
+  return parsed;
+}
+function rebuildConversationLabels(database, hmacKey2) {
+  database.exec("DELETE FROM conversation_contact_labels");
+  const contacts = new Map(all(database, `SELECT id,private_label,normalized_label,label_basis,contacts_revision
+    FROM addressbook_contacts ORDER BY id`).map((row) => [row.id, row]));
+  const owners = new Map;
+  for (const row of all(database, `SELECT contact_id,kind,match_id FROM addressbook_handles
+    ORDER BY kind,match_id,contact_id`)) {
+    const key = `${row.kind}\x00${row.match_id}`;
+    const values = owners.get(key) ?? new Set;
+    values.add(row.contact_id);
+    owners.set(key, values);
+  }
+  const conversations = all(database, `
+    SELECT id,private_participants_json FROM conversations WHERE is_group=0 ORDER BY id
+  `);
+  const insert = database.query(`INSERT INTO conversation_contact_labels(
+    conversation_id,contact_id,private_label,normalized_label,label_basis,contacts_revision
+  ) VALUES (?,?,?,?,?,?)`);
+  let eligibleConversations = 0;
+  let matched = 0;
+  let enriched = 0;
+  let unmatched = 0;
+  let ambiguous = 0;
+  let matchedWithoutLabel = 0;
+  for (const conversation of conversations) {
+    const normalizedHandles = stringArray(conversation.private_participants_json, `conversation ${conversation.id} participants`).map(normalizeContactHandle).filter((handle) => handle !== null);
+    if (normalizedHandles.length > 0 && owners.size > 0 && hmacKey2 === undefined) {
+      throw new CliError("internal", "The installation key is required to rebuild contact labels");
+    }
+    const keys = hmacKey2 === undefined ? new Set : new Set(normalizedHandles.map((handle) => `${handle.kind}\x00${contactHandleMatchId(hmacKey2, handle)}`));
+    if (keys.size > 0)
+      eligibleConversations += 1;
+    const candidates = new Set;
+    for (const key of keys)
+      for (const contactId2 of owners.get(key) ?? [])
+        candidates.add(contactId2);
+    if (candidates.size === 0) {
+      unmatched += 1;
+      continue;
+    }
+    if (candidates.size > 1) {
+      ambiguous += 1;
+      continue;
+    }
+    matched += 1;
+    const contactId = [...candidates][0];
+    const contact = contacts.get(contactId);
+    if (contact?.private_label === null || contact?.normalized_label === null || contact?.label_basis === null || contact === undefined) {
+      matchedWithoutLabel += 1;
+      continue;
+    }
+    insert.run(conversation.id, contact.id, contact.private_label, contact.normalized_label, contact.label_basis, contact.contacts_revision);
+    enriched += 1;
+  }
+  return {
+    directConversations: conversations.length,
+    eligibleConversations,
+    matched,
+    enriched,
+    unmatched,
+    ambiguous,
+    matchedWithoutLabel
+  };
+}
 
 class LocalStore {
   #database;
@@ -2016,7 +2800,7 @@ class LocalStore {
   static open(path) {
     const existing = (() => {
       try {
-        return lstatSync2(path);
+        return lstatSync3(path);
       } catch (error) {
         if (error.code === "ENOENT")
           return null;
@@ -2029,10 +2813,10 @@ class LocalStore {
     if (existing !== null && typeof process.getuid === "function" && existing.uid !== process.getuid()) {
       throw new CliError("unsafe-path", `${path} is not owned by the current user`);
     }
-    const database = new Database2(path, { create: true, strict: true });
+    const database = new Database3(path, { create: true, strict: true });
     database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
     database.exec(SCHEMA);
-    chmodSync2(path, 384);
+    chmodSync3(path, 384);
     return new LocalStore(database);
   }
   close() {
@@ -2045,7 +2829,106 @@ class LocalStore {
     const encoded = scalarText(this.#database, "source_identity");
     return encoded === null ? null : JSON.parse(encoded);
   }
-  replaceCorpus(snapshot, ingestedAt) {
+  contactsRevision() {
+    return scalarText(this.#database, "contacts_revision");
+  }
+  enrichContacts(snapshot, ingestedAt, hmacKey2) {
+    if (snapshot.schemaVersion !== 1 || !/^[a-f0-9]{64}$/u.test(snapshot.snapshotSha256)) {
+      throw new CliError("invalid-data", "The Contacts reader returned an invalid snapshot revision");
+    }
+    if (snapshot.sources.length < 1 || snapshot.sources.length > 64) {
+      throw new CliError("invalid-data", "The Contacts reader returned an invalid source count");
+    }
+    if (snapshot.contacts.length > 1e5 || snapshot.warnings.length > 16) {
+      throw new CliError("invalid-data", "The Contacts reader exceeded its result bounds");
+    }
+    const ids = new Set;
+    let handleCount = 0;
+    for (const contact of snapshot.contacts) {
+      if (!/^[a-f0-9]{64}$/u.test(contact.id) || ids.has(contact.id)) {
+        throw new CliError("invalid-data", "The Contacts reader returned duplicate or invalid contact IDs");
+      }
+      ids.add(contact.id);
+      if (contact.privateLabel !== null && (Buffer.byteLength(contact.privateLabel, "utf8") < 1 || Buffer.byteLength(contact.privateLabel, "utf8") > 4096 || /\p{Cc}/u.test(contact.privateLabel)))
+        throw new CliError("invalid-data", "The Contacts reader returned an invalid private label");
+      if (contact.privateLabel === null !== (contact.privateLabelBasis === null) || contact.privateLabelBasis !== null && contact.privateLabelBasis !== "display-name" && contact.privateLabelBasis !== "name-parts" && contact.privateLabelBasis !== "organization")
+        throw new CliError("invalid-data", "The Contacts reader returned an invalid label basis");
+      handleCount += contact.handles.length;
+      if (handleCount > 1e6) {
+        throw new CliError("invalid-data", "The Contacts reader returned too many handles");
+      }
+      const handles = new Set;
+      for (const handle of contact.handles) {
+        const canonical = normalizeContactHandle(handle.normalizedValue);
+        if (canonical === null || canonical.kind !== handle.kind || canonical.normalizedValue !== handle.normalizedValue || handle.matchId !== contactHandleMatchId(hmacKey2, canonical) || !/^[a-f0-9]{64}$/u.test(handle.matchId))
+          throw new CliError("invalid-data", "The Contacts reader returned a non-canonical handle");
+        const key = `${handle.kind}\x00${handle.matchId}`;
+        if (handles.has(key)) {
+          throw new CliError("invalid-data", "The Contacts reader returned duplicate contact handles");
+        }
+        handles.add(key);
+      }
+    }
+    for (const warning of snapshot.warnings) {
+      if (Buffer.byteLength(warning, "utf8") > 1024 || warning.includes("\x00")) {
+        throw new CliError("invalid-data", "The Contacts reader returned an invalid warning");
+      }
+    }
+    return transaction(this.#database, () => {
+      this.#database.exec("DELETE FROM addressbook_contacts");
+      const insertContact = this.#database.query(`INSERT INTO addressbook_contacts(
+        id,private_label,normalized_label,label_basis,contacts_revision
+      ) VALUES (?,?,?,?,?)`);
+      const insertHandle = this.#database.query(`INSERT INTO addressbook_handles(
+        contact_id,kind,match_id
+      ) VALUES (?,?,?)`);
+      for (const contact of snapshot.contacts) {
+        insertContact.run(contact.id, contact.privateLabel, contact.privateLabel === null ? null : normalizeContactLabelQuery(contact.privateLabel), contact.privateLabelBasis, snapshot.snapshotSha256);
+        for (const handle of contact.handles) {
+          insertHandle.run(contact.id, handle.kind, handle.matchId);
+        }
+      }
+      const projection = rebuildConversationLabels(this.#database, hmacKey2);
+      const setMetadata = this.#database.query(`
+        INSERT INTO metadata (key,value) VALUES (?,?)
+        ON CONFLICT (key) DO UPDATE SET value=excluded.value
+      `);
+      for (const [key, value] of [
+        ["contacts_revision", snapshot.snapshotSha256],
+        ["contacts_source_identity", canonicalJson(snapshot.sources.map((source) => ({
+          device: source.device,
+          inode: source.inode,
+          bytes: source.bytes,
+          modifiedAt: source.modifiedAt,
+          schemaSha256: source.schemaSha256
+        })))],
+        ["contacts_ingested_at", ingestedAt],
+        ["contacts_warnings", canonicalJson(snapshot.warnings)],
+        ["contacts_schema_version", String(snapshot.schemaVersion)]
+      ])
+        setMetadata.run(key, value);
+      return {
+        contactsRevision: snapshot.snapshotSha256,
+        sources: snapshot.sources.length,
+        sourceContacts: snapshot.contacts.length,
+        ...projection
+      };
+    });
+  }
+  resolvePrivateContacts(query, limit) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new CliError("usage", "Contact resolution limit must be between 1 and 50");
+    }
+    const normalized = normalizeContactLabelQuery(query);
+    return all(this.#database, `
+      SELECT conversation.id,label.private_label
+      FROM conversation_contact_labels label
+      JOIN conversations conversation ON conversation.id=label.conversation_id
+      WHERE conversation.is_group=0 AND label.normalized_label=?
+      ORDER BY conversation.id LIMIT ?
+    `, normalized, limit).map((row) => ({ id: row.id, privateLabel: row.private_label }));
+  }
+  replaceCorpus(snapshot, ingestedAt, hmacKey2) {
     const corpusRevision = snapshot.source.snapshotSha256;
     if (!/^[a-f0-9]{64}$/u.test(corpusRevision)) {
       throw new CliError("invalid-data", "The iMessage reader returned an invalid corpus revision");
@@ -2096,6 +2979,7 @@ class LocalStore {
         ["corpus_schema_version", String(snapshot.schemaVersion)]
       ])
         setMetadata.run(key, value);
+      rebuildConversationLabels(this.#database, hmacKey2);
     });
     return {
       corpusRevision,
@@ -2108,7 +2992,9 @@ class LocalStore {
     if (revision === null)
       return [];
     const rows = all(this.#database, `
-      SELECT conversation.id, conversation.private_label, conversation.is_group,
+      SELECT conversation.id,
+        coalesce(contact_label.private_label,conversation.private_label) AS private_label,
+        conversation.is_group,
         conversation.participant_count, min(message.sent_at) AS first_message_at,
         max(message.sent_at) AS last_message_at, count(message.id) AS message_count,
         sum(CASE WHEN message.direction = 'incoming' THEN 1 ELSE 0 END) AS incoming_count,
@@ -2117,6 +3003,8 @@ class LocalStore {
       FROM conversations conversation
       JOIN messages message ON message.conversation_id = conversation.id
       LEFT JOIN profiles profile ON profile.contact_id = conversation.id
+      LEFT JOIN conversation_contact_labels contact_label
+        ON contact_label.conversation_id = conversation.id
       GROUP BY conversation.id
       HAVING outgoing_count >= ?
       ORDER BY outgoing_count DESC, last_message_at DESC, conversation.id
@@ -2137,7 +3025,10 @@ class LocalStore {
   }
   conversation(contactId, privateLabels) {
     const row = get(this.#database, `
-      SELECT conversation.*,
+      SELECT conversation.id,conversation.source_key,
+        coalesce(contact_label.private_label,conversation.private_label) AS private_label,
+        conversation.service,conversation.participant_count,conversation.participant_ids_json,
+        conversation.private_participants_json,conversation.is_group,
         min(message.sent_at) AS first_message_at,
         max(message.sent_at) AS last_message_at,
         count(message.id) AS message_count,
@@ -2145,6 +3036,8 @@ class LocalStore {
         sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
       FROM conversations conversation
       LEFT JOIN messages message ON message.conversation_id = conversation.id
+      LEFT JOIN conversation_contact_labels contact_label
+        ON contact_label.conversation_id = conversation.id
       WHERE conversation.id = ?
       GROUP BY conversation.id
     `, contactId);
@@ -2269,9 +3162,12 @@ class LocalStore {
       quickCheck: quick,
       foreignKeyViolations: foreignKeys,
       corpusRevision: this.corpusRevision(),
+      contactsRevision: this.contactsRevision(),
       conversations: count("conversations"),
       messages: count("messages"),
-      profiles: count("profiles")
+      profiles: count("profiles"),
+      addressBookContacts: count("addressbook_contacts"),
+      enrichedLabels: count("conversation_contact_labels")
     };
   }
 }
@@ -2285,8 +3181,10 @@ var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
+  messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
+  messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
   messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--json]
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N] [--json]
@@ -2299,8 +3197,9 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads a caller-owned macOS Messages database and stores private
-analysis locally. It has no network, account, AI-provider, or message-sending surface.
+Message Like Me reads caller-owned macOS Messages and optional Contacts data,
+then stores private analysis locally. It has no network, account, AI-provider,
+or message-sending surface.
 `;
 async function exists2(path) {
   try {
@@ -2329,7 +3228,7 @@ function globalDataPaths(parsed) {
 async function existingStore(parsed) {
   const requested = globalDataPaths(parsed);
   if (!await exists2(requested.root) || !await exists2(requested.database)) {
-    throw new CliError("not-found", "Message Like Me is not initialized; run messagelikeme init or ingest imessage");
+    throw new CliError("not-found", "Message Like Me is not initialized; run messagelikeme init or an ingest command");
   }
   const paths = await initializeDataPaths(requested);
   return { paths, store: LocalStore.open(paths.database) };
@@ -2401,9 +3300,9 @@ function compactMetrics(metrics) {
 function absolutePrivatePath(value, label) {
   if (value === undefined)
     throw new CliError("usage", `${label} is required`);
-  if (!isAbsolute3(value))
+  if (!isAbsolute4(value))
     throw new CliError("unsafe-path", `${label} must be an absolute private path`);
-  return resolve4(value);
+  return resolve5(value);
 }
 function translateIMessageError(error) {
   const code = error.code;
@@ -2414,6 +3313,17 @@ function translateIMessageError(error) {
     throw new CliError("not-found", "The selected Messages database does not exist", { cause: error });
   }
   throw new CliError("invalid-data", error instanceof Error ? error.message : String(error), { cause: error });
+}
+function translateContactsError(error) {
+  const code = error.code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError("permission", "Contacts data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.", { cause: error });
+  }
+  if (code === "ENOENT") {
+    throw new CliError("not-found", "The selected AddressBook source does not exist", { cause: error });
+  }
+  const message = error instanceof Error ? error.message : "";
+  throw new CliError("invalid-data", message.startsWith("Contacts source ") ? message : "The selected AddressBook source could not be read safely", { cause: error });
 }
 async function runCommand(argv, io) {
   const parsed = parseArguments(argv);
@@ -2458,7 +3368,7 @@ async function runCommand(argv, io) {
       } catch (error) {
         translateIMessageError(error);
       }
-      const stored = context.store.replaceCorpus(snapshot, canonicalNow(io));
+      const stored = context.store.replaceCorpus(snapshot, canonicalNow(io), context.key);
       const result = {
         ...stored,
         source: {
@@ -2469,6 +3379,34 @@ async function runCommand(argv, io) {
         warnings: snapshot.warnings
       };
       emit(io, json, result, `Ingested ${stored.messages} messages across ${stored.conversations} conversations`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "ingest" && subcommand === "contacts" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir", "addressbook"], ["json"]);
+    const context = await writableStore(parsed);
+    try {
+      const override = parsed.options.get("addressbook");
+      const sourcePath = override === undefined ? DEFAULT_CONTACTS_DIRECTORY : absolutePrivatePath(override, "--addressbook");
+      let snapshot;
+      try {
+        snapshot = readMacOSContacts(sourcePath, { hmacKey: context.key });
+      } catch (error) {
+        translateContactsError(error);
+      }
+      const stored = context.store.enrichContacts(snapshot, canonicalNow(io), context.key);
+      const result = {
+        ...stored,
+        source: {
+          databases: snapshot.sources.length,
+          bytes: snapshot.sources.reduce((sum, source) => sum + source.bytes, 0),
+          schemaSha256: snapshot.sources.map((source) => source.schemaSha256)
+        },
+        warnings: snapshot.warnings
+      };
+      emit(io, json, result, `Matched ${stored.matched} direct conversations and enriched ${stored.enriched} private labels`);
     } finally {
       context.store.close();
     }
@@ -2495,6 +3433,27 @@ async function runCommand(argv, io) {
     try {
       const detail = safeContactDetail(context.store, identifier, parsed.flags.has("private"));
       emit(io, json, detail, `Contact ${identifier}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "contacts" && subcommand === "resolve" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "limit"], ["json", "private"]);
+    if (!parsed.flags.has("private")) {
+      throw new CliError("usage", "contacts resolve requires --private");
+    }
+    const context = await existingStore(parsed);
+    try {
+      let matches;
+      try {
+        matches = context.store.resolvePrivateContacts(identifier, integerOption(parsed, "limit", 10, 1, 50));
+      } catch (error) {
+        if (error instanceof CliError)
+          throw error;
+        throw new CliError("usage", "Contact query must be bounded exact text", { cause: error });
+      }
+      emit(io, json, { exact: true, matches }, `${matches.length} exact private contact matches`);
     } finally {
       context.store.close();
     }
@@ -2659,7 +3618,8 @@ async function runCommand(argv, io) {
         ok: true,
         initialized: false,
         dataDirectory: requested.root,
-        defaultMessagesDatabase: DEFAULT_IMESSAGE_DATABASE
+        defaultMessagesDatabase: DEFAULT_IMESSAGE_DATABASE,
+        defaultContactsDirectory: DEFAULT_CONTACTS_DIRECTORY
       };
       emit(io, json, result, `Message Like Me is not initialized at ${requested.root}`);
       return;

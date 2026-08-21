@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./cli.ts";
@@ -67,6 +68,33 @@ function ioCapture() {
   return { io, stdout: () => stdout, stderr: () => stderr, clear: () => { stdout = ""; stderr = ""; } };
 }
 
+async function createContactsFixture(root: string): Promise<string> {
+  const directory = join(root, "AddressBook", "Sources", "CLI-STORE");
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, "AddressBook-v22.abcddb");
+  const database = new Database(path, { create: true, strict: true });
+  try {
+    database.exec(`
+      CREATE TABLE Z_PRIMARYKEY(Z_ENT INTEGER PRIMARY KEY,Z_NAME TEXT NOT NULL);
+      INSERT INTO Z_PRIMARYKEY VALUES (7,'ABCDContact');
+      CREATE TABLE ZABCDRECORD(
+        Z_PK INTEGER PRIMARY KEY,Z_ENT INTEGER NOT NULL,ZUNIQUEID TEXT,
+        ZNAME TEXT,ZFIRSTNAME TEXT,ZLASTNAME TEXT,ZORGANIZATION TEXT
+      );
+      CREATE TABLE ZABCDEMAILADDRESS(
+        Z_PK INTEGER PRIMARY KEY,ZOWNER INTEGER NOT NULL,ZADDRESS TEXT
+      );
+      INSERT INTO ZABCDRECORD VALUES (
+        1,7,'cli-contact','CLI Private Name',NULL,NULL,NULL
+      );
+      INSERT INTO ZABCDEMAILADDRESS VALUES (1,1,'synthetic@example.test');
+    `);
+  } finally {
+    database.close();
+  }
+  return join(root, "AddressBook");
+}
+
 describe("messagelikeme CLI", () => {
   test("keeps aggregate views redacted and completes packet-to-profile flow", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-"));
@@ -77,11 +105,38 @@ describe("messagelikeme CLI", () => {
     store.close();
     const capture = ioCapture();
     try {
+      const contactsRoot = await createContactsFixture(root);
+      expect(await main([
+        "--data-dir", paths.root, "ingest", "contacts",
+        "--addressbook", contactsRoot, "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stderr()).toBe("");
+      expect(capture.stdout()).toContain('"enriched": 1');
+      expect(capture.stdout()).not.toContain("CLI Private Name");
+      expect(capture.stdout()).not.toContain("synthetic@example.test");
+
+      capture.clear();
       expect(await main(["--data-dir", paths.root, "contacts", "list", "--json"], capture.io)).toBe(0);
       expect(capture.stderr()).toBe("");
       expect(capture.stdout()).not.toContain("Synthetic Contact");
       expect(capture.stdout()).not.toContain("synthetic@example.test");
       expect(capture.stdout()).not.toContain("yes");
+      expect(capture.stdout()).not.toContain("CLI Private Name");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "contacts", "resolve", "CLI Private Name", "--json",
+      ], capture.io)).toBe(2);
+      expect(capture.stderr()).toContain("requires --private");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "contacts", "resolve", "cli private name",
+        "--private", "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stdout()).toContain("CLI Private Name");
+      expect(capture.stdout()).toContain("contact_0123456789abcdef");
+      expect(capture.stdout()).not.toContain("synthetic@example.test");
 
       capture.clear();
       const packetPath = join(root, "packet.json");

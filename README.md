@@ -69,10 +69,34 @@ only to name another caller-owned physical database:
 messagelikeme ingest imessage --database /absolute/path/to/chat.db --json
 ```
 
-Ingestion opens the source read-only, validates its schema and ownership, and
-does not change Messages or the source database. macOS may require permission
-for the terminal or agent host to read Messages data. `messagelikeme doctor`
-reports the local state without asking for an account or credential.
+Ingestion validates the source schema and ownership, makes a stable private
+copy of the database and its transactional sidecars, and opens only that copy
+with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
+require permission for the terminal or agent host to read Messages data.
+
+Optionally enrich direct conversations with private labels from macOS Contacts:
+
+```sh
+messagelikeme ingest contacts --json
+```
+
+The default source is the current user's AddressBook directory. An explicit
+absolute AddressBook root, `Sources` directory, store directory, or
+`AddressBook-vN.abcddb` file can be selected with `--addressbook`:
+
+```sh
+messagelikeme ingest contacts \
+  --addressbook /absolute/path/to/AddressBook \
+  --json
+```
+
+Contacts ingest may run before or after iMessage ingest. It reads only bounded
+name, email, and phone fields from a stable private copy. Exact normalized
+email or phone handles can label direct conversations. Shared handles remain
+ambiguous, local phone numbers never gain a guessed country code, and groups
+are never collapsed to one contact. Contact labels have their own revision, so
+a rename does not stale a messaging-style profile. `messagelikeme doctor`
+reports local aggregate state without asking for an account or credential.
 
 ## Inspect behavior without exposing prose
 
@@ -94,6 +118,17 @@ counted as examples of your writing style.
 
 Pass `--private` to `contacts list` or `contacts show` only when you need to
 resolve a pseudonymous contact to its local private label or participants.
+
+When you already know the complete Contacts label, resolve only that exact
+private name instead of listing every label:
+
+```sh
+messagelikeme contacts resolve "Exact Contact Name" --private --json
+```
+
+Resolution is normalized for case and Unicode representation, but it does not
+perform prefix, substring, phonetic, or fuzzy matching. It returns only direct
+conversation IDs and labels, never handles or message bodies.
 
 ## Build a style profile
 
@@ -166,8 +201,10 @@ Run `messagelikeme --help` for the checked grammar. The public surfaces are:
 ```text
 messagelikeme init [--json]
 messagelikeme ingest imessage [--database PATH] [--json]
+messagelikeme ingest contacts [--addressbook PATH] [--json]
 messagelikeme contacts list [--min-outgoing N] [--limit N] [--private] [--json]
 messagelikeme contacts show CONTACT_ID [--private] [--json]
+messagelikeme contacts resolve QUERY --private [--limit N] [--json]
 messagelikeme inspect tempo CONTACT_ID [--json]
 messagelikeme inspect sessions CONTACT_ID [--limit N] [--json]
 messagelikeme study prepare CONTACT_ID --output FILE [--limit N] [--json]
@@ -185,7 +222,8 @@ Place global `--data-dir PATH` before the command.
 
 ## Privacy model
 
-- The original `chat.db` remains authoritative and is opened read-only.
+- The original `chat.db` and AddressBook databases remain authoritative.
+  SQLite opens only stable private copies, never the source files or sidecars.
 - The normalized corpus, profiles, and installation key stay in a private local
   store with owner-only permissions.
 - Stable contact, conversation, and message IDs are derived with a private
@@ -214,8 +252,8 @@ import type { ContactMetrics, StyleProfileV1 } from "@hraness/message-like-me"
 import { canonicalJson, sha256 } from "@hraness/message-like-me"
 ```
 
-The library does not start the CLI, inspect Messages, connect to a network, or
-send a draft merely because it is imported.
+The library does not start the CLI, inspect Messages or Contacts, connect to a
+network, or send a draft merely because it is imported.
 
 ## Development
 
@@ -224,9 +262,9 @@ bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
-Tests use synthetic Messages databases and synthetic conversations. Never add
-a real message, handle, group title, attachment, contact record, private path,
-or derived profile to a fixture.
+Tests use synthetic Messages and AddressBook databases plus synthetic
+conversations. Never add a real message, handle, group title, attachment,
+contact record, private path, or derived profile to a fixture.
 
 The canonical repository is
 [`hraness/message-like-me`](https://github.com/hraness/message-like-me).

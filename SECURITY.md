@@ -14,7 +14,8 @@ boundary, observed result, and a reproduction built from synthetic data.
 Message Like Me reads private iMessage history to derive local analysis. The
 following values are sensitive even when they do not contain an obvious name:
 
-- the source Messages database and its SQLite sidecars;
+- the source Messages and AddressBook databases and their SQLite sidecars;
+- contact names, email addresses, and phone numbers;
 - message bodies, timestamps, reply links, tapbacks, and attachment metadata;
 - contact, participant, conversation, and group metadata;
 - the per-install HMAC key and all normalized corpus records;
@@ -35,10 +36,13 @@ device backup access, or an administrator.
 ## Messages ingestion
 
 The original `chat.db` is the source of authority. The iMessage reader opens it
-read-only with SQLite query-only mode inside one transaction, checks ownership
-and file type, validates the required schema dynamically, and bounds source and
-result sizes. It does not modify Messages, contacts, attachments, the source
-database, or its sidecars.
+only after copying a byte-stable snapshot of the database and active journal or
+WAL into a private temporary directory. It validates but does not copy shared
+memory, then opens only the isolated copy with SQLite query-only mode inside one
+transaction. It checks ownership and file identity before and after copying,
+validates the required schema dynamically, and bounds source and result sizes.
+It does not modify Messages, contacts, attachments, the source database, or its
+sidecars.
 
 Grant Messages or Full Disk Access only to the terminal or agent application
 you intend to use. Message Like Me does not bypass macOS privacy controls.
@@ -49,6 +53,33 @@ Message text recovered from ordinary or attributed bodies retains its source
 provenance. Missing or unsupported text remains unavailable rather than being
 guessed. Reply targets and tapbacks remain separate from prose so they cannot
 silently become authored style evidence.
+
+## Contacts enrichment
+
+Contacts enrichment is optional. The reader discovers populated
+`Sources/*/AddressBook-vN.abcddb` stores and reads only the contact identifier,
+name components, organization, email address, and phone-number columns needed
+for labeling. It does not read notes, images, postal addresses, birthdays,
+social profiles, or other AddressBook fields. It resolves contact entities and
+their descendants through source metadata and uses the actual `ZOWNER` foreign
+key rather than model-number discriminator columns.
+
+Each source database and active journal or WAL is copied into a private
+temporary directory only after bounded ownership, link, path, and byte-stability
+checks. Shared memory is validated but never copied or opened. The original
+AddressBook database and sidecars are never opened through SQLite, and the
+complete discovered source set is checked again before any enrichment is
+stored.
+
+Email and phone matching is exact and conservative. The reader does not infer
+a country, compare number suffixes, accept extensions or vanity numbers, or
+choose between several contacts that claim one method. Ambiguous methods remain
+unresolved. Group conversations are never collapsed to a single contact.
+
+The private store retains contact labels and keyed HMAC match identifiers, not
+raw AddressBook email addresses or phone numbers. Contact labels have their own
+revision, so a rename does not change the message corpus revision or invalidate
+a prose profile.
 
 ## Local identifiers
 
@@ -66,6 +97,10 @@ it.
 Aggregate contact, session, tempo, and surface-style views omit message bodies
 and private labels by default. `--private` deliberately reveals local private
 identity fields. Use it only when the current task needs that mapping.
+
+`contacts resolve QUERY --private` performs bounded exact matching against
+private labels. It does not do prefix, substring, phonetic, or fuzzy matching,
+and it does not reveal contact methods.
 
 `study prepare` is the only command designed to write bounded message bodies
 outside the private database. Its output is still private. Choose an explicit

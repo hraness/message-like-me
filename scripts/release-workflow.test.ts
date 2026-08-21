@@ -4,14 +4,14 @@ import { join } from "node:path";
 
 const WORKFLOWS = join(import.meta.dir, "..", ".github", "workflows");
 
-test("CI runs the standalone package on Ubuntu and only synthetic iMessage fixtures on macOS", async () => {
+test("CI runs the standalone package on Ubuntu and only synthetic local-data fixtures on macOS", async () => {
   const workflow = await readFile(join(WORKFLOWS, "ci.yml"), "utf8");
 
   expect(workflow).toContain("runs-on: ubuntu-24.04");
   expect(workflow).toContain("runs-on: macos-15");
   expect(workflow.match(/bun-version: "1\.3\.14"/gu)?.length).toBe(2);
   expect(workflow).toContain("bun run check");
-  expect(workflow).toContain("bun test src/imessage.test.ts src/metrics.test.ts");
+  expect(workflow).toContain("bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts");
   expect(workflow).toContain("HOME: ${{ runner.temp }}/message-like-me-fixture-home");
   expect(workflow).toContain("git status --porcelain --untracked-files=all -- dist bun.lock");
   expect(workflow).toContain("persist-credentials: false");
@@ -36,7 +36,7 @@ test("stable version tags pass an exact-main immutable release gate", async () =
   expect(workflow).toContain("newest_stable_tag=\"$(git tag --list");
   expect(workflow).toContain("bun run check");
   expect(workflow).toContain("bun pm pack --dry-run --ignore-scripts");
-  expect(workflow).toContain("bun test src/imessage.test.ts src/metrics.test.ts");
+  expect(workflow).toContain("bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts");
   expect(workflow).toContain("needs: [verify, macos_fixtures]");
   expect(workflow).toContain("contents: write");
   expect(workflow).toContain('"/repos/$GITHUB_REPOSITORY/immutable-releases"');

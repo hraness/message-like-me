@@ -2,6 +2,7 @@ import { lstat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { integerOption, parseArguments, rejectUnused, type ParsedArguments } from "./args.ts";
 import { prettyJson, sha256 } from "./canonical-json.ts";
+import { DEFAULT_CONTACTS_DIRECTORY, readMacOSContacts } from "./contacts.ts";
 import { CliError } from "./errors.ts";
 import { DEFAULT_IMESSAGE_DATABASE, readIMessageDatabase } from "./imessage.ts";
 import type { CommandIo } from "./io.ts";
@@ -24,8 +25,10 @@ export const HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
+  messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
+  messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
   messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--json]
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N] [--json]
@@ -38,8 +41,9 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads a caller-owned macOS Messages database and stores private
-analysis locally. It has no network, account, AI-provider, or message-sending surface.
+Message Like Me reads caller-owned macOS Messages and optional Contacts data,
+then stores private analysis locally. It has no network, account, AI-provider,
+or message-sending surface.
 `;
 
 async function exists(path: string): Promise<boolean> {
@@ -71,7 +75,7 @@ function globalDataPaths(parsed: ParsedArguments): DataPaths {
 async function existingStore(parsed: ParsedArguments): Promise<Readonly<{ paths: DataPaths; store: LocalStore }>> {
   const requested = globalDataPaths(parsed);
   if (!(await exists(requested.root)) || !(await exists(requested.database))) {
-    throw new CliError("not-found", "Message Like Me is not initialized; run messagelikeme init or ingest imessage");
+    throw new CliError("not-found", "Message Like Me is not initialized; run messagelikeme init or an ingest command");
   }
   const paths = await initializeDataPaths(requested);
   return { paths, store: LocalStore.open(paths.database) };
@@ -171,6 +175,28 @@ function translateIMessageError(error: unknown): never {
   throw new CliError("invalid-data", error instanceof Error ? error.message : String(error), { cause: error });
 }
 
+function translateContactsError(error: unknown): never {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError(
+      "permission",
+      "Contacts data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.",
+      { cause: error },
+    );
+  }
+  if (code === "ENOENT") {
+    throw new CliError("not-found", "The selected AddressBook source does not exist", { cause: error });
+  }
+  const message = error instanceof Error ? error.message : "";
+  throw new CliError(
+    "invalid-data",
+    message.startsWith("Contacts source ")
+      ? message
+      : "The selected AddressBook source could not be read safely",
+    { cause: error },
+  );
+}
+
 export async function runCommand(argv: readonly string[], io: CommandIo): Promise<void> {
   const parsed = parseArguments(argv);
   if (parsed.flags.has("version")) {
@@ -213,7 +239,7 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
       } catch (error) {
         translateIMessageError(error);
       }
-      const stored = context.store.replaceCorpus(snapshot, canonicalNow(io));
+      const stored = context.store.replaceCorpus(snapshot, canonicalNow(io), context.key);
       const result = {
         ...stored,
         source: {
@@ -224,6 +250,42 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         warnings: snapshot.warnings,
       };
       emit(io, json, result, `Ingested ${stored.messages} messages across ${stored.conversations} conversations`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "ingest" && subcommand === "contacts" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir", "addressbook"], ["json"]);
+    const context = await writableStore(parsed);
+    try {
+      const override = parsed.options.get("addressbook");
+      const sourcePath = override === undefined
+        ? DEFAULT_CONTACTS_DIRECTORY
+        : absolutePrivatePath(override, "--addressbook");
+      let snapshot;
+      try {
+        snapshot = readMacOSContacts(sourcePath, { hmacKey: context.key });
+      } catch (error) {
+        translateContactsError(error);
+      }
+      const stored = context.store.enrichContacts(snapshot, canonicalNow(io), context.key);
+      const result = {
+        ...stored,
+        source: {
+          databases: snapshot.sources.length,
+          bytes: snapshot.sources.reduce((sum, source) => sum + source.bytes, 0),
+          schemaSha256: snapshot.sources.map((source) => source.schemaSha256),
+        },
+        warnings: snapshot.warnings,
+      };
+      emit(
+        io,
+        json,
+        result,
+        `Matched ${stored.matched} direct conversations and enriched ${stored.enriched} private labels`,
+      );
     } finally {
       context.store.close();
     }
@@ -252,6 +314,30 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
     try {
       const detail = safeContactDetail(context.store, identifier, parsed.flags.has("private"));
       emit(io, json, detail, `Contact ${identifier}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "contacts" && subcommand === "resolve" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "limit"], ["json", "private"]);
+    if (!parsed.flags.has("private")) {
+      throw new CliError("usage", "contacts resolve requires --private");
+    }
+    const context = await existingStore(parsed);
+    try {
+      let matches;
+      try {
+        matches = context.store.resolvePrivateContacts(
+          identifier,
+          integerOption(parsed, "limit", 10, 1, 50),
+        );
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new CliError("usage", "Contact query must be bounded exact text", { cause: error });
+      }
+      emit(io, json, { exact: true, matches }, `${matches.length} exact private contact matches`);
     } finally {
       context.store.close();
     }
@@ -425,6 +511,7 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         initialized: false,
         dataDirectory: requested.root,
         defaultMessagesDatabase: DEFAULT_IMESSAGE_DATABASE,
+        defaultContactsDirectory: DEFAULT_CONTACTS_DIRECTORY,
       };
       emit(io, json, result, `Message Like Me is not initialized at ${requested.root}`);
       return;

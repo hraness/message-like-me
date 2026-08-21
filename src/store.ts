@@ -1,8 +1,14 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, lstatSync } from "node:fs";
 import { canonicalJson } from "./canonical-json.ts";
+import {
+  contactHandleMatchId,
+  normalizeContactHandle,
+  normalizeContactLabelQuery,
+} from "./contacts.ts";
 import { CliError } from "./errors.ts";
 import type {
+  ContactsSnapshot,
   ContactSummary,
   CorpusConversation,
   CorpusMessage,
@@ -64,6 +70,31 @@ const SCHEMA = `
     profile_json TEXT NOT NULL,
     applied_at TEXT NOT NULL
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS addressbook_contacts (
+    id TEXT PRIMARY KEY,
+    private_label TEXT,
+    normalized_label TEXT,
+    label_basis TEXT CHECK (label_basis IN ('display-name', 'name-parts', 'organization')),
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS addressbook_handles (
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('email', 'phone')),
+    match_id TEXT NOT NULL,
+    PRIMARY KEY (contact_id, kind, match_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE INDEX IF NOT EXISTS addressbook_handles_lookup
+    ON addressbook_handles(kind, match_id, contact_id);
+  CREATE TABLE IF NOT EXISTS conversation_contact_labels (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    private_label TEXT NOT NULL,
+    normalized_label TEXT NOT NULL,
+    label_basis TEXT NOT NULL CHECK (label_basis IN ('display-name', 'name-parts', 'organization')),
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_contact_labels_lookup
+    ON conversation_contact_labels(normalized_label, conversation_id);
 `;
 
 function get<T extends Row>(database: Database, sql: string, ...bindings: Binding[]): T | null {
@@ -101,6 +132,139 @@ function readTransaction<T>(database: Database, operation: () => T): T {
     throw error;
   }
 }
+
+function stringArray(value: string, label: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} is malformed JSON`, { cause: error });
+  }
+  if (
+    !Array.isArray(parsed)
+    || parsed.length > 1_000
+    || parsed.some((item) => typeof item !== "string" || Buffer.byteLength(item, "utf8") > 4_096)
+  ) {
+    throw new CliError("invalid-data", `${label} must be a bounded text array`);
+  }
+  return parsed as string[];
+}
+
+type LabelProjectionResult = Readonly<{
+  directConversations: number;
+  eligibleConversations: number;
+  matched: number;
+  enriched: number;
+  unmatched: number;
+  ambiguous: number;
+  matchedWithoutLabel: number;
+}>;
+
+function rebuildConversationLabels(
+  database: Database,
+  hmacKey?: string | Uint8Array,
+): LabelProjectionResult {
+  database.exec("DELETE FROM conversation_contact_labels");
+  const contacts = new Map(all<{
+    id: string;
+    private_label: string | null;
+    normalized_label: string | null;
+    label_basis: "display-name" | "name-parts" | "organization" | null;
+    contacts_revision: string;
+  }>(database, `SELECT id,private_label,normalized_label,label_basis,contacts_revision
+    FROM addressbook_contacts ORDER BY id`).map((row) => [row.id, row]));
+  const owners = new Map<string, Set<string>>();
+  for (const row of all<{
+    contact_id: string;
+    kind: "email" | "phone";
+    match_id: string;
+  }>(database, `SELECT contact_id,kind,match_id FROM addressbook_handles
+    ORDER BY kind,match_id,contact_id`)) {
+    const key = `${row.kind}\0${row.match_id}`;
+    const values = owners.get(key) ?? new Set<string>();
+    values.add(row.contact_id);
+    owners.set(key, values);
+  }
+  const conversations = all<{ id: string; private_participants_json: string }>(database, `
+    SELECT id,private_participants_json FROM conversations WHERE is_group=0 ORDER BY id
+  `);
+  const insert = database.query(`INSERT INTO conversation_contact_labels(
+    conversation_id,contact_id,private_label,normalized_label,label_basis,contacts_revision
+  ) VALUES (?,?,?,?,?,?)`);
+  let eligibleConversations = 0;
+  let matched = 0;
+  let enriched = 0;
+  let unmatched = 0;
+  let ambiguous = 0;
+  let matchedWithoutLabel = 0;
+  for (const conversation of conversations) {
+    const normalizedHandles = stringArray(
+      conversation.private_participants_json,
+      `conversation ${conversation.id} participants`,
+    ).map(normalizeContactHandle).filter((handle) => handle !== null);
+    if (normalizedHandles.length > 0 && owners.size > 0 && hmacKey === undefined) {
+      throw new CliError("internal", "The installation key is required to rebuild contact labels");
+    }
+    const keys = hmacKey === undefined
+      ? new Set<string>()
+      : new Set(normalizedHandles.map((handle) =>
+        `${handle.kind}\0${contactHandleMatchId(hmacKey, handle)}`));
+    if (keys.size > 0) eligibleConversations += 1;
+    const candidates = new Set<string>();
+    for (const key of keys) for (const contactId of owners.get(key) ?? []) candidates.add(contactId);
+    if (candidates.size === 0) {
+      unmatched += 1;
+      continue;
+    }
+    if (candidates.size > 1) {
+      ambiguous += 1;
+      continue;
+    }
+    matched += 1;
+    const contactId = [...candidates][0]!;
+    const contact = contacts.get(contactId);
+    if (
+      contact?.private_label === null
+      || contact?.normalized_label === null
+      || contact?.label_basis === null
+      || contact === undefined
+    ) {
+      matchedWithoutLabel += 1;
+      continue;
+    }
+    insert.run(
+      conversation.id,
+      contact.id,
+      contact.private_label,
+      contact.normalized_label,
+      contact.label_basis,
+      contact.contacts_revision,
+    );
+    enriched += 1;
+  }
+  return {
+    directConversations: conversations.length,
+    eligibleConversations,
+    matched,
+    enriched,
+    unmatched,
+    ambiguous,
+    matchedWithoutLabel,
+  };
+}
+
+export type ContactsEnrichmentResult = Readonly<{
+  contactsRevision: string;
+  sources: number;
+  sourceContacts: number;
+  directConversations: number;
+  eligibleConversations: number;
+  matched: number;
+  enriched: number;
+  unmatched: number;
+  ambiguous: number;
+  matchedWithoutLabel: number;
+}>;
 
 export class LocalStore {
   readonly #database: Database;
@@ -148,7 +312,144 @@ export class LocalStore {
     return encoded === null ? null : JSON.parse(encoded) as unknown;
   }
 
-  replaceCorpus(snapshot: CorpusSnapshot, ingestedAt: string): Readonly<{
+  contactsRevision(): string | null {
+    return scalarText(this.#database, "contacts_revision");
+  }
+
+  enrichContacts(
+    snapshot: ContactsSnapshot,
+    ingestedAt: string,
+    hmacKey: string | Uint8Array,
+  ): ContactsEnrichmentResult {
+    if (snapshot.schemaVersion !== 1 || !/^[a-f0-9]{64}$/u.test(snapshot.snapshotSha256)) {
+      throw new CliError("invalid-data", "The Contacts reader returned an invalid snapshot revision");
+    }
+    if (snapshot.sources.length < 1 || snapshot.sources.length > 64) {
+      throw new CliError("invalid-data", "The Contacts reader returned an invalid source count");
+    }
+    if (snapshot.contacts.length > 100_000 || snapshot.warnings.length > 16) {
+      throw new CliError("invalid-data", "The Contacts reader exceeded its result bounds");
+    }
+    const ids = new Set<string>();
+    let handleCount = 0;
+    for (const contact of snapshot.contacts) {
+      if (!/^[a-f0-9]{64}$/u.test(contact.id) || ids.has(contact.id)) {
+        throw new CliError("invalid-data", "The Contacts reader returned duplicate or invalid contact IDs");
+      }
+      ids.add(contact.id);
+      if (
+        contact.privateLabel !== null
+        && (
+          Buffer.byteLength(contact.privateLabel, "utf8") < 1
+          || Buffer.byteLength(contact.privateLabel, "utf8") > 4_096
+          || /\p{Cc}/u.test(contact.privateLabel)
+        )
+      ) throw new CliError("invalid-data", "The Contacts reader returned an invalid private label");
+      if (
+        (contact.privateLabel === null) !== (contact.privateLabelBasis === null)
+        || (
+          contact.privateLabelBasis !== null
+          && contact.privateLabelBasis !== "display-name"
+          && contact.privateLabelBasis !== "name-parts"
+          && contact.privateLabelBasis !== "organization"
+        )
+      ) throw new CliError("invalid-data", "The Contacts reader returned an invalid label basis");
+      handleCount += contact.handles.length;
+      if (handleCount > 1_000_000) {
+        throw new CliError("invalid-data", "The Contacts reader returned too many handles");
+      }
+      const handles = new Set<string>();
+      for (const handle of contact.handles) {
+        const canonical = normalizeContactHandle(handle.normalizedValue);
+        if (
+          canonical === null
+          || canonical.kind !== handle.kind
+          || canonical.normalizedValue !== handle.normalizedValue
+          || handle.matchId !== contactHandleMatchId(hmacKey, canonical)
+          || !/^[a-f0-9]{64}$/u.test(handle.matchId)
+        ) throw new CliError("invalid-data", "The Contacts reader returned a non-canonical handle");
+        const key = `${handle.kind}\0${handle.matchId}`;
+        if (handles.has(key)) {
+          throw new CliError("invalid-data", "The Contacts reader returned duplicate contact handles");
+        }
+        handles.add(key);
+      }
+    }
+    for (const warning of snapshot.warnings) {
+      if (Buffer.byteLength(warning, "utf8") > 1_024 || warning.includes("\u0000")) {
+        throw new CliError("invalid-data", "The Contacts reader returned an invalid warning");
+      }
+    }
+
+    return transaction(this.#database, () => {
+      this.#database.exec("DELETE FROM addressbook_contacts");
+      const insertContact = this.#database.query(`INSERT INTO addressbook_contacts(
+        id,private_label,normalized_label,label_basis,contacts_revision
+      ) VALUES (?,?,?,?,?)`);
+      const insertHandle = this.#database.query(`INSERT INTO addressbook_handles(
+        contact_id,kind,match_id
+      ) VALUES (?,?,?)`);
+      for (const contact of snapshot.contacts) {
+        insertContact.run(
+          contact.id,
+          contact.privateLabel,
+          contact.privateLabel === null ? null : normalizeContactLabelQuery(contact.privateLabel),
+          contact.privateLabelBasis,
+          snapshot.snapshotSha256,
+        );
+        for (const handle of contact.handles) {
+          insertHandle.run(contact.id, handle.kind, handle.matchId);
+        }
+      }
+      const projection = rebuildConversationLabels(this.#database, hmacKey);
+      const setMetadata = this.#database.query(`
+        INSERT INTO metadata (key,value) VALUES (?,?)
+        ON CONFLICT (key) DO UPDATE SET value=excluded.value
+      `);
+      for (const [key, value] of [
+        ["contacts_revision", snapshot.snapshotSha256],
+        ["contacts_source_identity", canonicalJson(snapshot.sources.map((source) => ({
+          device: source.device,
+          inode: source.inode,
+          bytes: source.bytes,
+          modifiedAt: source.modifiedAt,
+          schemaSha256: source.schemaSha256,
+        })))],
+        ["contacts_ingested_at", ingestedAt],
+        ["contacts_warnings", canonicalJson(snapshot.warnings)],
+        ["contacts_schema_version", String(snapshot.schemaVersion)],
+      ] as const) setMetadata.run(key, value);
+      return {
+        contactsRevision: snapshot.snapshotSha256,
+        sources: snapshot.sources.length,
+        sourceContacts: snapshot.contacts.length,
+        ...projection,
+      };
+    });
+  }
+
+  resolvePrivateContacts(query: string, limit: number): ReadonlyArray<Readonly<{
+    id: string;
+    privateLabel: string;
+  }>> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw new CliError("usage", "Contact resolution limit must be between 1 and 50");
+    }
+    const normalized = normalizeContactLabelQuery(query);
+    return all<{ id: string; private_label: string }>(this.#database, `
+      SELECT conversation.id,label.private_label
+      FROM conversation_contact_labels label
+      JOIN conversations conversation ON conversation.id=label.conversation_id
+      WHERE conversation.is_group=0 AND label.normalized_label=?
+      ORDER BY conversation.id LIMIT ?
+    `, normalized, limit).map((row) => ({ id: row.id, privateLabel: row.private_label }));
+  }
+
+  replaceCorpus(
+    snapshot: CorpusSnapshot,
+    ingestedAt: string,
+    hmacKey?: string | Uint8Array,
+  ): Readonly<{
     corpusRevision: string;
     conversations: number;
     messages: number;
@@ -226,6 +527,7 @@ export class LocalStore {
         ["warnings", canonicalJson(snapshot.warnings)],
         ["corpus_schema_version", String(snapshot.schemaVersion)],
       ] as const) setMetadata.run(key, value);
+      rebuildConversationLabels(this.#database, hmacKey);
     });
 
     return {
@@ -254,7 +556,9 @@ export class LocalStore {
       outgoing_count: number;
       profile_revision: string | null;
     }>(this.#database, `
-      SELECT conversation.id, conversation.private_label, conversation.is_group,
+      SELECT conversation.id,
+        coalesce(contact_label.private_label,conversation.private_label) AS private_label,
+        conversation.is_group,
         conversation.participant_count, min(message.sent_at) AS first_message_at,
         max(message.sent_at) AS last_message_at, count(message.id) AS message_count,
         sum(CASE WHEN message.direction = 'incoming' THEN 1 ELSE 0 END) AS incoming_count,
@@ -263,6 +567,8 @@ export class LocalStore {
       FROM conversations conversation
       JOIN messages message ON message.conversation_id = conversation.id
       LEFT JOIN profiles profile ON profile.contact_id = conversation.id
+      LEFT JOIN conversation_contact_labels contact_label
+        ON contact_label.conversation_id = conversation.id
       GROUP BY conversation.id
       HAVING outgoing_count >= ?
       ORDER BY outgoing_count DESC, last_message_at DESC, conversation.id
@@ -306,7 +612,10 @@ export class LocalStore {
       incoming_count: number;
       outgoing_count: number;
     }>(this.#database, `
-      SELECT conversation.*,
+      SELECT conversation.id,conversation.source_key,
+        coalesce(contact_label.private_label,conversation.private_label) AS private_label,
+        conversation.service,conversation.participant_count,conversation.participant_ids_json,
+        conversation.private_participants_json,conversation.is_group,
         min(message.sent_at) AS first_message_at,
         max(message.sent_at) AS last_message_at,
         count(message.id) AS message_count,
@@ -314,6 +623,8 @@ export class LocalStore {
         sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
       FROM conversations conversation
       LEFT JOIN messages message ON message.conversation_id = conversation.id
+      LEFT JOIN conversation_contact_labels contact_label
+        ON contact_label.conversation_id = conversation.id
       WHERE conversation.id = ?
       GROUP BY conversation.id
     `, contactId);
@@ -495,21 +806,27 @@ export class LocalStore {
     quickCheck: string;
     foreignKeyViolations: number;
     corpusRevision: string | null;
+    contactsRevision: string | null;
     conversations: number;
     messages: number;
     profiles: number;
+    addressBookContacts: number;
+    enrichedLabels: number;
   }> {
     const quick = get<{ quick_check: string }>(this.#database, "PRAGMA quick_check")?.quick_check ?? "unknown";
     const foreignKeys = all<Row>(this.#database, "PRAGMA foreign_key_check").length;
-    const count = (table: "conversations" | "messages" | "profiles") =>
+    const count = (table: "conversations" | "messages" | "profiles" | "addressbook_contacts" | "conversation_contact_labels") =>
       get<{ value: number }>(this.#database, `SELECT count(*) AS value FROM ${table}`)?.value ?? 0;
     return {
       quickCheck: quick,
       foreignKeyViolations: foreignKeys,
       corpusRevision: this.corpusRevision(),
+      contactsRevision: this.contactsRevision(),
       conversations: count("conversations"),
       messages: count("messages"),
       profiles: count("profiles"),
+      addressBookContacts: count("addressbook_contacts"),
+      enrichedLabels: count("conversation_contact_labels"),
     };
   }
 }

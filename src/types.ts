@@ -2,6 +2,7 @@ export const CORPUS_SCHEMA_VERSION = 1 as const;
 export const METRICS_SCHEMA_VERSION = 1 as const;
 export const PROFILE_SCHEMA_VERSION = 1 as const;
 export const STUDY_PACKET_SCHEMA_VERSION = 1 as const;
+export const CONTACTS_SCHEMA_VERSION = 1 as const;
 
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
@@ -55,6 +56,39 @@ export type CorpusSnapshot = Readonly<{
   source: SourceIdentity;
   conversations: readonly CorpusConversation[];
   messages: readonly CorpusMessage[];
+  warnings: readonly string[];
+}>;
+
+export type ContactHandle = Readonly<{
+  kind: "email" | "phone";
+  normalizedValue: string;
+  /** Per-install HMAC used by the local store instead of persisting the value. */
+  matchId: string;
+}>;
+
+export type AddressBookContact = Readonly<{
+  /** Per-install pseudonym for the source AddressBook record. */
+  id: string;
+  /** Sensitive local label. Ordinary aggregate commands never emit it. */
+  privateLabel: string | null;
+  privateLabelBasis: "display-name" | "name-parts" | "organization" | null;
+  handles: readonly ContactHandle[];
+}>;
+
+export type AddressBookSourceIdentity = Readonly<{
+  physicalPath: string;
+  device: string;
+  inode: string;
+  bytes: number;
+  modifiedAt: string;
+  schemaSha256: string;
+}>;
+
+export type ContactsSnapshot = Readonly<{
+  schemaVersion: typeof CONTACTS_SCHEMA_VERSION;
+  snapshotSha256: string;
+  sources: readonly AddressBookSourceIdentity[];
+  contacts: readonly AddressBookContact[];
   warnings: readonly string[];
 }>;
 

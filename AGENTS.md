@@ -1,8 +1,8 @@
 # Contents
 
-- `src/` – the deterministic local iMessage reader, normalized corpus and
-  metrics, private SQLite store, profile parser, Agent Skill installer, and
-  `messagelikeme` CLI.
+- `src/` – the deterministic local iMessage and Contacts readers, normalized
+  corpus and metrics, private SQLite store, profile parser, Agent Skill
+  installer, and `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
 - `skills/message-like-me/` – the canonical Message Like Me Agent Skill and its
@@ -29,6 +29,10 @@
 - Keep `chat.db` authoritative and ingestion read-only, query-only,
   ownership-checked, schema-validated, and bounded. Never modify Messages,
   contacts, attachments, or SQLite sidecars.
+- Treat AddressBook databases as optional label-enrichment sources. Isolate
+  every database plus WAL or journal before SQLite opens it, validate contact
+  entities and property owners dynamically, read only names and exact
+  email/phone handles, and never modify Contacts or its sidecars.
 - Keep the normalized corpus, installation key, study packets, profiles, and
   drafting context local in owned physical paths with private permissions.
   Reject symlinks and foreign-owned sensitive files.
@@ -46,7 +50,8 @@
 - Keep the command name `messagelikeme`, the repository and package name
   `message-like-me`, and the Agent Skill name `message-like-me`. Do not claim
   that `messagelikeme.com` is deployed or treat it as a data plane.
-- Keep CLI commands namespaced as `ingest imessage`, `contacts list|show`,
+- Keep CLI commands namespaced as `ingest imessage|contacts`,
+  `contacts list|show|resolve`,
   `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`, plus
   `init`, `context`, `skill`, and `doctor`. Machine-readable commands support
   stable JSON stdout; diagnostics use stderr and typed exit codes.

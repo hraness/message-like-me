@@ -71,7 +71,7 @@ jobs:
       - run: bun pm pack --dry-run --ignore-scripts
 
   macos_fixtures:
-    name: macOS synthetic iMessage fixtures
+    name: macOS synthetic Messages and Contacts fixtures
     needs: verify
     runs-on: macos-15
     timeout-minutes: 10
@@ -89,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME"
-          bun test src/imessage.test.ts src/metrics.test.ts
+          bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts
 
   publish:
     name: Publish immutable GitHub release

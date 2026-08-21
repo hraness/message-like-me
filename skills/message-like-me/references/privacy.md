@@ -7,9 +7,11 @@ sensitive local data.
 ## Data boundary
 
 - Use the `messagelikeme` CLI for ingestion and inspection. Do not open, copy,
-  transform, or query the live Messages database through an improvised script.
-- Keep the original `chat.db` authoritative. Ingestion is read-only and must
-  not change Messages, contacts, attachments, or database sidecars.
+  transform, or query the live Messages or AddressBook databases through an
+  improvised script.
+- Keep the original `chat.db` and AddressBook stores authoritative. Ingestion
+  is read-only and must not change Messages, Contacts, attachments, or database
+  sidecars.
 - Do not send message data to a model API, hosted service, analytics system,
   remote MCP server, or network endpoint. The agent already executing this
   skill performs the semantic work directly in its current context.
@@ -27,6 +29,12 @@ Start with aggregate views that omit bodies, handles, names, and group titles.
 Request a bounded study packet only when semantic evidence is necessary. Keep
 the contact scope, date range, and sample size no larger than the analysis
 requires.
+
+AddressBook enrichment is optional and exact. Use
+`messagelikeme contacts resolve <query> --private --json` only when a user-named
+recipient must be mapped. It matches a complete normalized private label, does
+not use fuzzy or suffix matching, and does not reveal email addresses or phone
+numbers. Do not copy resolved names into profiles or notes.
 
 Use private stable identifiers in profiles and notes. Do not persist raw
 handles, contact names, group titles, attachments, or verbatim excerpts merely

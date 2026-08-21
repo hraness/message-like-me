@@ -36,7 +36,7 @@ jobs:
           fi
 
   macos_fixtures:
-    name: macOS synthetic iMessage fixtures
+    name: macOS synthetic Messages and Contacts fixtures
     runs-on: macos-15
     timeout-minutes: 10
     steps:
@@ -53,4 +53,4 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME"
-          bun test src/imessage.test.ts src/metrics.test.ts
+          bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts

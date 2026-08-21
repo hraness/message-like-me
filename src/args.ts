@@ -1,6 +1,7 @@
 import { CliError } from "./errors.ts";
 
 const VALUE_OPTIONS = new Set([
+  "addressbook",
   "burst-gap",
   "data-dir",
   "database",
