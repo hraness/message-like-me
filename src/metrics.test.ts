@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { analyzeContact, buildStudyPacket } from "./metrics.ts";
+import {
+  analyzeContact,
+  buildEvaluationPackets,
+  buildStudyPacket,
+  messagesInTimeWindow,
+} from "./metrics.ts";
 import type { CorpusMessage, MessageKind } from "./types.ts";
 
 const CORPUS_REVISION = "a".repeat(64);
@@ -16,6 +21,7 @@ function message(
     kind?: MessageKind;
     replyTo?: string | null;
     attachments?: number;
+    retractedAt?: string | null;
   }> = {},
 ): CorpusMessage {
   return Object.freeze({
@@ -30,7 +36,7 @@ function message(
     kind: options.kind ?? (body === null ? "unknown" : "text"),
     replyToSourceGuid: options.replyTo ?? null,
     editedAt: null,
-    retractedAt: null,
+    retractedAt: options.retractedAt ?? null,
     service: "iMessage",
     attachmentCount: options.attachments ?? 0,
   });
@@ -221,9 +227,131 @@ describe("analyzeContact", () => {
       burstGapSeconds: 31,
     })).toThrow("cannot exceed");
   });
+
+  test("excludes retracted and system records from style and tempo evidence", () => {
+    const messages = [
+      message("eligible-in", 1, "2024-05-01T00:00:00.000Z", "incoming", "Are you coming?"),
+      message("retracted-out", 2, "2024-05-01T00:00:10.000Z", "outgoing", "secret draft", {
+        replyTo: "source-eligible-in",
+        retractedAt: "2024-05-01T00:00:11.000Z",
+      }),
+      message("system-out", 3, "2024-05-01T00:00:20.000Z", "outgoing", "A system event", {
+        kind: "system",
+      }),
+      message("eligible-out", 4, "2024-05-01T00:00:30.000Z", "outgoing", "yes"),
+      message("retracted-reaction", 5, "2024-05-01T00:00:40.000Z", "outgoing", "Loved a message", {
+        kind: "reaction",
+        retractedAt: "2024-05-01T00:00:41.000Z",
+      }),
+    ] as const;
+
+    const metrics = analyzeContact(messages, CORPUS_REVISION, CONTACT_ID);
+
+    expect(metrics).toMatchObject({
+      messageCount: 5,
+      incomingCount: 1,
+      outgoingCount: 4,
+      textMessageCount: 2,
+    });
+    expect(metrics.sessions).toHaveLength(1);
+    expect(metrics.sessions[0]).toMatchObject({
+      messageCount: 2,
+      incomingCount: 1,
+      outgoingCount: 1,
+    });
+    expect(metrics.bursts.map(({ messageIds }) => messageIds)).toEqual([
+      ["eligible-in"],
+      ["eligible-out"],
+    ]);
+    expect(metrics.responses).toHaveLength(1);
+    expect(metrics.responses[0]).toMatchObject({
+      incomingMessageIds: ["eligible-in"],
+      outgoingMessageIds: ["eligible-out"],
+      explicitReplyCount: 0,
+    });
+    expect(metrics.tempo.explicitReplyMessages).toBe(0);
+    expect(metrics.surface).toMatchObject({
+      outgoingTextMessages: 1,
+      characters: { total: 3 },
+    });
+    expect(metrics.reactions).toEqual({
+      total: 0,
+      incoming: 0,
+      outgoing: 0,
+      outgoingReactionRatio: 0,
+    });
+  });
+});
+
+describe("messagesInTimeWindow", () => {
+  test("uses an inclusive after bound, exclusive before bound, and canonical ordering", () => {
+    const messages = [
+      message("after-before", 4, "2024-06-01T00:00:20.000Z", "outgoing", "excluded before"),
+      message("at-after", 2, "2024-06-01T00:00:10.000Z", "incoming", "included after"),
+      message("inside", 3, "2024-06-01T00:00:15.000Z", "outgoing", "included inside"),
+      message("before-after", 1, "2024-06-01T00:00:05.000Z", "incoming", "excluded after"),
+    ] as const;
+
+    const selected = messagesInTimeWindow(messages, {
+      after: "2024-06-01T00:00:10.000Z",
+      before: "2024-06-01T00:00:20.000Z",
+    });
+
+    expect(selected.map(({ id }) => id)).toEqual(["at-after", "inside"]);
+    expect(messages.map(({ id }) => id)).toEqual([
+      "after-before",
+      "at-after",
+      "inside",
+      "before-after",
+    ]);
+  });
+
+  test("rejects non-canonical and inverted bounds", () => {
+    const messages = studyCorpus();
+    expect(() => messagesInTimeWindow(messages, { after: "2024-02-01" }))
+      .toThrow("canonical ISO timestamp");
+    expect(() => messagesInTimeWindow(messages, {
+      after: "2024-02-02T00:00:00.000Z",
+      before: "2024-02-01T00:00:00.000Z",
+    })).toThrow("after must be earlier than before");
+    expect(() => messagesInTimeWindow(messages, {
+      after: "2024-02-01T00:00:00.000Z",
+      before: "2024-02-01T00:00:00.000Z",
+    })).toThrow("after must be earlier than before");
+  });
 });
 
 describe("buildStudyPacket", () => {
+  test("emits v2 evidence provenance without replacing the global corpus revision", () => {
+    const evidenceRevision = "b".repeat(64);
+    const after = "2024-02-01T00:10:00.000Z";
+    const before = "2024-02-01T12:00:00.000Z";
+    const selected = messagesInTimeWindow(studyCorpus(), { after, before });
+    const metrics = analyzeContact(selected, CORPUS_REVISION, CONTACT_ID);
+
+    const packet = buildStudyPacket(selected, metrics, {
+      limit: 3,
+      generatedAt: "2024-03-01T00:00:00.000Z",
+      evidenceRevision,
+      evidenceWindow: { after, before },
+    });
+
+    expect(packet).toMatchObject({
+      schemaVersion: 2,
+      corpusRevision: CORPUS_REVISION,
+      evidenceRevision,
+      contactId: CONTACT_ID,
+      evidenceWindow: { after, before },
+      metrics: {
+        firstMessageAt: after,
+        lastMessageAt: "2024-02-01T11:02:00.000Z",
+        messageCount: selected.length,
+      },
+    });
+    expect(Object.hasOwn(packet.metrics, "corpusRevision")).toBeFalse();
+    expect(Object.hasOwn(packet.metrics, "evidenceRevision")).toBeFalse();
+  });
+
   test("selects deterministic, diverse, exact response contexts within the bound", () => {
     const messages = studyCorpus();
     const metrics = analyzeContact(messages, CORPUS_REVISION, CONTACT_ID);
@@ -421,5 +549,112 @@ describe("buildStudyPacket", () => {
     })).toThrow("maxMessagesPerDirectionPerExample");
     expect(() => buildStudyPacket(messages, metrics, { maxTotalBodyBytes: 1_048_577 }))
       .toThrow("maxTotalBodyBytes");
+  });
+});
+
+describe("buildEvaluationPackets", () => {
+  test("separates prompts from references and keeps held-out cases chronological", () => {
+    const after = "2024-02-01T00:10:00.000Z";
+    const before = "2024-02-01T12:00:00.000Z";
+    const evidenceRevision = "b".repeat(64);
+    const selected = messagesInTimeWindow(studyCorpus(), { after, before });
+    const metrics = analyzeContact(selected, CORPUS_REVISION, CONTACT_ID);
+    const options = {
+      after,
+      before,
+      evidenceRevision,
+      generatedAt: "2024-03-01T00:00:00.000Z",
+      limit: 3,
+    } as const;
+
+    const packets = buildEvaluationPackets(selected, metrics, options);
+    const reversed = buildEvaluationPackets([...selected].reverse(), metrics, options);
+    const fullCorpus = studyCorpus();
+    const fromUnfilteredInputs = buildEvaluationPackets(
+      fullCorpus,
+      analyzeContact(fullCorpus, CORPUS_REVISION, CONTACT_ID),
+      options,
+    );
+
+    expect(reversed).toEqual(packets);
+    const sentAtById = new Map(fullCorpus.map(({ id, sentAt }) => [id, sentAt]));
+    expect(fromUnfilteredInputs.prompt.cases.flatMap(({ incoming }) => incoming)
+      .every(({ id }) => sentAtById.get(id)! >= after && sentAtById.get(id)! < before)).toBe(true);
+    expect(fromUnfilteredInputs.reference.cases.flatMap(({ outgoing }) => outgoing)
+      .every(({ id }) => sentAtById.get(id)! >= after && sentAtById.get(id)! < before)).toBe(true);
+    expect(packets.prompt).toMatchObject({
+      schemaVersion: 1,
+      generatedAt: options.generatedAt,
+      corpusRevision: CORPUS_REVISION,
+      evidenceRevision,
+      contactId: CONTACT_ID,
+      evidenceWindow: { after, before },
+      selection: {
+        algorithm: "temporal-held-out-responses-v1",
+        requestedLimit: 3,
+        eligibleCandidates: 2,
+        emitted: 2,
+      },
+    });
+    expect(packets.reference).toMatchObject({
+      evaluationId: packets.prompt.evaluationId,
+      generatedAt: packets.prompt.generatedAt,
+      corpusRevision: packets.prompt.corpusRevision,
+      evidenceRevision: packets.prompt.evidenceRevision,
+      contactId: packets.prompt.contactId,
+      evidenceWindow: packets.prompt.evidenceWindow,
+      notice: "Open only after the candidate drafts for every case are fixed.",
+    });
+
+    expect(packets.prompt.cases.map(({ startedAt }) => startedAt)).toEqual([
+      "2024-02-01T00:10:00.000Z",
+      "2024-02-01T10:00:00.000Z",
+    ]);
+    expect(packets.prompt.cases.map(({ id }) => id)).toEqual(
+      packets.reference.cases.map(({ id }) => id),
+    );
+    expect(packets.prompt.cases.flatMap(({ incoming }) =>
+      incoming.map(({ id, direction }) => [id, direction]))).toEqual([
+      ["m05", "incoming"],
+      ["m10", "incoming"],
+    ]);
+    expect(packets.reference.cases.flatMap(({ outgoing }) =>
+      outgoing.map(({ id, direction }) => [id, direction]))).toEqual([
+      ["m06", "outgoing"],
+      ["m11", "outgoing"],
+      ["m12", "outgoing"],
+    ]);
+    expect(JSON.stringify(packets.prompt)).not.toContain("nah!");
+    expect(JSON.stringify(packets.prompt)).not.toContain("follow up 😊");
+    expect(packets.prompt.budget.emittedBodyBytes).toBe(
+      packets.prompt.cases.flatMap(({ incoming }) => incoming)
+        .reduce((total, item) => total + item.emittedBodyBytes, 0),
+    );
+    expect(JSON.stringify(packets.reference)).not.toContain("Bring anything?");
+    expect(JSON.stringify(packets.reference)).not.toContain("Can you send the full version?");
+    expect(packets.reference.cases.map(({ shape }) => shape)).toEqual([
+      { bubbles: 1, characters: 4, words: 1, explicitReplyMessages: 0 },
+      { bubbles: 2, characters: 311, words: 3, explicitReplyMessages: 0 },
+    ]);
+  });
+
+  test("rejects invalid temporal and packet bounds", () => {
+    const messages = studyCorpus();
+    const metrics = analyzeContact(messages, CORPUS_REVISION, CONTACT_ID);
+    const base = {
+      after: "2024-02-01T00:00:00.000Z",
+      generatedAt: "2024-03-01T00:00:00.000Z",
+    } as const;
+
+    expect(() => buildEvaluationPackets(messages, metrics, { ...base, limit: 26 }))
+      .toThrow("1 through 25");
+    expect(() => buildEvaluationPackets(messages, metrics, {
+      ...base,
+      before: base.after,
+    })).toThrow("after must be earlier than before");
+    expect(() => buildEvaluationPackets(messages, metrics, {
+      ...base,
+      after: "2024-02-01",
+    })).toThrow("canonical ISO timestamp");
   });
 });

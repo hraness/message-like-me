@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 
 import {
+  EVALUATION_PACKET_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION,
   type BurstMetric,
   type ContactMetrics,
   type CorpusMessage,
   type Direction,
+  type EvaluationPromptPacket,
+  type EvaluationReferencePacket,
   type ReactionMetrics,
   type ResponseEpisode,
   type SessionMetric,
@@ -81,8 +84,24 @@ export type AnalyzeContactOptions = Readonly<{
 export type BuildStudyPacketOptions = Readonly<{
   limit?: number;
   generatedAt?: string;
+  evidenceRevision?: string;
+  evidenceWindow?: Readonly<{
+    after?: string | null;
+    before?: string | null;
+  }>;
   maxTextBytesPerMessage?: number;
   maxMessagesPerDirectionPerExample?: number;
+  maxTotalBodyBytes?: number;
+}>;
+
+export type BuildEvaluationPacketsOptions = Readonly<{
+  limit?: number;
+  generatedAt?: string;
+  evidenceRevision?: string;
+  after: string;
+  before?: string | null;
+  maxTextBytesPerMessage?: number;
+  maxMessagesPerDirectionPerCase?: number;
   maxTotalBodyBytes?: number;
 }>;
 
@@ -128,6 +147,32 @@ function canonicalTimestamp(value: string, label: string): number {
   return milliseconds;
 }
 
+function optionalCanonicalTimestamp(
+  value: string | null | undefined,
+  label: string,
+): Readonly<{ value: string | null; milliseconds: number | null }> {
+  if (value === undefined || value === null) return Object.freeze({ value: null, milliseconds: null });
+  return Object.freeze({ value, milliseconds: canonicalTimestamp(value, label) });
+}
+
+export function messagesInTimeWindow(
+  messages: readonly CorpusMessage[],
+  window: Readonly<{ after?: string | null; before?: string | null }>,
+): readonly CorpusMessage[] {
+  const after = optionalCanonicalTimestamp(window.after, "after");
+  const before = optionalCanonicalTimestamp(window.before, "before");
+  if (
+    after.milliseconds !== null
+    && before.milliseconds !== null
+    && after.milliseconds >= before.milliseconds
+  ) throw new Error("after must be earlier than before");
+  return Object.freeze(orderedMessages(messages).flatMap(({ message, milliseconds }) =>
+    (after.milliseconds === null || milliseconds >= after.milliseconds)
+      && (before.milliseconds === null || milliseconds < before.milliseconds)
+      ? [message]
+      : []));
+}
+
 function orderedMessages(messages: readonly CorpusMessage[]): readonly OrderedMessage[] {
   if (!Array.isArray(messages)) throw new Error("messages must be an array");
   const ids = new Set<string>();
@@ -156,11 +201,12 @@ function orderedMessages(messages: readonly CorpusMessage[]): readonly OrderedMe
 }
 
 function timelineEligible(message: CorpusMessage): boolean {
-  return message.kind === "text" || message.kind === "attachment" || message.kind === "reaction";
+  return message.retractedAt === null
+    && (message.kind === "text" || message.kind === "attachment" || message.kind === "reaction");
 }
 
 function responseEligible(message: CorpusMessage): boolean {
-  return message.kind === "text" || message.kind === "attachment";
+  return message.retractedAt === null && (message.kind === "text" || message.kind === "attachment");
 }
 
 function secondsBetween(left: OrderedMessage, right: OrderedMessage): number {
@@ -265,7 +311,7 @@ function burstsFor(
 
 function bodies(rows: readonly OrderedMessage[]): readonly string[] {
   return rows.flatMap(({ message }) =>
-    message.kind === "text" && message.body !== null ? [message.body] : []);
+    message.retractedAt === null && message.kind === "text" && message.body !== null ? [message.body] : []);
 }
 
 function characterCount(value: string): number {
@@ -408,7 +454,8 @@ function ratio(count: number, total: number): number {
 
 function surfaceMetrics(messages: readonly OrderedMessage[]): SurfaceStyleMetrics {
   const outgoing = messages.flatMap(({ message }) =>
-    message.direction === "outgoing" && message.kind === "text" && message.body !== null
+    message.retractedAt === null
+      && message.direction === "outgoing" && message.kind === "text" && message.body !== null
       ? [message.body]
       : []);
   const characters = outgoing.map(characterCount);
@@ -436,7 +483,8 @@ function tempoMetrics(messages: readonly OrderedMessage[], responses: readonly R
   const latencies = responses.map((response) => response.latencySeconds);
   const bundles = responses.map((response) => response.outgoingCount);
   const outgoingText = messages.filter(({ message }) =>
-    message.direction === "outgoing" && message.kind === "text" && message.body !== null);
+    message.retractedAt === null
+      && message.direction === "outgoing" && message.kind === "text" && message.body !== null);
   const explicitReplies = outgoingText.filter(({ message }) => message.replyToSourceGuid !== null).length;
   return Object.freeze({
     responseEpisodes: responses.length,
@@ -461,7 +509,8 @@ function tempoMetrics(messages: readonly OrderedMessage[], responses: readonly R
 }
 
 function reactionMetrics(messages: readonly OrderedMessage[]): ReactionMetrics {
-  const reactions = messages.filter(({ message }) => message.kind === "reaction");
+  const reactions = messages.filter(({ message }) =>
+    message.kind === "reaction" && message.retractedAt === null);
   const outgoing = reactions.filter(({ message }) => message.direction === "outgoing").length;
   const outgoingActions = messages.filter(({ message }) =>
     message.direction === "outgoing" && timelineEligible(message)).length;
@@ -522,7 +571,8 @@ export function analyzeContact(
     messageCount: ordered.length,
     incomingCount: ordered.filter(({ message }) => message.direction === "incoming").length,
     outgoingCount: ordered.filter(({ message }) => message.direction === "outgoing").length,
-    textMessageCount: ordered.filter(({ message }) => message.kind === "text" && message.body !== null).length,
+    textMessageCount: ordered.filter(({ message }) =>
+      message.retractedAt === null && message.kind === "text" && message.body !== null).length,
     sessionGapSeconds,
     burstGapSeconds,
     sessions,
@@ -876,7 +926,22 @@ export function buildStudyPacket(
   );
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   canonicalTimestamp(generatedAt, "generatedAt");
-  const ordered = orderedMessages(messages);
+  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
+  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
+    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
+  }
+  const after = optionalCanonicalTimestamp(options.evidenceWindow?.after, "evidenceWindow.after");
+  const before = optionalCanonicalTimestamp(options.evidenceWindow?.before, "evidenceWindow.before");
+  if (
+    after.milliseconds !== null
+    && before.milliseconds !== null
+    && after.milliseconds >= before.milliseconds
+  ) throw new Error("evidenceWindow.after must be earlier than evidenceWindow.before");
+  const afterMilliseconds = after.milliseconds;
+  const beforeMilliseconds = before.milliseconds;
+  const ordered = orderedMessages(messages).filter(({ milliseconds }) =>
+    (afterMilliseconds === null || milliseconds >= afterMilliseconds)
+    && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
   const candidateSet = candidatesFor(
     ordered,
     metrics,
@@ -892,7 +957,9 @@ export function buildStudyPacket(
     schemaVersion: STUDY_PACKET_SCHEMA_VERSION,
     generatedAt,
     corpusRevision: metrics.corpusRevision,
+    evidenceRevision,
     contactId: metrics.contactId,
+    evidenceWindow: Object.freeze({ after: after.value, before: before.value }),
     metrics: aggregateStudyMetrics(metrics),
     examples: selected.examples,
     selection: Object.freeze({
@@ -926,6 +993,141 @@ export function buildStudyPacket(
       ),
       omittedExamplesByTotalBodyBytes: selected.omittedByTotalBodyBytes,
       omittedExampleBodyBytes: selected.omittedExampleBodyBytes,
+    }),
+  });
+}
+
+/** Build temporally held-out prompt and reference packets without model calls. */
+export function buildEvaluationPackets(
+  messages: readonly CorpusMessage[],
+  metrics: ContactMetrics,
+  options: BuildEvaluationPacketsOptions,
+): Readonly<{
+  prompt: EvaluationPromptPacket;
+  reference: EvaluationReferencePacket;
+}> {
+  const limit = options.limit ?? 8;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) {
+    throw new Error("evaluation limit must be an integer from 1 through 25");
+  }
+  const maximumTextBytes = boundedStudyInteger(
+    options.maxTextBytesPerMessage,
+    DEFAULT_MAX_STUDY_TEXT_BYTES,
+    MAX_STUDY_TEXT_BYTES,
+    "maxTextBytesPerMessage",
+  );
+  const maximumMessagesPerDirection = boundedStudyInteger(
+    options.maxMessagesPerDirectionPerCase,
+    DEFAULT_MAX_STUDY_MESSAGES_PER_DIRECTION,
+    MAX_STUDY_MESSAGES_PER_DIRECTION,
+    "maxMessagesPerDirectionPerCase",
+  );
+  const maximumBodyBytes = boundedStudyInteger(
+    options.maxTotalBodyBytes,
+    DEFAULT_MAX_STUDY_PACKET_BODY_BYTES,
+    MAX_STUDY_PACKET_BODY_BYTES,
+    "maxTotalBodyBytes",
+  );
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
+  canonicalTimestamp(generatedAt, "generatedAt");
+  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
+  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
+    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
+  }
+  const after = optionalCanonicalTimestamp(options.after, "after");
+  const before = optionalCanonicalTimestamp(options.before, "before");
+  if (after.value === null || after.milliseconds === null) throw new Error("after is required");
+  if (
+    before.milliseconds !== null
+    && after.milliseconds >= before.milliseconds
+  ) throw new Error("after must be earlier than before");
+
+  const afterMilliseconds = after.milliseconds;
+  const beforeMilliseconds = before.milliseconds;
+  const ordered = orderedMessages(messages).filter(({ milliseconds }) =>
+    milliseconds >= afterMilliseconds
+    && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
+  const candidateSet = candidatesFor(
+    ordered,
+    metrics,
+    maximumTextBytes,
+    maximumMessagesPerDirection,
+  );
+  const chronological = [...candidateSet.candidates].sort((left, right) =>
+    left.milliseconds - right.milliseconds
+    || left.example.id.localeCompare(right.example.id, "en-US"));
+  const selected: ResponseCandidate[] = [];
+  let emittedBodyBytes = 0;
+  for (const candidate of chronological) {
+    if (selected.length >= limit) break;
+    if (candidate.bodyBytes > maximumBodyBytes - emittedBodyBytes) continue;
+    selected.push(candidate);
+    emittedBodyBytes += candidate.bodyBytes;
+  }
+  const caseIds = selected.map(({ example }) => example.id);
+  const evaluationId = digest("evaluation", [
+    metrics.corpusRevision,
+    evidenceRevision,
+    metrics.contactId,
+    after.value,
+    before.value ?? "",
+    ...caseIds,
+  ]);
+  const promptCases = Object.freeze(selected.map(({ example }) => Object.freeze({
+    id: example.id,
+    startedAt: example.startedAt,
+    incoming: Object.freeze(example.messages.filter(({ direction }) => direction === "incoming")),
+  })));
+  const referenceCases = Object.freeze(selected.map(({ example }) => {
+    const outgoing = Object.freeze(example.messages.filter(({ direction }) => direction === "outgoing"));
+    return Object.freeze({
+      id: example.id,
+      startedAt: example.startedAt,
+      outgoing,
+      shape: Object.freeze({
+        bubbles: outgoing.length,
+        characters: outgoing.reduce((total, message) => total + characterCount(message.body), 0),
+        words: outgoing.reduce((total, message) => total + wordCount(message.body), 0),
+        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply).length,
+      }),
+    });
+  }));
+  const promptMessages = promptCases.flatMap(({ incoming }) => incoming);
+  const evidenceWindow = Object.freeze({ after: after.value, before: before.value });
+  const shared = {
+    schemaVersion: EVALUATION_PACKET_SCHEMA_VERSION,
+    evaluationId,
+    generatedAt,
+    corpusRevision: metrics.corpusRevision,
+    evidenceRevision,
+    contactId: metrics.contactId,
+    evidenceWindow,
+  } as const;
+  return Object.freeze({
+    prompt: Object.freeze({
+      ...shared,
+      cases: promptCases,
+      selection: Object.freeze({
+        algorithm: "temporal-held-out-responses-v1" as const,
+        requestedLimit: limit,
+        eligibleCandidates: candidateSet.candidates.length,
+        emitted: promptCases.length,
+      }),
+      budget: Object.freeze({
+        maxTextBytesPerMessage: maximumTextBytes,
+        maxMessagesPerDirectionPerCase: maximumMessagesPerDirection,
+        maxTotalBodyBytes: maximumBodyBytes,
+        emittedBodyBytes: promptMessages.reduce(
+          (total, message) => total + message.emittedBodyBytes,
+          0,
+        ),
+        truncatedMessages: promptMessages.filter(({ bodyTruncated }) => bodyTruncated).length,
+      }),
+    }),
+    reference: Object.freeze({
+      ...shared,
+      cases: referenceCases,
+      notice: "Open only after the candidate drafts for every case are fixed." as const,
     }),
   });
 }

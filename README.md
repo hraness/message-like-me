@@ -12,13 +12,18 @@ The CLI does not call an AI service, authenticate with a product account, send
 messages, or operate Messages. The agent already running the skill supplies the
 semantic analysis and drafting judgment.
 
+This is an evidence layer for relationship-aware drafting, not a digital clone.
+It does not train a model, represent your identity, infer your beliefs, or claim
+that a draft is what you would have written. Your current meaning, facts, and
+intent outrank historical style.
+
 ## Install
 
 Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.1.0
+bun add --global github:hraness/message-like-me#v0.2.0
 messagelikeme skill install
 ```
 
@@ -74,7 +79,8 @@ copy of the database and its transactional sidecars, and opens only that copy
 with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
 require permission for the terminal or agent host to read Messages data.
 
-Optionally enrich direct conversations with private labels from macOS Contacts:
+Optionally enrich and join direct conversations with private identities from
+macOS Contacts:
 
 ```sh
 messagelikeme ingest contacts --json
@@ -92,11 +98,14 @@ messagelikeme ingest contacts \
 
 Contacts ingest may run before or after iMessage ingest. It reads only bounded
 name, email, and phone fields from a stable private copy. Exact normalized
-email or phone handles can label direct conversations. Shared handles remain
-ambiguous, local phone numbers never gain a guessed country code, and groups
-are never collapsed to one contact. Contact labels have their own revision, so
-a rename does not stale a messaging-style profile. `messagelikeme doctor`
-reports local aggregate state without asking for an account or credential.
+email or phone handles can join several one-to-one iMessage, SMS, and email
+threads for the same AddressBook person into one analysis scope. Existing
+conversation IDs remain aliases for that person scope. Shared handles remain
+ambiguous, local phone numbers never gain a guessed country code, unmatched
+threads stay separate, and groups are never collapsed to one person. Contact
+labels have their own revision, so a rename does not stale a messaging-style
+profile. `messagelikeme doctor` reports local aggregate state without asking
+for an account or credential.
 
 ## Inspect behavior without exposing prose
 
@@ -106,15 +115,17 @@ bodies by default:
 ```sh
 messagelikeme contacts list --min-outgoing 20 --json
 messagelikeme contacts show <contact-id> --json
-messagelikeme inspect tempo <contact-id> --json
+messagelikeme inspect tempo <contact-id> --session-gap 28800 --burst-gap 300 --json
 messagelikeme inspect sessions <contact-id> --limit 20 --json
 ```
 
 The metrics cover conversation start and end, message counts, incoming and
-outgoing turns, response latency, single-message versus multi-message replies,
-surface prose features, multi-point response contexts, and explicit reply use.
-Incoming messages establish what you were responding to; they are never
-counted as examples of your writing style.
+outgoing turns, within-session response latency, single-message versus
+multi-message replies, surface prose features, multi-point response contexts,
+reactions, and explicit reply use. Incoming messages establish what you were
+responding to; they are never counted as examples of your writing style.
+Session and burst gaps are configurable seconds and are recorded with each
+result. They are segmentation choices, not universal facts about conversation.
 
 Pass `--private` to `contacts list` or `contacts show` only when you need to
 resolve a pseudonymous contact to its local private label or participants.
@@ -128,7 +139,7 @@ messagelikeme contacts resolve "Exact Contact Name" --private --json
 
 Resolution is normalized for case and Unicode representation, but it does not
 perform prefix, substring, phonetic, or fuzzy matching. It returns only direct
-conversation IDs and labels, never handles or message bodies.
+person scopes and labels, never handles or message bodies.
 
 ## Build a style profile
 
@@ -139,27 +150,30 @@ small, diverse study packet at an explicit private path:
 ```sh
 messagelikeme study prepare <contact-id> \
   --output /absolute/private/path/study.json \
+  --before 2026-08-01T00:00:00.000Z \
   --limit 24 \
   --json
 ```
 
-This is the only command that writes bounded message bodies outside the private
-database. The output is mode `0600`. It contains incoming context and outgoing
-responses selected across different response shapes; it is not a full
-transcript export. By default, each body is capped at 4 KiB, each example keeps
-at most 12 text messages per direction, and the entire packet keeps at most
-256 KiB of body text. Packet coverage fields report every truncation or
-omission explicitly.
+`study prepare` and `evaluate prepare` are the only commands that write bounded
+message bodies outside the private database. Their outputs are mode `0600`.
+A study packet contains incoming context and outgoing responses selected across
+different response shapes; it is not a full transcript export. By default,
+each body is capped at 4 KiB, each example keeps at most 12 text messages per
+direction, and the entire packet keeps at most 256 KiB of body text. Packet
+coverage fields report every truncation or omission explicitly.
 
 Keep the JSON receipt with the analysis. Its `packetSha256` binds the finished
 profile to these exact packet bytes; the packet does not contain its own digest.
 
-Invoke `$message-like-me` in your agent and ask it to analyze that contact. The
-skill separates measured facts from inferred patterns, covers prose and tempo,
-studies how several inbound points are handled, and treats reply links and
-tapbacks separately from written text.
+`--after` is inclusive and `--before` is exclusive. Temporal bounds let you
+reserve later conversations for evaluation. Invoke `$message-like-me` in your
+agent and ask it to analyze that contact. The skill separates measured facts
+from inferred patterns, covers prose and tempo, studies how several inbound
+points are handled, and treats reply links and tapbacks separately from written
+text.
 
-The agent writes a schema-version-one profile and asks the CLI to validate and
+The agent writes a schema-version-two profile and asks the CLI to validate and
 store it:
 
 ```sh
@@ -167,15 +181,43 @@ messagelikeme profile apply /absolute/private/path/profile.json --json
 messagelikeme profile show <contact-id> --json
 ```
 
-A profile is bound to the exact corpus revision and study-packet SHA-256. A new
-ingest can therefore mark an earlier profile stale instead of silently applying
-it to changed evidence.
+A version-two profile records the global corpus revision for provenance, a
+person-and-window-specific evidence revision for validity, the exact
+study-packet SHA-256, and the packet's non-body evidence manifest. Measured and
+inferred claims cite valid packet example IDs and record counterexamples,
+support counts, confidence, and drafting consequences. Messages for someone
+else or outside the studied time window do not stale it; changes inside its
+actual evidence do.
 
 Export a profile only when you need an explicit private copy:
 
 ```sh
 messagelikeme profile export <contact-id> --output /absolute/private/path/profile.json
 ```
+
+Version-one profiles remain readable for migration, but new analyses should use
+[`schema/style-profile-v2.schema.json`](schema/style-profile-v2.schema.json).
+
+## Audit against later conversations
+
+Prepare a separate prompt and reference set from conversations after the study
+cutoff:
+
+```sh
+messagelikeme evaluate prepare <contact-id> \
+  --after 2026-08-01T00:00:00.000Z \
+  --prompt-output /absolute/private/path/evaluation-prompts.json \
+  --reference-output /absolute/private/path/evaluation-references.json \
+  --json
+```
+
+Give the agent only the prompt file and fix one candidate bubble sequence per
+case before opening the reference file. Then compare intent coverage, factual
+meaning, prose, bubble shape, explicit replies, privacy leakage, and
+calibration. The files support a blind workflow but do not enforce one, and the
+historical response is one observation rather than a unique correct answer.
+The CLI deliberately does not collapse these dimensions into a universal
+fidelity score. See [the methodology](docs/methodology.md).
 
 ## Draft an unsent reply
 
@@ -205,9 +247,14 @@ messagelikeme ingest contacts [--addressbook PATH] [--json]
 messagelikeme contacts list [--min-outgoing N] [--limit N] [--private] [--json]
 messagelikeme contacts show CONTACT_ID [--private] [--json]
 messagelikeme contacts resolve QUERY --private [--limit N] [--json]
-messagelikeme inspect tempo CONTACT_ID [--json]
-messagelikeme inspect sessions CONTACT_ID [--limit N] [--json]
-messagelikeme study prepare CONTACT_ID --output FILE [--limit N] [--json]
+messagelikeme inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
+messagelikeme inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
+messagelikeme study prepare CONTACT_ID --output FILE [--limit N]
+  [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+  [--session-gap N] [--burst-gap N] [--json]
+messagelikeme evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
+  --prompt-output FILE --reference-output FILE [--before ISO_TIMESTAMP]
+  [--limit N] [--session-gap N] [--burst-gap N] [--json]
 messagelikeme profile apply FILE [--json]
 messagelikeme profile show CONTACT_ID [--json]
 messagelikeme profile export CONTACT_ID --output FILE [--json]
@@ -228,8 +275,8 @@ Place global `--data-dir PATH` before the command.
   store with owner-only permissions.
 - Stable contact, conversation, and message IDs are derived with a private
   per-install HMAC key. Pseudonymous IDs are not encryption.
-- Aggregate commands omit bodies and private labels. Study packets are bounded,
-  explicit body-bearing exports.
+- Aggregate commands omit bodies and private labels. Study and evaluation
+  packets are bounded, explicit body-bearing exports.
 - Message text never goes to a Message Like Me server. There is no service,
   account, auth flow, analytics client, or network-backed model call.
 - Opening a study packet makes its bounded excerpts visible to the agent
@@ -240,7 +287,10 @@ Place global `--data-dir PATH` before the command.
 - A draft is never sent.
 
 Read [SECURITY.md](SECURITY.md) before integrating the library into another
-tool or handling a private study packet outside the CLI.
+tool or handling a private packet outside the CLI. The
+[methodology](docs/methodology.md) defines every unit and evidence boundary;
+the [research review](docs/research.md) documents papers, neighboring OSS, and
+the claims this project does not make.
 
 ## TypeScript library
 
@@ -248,7 +298,7 @@ The package exports the versioned corpus, metrics, study-packet, and profile
 types plus deterministic canonical JSON and SHA-256 helpers:
 
 ```ts
-import type { ContactMetrics, StyleProfileV1 } from "@hraness/message-like-me"
+import type { ContactMetrics, StyleProfileV2 } from "@hraness/message-like-me"
 import { canonicalJson, sha256 } from "@hraness/message-like-me"
 ```
 

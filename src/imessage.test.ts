@@ -106,6 +106,7 @@ type FixtureMessage = Readonly<{
   corrupt?: 0 | 1;
   editedAt?: string | null;
   retractedAt?: string | null;
+  rawRetractedAt?: bigint;
   hasAttachments?: 0 | 1;
 }>;
 
@@ -135,9 +136,10 @@ function insertMessage(database: Database, message: FixtureMessage): number {
     message.editedAt === undefined || message.editedAt === null
       ? null
       : appleNanoseconds(message.editedAt),
-    message.retractedAt === undefined || message.retractedAt === null
-      ? null
-      : appleNanoseconds(message.retractedAt),
+    message.rawRetractedAt
+      ?? (message.retractedAt === undefined || message.retractedAt === null
+        ? null
+        : appleNanoseconds(message.retractedAt)),
     message.hasAttachments ?? 0,
   );
   return Number(result.lastInsertRowid);
@@ -218,6 +220,20 @@ function createFixture(path: string): void {
         associatedGuid: "p:0/direct-incoming-guid",
       }),
       insertMessage(database, {
+        guid: "direct-retracted-guid",
+        sentAt: "2024-01-01T00:00:50.000Z",
+        fromMe: 1,
+        text: "PRIVATE RETRACTED BODY",
+        retractedAt: "2024-01-01T00:01:10.000Z",
+      }),
+      insertMessage(database, {
+        guid: "direct-malformed-retraction-guid",
+        sentAt: "2024-01-01T00:00:55.000Z",
+        fromMe: 1,
+        text: "PRIVATE MALFORMED RETRACTION BODY",
+        rawRetractedAt: -1n,
+      }),
+      insertMessage(database, {
         guid: "group-incoming-guid",
         handleId: 2,
         sentAt: "2024-01-02T10:00:00.000Z",
@@ -242,6 +258,7 @@ function createFixture(path: string): void {
         guid: "group-system-guid",
         sentAt: "2024-01-02T10:04:00.000Z",
         fromMe: 0,
+        text: "PRIVATE SYSTEM BODY",
         itemType: 1,
         system: 1,
       }),
@@ -280,21 +297,23 @@ function createFixture(path: string): void {
     join.run(1, messages[1]!);
     join.run(1, messages[1]!); // A duplicate join must not duplicate the message.
     join.run(1, messages[2]!);
-    join.run(2, messages[3]!);
-    join.run(2, messages[4]!);
+    join.run(1, messages[3]!);
+    join.run(1, messages[4]!);
     join.run(2, messages[5]!);
     join.run(2, messages[6]!);
     join.run(2, messages[7]!);
-    join.run(1, messages[7]!); // Lowest chat ROWID is selected deterministically.
-    join.run(1, messages[8]!);
-    join.run(1, messages[9]!);
+    join.run(2, messages[8]!);
+    join.run(2, messages[9]!);
+    join.run(1, messages[9]!); // Lowest chat ROWID is selected deterministically.
     join.run(1, messages[10]!);
+    join.run(1, messages[11]!);
+    join.run(1, messages[12]!);
     const attachment = database.query(
       "INSERT INTO message_attachment_join (message_id,attachment_id) VALUES (?,?)",
     );
-    attachment.run(messages[5]!, 91);
-    attachment.run(messages[5]!, 91);
-    attachment.run(messages[5]!, 92);
+    attachment.run(messages[7]!, 91);
+    attachment.run(messages[7]!, 91);
+    attachment.run(messages[7]!, 92);
   } finally {
     database.close();
     chmodSync(path, 0o600);
@@ -341,7 +360,7 @@ describe("readIMessageDatabase", () => {
 
     expect(repeated).toEqual(snapshot);
     expect(snapshot.conversations).toHaveLength(2);
-    expect(snapshot.messages).toHaveLength(9);
+    expect(snapshot.messages).toHaveLength(11);
     expect(snapshot.source.physicalPath).toBe(realpathSync(path));
     expect(snapshot.source.schemaSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(snapshot.source.snapshotSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -365,12 +384,27 @@ describe("readIMessageDatabase", () => {
     const fallbackReply = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "group-reply-guid")!;
     expect(fallbackReply.replyToSourceGuid).toBe("group-incoming-guid");
     const reaction = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "direct-reaction-guid")!;
-    expect(reaction.kind).toBe("reaction");
+    expect(reaction).toMatchObject({ kind: "reaction", body: null, bodySource: "unavailable" });
     expect(reaction.replyToSourceGuid).toBeNull();
+    const retracted = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "direct-retracted-guid")!;
+    expect(retracted).toMatchObject({
+      kind: "text",
+      body: null,
+      bodySource: "unavailable",
+      retractedAt: "2024-01-01T00:01:10.000Z",
+    });
+    const malformedRetraction = snapshot.messages.find(({ sourceGuid }) =>
+      sourceGuid === "direct-malformed-retraction-guid")!;
+    expect(malformedRetraction).toMatchObject({
+      kind: "text",
+      body: null,
+      bodySource: "unavailable",
+      retractedAt: null,
+    });
     const attachment = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "group-attachment-guid")!;
     expect(attachment).toMatchObject({ kind: "attachment", attachmentCount: 2, body: null });
     const system = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "group-system-guid")!;
-    expect(system.kind).toBe("system");
+    expect(system).toMatchObject({ kind: "system", body: null, bodySource: "unavailable" });
     const ambiguous = snapshot.messages.find(({ sourceGuid }) => sourceGuid === "ambiguous-guid")!;
     expect(ambiguous.conversationId).toBe(direct.id);
     const missingHandle = snapshot.messages.find(({ sourceGuid }) =>
@@ -389,6 +423,10 @@ describe("readIMessageDatabase", () => {
     expect(warnings).not.toContain("spam-guid");
     expect(warnings).not.toContain("corrupt-guid");
     expect(warnings).not.toMatch(/[a-f0-9]{64}/u);
+    expect(JSON.stringify(snapshot.messages)).not.toContain("Loved “Are you free?”");
+    expect(JSON.stringify(snapshot.messages)).not.toContain("PRIVATE RETRACTED BODY");
+    expect(JSON.stringify(snapshot.messages)).not.toContain("PRIVATE MALFORMED RETRACTION BODY");
+    expect(JSON.stringify(snapshot.messages)).not.toContain("PRIVATE SYSTEM BODY");
 
     const otherInstall = readIMessageDatabase(path, { hmacKey: "another-synthetic-install-key-32" });
     expect(otherInstall.messages.map(({ sourceGuid }) => sourceGuid)).toEqual(
@@ -412,6 +450,11 @@ describe("readIMessageDatabase", () => {
     chmodSync(malformed, 0o600);
     expect(() => readIMessageDatabase(malformed, { hmacKey: TEST_HMAC_KEY }))
       .toThrow("message is missing required column service");
+  });
+
+  test("rejects a relative source path", () => {
+    expect(() => readIMessageDatabase("relative-chat.db", { hmacKey: TEST_HMAC_KEY }))
+      .toThrow("path must be absolute");
   });
 
   test("retains the schema warning alongside fixed aggregate categories", () => {

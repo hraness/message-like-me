@@ -1,6 +1,6 @@
 {
   "name": "@hraness/message-like-me",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local-first CLI and Agent Skill for studying your private iMessage history and drafting messages that sound like you.",
   "license": "MIT",
   "type": "module",
@@ -36,8 +36,10 @@
   },
   "files": [
     "dist",
+    "docs",
     "schema",
     "skills",
+    "CHANGELOG.md",
     "README.md",
     "SECURITY.md",
     "LICENSE"

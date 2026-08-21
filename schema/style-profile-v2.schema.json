@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Message Like Me style profile v2",
+  "description": "A locally derived, evidence-bound messaging style profile. The runtime parser additionally trims text and enforces every documented string bound in UTF-8 bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contactId",
+    "corpusRevision",
+    "packetSha256",
+    "analyzedAt",
+    "evidence",
+    "overview",
+    "prose",
+    "tempo",
+    "replies",
+    "contexts",
+    "claims",
+    "invariants",
+    "avoid",
+    "confidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "contactId": { "$ref": "#/$defs/identifier" },
+    "corpusRevision": { "$ref": "#/$defs/digest" },
+    "packetSha256": { "$ref": "#/$defs/digest" },
+    "analyzedAt": { "$ref": "#/$defs/timestamp" },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceRevision",
+        "firstMessageAt",
+        "lastMessageAt",
+        "messageCount",
+        "outgoingTextMessages",
+        "responseEpisodes",
+        "studyExamples",
+        "selectionAlgorithm",
+        "after",
+        "before"
+      ],
+      "properties": {
+        "evidenceRevision": { "$ref": "#/$defs/digest" },
+        "firstMessageAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "lastMessageAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "messageCount": { "$ref": "#/$defs/count" },
+        "outgoingTextMessages": { "$ref": "#/$defs/count" },
+        "responseEpisodes": { "$ref": "#/$defs/count" },
+        "studyExamples": { "type": "integer", "minimum": 0, "maximum": 50 },
+        "selectionAlgorithm": { "const": "bounded-diverse-response-contexts-v1" },
+        "after": { "$ref": "#/$defs/nullableTimestamp" },
+        "before": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "overview": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "prose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "register",
+        "capitalization",
+        "punctuation",
+        "vocabulary",
+        "warmth",
+        "humor",
+        "openingPatterns",
+        "closingPatterns",
+        "notablePatterns"
+      ],
+      "properties": {
+        "register": { "$ref": "#/$defs/profileText" },
+        "capitalization": { "$ref": "#/$defs/profileText" },
+        "punctuation": { "$ref": "#/$defs/profileText" },
+        "vocabulary": { "$ref": "#/$defs/profileText" },
+        "warmth": { "$ref": "#/$defs/profileText" },
+        "humor": { "$ref": "#/$defs/profileText" },
+        "openingPatterns": { "$ref": "#/$defs/textList" },
+        "closingPatterns": { "$ref": "#/$defs/textList" },
+        "notablePatterns": { "$ref": "#/$defs/textList" }
+      }
+    },
+    "tempo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultBundle",
+        "singleLongMessage",
+        "multipleMessages",
+        "responseTiming",
+        "followUps"
+      ],
+      "properties": {
+        "defaultBundle": { "$ref": "#/$defs/profileText" },
+        "singleLongMessage": { "$ref": "#/$defs/profileText" },
+        "multipleMessages": { "$ref": "#/$defs/profileText" },
+        "responseTiming": { "$ref": "#/$defs/profileText" },
+        "followUps": { "$ref": "#/$defs/profileText" }
+      }
+    },
+    "replies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usage", "useWhen", "avoidWhen"],
+      "properties": {
+        "usage": { "$ref": "#/$defs/profileText" },
+        "useWhen": { "$ref": "#/$defs/textList" },
+        "avoidWhen": { "$ref": "#/$defs/textList" }
+      }
+    },
+    "contexts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "when",
+          "incomingPattern",
+          "responseStrategy",
+          "prosePattern",
+          "tempoPattern",
+          "evidenceExampleIds"
+        ],
+        "properties": {
+          "when": { "$ref": "#/$defs/profileText" },
+          "incomingPattern": { "$ref": "#/$defs/profileText" },
+          "responseStrategy": { "$ref": "#/$defs/profileText" },
+          "prosePattern": { "$ref": "#/$defs/profileText" },
+          "tempoPattern": { "$ref": "#/$defs/profileText" },
+          "evidenceExampleIds": { "$ref": "#/$defs/textList" }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dimension",
+          "statement",
+          "basis",
+          "appliesWhen",
+          "supportExampleIds",
+          "counterexampleIds",
+          "supportCount",
+          "confidence",
+          "draftingConsequence"
+        ],
+        "properties": {
+          "dimension": { "enum": ["prose", "tempo", "reply", "context"] },
+          "statement": { "$ref": "#/$defs/profileText" },
+          "basis": { "enum": ["measured", "inferred"] },
+          "appliesWhen": { "$ref": "#/$defs/profileText" },
+          "supportExampleIds": { "$ref": "#/$defs/textList" },
+          "counterexampleIds": { "$ref": "#/$defs/textList" },
+          "supportCount": { "$ref": "#/$defs/count" },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "draftingConsequence": { "$ref": "#/$defs/profileText" }
+        }
+      }
+    },
+    "invariants": { "$ref": "#/$defs/textList" },
+    "avoid": { "$ref": "#/$defs/textList" },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "prose", "tempo", "replies", "contexts", "limitations"],
+      "properties": {
+        "overall": { "$ref": "#/$defs/confidence" },
+        "prose": { "$ref": "#/$defs/confidence" },
+        "tempo": { "$ref": "#/$defs/confidence" },
+        "replies": { "$ref": "#/$defs/confidence" },
+        "contexts": { "$ref": "#/$defs/confidence" },
+        "limitations": { "$ref": "#/$defs/textList" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": { "type": "string", "format": "date-time", "minLength": 1, "maxLength": 64 },
+    "nullableTimestamp": {
+      "anyOf": [
+        { "$ref": "#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "count": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "profileText": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "textList": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    }
+  }
+}

@@ -6,9 +6,15 @@ including how those choices change with the contact and the situation.
 
 ## Establish the evidence scope
 
-Record the local corpus or study-packet identifier, conversation scope, date
-range, authored-message count, and any exclusions. Check whether the evidence
-spans enough conversations and contexts to support the requested claim.
+Record the global corpus revision, scope-and-window evidence revision, packet
+digest, person or conversation scope, time bounds, authored-message count,
+segmentation parameters, and exclusions. Check whether the evidence spans
+enough conversations and contexts to support the requested claim.
+
+An AddressBook-matched `person_...` scope can combine several conservatively
+matched direct Messages conversations with one person. An unmatched contact ID
+or a group remains a conversation scope. Analyze the observed messaging scope
+without inferring a relationship category, importance, or status.
 
 Start with aggregate metrics. Open bounded text samples only for questions the
 metrics cannot answer, such as how the user acknowledges emotion, resolves
@@ -20,8 +26,18 @@ The normal command sequence is:
 ```sh
 messagelikeme inspect tempo <contact-id> --json
 messagelikeme inspect sessions <contact-id> --limit 20 --json
-messagelikeme study prepare <contact-id> --output <private-file> --limit 24 --json
+messagelikeme study prepare <contact-id> \
+  --output <private-file> \
+  --limit 24 \
+  --after <inclusive-iso-time> \
+  --before <exclusive-iso-time> \
+  --json
 ```
+
+Omit `--after` or `--before` when the question does not require that bound.
+Use both for a specific era, `--before` for profile evidence preceding a
+held-out cutoff, and `--after` for an explicitly recent profile. Compare time
+windows before treating drift as a stable contact difference.
 
 The numeric limits are starting bounds, not targets. Use fewer examples when
 they answer the question. Increase a limit only when the existing sample is
@@ -30,10 +46,11 @@ too sparse or homogeneous to support the requested conclusion.
 Retain the JSON receipt from `study prepare`. Use its `packetSha256` for the
 profile provenance field; the packet does not contain its own digest.
 
-Before reading the examples, inspect the packet-level `budget` and each
-example's `coverage`. Treat truncated bodies, omitted messages, and examples
-omitted by the total byte budget as evidence limitations. Do not reconstruct
-missing prose or imply that a bounded excerpt is a complete turn.
+Before reading the examples, inspect `evidenceWindow`, the packet-level
+`budget`, and each example's `coverage`. Treat truncated bodies, omitted
+messages, and examples omitted by the total byte budget as evidence
+limitations. Do not reconstruct missing prose or imply that a bounded excerpt
+is a complete turn.
 
 Use three levels of scope when the evidence permits:
 
@@ -62,13 +79,19 @@ Look for patterns that materially change a draft:
 
 Capture tendencies, not a bag of catchphrases. Prefer structural observations
 such as “answers first, then adds one softening sentence” over reusable private
-quotes.
+quotes. A response-episode packet does not automatically sample session
+openings, closings, or standalone follow-ups. Leave those profile dimensions
+uncertain unless the selected examples actually expose them.
 
 ## Study tempo and message shape
 
-Use measured turn and session data for tempo. Examine:
+Use measured turn and session data for tempo. A response episode is an incoming
+burst followed by the next outgoing burst in the same operational session.
+Report its latency as **within-session response latency under a named session
+gap and burst gap**. It is not total time-to-response across all messages.
+Examine:
 
-- response latency distributions by context and time of day;
+- within-session response-latency distributions by context and time of day;
 - one long bubble versus a burst of short bubbles;
 - messages per outgoing turn and the gaps inside a burst;
 - character, word, and sentence counts per bubble and per turn;
@@ -78,8 +101,10 @@ Use measured turn and session data for tempo. Examine:
 - explicit reply-link frequency and the situations where replies are used;
 - tapbacks as lightweight acknowledgements, separate from written replies.
 
-Do not describe response latency as an obligation or promise. Historical tempo
-is descriptive and may reflect availability rather than preference.
+Do not describe within-session response latency as an obligation, promise,
+availability signal, or general preference. The sample excludes incoming
+bursts without a later outgoing burst in the same session and may be shaped by
+sleep, work, travel, notification state, or missing history.
 
 ## Study response structure
 
@@ -102,14 +127,21 @@ For each conclusion, retain:
 - the scope where it applies;
 - whether it is measured or inferred;
 - concise evidence without raw private quotations;
-- a confidence level and meaningful counterexamples;
+- supporting example IDs, meaningful counterexample IDs, and a grounded
+  support count;
+- a confidence level, including dimension-specific confidence; and
 - the drafting consequence.
+
+A `measured` claim restates a value the deterministic artifact exposes under
+its recorded definitions. An `inferred` claim interprets one or more bounded
+examples. Do not explain a measured pattern with a guessed motive. Do not cite
+incoming prose as evidence of the user's voice.
 
 Read [profile-schema.md](profile-schema.md) before storing the synthesis. If a
 prior profile exists, preserve still-supported observations, revise findings
 whose evidence changed, and retain the new evidence window. Do not silently
 turn a contact-specific rule into a universal rule.
 
-Write the finished schema-version-one JSON to a private file outside Git and
+Write the finished schema-version-two JSON to a private file outside Git and
 run `messagelikeme profile apply <file> --json`. Treat a validation error as a
 profile error to correct, never as a reason to bypass the schema.

@@ -5,6 +5,8 @@
   installer, and `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
+- `docs/` – public methodology, evidence limits, research review, and prior-art
+  comparisons.
 - `skills/message-like-me/` – the canonical Message Like Me Agent Skill and its
   progressive analysis, drafting, privacy, and profile references.
 - `site/` – the informational public project page; it has no private-data or
@@ -13,8 +15,8 @@
   verification.
 - `dist/` – committed Bun-targeted JavaScript used by immutable GitHub installs.
 - `.github/workflows/` – read-only CI and checks-gated immutable tag releases.
-- `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `LICENSE` – standalone
-  public documentation, policy, and terms.
+- `README.md`, `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `LICENSE` –
+  standalone public documentation, release history, policy, and terms.
 - `package.json`, `tsconfig.json`, and `bun.lock` – Bun package, build, and
   verification configuration.
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -61,6 +61,35 @@ describe("private local paths", () => {
       await expect(atomicWritePrivate(path, "second")).rejects.toMatchObject({ code: "EEXIST" });
       expect(await readFile(path, "utf8")).toBe("first");
       expect((await lstat(path)).mode & 0o777).toBe(0o600);
+      expect((await lstat(path)).nlink).toBe(1);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  test("creates a missing output parent privately", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-output-parent-"));
+    const parent = join(root, "private-output");
+    const path = join(parent, "packet.json");
+    try {
+      await atomicWritePrivate(path, "private");
+      expect((await lstat(parent)).mode & 0o777).toBe(0o700);
+      expect((await lstat(path)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an existing non-private output parent without changing it", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "message-like-me-public-output-"));
+    const path = join(parent, "packet.json");
+    try {
+      await chmod(parent, 0o755);
+      await expect(atomicWritePrivate(path, "private")).rejects.toThrow(
+        "refusing to change a caller-owned directory",
+      );
+      expect((await lstat(parent)).mode & 0o777).toBe(0o755);
+      await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(parent, { recursive: true, force: true });
     }

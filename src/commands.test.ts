@@ -7,8 +7,8 @@ import { main } from "./cli.ts";
 import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
 import { LocalStore } from "./store.ts";
-import { syntheticProfile } from "./test-fixtures.ts";
-import type { CorpusSnapshot } from "./types.ts";
+import { syntheticProfileV2 } from "./test-fixtures.ts";
+import type { CorpusSnapshot, StudyPacket } from "./types.ts";
 
 function corpus(): CorpusSnapshot {
   const contactId = "contact_0123456789abcdef";
@@ -49,6 +49,18 @@ function corpus(): CorpusSnapshot {
       {
         id: "outgoing_2", sourceRowId: 3, sourceGuid: "private-guid-3", conversationId: contactId,
         sentAt: "2026-08-21T10:01:20.000Z", direction: "outgoing", body: "that works",
+        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        retractedAt: null, service: "iMessage", attachmentCount: 0,
+      },
+      {
+        id: "incoming_2", sourceRowId: 4, sourceGuid: "private-guid-4", conversationId: contactId,
+        sentAt: "2026-08-21T11:00:00.000Z", direction: "incoming", body: "What about the later check?",
+        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        retractedAt: null, service: "iMessage", attachmentCount: 0,
+      },
+      {
+        id: "outgoing_3", sourceRowId: 5, sourceGuid: "private-guid-5", conversationId: contactId,
+        sentAt: "2026-08-21T11:01:00.000Z", direction: "outgoing", body: "later answer",
         bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
@@ -122,6 +134,8 @@ describe("messagelikeme CLI", () => {
       expect(capture.stdout()).not.toContain("synthetic@example.test");
       expect(capture.stdout()).not.toContain("yes");
       expect(capture.stdout()).not.toContain("CLI Private Name");
+      expect(capture.stdout()).toContain('"scopeKind": "person"');
+      expect(capture.stdout()).toContain('"conversationCount": 1');
 
       capture.clear();
       expect(await main([
@@ -134,22 +148,77 @@ describe("messagelikeme CLI", () => {
         "--data-dir", paths.root, "contacts", "resolve", "cli private name",
         "--private", "--json",
       ], capture.io)).toBe(0);
-      expect(capture.stdout()).toContain("CLI Private Name");
-      expect(capture.stdout()).toContain("contact_0123456789abcdef");
+      const resolved = JSON.parse(capture.stdout()) as {
+        matches: Array<{ id: string; privateLabel: string }>;
+      };
+      expect(resolved.matches).toHaveLength(1);
+      const personId = resolved.matches[0]!.id;
+      expect(personId).toMatch(/^person_[a-f0-9]{64}$/u);
+      expect(resolved.matches[0]!.privateLabel).toBe("CLI Private Name");
       expect(capture.stdout()).not.toContain("synthetic@example.test");
 
       capture.clear();
       const packetPath = join(root, "packet.json");
       expect(await main([
-        "--data-dir", paths.root, "study", "prepare", "contact_0123456789abcdef",
-        "--output", packetPath, "--limit", "4", "--json",
+        "--data-dir", paths.root, "study", "prepare", personId,
+        "--output", packetPath, "--before", "2026-08-21T11:00:00.000Z",
+        "--limit", "4", "--json",
       ], capture.io)).toBe(0);
-      const receipt = JSON.parse(capture.stdout()) as { packetSha256: string; examples: number };
+      const receipt = JSON.parse(capture.stdout()) as {
+        packetSha256: string;
+        evidenceRevision: string;
+        examples: number;
+      };
       expect(receipt.examples).toBe(1);
-      expect(await readFile(packetPath, "utf8")).toContain("that works");
+      const packet = JSON.parse(await readFile(packetPath, "utf8")) as StudyPacket;
+      expect(JSON.stringify(packet)).toContain("that works");
+      expect(JSON.stringify(packet)).not.toContain("later answer");
+      expect(packet.evidenceWindow).toEqual({
+        after: null,
+        before: "2026-08-21T11:00:00.000Z",
+      });
 
       const profilePath = join(root, "profile.json");
-      await writeFile(profilePath, JSON.stringify(syntheticProfile({ packetSha256: receipt.packetSha256 })), { mode: 0o600 });
+      const exampleId = packet.examples[0]!.id;
+      const baseProfile = syntheticProfileV2() as Record<string, unknown>;
+      const profile = {
+        ...baseProfile,
+        contactId: personId,
+        corpusRevision: packet.corpusRevision,
+        packetSha256: receipt.packetSha256,
+        evidence: {
+          evidenceRevision: receipt.evidenceRevision,
+          firstMessageAt: packet.metrics.firstMessageAt,
+          lastMessageAt: packet.metrics.lastMessageAt,
+          messageCount: packet.metrics.messageCount,
+          outgoingTextMessages: packet.metrics.surface.outgoingTextMessages,
+          responseEpisodes: packet.metrics.tempo.responseEpisodes,
+          studyExamples: packet.examples.length,
+          selectionAlgorithm: packet.selection.algorithm,
+          after: packet.evidenceWindow.after,
+          before: packet.evidenceWindow.before,
+        },
+        contexts: [{
+          when: "a concrete question arrives",
+          incomingPattern: "one direct ask",
+          responseStrategy: "answer it",
+          prosePattern: "brief and literal",
+          tempoPattern: "one or two bubbles",
+          evidenceExampleIds: [exampleId],
+        }],
+        claims: [{
+          dimension: "tempo",
+          statement: "This response used two bubbles.",
+          basis: "measured",
+          appliesWhen: "within this synthetic response episode",
+          supportExampleIds: [exampleId],
+          counterexampleIds: [],
+          supportCount: 1,
+          confidence: "high",
+          draftingConsequence: "Consider two bubbles for a comparable reply.",
+        }],
+      };
+      await writeFile(profilePath, JSON.stringify(profile), { mode: 0o600 });
       capture.clear();
       expect(await main([
         "--data-dir", paths.root, "profile", "apply", profilePath, "--json",
@@ -158,11 +227,29 @@ describe("messagelikeme CLI", () => {
 
       capture.clear();
       expect(await main([
-        "--data-dir", paths.root, "context", "contact_0123456789abcdef", "--json",
+        "--data-dir", paths.root, "context", personId, "--json",
       ], capture.io)).toBe(0);
-      expect(capture.stdout()).toContain('"multiRatio": 1');
+      expect(capture.stdout()).toContain('"state": "current"');
       expect(capture.stdout()).not.toContain("that works");
       expect(capture.stdout()).not.toContain("private-guid");
+
+      const promptPath = join(root, "evaluation-prompts.json");
+      const referencePath = join(root, "evaluation-references.json");
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "evaluate", "prepare", personId,
+        "--after", "2026-08-21T11:00:00.000Z",
+        "--prompt-output", promptPath,
+        "--reference-output", referencePath,
+        "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stdout()).toContain('"cases": 1');
+      const prompt = await readFile(promptPath, "utf8");
+      const reference = await readFile(referencePath, "utf8");
+      expect(prompt).toContain("What about the later check?");
+      expect(prompt).not.toContain("later answer");
+      expect(reference).toContain("later answer");
+      expect(reference).not.toContain("What about the later check?");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

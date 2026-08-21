@@ -9,7 +9,6 @@ import {
   realpath,
   stat,
   unlink,
-  writeFile,
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -124,6 +123,7 @@ export async function loadOrCreateInstallKey(path: string): Promise<Uint8Array> 
       await handle.close();
     }
     await assertPrivateRegularFile(path);
+    await syncDirectory(dirname(path));
     return Uint8Array.from(key);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return loadOrCreateInstallKey(path);
@@ -131,18 +131,62 @@ export async function loadOrCreateInstallKey(path: string): Promise<Uint8Array> 
   }
 }
 
+async function privateOutputDirectory(path: string): Promise<string> {
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  const requested = await lstat(path);
+  if (requested.isSymbolicLink() || !requested.isDirectory()) {
+    throw new CliError("unsafe-path", `${path} must be a physical directory`);
+  }
+  await assertOwned(path);
+  if ((requested.mode & 0o077) !== 0) {
+    throw new CliError(
+      "unsafe-path",
+      `${path} must already have private permissions; refusing to change a caller-owned directory`,
+    );
+  }
+  return realpath(path);
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await open(path, "r");
+    await handle.sync();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EINVAL" && code !== "ENOTSUP" && code !== "EISDIR" && code !== "EPERM") {
+      throw error;
+    }
+  } finally {
+    await handle?.close();
+  }
+}
+
 export async function atomicWritePrivate(path: string, bytes: string | Uint8Array): Promise<void> {
-  const parent = await ensurePrivateDirectory(dirname(resolve(path)));
+  const parent = await privateOutputDirectory(dirname(resolve(path)));
   const destination = join(parent, basename(path));
   const temporary = join(parent, `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
+  let published = false;
   try {
-    await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
-    await chmod(temporary, 0o600);
+    const handle = await open(temporary, "wx", 0o600);
+    try {
+      await handle.writeFile(bytes);
+      await handle.chmod(0o600);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await link(temporary, destination);
+    published = true;
     await unlink(temporary);
     await assertPrivateRegularFile(destination);
+    await syncDirectory(parent);
   } catch (error) {
     await unlink(temporary).catch(() => undefined);
+    if (published) {
+      await unlink(destination).catch(() => undefined);
+      await syncDirectory(parent).catch(() => undefined);
+    }
     throw error;
   }
 }

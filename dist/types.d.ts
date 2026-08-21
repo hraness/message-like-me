@@ -1,7 +1,9 @@
 export declare const CORPUS_SCHEMA_VERSION: 1;
 export declare const METRICS_SCHEMA_VERSION: 1;
-export declare const PROFILE_SCHEMA_VERSION: 1;
-export declare const STUDY_PACKET_SCHEMA_VERSION: 1;
+export declare const PROFILE_SCHEMA_VERSION: 2;
+export declare const LEGACY_PROFILE_SCHEMA_VERSION: 1;
+export declare const STUDY_PACKET_SCHEMA_VERSION: 2;
+export declare const EVALUATION_PACKET_SCHEMA_VERSION: 1;
 export declare const CONTACTS_SCHEMA_VERSION: 1;
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
@@ -239,7 +241,12 @@ export type StudyPacket = Readonly<{
     schemaVersion: typeof STUDY_PACKET_SCHEMA_VERSION;
     generatedAt: string;
     corpusRevision: string;
+    evidenceRevision: string;
     contactId: string;
+    evidenceWindow: Readonly<{
+        after: string | null;
+        before: string | null;
+    }>;
     metrics: StudyAggregateMetrics;
     examples: readonly StudyExample[];
     selection: Readonly<{
@@ -264,8 +271,64 @@ export type StudyPacket = Readonly<{
         omittedExampleBodyBytes: number;
     }>;
 }>;
+export type EvaluationPromptCase = Readonly<{
+    id: string;
+    startedAt: string;
+    incoming: readonly StudyMessage[];
+}>;
+export type EvaluationReferenceCase = Readonly<{
+    id: string;
+    startedAt: string;
+    outgoing: readonly StudyMessage[];
+    shape: Readonly<{
+        bubbles: number;
+        characters: number;
+        words: number;
+        explicitReplyMessages: number;
+    }>;
+}>;
+export type EvaluationPromptPacket = Readonly<{
+    schemaVersion: typeof EVALUATION_PACKET_SCHEMA_VERSION;
+    evaluationId: string;
+    generatedAt: string;
+    corpusRevision: string;
+    evidenceRevision: string;
+    contactId: string;
+    evidenceWindow: Readonly<{
+        after: string;
+        before: string | null;
+    }>;
+    cases: readonly EvaluationPromptCase[];
+    selection: Readonly<{
+        algorithm: "temporal-held-out-responses-v1";
+        requestedLimit: number;
+        eligibleCandidates: number;
+        emitted: number;
+    }>;
+    budget: Readonly<{
+        maxTextBytesPerMessage: number;
+        maxMessagesPerDirectionPerCase: number;
+        maxTotalBodyBytes: number;
+        emittedBodyBytes: number;
+        truncatedMessages: number;
+    }>;
+}>;
+export type EvaluationReferencePacket = Readonly<{
+    schemaVersion: typeof EVALUATION_PACKET_SCHEMA_VERSION;
+    evaluationId: string;
+    generatedAt: string;
+    corpusRevision: string;
+    evidenceRevision: string;
+    contactId: string;
+    evidenceWindow: Readonly<{
+        after: string;
+        before: string | null;
+    }>;
+    cases: readonly EvaluationReferenceCase[];
+    notice: "Open only after the candidate drafts for every case are fixed.";
+}>;
 export type StyleProfileV1 = Readonly<{
-    schemaVersion: typeof PROFILE_SCHEMA_VERSION;
+    schemaVersion: typeof LEGACY_PROFILE_SCHEMA_VERSION;
     contactId: string;
     corpusRevision: string;
     packetSha256: string;
@@ -309,9 +372,86 @@ export type StyleProfileV1 = Readonly<{
         limitations: readonly string[];
     }>;
 }>;
+export type ProfileEvidenceV2 = Readonly<{
+    evidenceRevision: string;
+    firstMessageAt: string | null;
+    lastMessageAt: string | null;
+    messageCount: number;
+    outgoingTextMessages: number;
+    responseEpisodes: number;
+    studyExamples: number;
+    selectionAlgorithm: "bounded-diverse-response-contexts-v1";
+    after: string | null;
+    before: string | null;
+}>;
+export type ProfileClaimV2 = Readonly<{
+    dimension: "prose" | "tempo" | "reply" | "context";
+    statement: string;
+    basis: "measured" | "inferred";
+    appliesWhen: string;
+    supportExampleIds: readonly string[];
+    counterexampleIds: readonly string[];
+    supportCount: number;
+    confidence: "low" | "medium" | "high";
+    draftingConsequence: string;
+}>;
+export type StyleProfileV2 = Readonly<{
+    schemaVersion: typeof PROFILE_SCHEMA_VERSION;
+    contactId: string;
+    corpusRevision: string;
+    packetSha256: string;
+    analyzedAt: string;
+    evidence: ProfileEvidenceV2;
+    overview: string;
+    prose: Readonly<{
+        register: string;
+        capitalization: string;
+        punctuation: string;
+        vocabulary: string;
+        warmth: string;
+        humor: string;
+        openingPatterns: readonly string[];
+        closingPatterns: readonly string[];
+        notablePatterns: readonly string[];
+    }>;
+    tempo: Readonly<{
+        defaultBundle: string;
+        singleLongMessage: string;
+        multipleMessages: string;
+        responseTiming: string;
+        followUps: string;
+    }>;
+    replies: Readonly<{
+        usage: string;
+        useWhen: readonly string[];
+        avoidWhen: readonly string[];
+    }>;
+    contexts: readonly Readonly<{
+        when: string;
+        incomingPattern: string;
+        responseStrategy: string;
+        prosePattern: string;
+        tempoPattern: string;
+        evidenceExampleIds: readonly string[];
+    }>[];
+    claims: readonly ProfileClaimV2[];
+    invariants: readonly string[];
+    avoid: readonly string[];
+    confidence: Readonly<{
+        overall: "low" | "medium" | "high";
+        prose: "low" | "medium" | "high";
+        tempo: "low" | "medium" | "high";
+        replies: "low" | "medium" | "high";
+        contexts: "low" | "medium" | "high";
+        limitations: readonly string[];
+    }>;
+}>;
+export type StyleProfile = StyleProfileV1 | StyleProfileV2;
 export type ContactSummary = Readonly<{
     id: string;
     privateLabel?: string | null;
+    scopeKind: "person" | "conversation";
+    conversationCount: number;
     group: boolean;
     participantCount: number;
     firstMessageAt: string | null;

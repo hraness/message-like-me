@@ -27,8 +27,9 @@ Preserve these boundaries:
 - Message data remains local. Do not add networking, telemetry, analytics,
   hosted storage, AI-provider calls, authentication, or synchronization.
 - There is no send, react, schedule, or messaging-application operation.
-- Ordinary aggregate views omit bodies and private identities. Only an explicit
-  bounded study packet writes message bodies outside the private database.
+- Ordinary aggregate views omit bodies and private identities. Only explicit
+  bounded study or evaluation packets write message bodies outside the private
+  database.
 - Incoming prose is response context, not evidence of the user's writing
   style.
 - Local IDs remain HMAC-derived, and owned data paths remain physical and

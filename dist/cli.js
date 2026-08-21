@@ -3,13 +3,15 @@
 import {
   CONTACTS_SCHEMA_VERSION,
   CORPUS_SCHEMA_VERSION,
+  EVALUATION_PACKET_SCHEMA_VERSION,
+  LEGACY_PROFILE_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION,
   canonicalJson,
   prettyJson,
   sha256
-} from "./cli-mfzpbxsj.js";
+} from "./cli-xby0v0et.js";
 
 // src/commands.ts
 import { lstat as lstat3 } from "fs/promises";
@@ -46,13 +48,17 @@ function exitCodeFor(error) {
 // src/args.ts
 var VALUE_OPTIONS = new Set([
   "addressbook",
+  "after",
+  "before",
   "burst-gap",
   "data-dir",
   "database",
   "limit",
   "min-outgoing",
   "output",
+  "prompt-output",
   "project",
+  "reference-output",
   "scope",
   "session-gap",
   "target"
@@ -899,6 +905,8 @@ function sameFile2(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 function inspectSource(path, maximumBytes) {
+  if (!isAbsolute2(path))
+    return fail2("path must be absolute");
   const requested = resolve2(path);
   const requestedStats = lstatSync2(requested, { bigint: true });
   if (!requestedStats.isFile() || requestedStats.isSymbolicLink() || requestedStats.nlink !== 1n || !ownedByCurrentUser(requestedStats) || requestedStats.size < 1n || requestedStats.size > BigInt(maximumBytes)) {
@@ -1214,6 +1222,11 @@ function appleTimestamp(value) {
   const year = result.getUTCFullYear();
   return year >= 2001 && year <= 2200 ? result.toISOString() : null;
 }
+function hasAppleTimestampMarker(value) {
+  if (value === null || value === "")
+    return false;
+  return !/^0+(?:\.0+)?$/u.test(value);
+}
 function columnExpression(columns, column, expression, alias) {
   return columns.has(column) ? `${expression} AS ${alias}` : `NULL AS ${alias}`;
 }
@@ -1429,7 +1442,7 @@ function readIMessageDatabase(path, options) {
   let transactionOpen = false;
   try {
     database = new Database2(isolated.path, { strict: true });
-    database.exec("PRAGMA query_only=ON");
+    database.exec("PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0; PRAGMA query_only=ON");
     const queryOnly = getRow2(database, "PRAGMA query_only");
     if (queryOnly?.query_only !== 1)
       return fail2("could not enable query-only mode");
@@ -1495,11 +1508,15 @@ function readIMessageDatabase(path, options) {
         if (row.isFromMe === 0 && row.handleId !== null && !handles.has(row.handleId)) {
           warningCounts.missingSenderHandle += 1;
         }
-        const body = messageBody(row, maximumAttributedBodyBytes, maximumBodyBytes);
-        if (row.text === null && row.attributedBody !== null && body.body === null) {
+        const decodedBody = messageBody(row, maximumAttributedBodyBytes, maximumBodyBytes);
+        if (row.text === null && row.attributedBody !== null && decodedBody.body === null) {
           warningCounts.unsupportedAttributedBody += 1;
         }
         const attachmentCount = attachments.get(row.sourceRowId) ?? (row.cacheHasAttachments === 1 ? 1 : 0);
+        const kind = messageKind(row, decodedBody.body, attachmentCount);
+        const retractedAt = appleTimestamp(row.retractedDateText);
+        const retainBody = !hasAppleTimestampMarker(row.retractedDateText) && kind !== "reaction" && kind !== "system";
+        const body = retainBody ? decodedBody : Object.freeze({ body: null, bodySource: "unavailable" });
         messages.push(Object.freeze({
           id,
           sourceRowId: row.sourceRowId,
@@ -1509,10 +1526,10 @@ function readIMessageDatabase(path, options) {
           direction: row.isFromMe === 1 ? "outgoing" : "incoming",
           body: body.body,
           bodySource: body.bodySource,
-          kind: messageKind(row, body.body, attachmentCount),
+          kind,
           replyToSourceGuid: (row.threadOriginatorGuid || row.replyToGuid) ?? null,
           editedAt: appleTimestamp(row.editedDateText),
-          retractedAt: appleTimestamp(row.retractedDateText),
+          retractedAt,
           service: row.service === "" ? null : row.service,
           attachmentCount
         }));
@@ -1609,6 +1626,11 @@ function canonicalTimestamp(value, label) {
   }
   return milliseconds;
 }
+function optionalCanonicalTimestamp(value, label) {
+  if (value === undefined || value === null)
+    return Object.freeze({ value: null, milliseconds: null });
+  return Object.freeze({ value, milliseconds: canonicalTimestamp(value, label) });
+}
 function orderedMessages(messages) {
   if (!Array.isArray(messages))
     throw new Error("messages must be an array");
@@ -1635,10 +1657,10 @@ function orderedMessages(messages) {
   return Object.freeze(rows);
 }
 function timelineEligible(message) {
-  return message.kind === "text" || message.kind === "attachment" || message.kind === "reaction";
+  return message.retractedAt === null && (message.kind === "text" || message.kind === "attachment" || message.kind === "reaction");
 }
 function responseEligible(message) {
-  return message.kind === "text" || message.kind === "attachment";
+  return message.retractedAt === null && (message.kind === "text" || message.kind === "attachment");
 }
 function secondsBetween(left, right) {
   return Math.max(0, (right.milliseconds - left.milliseconds) / 1000);
@@ -1721,7 +1743,7 @@ function burstsFor(messages, sessions, corpusRevision, contactId, burstGapSecond
   return Object.freeze(result);
 }
 function bodies(rows) {
-  return rows.flatMap(({ message }) => message.kind === "text" && message.body !== null ? [message.body] : []);
+  return rows.flatMap(({ message }) => message.retractedAt === null && message.kind === "text" && message.body !== null ? [message.body] : []);
 }
 function characterCount(value) {
   return Array.from(value).length;
@@ -1835,7 +1857,7 @@ function ratio(count, total) {
   return total === 0 ? 0 : round(count / total);
 }
 function surfaceMetrics(messages) {
-  const outgoing = messages.flatMap(({ message }) => message.direction === "outgoing" && message.kind === "text" && message.body !== null ? [message.body] : []);
+  const outgoing = messages.flatMap(({ message }) => message.retractedAt === null && message.direction === "outgoing" && message.kind === "text" && message.body !== null ? [message.body] : []);
   const characters = outgoing.map(characterCount);
   const words = outgoing.map(wordCount);
   return Object.freeze({
@@ -1853,7 +1875,7 @@ function surfaceMetrics(messages) {
 function tempoMetrics(messages, responses) {
   const latencies = responses.map((response) => response.latencySeconds);
   const bundles = responses.map((response) => response.outgoingCount);
-  const outgoingText = messages.filter(({ message }) => message.direction === "outgoing" && message.kind === "text" && message.body !== null);
+  const outgoingText = messages.filter(({ message }) => message.retractedAt === null && message.direction === "outgoing" && message.kind === "text" && message.body !== null);
   const explicitReplies = outgoingText.filter(({ message }) => message.replyToSourceGuid !== null).length;
   return Object.freeze({
     responseEpisodes: responses.length,
@@ -1877,7 +1899,7 @@ function tempoMetrics(messages, responses) {
   });
 }
 function reactionMetrics(messages) {
-  const reactions = messages.filter(({ message }) => message.kind === "reaction");
+  const reactions = messages.filter(({ message }) => message.kind === "reaction" && message.retractedAt === null);
   const outgoing = reactions.filter(({ message }) => message.direction === "outgoing").length;
   const outgoingActions = messages.filter(({ message }) => message.direction === "outgoing" && timelineEligible(message)).length;
   return Object.freeze({
@@ -1912,7 +1934,7 @@ function analyzeContact(messages, corpusRevision, contactId, options = {}) {
     messageCount: ordered.length,
     incomingCount: ordered.filter(({ message }) => message.direction === "incoming").length,
     outgoingCount: ordered.filter(({ message }) => message.direction === "outgoing").length,
-    textMessageCount: ordered.filter(({ message }) => message.kind === "text" && message.body !== null).length,
+    textMessageCount: ordered.filter(({ message }) => message.retractedAt === null && message.kind === "text" && message.body !== null).length,
     sessionGapSeconds,
     burstGapSeconds,
     sessions,
@@ -2179,7 +2201,17 @@ function buildStudyPacket(messages, metrics, options = {}) {
   const maximumBodyBytes = boundedStudyInteger(options.maxTotalBodyBytes, DEFAULT_MAX_STUDY_PACKET_BODY_BYTES, MAX_STUDY_PACKET_BODY_BYTES, "maxTotalBodyBytes");
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   canonicalTimestamp(generatedAt, "generatedAt");
-  const ordered = orderedMessages(messages);
+  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
+  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
+    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
+  }
+  const after = optionalCanonicalTimestamp(options.evidenceWindow?.after, "evidenceWindow.after");
+  const before = optionalCanonicalTimestamp(options.evidenceWindow?.before, "evidenceWindow.before");
+  if (after.milliseconds !== null && before.milliseconds !== null && after.milliseconds >= before.milliseconds)
+    throw new Error("evidenceWindow.after must be earlier than evidenceWindow.before");
+  const afterMilliseconds = after.milliseconds;
+  const beforeMilliseconds = before.milliseconds;
+  const ordered = orderedMessages(messages).filter(({ milliseconds }) => (afterMilliseconds === null || milliseconds >= afterMilliseconds) && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
   const candidateSet = candidatesFor(ordered, metrics, maximumTextBytes, maximumMessagesPerDirection);
   const selected = selectDiverse(candidateSet.candidates, limit, maximumBodyBytes);
   const emittedBodyBytes = selected.examples.reduce((total, example) => total + example.coverage.emitted.bodyBytes, 0);
@@ -2187,7 +2219,9 @@ function buildStudyPacket(messages, metrics, options = {}) {
     schemaVersion: STUDY_PACKET_SCHEMA_VERSION,
     generatedAt,
     corpusRevision: metrics.corpusRevision,
+    evidenceRevision,
     contactId: metrics.contactId,
+    evidenceWindow: Object.freeze({ after: after.value, before: before.value }),
     metrics: aggregateStudyMetrics(metrics),
     examples: selected.examples,
     selection: Object.freeze({
@@ -2213,6 +2247,105 @@ function buildStudyPacket(messages, metrics, options = {}) {
     })
   });
 }
+function buildEvaluationPackets(messages, metrics, options) {
+  const limit = options.limit ?? 8;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) {
+    throw new Error("evaluation limit must be an integer from 1 through 25");
+  }
+  const maximumTextBytes = boundedStudyInteger(options.maxTextBytesPerMessage, DEFAULT_MAX_STUDY_TEXT_BYTES, MAX_STUDY_TEXT_BYTES, "maxTextBytesPerMessage");
+  const maximumMessagesPerDirection = boundedStudyInteger(options.maxMessagesPerDirectionPerCase, DEFAULT_MAX_STUDY_MESSAGES_PER_DIRECTION, MAX_STUDY_MESSAGES_PER_DIRECTION, "maxMessagesPerDirectionPerCase");
+  const maximumBodyBytes = boundedStudyInteger(options.maxTotalBodyBytes, DEFAULT_MAX_STUDY_PACKET_BODY_BYTES, MAX_STUDY_PACKET_BODY_BYTES, "maxTotalBodyBytes");
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
+  canonicalTimestamp(generatedAt, "generatedAt");
+  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
+  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
+    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
+  }
+  const after = optionalCanonicalTimestamp(options.after, "after");
+  const before = optionalCanonicalTimestamp(options.before, "before");
+  if (after.value === null || after.milliseconds === null)
+    throw new Error("after is required");
+  if (before.milliseconds !== null && after.milliseconds >= before.milliseconds)
+    throw new Error("after must be earlier than before");
+  const afterMilliseconds = after.milliseconds;
+  const beforeMilliseconds = before.milliseconds;
+  const ordered = orderedMessages(messages).filter(({ milliseconds }) => milliseconds >= afterMilliseconds && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
+  const candidateSet = candidatesFor(ordered, metrics, maximumTextBytes, maximumMessagesPerDirection);
+  const chronological = [...candidateSet.candidates].sort((left, right) => left.milliseconds - right.milliseconds || left.example.id.localeCompare(right.example.id, "en-US"));
+  const selected = [];
+  let emittedBodyBytes = 0;
+  for (const candidate of chronological) {
+    if (selected.length >= limit)
+      break;
+    if (candidate.bodyBytes > maximumBodyBytes - emittedBodyBytes)
+      continue;
+    selected.push(candidate);
+    emittedBodyBytes += candidate.bodyBytes;
+  }
+  const caseIds = selected.map(({ example }) => example.id);
+  const evaluationId = digest("evaluation", [
+    metrics.corpusRevision,
+    evidenceRevision,
+    metrics.contactId,
+    after.value,
+    before.value ?? "",
+    ...caseIds
+  ]);
+  const promptCases = Object.freeze(selected.map(({ example }) => Object.freeze({
+    id: example.id,
+    startedAt: example.startedAt,
+    incoming: Object.freeze(example.messages.filter(({ direction }) => direction === "incoming"))
+  })));
+  const referenceCases = Object.freeze(selected.map(({ example }) => {
+    const outgoing = Object.freeze(example.messages.filter(({ direction }) => direction === "outgoing"));
+    return Object.freeze({
+      id: example.id,
+      startedAt: example.startedAt,
+      outgoing,
+      shape: Object.freeze({
+        bubbles: outgoing.length,
+        characters: outgoing.reduce((total, message) => total + characterCount(message.body), 0),
+        words: outgoing.reduce((total, message) => total + wordCount(message.body), 0),
+        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply).length
+      })
+    });
+  }));
+  const promptMessages = promptCases.flatMap(({ incoming }) => incoming);
+  const evidenceWindow = Object.freeze({ after: after.value, before: before.value });
+  const shared = {
+    schemaVersion: EVALUATION_PACKET_SCHEMA_VERSION,
+    evaluationId,
+    generatedAt,
+    corpusRevision: metrics.corpusRevision,
+    evidenceRevision,
+    contactId: metrics.contactId,
+    evidenceWindow
+  };
+  return Object.freeze({
+    prompt: Object.freeze({
+      ...shared,
+      cases: promptCases,
+      selection: Object.freeze({
+        algorithm: "temporal-held-out-responses-v1",
+        requestedLimit: limit,
+        eligibleCandidates: candidateSet.candidates.length,
+        emitted: promptCases.length
+      }),
+      budget: Object.freeze({
+        maxTextBytesPerMessage: maximumTextBytes,
+        maxMessagesPerDirectionPerCase: maximumMessagesPerDirection,
+        maxTotalBodyBytes: maximumBodyBytes,
+        emittedBodyBytes: promptMessages.reduce((total, message) => total + message.emittedBodyBytes, 0),
+        truncatedMessages: promptMessages.filter(({ bodyTruncated }) => bodyTruncated).length
+      })
+    }),
+    reference: Object.freeze({
+      ...shared,
+      cases: referenceCases,
+      notice: "Open only after the candidate drafts for every case are fixed."
+    })
+  });
+}
 
 // src/paths.ts
 import { randomBytes } from "crypto";
@@ -2225,8 +2358,7 @@ import {
   readFile,
   realpath,
   stat,
-  unlink,
-  writeFile
+  unlink
 } from "fs/promises";
 import { homedir as homedir3, platform } from "os";
 import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute3, join as join3, resolve as resolve3 } from "path";
@@ -2329,6 +2461,7 @@ async function loadOrCreateInstallKey(path) {
       await handle.close();
     }
     await assertPrivateRegularFile(path);
+    await syncDirectory(dirname2(path));
     return Uint8Array.from(key);
   } catch (error) {
     if (error.code === "EEXIST")
@@ -2336,20 +2469,63 @@ async function loadOrCreateInstallKey(path) {
     throw error;
   }
 }
+async function privateOutputDirectory(path) {
+  await mkdir(path, { recursive: true, mode: 448 });
+  const requested = await lstat(path);
+  if (requested.isSymbolicLink() || !requested.isDirectory()) {
+    throw new CliError("unsafe-path", `${path} must be a physical directory`);
+  }
+  await assertOwned(path);
+  if ((requested.mode & 63) !== 0) {
+    throw new CliError("unsafe-path", `${path} must already have private permissions; refusing to change a caller-owned directory`);
+  }
+  return realpath(path);
+}
+async function syncDirectory(path) {
+  let handle = null;
+  try {
+    handle = await open(path, "r");
+    await handle.sync();
+  } catch (error) {
+    const code = error.code;
+    if (code !== "EINVAL" && code !== "ENOTSUP" && code !== "EISDIR" && code !== "EPERM") {
+      throw error;
+    }
+  } finally {
+    await handle?.close();
+  }
+}
 async function atomicWritePrivate(path, bytes) {
-  const parent = await ensurePrivateDirectory(dirname2(resolve3(path)));
+  const parent = await privateOutputDirectory(dirname2(resolve3(path)));
   const destination = join3(parent, basename3(path));
   const temporary = join3(parent, `.${basename3(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
+  let published = false;
   try {
-    await writeFile(temporary, bytes, { mode: 384, flag: "wx" });
-    await chmod(temporary, 384);
+    const handle = await open(temporary, "wx", 384);
+    try {
+      await handle.writeFile(bytes);
+      await handle.chmod(384);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await link(temporary, destination);
+    published = true;
     await unlink(temporary);
     await assertPrivateRegularFile(destination);
+    await syncDirectory(parent);
   } catch (error) {
     await unlink(temporary).catch(() => {
       return;
     });
+    if (published) {
+      await unlink(destination).catch(() => {
+        return;
+      });
+      await syncDirectory(parent).catch(() => {
+        return;
+      });
+    }
     throw error;
   }
 }
@@ -2400,7 +2576,29 @@ function isoTimestamp(value, label) {
   }
   return parsed;
 }
-function parseStyleProfile(value) {
+function nullableIsoTimestamp(value, label) {
+  return value === null ? null : isoTimestamp(value, label);
+}
+function digest2(value, label) {
+  const parsed = text(value, label, 64);
+  if (!/^[a-f0-9]{64}$/u.test(parsed)) {
+    throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
+  }
+  return parsed;
+}
+function nonNegativeInteger(value, label, maximum = 1e7) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new CliError("invalid-data", `${label} must be an integer from 0 through ${maximum}`);
+  }
+  return value;
+}
+function confidenceLevel(value, label) {
+  if (value !== "low" && value !== "medium" && value !== "high") {
+    throw new CliError("invalid-data", `${label} must be low, medium, or high`);
+  }
+  return value;
+}
+function parseStyleProfileV1(value) {
   const root = object(value, "profile");
   exactKeys(root, [
     "schemaVersion",
@@ -2417,8 +2615,8 @@ function parseStyleProfile(value) {
     "avoid",
     "confidence"
   ], "profile");
-  if (root.schemaVersion !== PROFILE_SCHEMA_VERSION) {
-    throw new CliError("invalid-data", `profile.schemaVersion must be ${PROFILE_SCHEMA_VERSION}`);
+  if (root.schemaVersion !== LEGACY_PROFILE_SCHEMA_VERSION) {
+    throw new CliError("invalid-data", `profile.schemaVersion must be ${LEGACY_PROFILE_SCHEMA_VERSION}`);
   }
   const contactId = text(root.contactId, "profile.contactId", 128);
   const corpusRevision = text(root.corpusRevision, "profile.corpusRevision", 128);
@@ -2458,7 +2656,7 @@ function parseStyleProfile(value) {
     throw new CliError("invalid-data", "profile.confidence.overall must be low, medium, or high");
   }
   return {
-    schemaVersion: PROFILE_SCHEMA_VERSION,
+    schemaVersion: LEGACY_PROFILE_SCHEMA_VERSION,
     contactId,
     corpusRevision,
     packetSha256,
@@ -2513,6 +2711,207 @@ function parseStyleProfile(value) {
       limitations: textArray(confidence.limitations, "profile.confidence.limitations")
     }
   };
+}
+function parseStyleProfileV2(value) {
+  const root = object(value, "profile");
+  exactKeys(root, [
+    "schemaVersion",
+    "contactId",
+    "corpusRevision",
+    "packetSha256",
+    "analyzedAt",
+    "evidence",
+    "overview",
+    "prose",
+    "tempo",
+    "replies",
+    "contexts",
+    "claims",
+    "invariants",
+    "avoid",
+    "confidence"
+  ], "profile");
+  if (root.schemaVersion !== PROFILE_SCHEMA_VERSION) {
+    throw new CliError("invalid-data", `profile.schemaVersion must be ${PROFILE_SCHEMA_VERSION}`);
+  }
+  const contactId = text(root.contactId, "profile.contactId", 128);
+  const corpusRevision = digest2(root.corpusRevision, "profile.corpusRevision");
+  const packetSha256 = digest2(root.packetSha256, "profile.packetSha256");
+  const evidence = object(root.evidence, "profile.evidence");
+  exactKeys(evidence, [
+    "evidenceRevision",
+    "firstMessageAt",
+    "lastMessageAt",
+    "messageCount",
+    "outgoingTextMessages",
+    "responseEpisodes",
+    "studyExamples",
+    "selectionAlgorithm",
+    "after",
+    "before"
+  ], "profile.evidence");
+  if (evidence.selectionAlgorithm !== "bounded-diverse-response-contexts-v1") {
+    throw new CliError("invalid-data", "profile.evidence.selectionAlgorithm must be bounded-diverse-response-contexts-v1");
+  }
+  const firstMessageAt = nullableIsoTimestamp(evidence.firstMessageAt, "profile.evidence.firstMessageAt");
+  const lastMessageAt = nullableIsoTimestamp(evidence.lastMessageAt, "profile.evidence.lastMessageAt");
+  const after = nullableIsoTimestamp(evidence.after, "profile.evidence.after");
+  const before = nullableIsoTimestamp(evidence.before, "profile.evidence.before");
+  if (firstMessageAt !== null && lastMessageAt !== null && firstMessageAt > lastMessageAt) {
+    throw new CliError("invalid-data", "profile.evidence.firstMessageAt must not follow lastMessageAt");
+  }
+  if (after !== null && before !== null && after >= before) {
+    throw new CliError("invalid-data", "profile.evidence.after must be earlier than before");
+  }
+  const prose = object(root.prose, "profile.prose");
+  exactKeys(prose, [
+    "register",
+    "capitalization",
+    "punctuation",
+    "vocabulary",
+    "warmth",
+    "humor",
+    "openingPatterns",
+    "closingPatterns",
+    "notablePatterns"
+  ], "profile.prose");
+  const tempo = object(root.tempo, "profile.tempo");
+  exactKeys(tempo, [
+    "defaultBundle",
+    "singleLongMessage",
+    "multipleMessages",
+    "responseTiming",
+    "followUps"
+  ], "profile.tempo");
+  const replies = object(root.replies, "profile.replies");
+  exactKeys(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
+  const confidence = object(root.confidence, "profile.confidence");
+  exactKeys(confidence, [
+    "overall",
+    "prose",
+    "tempo",
+    "replies",
+    "contexts",
+    "limitations"
+  ], "profile.confidence");
+  if (!Array.isArray(root.contexts) || root.contexts.length > 32) {
+    throw new CliError("invalid-data", "profile.contexts must contain at most 32 items");
+  }
+  if (!Array.isArray(root.claims) || root.claims.length > 64) {
+    throw new CliError("invalid-data", "profile.claims must contain at most 64 items");
+  }
+  const contexts = root.contexts.map((item, index) => {
+    const context = object(item, `profile.contexts[${index}]`);
+    exactKeys(context, [
+      "when",
+      "incomingPattern",
+      "responseStrategy",
+      "prosePattern",
+      "tempoPattern",
+      "evidenceExampleIds"
+    ], `profile.contexts[${index}]`);
+    return {
+      when: text(context.when, `profile.contexts[${index}].when`),
+      incomingPattern: text(context.incomingPattern, `profile.contexts[${index}].incomingPattern`),
+      responseStrategy: text(context.responseStrategy, `profile.contexts[${index}].responseStrategy`),
+      prosePattern: text(context.prosePattern, `profile.contexts[${index}].prosePattern`),
+      tempoPattern: text(context.tempoPattern, `profile.contexts[${index}].tempoPattern`),
+      evidenceExampleIds: textArray(context.evidenceExampleIds, `profile.contexts[${index}].evidenceExampleIds`)
+    };
+  });
+  const claims = root.claims.map((item, index) => {
+    const claim = object(item, `profile.claims[${index}]`);
+    exactKeys(claim, [
+      "dimension",
+      "statement",
+      "basis",
+      "appliesWhen",
+      "supportExampleIds",
+      "counterexampleIds",
+      "supportCount",
+      "confidence",
+      "draftingConsequence"
+    ], `profile.claims[${index}]`);
+    if (claim.dimension !== "prose" && claim.dimension !== "tempo" && claim.dimension !== "reply" && claim.dimension !== "context")
+      throw new CliError("invalid-data", `profile.claims[${index}].dimension is invalid`);
+    if (claim.basis !== "measured" && claim.basis !== "inferred") {
+      throw new CliError("invalid-data", `profile.claims[${index}].basis must be measured or inferred`);
+    }
+    return {
+      dimension: claim.dimension,
+      statement: text(claim.statement, `profile.claims[${index}].statement`),
+      basis: claim.basis,
+      appliesWhen: text(claim.appliesWhen, `profile.claims[${index}].appliesWhen`),
+      supportExampleIds: textArray(claim.supportExampleIds, `profile.claims[${index}].supportExampleIds`),
+      counterexampleIds: textArray(claim.counterexampleIds, `profile.claims[${index}].counterexampleIds`),
+      supportCount: nonNegativeInteger(claim.supportCount, `profile.claims[${index}].supportCount`),
+      confidence: confidenceLevel(claim.confidence, `profile.claims[${index}].confidence`),
+      draftingConsequence: text(claim.draftingConsequence, `profile.claims[${index}].draftingConsequence`)
+    };
+  });
+  return {
+    schemaVersion: PROFILE_SCHEMA_VERSION,
+    contactId,
+    corpusRevision,
+    packetSha256,
+    analyzedAt: isoTimestamp(root.analyzedAt, "profile.analyzedAt"),
+    evidence: {
+      evidenceRevision: digest2(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
+      firstMessageAt,
+      lastMessageAt,
+      messageCount: nonNegativeInteger(evidence.messageCount, "profile.evidence.messageCount"),
+      outgoingTextMessages: nonNegativeInteger(evidence.outgoingTextMessages, "profile.evidence.outgoingTextMessages"),
+      responseEpisodes: nonNegativeInteger(evidence.responseEpisodes, "profile.evidence.responseEpisodes"),
+      studyExamples: nonNegativeInteger(evidence.studyExamples, "profile.evidence.studyExamples", 50),
+      selectionAlgorithm: "bounded-diverse-response-contexts-v1",
+      after,
+      before
+    },
+    overview: text(root.overview, "profile.overview", 8192),
+    prose: {
+      register: text(prose.register, "profile.prose.register"),
+      capitalization: text(prose.capitalization, "profile.prose.capitalization"),
+      punctuation: text(prose.punctuation, "profile.prose.punctuation"),
+      vocabulary: text(prose.vocabulary, "profile.prose.vocabulary"),
+      warmth: text(prose.warmth, "profile.prose.warmth"),
+      humor: text(prose.humor, "profile.prose.humor"),
+      openingPatterns: textArray(prose.openingPatterns, "profile.prose.openingPatterns"),
+      closingPatterns: textArray(prose.closingPatterns, "profile.prose.closingPatterns"),
+      notablePatterns: textArray(prose.notablePatterns, "profile.prose.notablePatterns")
+    },
+    tempo: {
+      defaultBundle: text(tempo.defaultBundle, "profile.tempo.defaultBundle"),
+      singleLongMessage: text(tempo.singleLongMessage, "profile.tempo.singleLongMessage"),
+      multipleMessages: text(tempo.multipleMessages, "profile.tempo.multipleMessages"),
+      responseTiming: text(tempo.responseTiming, "profile.tempo.responseTiming"),
+      followUps: text(tempo.followUps, "profile.tempo.followUps")
+    },
+    replies: {
+      usage: text(replies.usage, "profile.replies.usage"),
+      useWhen: textArray(replies.useWhen, "profile.replies.useWhen"),
+      avoidWhen: textArray(replies.avoidWhen, "profile.replies.avoidWhen")
+    },
+    contexts,
+    claims,
+    invariants: textArray(root.invariants, "profile.invariants"),
+    avoid: textArray(root.avoid, "profile.avoid"),
+    confidence: {
+      overall: confidenceLevel(confidence.overall, "profile.confidence.overall"),
+      prose: confidenceLevel(confidence.prose, "profile.confidence.prose"),
+      tempo: confidenceLevel(confidence.tempo, "profile.confidence.tempo"),
+      replies: confidenceLevel(confidence.replies, "profile.confidence.replies"),
+      contexts: confidenceLevel(confidence.contexts, "profile.confidence.contexts"),
+      limitations: textArray(confidence.limitations, "profile.confidence.limitations")
+    }
+  };
+}
+function parseStyleProfile(value) {
+  const root = object(value, "profile");
+  if (root.schemaVersion === LEGACY_PROFILE_SCHEMA_VERSION)
+    return parseStyleProfileV1(root);
+  if (root.schemaVersion === PROFILE_SCHEMA_VERSION)
+    return parseStyleProfileV2(root);
+  throw new CliError("invalid-data", `profile.schemaVersion must be ${LEGACY_PROFILE_SCHEMA_VERSION} or ${PROFILE_SCHEMA_VERSION}`);
 }
 async function readStyleProfile(path) {
   let parsed;
@@ -2606,7 +3005,16 @@ async function installSkill(options) {
 
 // src/store.ts
 import { Database as Database3 } from "bun:sqlite";
-import { chmodSync as chmodSync3, lstatSync as lstatSync3 } from "fs";
+import {
+  closeSync,
+  constants as fsConstants4,
+  fchmodSync,
+  fstatSync,
+  lstatSync as lstatSync3,
+  openSync
+} from "fs";
+var STORE_SCHEMA_VERSION = 2;
+var PERSON_SCOPE_PREFIX = "person_";
 var SCHEMA = `
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS metadata (
@@ -2647,17 +3055,25 @@ var SCHEMA = `
     sha256 TEXT PRIMARY KEY,
     contact_id TEXT NOT NULL,
     corpus_revision TEXT NOT NULL,
+    scope_id TEXT,
+    evidence_revision TEXT,
+    example_ids_json TEXT,
+    evidence_json TEXT,
     created_at TEXT NOT NULL,
     private_path TEXT NOT NULL
   ) STRICT;
+  CREATE INDEX IF NOT EXISTS study_packets_scope ON study_packets(scope_id, created_at);
   CREATE TABLE IF NOT EXISTS profiles (
     contact_id TEXT PRIMARY KEY,
     corpus_revision TEXT NOT NULL,
+    scope_id TEXT,
+    evidence_revision TEXT,
     packet_sha256 TEXT NOT NULL,
     analyzed_at TEXT NOT NULL,
     profile_json TEXT NOT NULL,
     applied_at TEXT NOT NULL
   ) STRICT;
+  CREATE INDEX IF NOT EXISTS profiles_scope ON profiles(scope_id, applied_at);
   CREATE TABLE IF NOT EXISTS addressbook_contacts (
     id TEXT PRIMARY KEY,
     private_label TEXT,
@@ -2673,6 +3089,13 @@ var SCHEMA = `
   ) WITHOUT ROWID, STRICT;
   CREATE INDEX IF NOT EXISTS addressbook_handles_lookup
     ON addressbook_handles(kind, match_id, contact_id);
+  CREATE TABLE IF NOT EXISTS conversation_contact_scopes (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_contact_scopes_lookup
+    ON conversation_contact_scopes(contact_id, conversation_id);
   CREATE TABLE IF NOT EXISTS conversation_contact_labels (
     conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
     contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
@@ -2683,6 +3106,15 @@ var SCHEMA = `
   ) STRICT;
   CREATE INDEX IF NOT EXISTS conversation_contact_labels_lookup
     ON conversation_contact_labels(normalized_label, conversation_id);
+`;
+var CONTACT_SCOPE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS conversation_contact_scopes (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+    contacts_revision TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_contact_scopes_lookup
+    ON conversation_contact_scopes(contact_id, conversation_id);
 `;
 function get(database, sql, ...bindings) {
   return database.query(sql).get(...bindings);
@@ -2727,8 +3159,348 @@ function stringArray(value, label) {
   }
   return parsed;
 }
+function parsedJson(value, label) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} is malformed JSON`, { cause: error });
+  }
+}
+function studyExampleIds(value, label) {
+  if (!Array.isArray(value) || value.length > 50) {
+    throw new CliError("invalid-data", `${label} must contain at most 50 IDs`);
+  }
+  const result = value.map((item, index) => {
+    if (typeof item !== "string" || item.length < 1 || item !== item.trim() || item.includes("\x00") || Buffer.byteLength(item, "utf8") > 1024) {
+      throw new CliError("invalid-data", `${label}[${index}] must be a bounded text ID`);
+    }
+    return item;
+  });
+  if (new Set(result).size !== result.length) {
+    throw new CliError("invalid-data", `${label} must not contain duplicate IDs`);
+  }
+  return result;
+}
+function canonicalTimestampOrNull(value, label) {
+  if (value === null)
+    return null;
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 64) {
+    throw new CliError("invalid-data", `${label} must be a canonical ISO timestamp or null`);
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) {
+    throw new CliError("invalid-data", `${label} must be a canonical ISO timestamp or null`);
+  }
+  return value;
+}
+function boundedCount(value, label, maximum = 1e7) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new CliError("invalid-data", `${label} must be an integer from 0 through ${maximum}`);
+  }
+  return value;
+}
+function studyEvidenceManifest(value, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CliError("invalid-data", `${label} must be an object`);
+  }
+  const record = value;
+  const keys = [
+    "firstMessageAt",
+    "lastMessageAt",
+    "messageCount",
+    "outgoingTextMessages",
+    "responseEpisodes",
+    "studyExamples",
+    "selectionAlgorithm",
+    "after",
+    "before"
+  ];
+  const expected = new Set(keys);
+  if (Object.keys(record).some((key) => !expected.has(key)) || keys.some((key) => !(key in record))) {
+    throw new CliError("invalid-data", `${label} has unsupported or missing fields`);
+  }
+  if (record.selectionAlgorithm !== "bounded-diverse-response-contexts-v1") {
+    throw new CliError("invalid-data", `${label}.selectionAlgorithm must be bounded-diverse-response-contexts-v1`);
+  }
+  const firstMessageAt = canonicalTimestampOrNull(record.firstMessageAt, `${label}.firstMessageAt`);
+  const lastMessageAt = canonicalTimestampOrNull(record.lastMessageAt, `${label}.lastMessageAt`);
+  const after = canonicalTimestampOrNull(record.after, `${label}.after`);
+  const before = canonicalTimestampOrNull(record.before, `${label}.before`);
+  if (firstMessageAt !== null && lastMessageAt !== null && firstMessageAt > lastMessageAt) {
+    throw new CliError("invalid-data", `${label}.firstMessageAt must not follow lastMessageAt`);
+  }
+  if (after !== null && before !== null && after >= before) {
+    throw new CliError("invalid-data", `${label}.after must be earlier than before`);
+  }
+  const messageCount = boundedCount(record.messageCount, `${label}.messageCount`);
+  const outgoingTextMessages = boundedCount(record.outgoingTextMessages, `${label}.outgoingTextMessages`);
+  if (outgoingTextMessages > messageCount) {
+    throw new CliError("invalid-data", `${label}.outgoingTextMessages exceeds messageCount`);
+  }
+  return Object.freeze({
+    firstMessageAt,
+    lastMessageAt,
+    messageCount,
+    outgoingTextMessages,
+    responseEpisodes: boundedCount(record.responseEpisodes, `${label}.responseEpisodes`),
+    studyExamples: boundedCount(record.studyExamples, `${label}.studyExamples`, 50),
+    selectionAlgorithm: "bounded-diverse-response-contexts-v1",
+    after,
+    before
+  });
+}
+function profileEvidenceManifest(profile) {
+  return {
+    firstMessageAt: profile.evidence.firstMessageAt,
+    lastMessageAt: profile.evidence.lastMessageAt,
+    messageCount: profile.evidence.messageCount,
+    outgoingTextMessages: profile.evidence.outgoingTextMessages,
+    responseEpisodes: profile.evidence.responseEpisodes,
+    studyExamples: profile.evidence.studyExamples,
+    selectionAlgorithm: profile.evidence.selectionAlgorithm,
+    after: profile.evidence.after,
+    before: profile.evidence.before
+  };
+}
+function assertProfileEvidenceIds(profile, exampleIds) {
+  const references = [
+    ...profile.contexts.flatMap(({ evidenceExampleIds }) => evidenceExampleIds),
+    ...profile.claims.flatMap(({ supportExampleIds, counterexampleIds }) => [
+      ...supportExampleIds,
+      ...counterexampleIds
+    ])
+  ];
+  const unknown = references.find((id) => !exampleIds.has(id));
+  if (unknown !== undefined) {
+    throw new CliError("conflict", `Profile cites study example ${unknown} that is not present in its recorded packet`);
+  }
+}
+var UNBOUNDED_EVIDENCE_WINDOW = Object.freeze({
+  after: null,
+  before: null
+});
+function evidenceWindow(value, label) {
+  if (value === undefined)
+    return UNBOUNDED_EVIDENCE_WINDOW;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CliError("invalid-data", `${label} must contain after and before bounds`);
+  }
+  const record = value;
+  if (Object.keys(record).some((key) => key !== "after" && key !== "before") || !("after" in record) || !("before" in record)) {
+    throw new CliError("invalid-data", `${label} must contain only after and before bounds`);
+  }
+  const after = canonicalTimestampOrNull(record.after, `${label}.after`);
+  const before = canonicalTimestampOrNull(record.before, `${label}.before`);
+  if (after !== null && before !== null && after >= before) {
+    throw new CliError("invalid-data", `${label}.after must be earlier than before`);
+  }
+  return Object.freeze({ after, before });
+}
+function personScopeId(addressBookContactId) {
+  return `${PERSON_SCOPE_PREFIX}${addressBookContactId}`;
+}
+function tableExists(database, name) {
+  return get(database, "SELECT 1 AS value FROM sqlite_master WHERE type='table' AND name=?", name) !== null;
+}
+function tableColumns3(database, name) {
+  return new Set(all(database, `PRAGMA table_info(${name})`).map((row) => row.name));
+}
+function userVersion(database) {
+  return get(database, "PRAGMA user_version")?.user_version ?? 0;
+}
+function personScope(database, addressBookContactId) {
+  const rows = all(database, `
+    SELECT association.conversation_id
+    FROM conversation_contact_scopes association
+    JOIN conversations conversation ON conversation.id=association.conversation_id
+    WHERE association.contact_id=? AND conversation.is_group=0
+    ORDER BY association.conversation_id
+  `, addressBookContactId);
+  if (rows.length === 0)
+    return null;
+  return Object.freeze({
+    id: personScopeId(addressBookContactId),
+    kind: "person",
+    addressBookContactId,
+    conversationIds: Object.freeze(rows.map((row) => row.conversation_id))
+  });
+}
+function analysisScope(database, contactId) {
+  if (contactId.startsWith(PERSON_SCOPE_PREFIX)) {
+    const addressBookContactId = contactId.slice(PERSON_SCOPE_PREFIX.length);
+    if (/^[a-f0-9]{64}$/u.test(addressBookContactId)) {
+      return personScope(database, addressBookContactId);
+    }
+  }
+  const conversation = get(database, "SELECT id FROM conversations WHERE id=?", contactId);
+  if (conversation === null)
+    return null;
+  const matched = get(database, `
+    SELECT contact_id FROM conversation_contact_scopes WHERE conversation_id=?
+  `, contactId);
+  if (matched !== null)
+    return personScope(database, matched.contact_id);
+  return Object.freeze({
+    id: contactId,
+    kind: "conversation",
+    addressBookContactId: null,
+    conversationIds: Object.freeze([contactId])
+  });
+}
+function messageRowsForScope(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
+  if (exactConversationId !== undefined) {
+    return all(database, `
+      SELECT * FROM messages WHERE conversation_id=?
+        AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
+      ORDER BY sent_at,source_row_id,id
+    `, exactConversationId, window.after, window.after, window.before, window.before);
+  }
+  if (scope.kind === "person") {
+    return all(database, `
+      SELECT message.*
+      FROM messages message
+      JOIN conversation_contact_scopes association
+        ON association.conversation_id=message.conversation_id
+      WHERE association.contact_id=?
+        AND (? IS NULL OR message.sent_at>=?)
+        AND (? IS NULL OR message.sent_at<?)
+      ORDER BY message.sent_at,message.source_row_id,message.id
+    `, scope.addressBookContactId, window.after, window.after, window.before, window.before);
+  }
+  return all(database, `
+    SELECT * FROM messages WHERE conversation_id=?
+      AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
+    ORDER BY sent_at,source_row_id,id
+  `, scope.conversationIds[0], window.after, window.after, window.before, window.before);
+}
+function corpusMessage(row) {
+  return {
+    id: row.id,
+    sourceRowId: row.source_row_id,
+    sourceGuid: row.source_guid,
+    conversationId: row.conversation_id,
+    sentAt: row.sent_at,
+    direction: row.direction,
+    body: row.body,
+    bodySource: row.body_source,
+    kind: row.kind,
+    replyToSourceGuid: row.reply_to_source_guid,
+    editedAt: row.edited_at,
+    retractedAt: row.retracted_at,
+    service: row.service,
+    attachmentCount: row.attachment_count
+  };
+}
+function scopeEvidenceRevision(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
+  const conversationIds = exactConversationId === undefined ? scope.conversationIds : Object.freeze([exactConversationId]);
+  const messages = messageRowsForScope(database, scope, exactConversationId, window).map(corpusMessage);
+  return sha256(canonicalJson(window.after === null && window.before === null ? {
+    schemaVersion: 1,
+    scopeId: scope.id,
+    conversationIds,
+    messages
+  } : {
+    schemaVersion: 2,
+    scopeId: scope.id,
+    evidenceWindow: window,
+    messages
+  }));
+}
+function storedProfileIsCurrent(database, scope, evidenceRevision, profile) {
+  const window = profile.schemaVersion === 2 ? Object.freeze({
+    after: profile.evidence.after,
+    before: profile.evidence.before
+  }) : UNBOUNDED_EVIDENCE_WINDOW;
+  if (profile.schemaVersion === 2 && profile.evidence.evidenceRevision !== evidenceRevision)
+    return false;
+  return evidenceRevision === scopeEvidenceRevision(database, scope, undefined, window);
+}
+function scopeMessageCounts(database, scope) {
+  const select = `SELECT min(message.sent_at) AS first_message_at,
+    max(message.sent_at) AS last_message_at,count(message.id) AS message_count,
+    coalesce(sum(CASE WHEN message.direction='incoming' THEN 1 ELSE 0 END),0) AS incoming_count,
+    coalesce(sum(CASE WHEN message.direction='outgoing' THEN 1 ELSE 0 END),0) AS outgoing_count`;
+  const row = scope.kind === "person" ? get(database, `${select}
+      FROM messages message
+      JOIN conversation_contact_scopes association
+        ON association.conversation_id=message.conversation_id
+      WHERE association.contact_id=?`, scope.addressBookContactId) : get(database, `${select} FROM messages message WHERE message.conversation_id=?`, scope.conversationIds[0]);
+  return {
+    firstMessageAt: row?.first_message_at ?? null,
+    lastMessageAt: row?.last_message_at ?? null,
+    messageCount: row?.message_count ?? 0,
+    incomingCount: row?.incoming_count ?? 0,
+    outgoingCount: row?.outgoing_count ?? 0
+  };
+}
+function addColumn(database, table, definition) {
+  const name = definition.split(/\s+/u)[0];
+  if (name !== undefined && !tableColumns3(database, table).has(name)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  }
+}
+function backfillLegacyEvidence(database) {
+  const currentCorpusRevision = scalarText(database, "corpus_revision");
+  for (const table of ["study_packets", "profiles"]) {
+    const rows = all(database, `
+      SELECT rowid,contact_id,corpus_revision,scope_id,evidence_revision
+      FROM ${table}
+      WHERE scope_id IS NULL OR evidence_revision IS NULL
+      ORDER BY rowid
+    `);
+    const update = database.query(`
+      UPDATE ${table} SET scope_id=?,evidence_revision=? WHERE rowid=?
+    `);
+    for (const row of rows) {
+      const scope = analysisScope(database, row.contact_id);
+      if (scope === null)
+        continue;
+      const exactConversation = get(database, `
+        SELECT 1 AS value FROM conversations WHERE id=?
+      `, row.contact_id) === null ? undefined : row.contact_id;
+      const evidenceRevision = row.evidence_revision ?? (currentCorpusRevision === row.corpus_revision ? scopeEvidenceRevision(database, scope, exactConversation) : null);
+      update.run(row.scope_id ?? scope.id, evidenceRevision, row.rowid);
+    }
+  }
+}
+function initializeStoreSchema(database) {
+  const existingStore = tableExists(database, "metadata");
+  const version = userVersion(database);
+  if (version > STORE_SCHEMA_VERSION) {
+    throw new CliError("invalid-data", `Local store schema ${version} is newer than supported schema ${STORE_SCHEMA_VERSION}`);
+  }
+  if (!existingStore) {
+    database.exec(SCHEMA);
+    database.exec(`PRAGMA user_version=${STORE_SCHEMA_VERSION}`);
+    return;
+  }
+  for (const table of ["study_packets", "profiles"]) {
+    if (!tableExists(database, table)) {
+      throw new CliError("invalid-data", `Local store is missing required table ${table}`);
+    }
+  }
+  transaction(database, () => {
+    database.exec(CONTACT_SCOPE_SCHEMA);
+    database.exec(`
+      INSERT OR IGNORE INTO conversation_contact_scopes(
+        conversation_id,contact_id,contacts_revision
+      )
+      SELECT conversation_id,contact_id,contacts_revision
+      FROM conversation_contact_labels
+    `);
+    addColumn(database, "study_packets", "scope_id TEXT");
+    addColumn(database, "study_packets", "evidence_revision TEXT");
+    addColumn(database, "study_packets", "example_ids_json TEXT");
+    addColumn(database, "study_packets", "evidence_json TEXT");
+    addColumn(database, "profiles", "scope_id TEXT");
+    addColumn(database, "profiles", "evidence_revision TEXT");
+    backfillLegacyEvidence(database);
+    database.exec(`PRAGMA user_version=${STORE_SCHEMA_VERSION}`);
+  });
+  database.exec(SCHEMA);
+}
 function rebuildConversationLabels(database, hmacKey2) {
-  database.exec("DELETE FROM conversation_contact_labels");
+  database.exec("DELETE FROM conversation_contact_labels; DELETE FROM conversation_contact_scopes;");
   const contacts = new Map(all(database, `SELECT id,private_label,normalized_label,label_basis,contacts_revision
     FROM addressbook_contacts ORDER BY id`).map((row) => [row.id, row]));
   const owners = new Map;
@@ -2742,7 +3514,10 @@ function rebuildConversationLabels(database, hmacKey2) {
   const conversations = all(database, `
     SELECT id,private_participants_json FROM conversations WHERE is_group=0 ORDER BY id
   `);
-  const insert = database.query(`INSERT INTO conversation_contact_labels(
+  const insertScope = database.query(`INSERT INTO conversation_contact_scopes(
+    conversation_id,contact_id,contacts_revision
+  ) VALUES (?,?,?)`);
+  const insertLabel = database.query(`INSERT INTO conversation_contact_labels(
     conversation_id,contact_id,private_label,normalized_label,label_basis,contacts_revision
   ) VALUES (?,?,?,?,?,?)`);
   let eligibleConversations = 0;
@@ -2774,11 +3549,15 @@ function rebuildConversationLabels(database, hmacKey2) {
     matched += 1;
     const contactId = [...candidates][0];
     const contact = contacts.get(contactId);
-    if (contact?.private_label === null || contact?.normalized_label === null || contact?.label_basis === null || contact === undefined) {
+    if (contact === undefined) {
+      throw new CliError("invalid-data", "A contact handle references an unknown contact");
+    }
+    insertScope.run(conversation.id, contact.id, contact.contacts_revision);
+    if (contact.private_label === null || contact.normalized_label === null || contact.label_basis === null) {
       matchedWithoutLabel += 1;
       continue;
     }
-    insert.run(conversation.id, contact.id, contact.private_label, contact.normalized_label, contact.label_basis, contact.contacts_revision);
+    insertLabel.run(conversation.id, contact.id, contact.private_label, contact.normalized_label, contact.label_basis, contact.contacts_revision);
     enriched += 1;
   }
   return {
@@ -2791,6 +3570,57 @@ function rebuildConversationLabels(database, hmacKey2) {
     matchedWithoutLabel
   };
 }
+function assertSafeDatabaseFileIfPresent(path) {
+  const existing = (() => {
+    try {
+      return lstatSync3(path);
+    } catch (error) {
+      if (error.code === "ENOENT")
+        return null;
+      throw error;
+    }
+  })();
+  if (existing === null)
+    return;
+  if (existing.isSymbolicLink() || !existing.isFile()) {
+    throw new CliError("unsafe-path", `${path} must be a physical regular file`);
+  }
+  if (typeof process.getuid === "function" && existing.uid !== process.getuid()) {
+    throw new CliError("unsafe-path", `${path} is not owned by the current user`);
+  }
+}
+function hardenDatabaseFiles(path) {
+  for (const [candidate, required] of [
+    [path, true],
+    [`${path}-wal`, false],
+    [`${path}-shm`, false]
+  ]) {
+    let descriptor;
+    try {
+      descriptor = openSync(candidate, fsConstants4.O_RDONLY | fsConstants4.O_NOFOLLOW);
+    } catch (error) {
+      const code = error.code;
+      if (!required && code === "ENOENT")
+        continue;
+      if (code === "ELOOP") {
+        throw new CliError("unsafe-path", `${candidate} must not be a symbolic link`, { cause: error });
+      }
+      throw error;
+    }
+    try {
+      const status = fstatSync(descriptor);
+      if (!status.isFile()) {
+        throw new CliError("unsafe-path", `${candidate} must be a physical regular file`);
+      }
+      if (typeof process.getuid === "function" && status.uid !== process.getuid()) {
+        throw new CliError("unsafe-path", `${candidate} is not owned by the current user`);
+      }
+      fchmodSync(descriptor, 384);
+    } finally {
+      closeSync(descriptor);
+    }
+  }
+}
 
 class LocalStore {
   #database;
@@ -2798,26 +3628,22 @@ class LocalStore {
     this.#database = database;
   }
   static open(path) {
-    const existing = (() => {
-      try {
-        return lstatSync3(path);
-      } catch (error) {
-        if (error.code === "ENOENT")
-          return null;
-        throw error;
-      }
-    })();
-    if (existing?.isSymbolicLink() || existing !== null && !existing.isFile()) {
-      throw new CliError("unsafe-path", `${path} must be a physical regular file`);
-    }
-    if (existing !== null && typeof process.getuid === "function" && existing.uid !== process.getuid()) {
-      throw new CliError("unsafe-path", `${path} is not owned by the current user`);
+    for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
+      assertSafeDatabaseFileIfPresent(candidate);
     }
     const database = new Database3(path, { create: true, strict: true });
-    database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
-    database.exec(SCHEMA);
-    chmodSync3(path, 384);
-    return new LocalStore(database);
+    try {
+      hardenDatabaseFiles(path);
+      database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;");
+      initializeStoreSchema(database);
+      hardenDatabaseFiles(path);
+      return new LocalStore(database);
+    } catch (error) {
+      try {
+        database.close();
+      } catch {}
+      throw error;
+    }
   }
   close() {
     this.#database.close();
@@ -2921,12 +3747,16 @@ class LocalStore {
     }
     const normalized = normalizeContactLabelQuery(query);
     return all(this.#database, `
-      SELECT conversation.id,label.private_label
+      SELECT label.contact_id AS id,min(label.private_label) AS private_label
       FROM conversation_contact_labels label
       JOIN conversations conversation ON conversation.id=label.conversation_id
       WHERE conversation.is_group=0 AND label.normalized_label=?
-      ORDER BY conversation.id LIMIT ?
-    `, normalized, limit).map((row) => ({ id: row.id, privateLabel: row.private_label }));
+      GROUP BY label.contact_id
+      ORDER BY label.contact_id LIMIT ?
+    `, normalized, limit).map((row) => ({
+      id: personScopeId(row.id),
+      privateLabel: row.private_label
+    }));
   }
   replaceCorpus(snapshot, ingestedAt, hmacKey2) {
     const corpusRevision = snapshot.source.snapshotSha256;
@@ -2988,31 +3818,60 @@ class LocalStore {
     };
   }
   listContacts(options) {
-    const revision = this.corpusRevision();
-    if (revision === null)
+    if (this.corpusRevision() === null)
       return [];
     const rows = all(this.#database, `
-      SELECT conversation.id,
-        coalesce(contact_label.private_label,conversation.private_label) AS private_label,
-        conversation.is_group,
-        conversation.participant_count, min(message.sent_at) AS first_message_at,
-        max(message.sent_at) AS last_message_at, count(message.id) AS message_count,
+      WITH scope_conversations AS (
+        SELECT '${PERSON_SCOPE_PREFIX}' || association.contact_id AS id,
+          coalesce(label.private_label,conversation.private_label) AS private_label,
+          'person' AS scope_kind,0 AS is_group,1 AS participant_count,
+          conversation.id AS conversation_id
+        FROM conversation_contact_scopes association
+        JOIN conversations conversation ON conversation.id=association.conversation_id
+        LEFT JOIN conversation_contact_labels label
+          ON label.conversation_id=association.conversation_id
+        WHERE conversation.is_group=0
+        UNION ALL
+        SELECT conversation.id,conversation.private_label,'conversation',conversation.is_group,
+          conversation.participant_count,conversation.id
+        FROM conversations conversation
+        LEFT JOIN conversation_contact_scopes association
+          ON association.conversation_id=conversation.id
+        WHERE association.conversation_id IS NULL
+      )
+      SELECT scope.id,min(scope.private_label) AS private_label,
+        max(scope.scope_kind) AS scope_kind,
+        count(distinct scope.conversation_id) AS conversation_count,
+        max(scope.is_group) AS is_group,max(scope.participant_count) AS participant_count,
+        min(message.sent_at) AS first_message_at,max(message.sent_at) AS last_message_at,
+        count(message.id) AS message_count,
         sum(CASE WHEN message.direction = 'incoming' THEN 1 ELSE 0 END) AS incoming_count,
-        sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count,
-        profile.corpus_revision AS profile_revision
-      FROM conversations conversation
-      JOIN messages message ON message.conversation_id = conversation.id
-      LEFT JOIN profiles profile ON profile.contact_id = conversation.id
-      LEFT JOIN conversation_contact_labels contact_label
-        ON contact_label.conversation_id = conversation.id
-      GROUP BY conversation.id
+        sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
+      FROM scope_conversations scope
+      JOIN messages message ON message.conversation_id=scope.conversation_id
+      GROUP BY scope.id
       HAVING outgoing_count >= ?
-      ORDER BY outgoing_count DESC, last_message_at DESC, conversation.id
+      ORDER BY outgoing_count DESC,last_message_at DESC,scope.id
       LIMIT ?
     `, options.minimumOutgoing, options.limit);
+    const storedProfiles = new Map;
+    for (const row of all(this.#database, `
+      SELECT scope_id,evidence_revision,profile_json FROM profiles
+      WHERE scope_id IS NOT NULL AND evidence_revision IS NOT NULL
+      ORDER BY scope_id,applied_at DESC,contact_id
+    `)) {
+      const profiles = storedProfiles.get(row.scope_id) ?? [];
+      profiles.push({
+        evidenceRevision: row.evidence_revision,
+        profile: parseStyleProfile(parsedJson(row.profile_json, "Stored profile"))
+      });
+      storedProfiles.set(row.scope_id, profiles);
+    }
     return rows.map((row) => ({
       id: row.id,
       ...options.privateLabels ? { privateLabel: row.private_label } : {},
+      scopeKind: row.scope_kind,
+      conversationCount: row.conversation_count,
       group: row.is_group === 1,
       participantCount: row.participant_count,
       firstMessageAt: row.first_message_at,
@@ -3020,138 +3879,213 @@ class LocalStore {
       messageCount: row.message_count,
       incomingCount: row.incoming_count,
       outgoingCount: row.outgoing_count,
-      profileState: row.profile_revision === null ? "missing" : row.profile_revision === revision ? "current" : "stale"
+      profileState: (() => {
+        const profiles = storedProfiles.get(row.id);
+        if (profiles === undefined)
+          return "missing";
+        const scope = analysisScope(this.#database, row.id);
+        if (scope === null)
+          return "stale";
+        return profiles.some(({ evidenceRevision, profile }) => storedProfileIsCurrent(this.#database, scope, evidenceRevision, profile)) ? "current" : "stale";
+      })()
     }));
   }
   conversation(contactId, privateLabels) {
-    const row = get(this.#database, `
+    const scope = analysisScope(this.#database, contactId);
+    if (scope === null)
+      return null;
+    const rows = scope.kind === "person" ? all(this.#database, `
+        SELECT conversation.id,conversation.source_key,
+          coalesce(label.private_label,conversation.private_label) AS private_label,
+          conversation.service,conversation.participant_count,
+          conversation.participant_ids_json,conversation.private_participants_json,
+          conversation.is_group
+        FROM conversations conversation
+        JOIN conversation_contact_scopes association
+          ON association.conversation_id=conversation.id
+        LEFT JOIN conversation_contact_labels label
+          ON label.conversation_id=conversation.id
+        WHERE association.contact_id=? ORDER BY conversation.id
+      `, scope.addressBookContactId) : all(this.#database, `
       SELECT conversation.id,conversation.source_key,
         coalesce(contact_label.private_label,conversation.private_label) AS private_label,
         conversation.service,conversation.participant_count,conversation.participant_ids_json,
-        conversation.private_participants_json,conversation.is_group,
-        min(message.sent_at) AS first_message_at,
-        max(message.sent_at) AS last_message_at,
-        count(message.id) AS message_count,
-        sum(CASE WHEN message.direction = 'incoming' THEN 1 ELSE 0 END) AS incoming_count,
-        sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
+        conversation.private_participants_json,conversation.is_group
       FROM conversations conversation
-      LEFT JOIN messages message ON message.conversation_id = conversation.id
       LEFT JOIN conversation_contact_labels contact_label
         ON contact_label.conversation_id = conversation.id
       WHERE conversation.id = ?
-      GROUP BY conversation.id
-    `, contactId);
-    if (row === null)
+    `, scope.conversationIds[0]);
+    const first = rows[0];
+    if (first === undefined)
       return null;
+    const services = [...new Set(rows.map((row) => row.service).filter((value) => value !== null))];
+    const participants = [...new Set(rows.flatMap((row) => stringArray(row.participant_ids_json, `conversation ${row.id} participant IDs`)))].sort();
+    const privateParticipants = privateLabels ? [...new Set(rows.flatMap((row) => stringArray(row.private_participants_json, `conversation ${row.id} private participants`)))].sort() : [];
+    const counts = scopeMessageCounts(this.#database, scope);
     return {
-      id: row.id,
-      sourceKey: row.source_key,
-      privateLabel: privateLabels ? row.private_label : null,
-      service: row.service,
-      participantCount: row.participant_count,
-      participantIds: JSON.parse(row.participant_ids_json),
-      privateParticipants: privateLabels ? JSON.parse(row.private_participants_json) : [],
-      group: row.is_group === 1,
-      firstMessageAt: row.first_message_at,
-      lastMessageAt: row.last_message_at,
-      messageCount: row.message_count,
-      incomingCount: row.incoming_count,
-      outgoingCount: row.outgoing_count
+      id: scope.id,
+      sourceKey: scope.kind === "person" ? scope.id : first.source_key,
+      privateLabel: privateLabels ? first.private_label : null,
+      scopeKind: scope.kind,
+      conversationCount: scope.conversationIds.length,
+      service: services.length === 1 ? services[0] : null,
+      participantCount: scope.kind === "person" ? 1 : first.participant_count,
+      participantIds: participants,
+      privateParticipants,
+      group: scope.kind === "person" ? false : first.is_group === 1,
+      ...counts
     };
   }
   messages(contactId) {
-    return all(this.#database, `
-      SELECT * FROM messages WHERE conversation_id = ?
-      ORDER BY sent_at, source_row_id, id
-    `, contactId).map((row) => ({
-      id: row.id,
-      sourceRowId: row.source_row_id,
-      sourceGuid: row.source_guid,
-      conversationId: row.conversation_id,
-      sentAt: row.sent_at,
-      direction: row.direction,
-      body: row.body,
-      bodySource: row.body_source,
-      kind: row.kind,
-      replyToSourceGuid: row.reply_to_source_guid,
-      editedAt: row.edited_at,
-      retractedAt: row.retracted_at,
-      service: row.service,
-      attachmentCount: row.attachment_count
-    }));
+    const scope = analysisScope(this.#database, contactId);
+    return scope === null ? [] : messageRowsForScope(this.#database, scope).map(corpusMessage);
   }
-  contactCorpus(contactId) {
+  contactCorpus(contactId, options) {
+    const window = evidenceWindow(options, "Evidence window");
     return readTransaction(this.#database, () => {
       const corpusRevision = scalarText(this.#database, "corpus_revision");
-      const contact = get(this.#database, "SELECT 1 AS value FROM conversations WHERE id = ?", contactId);
-      if (contact === null)
+      const scope = analysisScope(this.#database, contactId);
+      if (scope === null)
         return null;
       if (corpusRevision === null) {
         throw new CliError("invalid-data", "Stored conversations have no corpus revision");
       }
       return {
         corpusRevision,
-        messages: this.messages(contactId)
+        evidenceRevision: scopeEvidenceRevision(this.#database, scope, undefined, window),
+        messages: messageRowsForScope(this.#database, scope, undefined, window).map(corpusMessage)
       };
     });
   }
   recordStudyPacket(receipt) {
+    if (receipt.exampleIds === undefined !== (receipt.evidence === undefined)) {
+      throw new CliError("invalid-data", "Study packet example IDs and evidence manifest must be recorded together");
+    }
+    const manifest = receipt.exampleIds === undefined || receipt.evidence === undefined ? null : {
+      exampleIds: studyExampleIds(receipt.exampleIds, "study packet exampleIds"),
+      evidence: studyEvidenceManifest(receipt.evidence, "study packet evidence")
+    };
+    if (manifest !== null && manifest.evidence.studyExamples !== manifest.exampleIds.length) {
+      throw new CliError("invalid-data", "Study packet evidence.studyExamples must equal the number of example IDs");
+    }
     transaction(this.#database, () => {
       const revision = scalarText(this.#database, "corpus_revision");
-      if (revision !== receipt.corpusRevision) {
+      const scope = analysisScope(this.#database, receipt.contactId);
+      if (scope === null)
+        throw new CliError("not-found", `Unknown contact ${receipt.contactId}`);
+      const window = manifest === null ? UNBOUNDED_EVIDENCE_WINDOW : Object.freeze({
+        after: manifest.evidence.after,
+        before: manifest.evidence.before
+      });
+      const currentEvidenceRevision = scopeEvidenceRevision(this.#database, scope, undefined, window);
+      if (revision !== receipt.corpusRevision && receipt.evidenceRevision === undefined) {
         throw new CliError("conflict", "Corpus changed while the study packet was prepared; prepare it again");
       }
-      const contact = get(this.#database, "SELECT 1 AS value FROM conversations WHERE id = ?", receipt.contactId);
-      if (contact === null)
-        throw new CliError("not-found", `Unknown contact ${receipt.contactId}`);
+      if (receipt.evidenceRevision !== undefined && receipt.evidenceRevision !== currentEvidenceRevision) {
+        throw new CliError("conflict", "Contact evidence changed while the study packet was prepared; prepare it again");
+      }
       this.#database.query(`
-        INSERT INTO study_packets (sha256, contact_id, corpus_revision, created_at, private_path)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO study_packets (
+          sha256,contact_id,corpus_revision,scope_id,evidence_revision,
+          example_ids_json,evidence_json,created_at,private_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (sha256) DO UPDATE SET
           contact_id = excluded.contact_id,
           corpus_revision = excluded.corpus_revision,
+          scope_id = excluded.scope_id,
+          evidence_revision = excluded.evidence_revision,
+          example_ids_json = excluded.example_ids_json,
+          evidence_json = excluded.evidence_json,
           created_at = excluded.created_at,
           private_path = excluded.private_path
-      `).run(receipt.sha256, receipt.contactId, receipt.corpusRevision, receipt.createdAt, receipt.privatePath);
+      `).run(receipt.sha256, receipt.contactId, receipt.corpusRevision, scope.id, currentEvidenceRevision, manifest === null ? null : canonicalJson(manifest.exampleIds), manifest === null ? null : canonicalJson(manifest.evidence), receipt.createdAt, receipt.privatePath);
     });
   }
   applyProfile(profile, appliedAt) {
-    const revision = this.corpusRevision();
-    if (revision === null)
-      throw new CliError("conflict", "Ingest iMessage before applying a profile");
-    if (profile.corpusRevision !== revision) {
-      throw new CliError("conflict", "Profile corpus revision is stale; prepare and analyze a new study packet");
-    }
-    if (this.conversation(profile.contactId, false) === null) {
-      throw new CliError("not-found", `Unknown contact ${profile.contactId}`);
-    }
-    const packet = get(this.#database, `
-      SELECT 1 AS value FROM study_packets
-      WHERE sha256 = ? AND contact_id = ? AND corpus_revision = ?
-    `, profile.packetSha256, profile.contactId, profile.corpusRevision);
-    if (packet === null) {
-      throw new CliError("conflict", "Profile does not bind a study packet prepared by this installation");
-    }
-    this.#database.query(`
-      INSERT INTO profiles (
-        contact_id, corpus_revision, packet_sha256, analyzed_at, profile_json, applied_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT (contact_id) DO UPDATE SET
-        corpus_revision = excluded.corpus_revision,
-        packet_sha256 = excluded.packet_sha256,
-        analyzed_at = excluded.analyzed_at,
-        profile_json = excluded.profile_json,
-        applied_at = excluded.applied_at
-    `).run(profile.contactId, profile.corpusRevision, profile.packetSha256, profile.analyzedAt, canonicalJson(profile), appliedAt);
+    const parsedProfile = parseStyleProfile(profile);
+    transaction(this.#database, () => {
+      const revision = scalarText(this.#database, "corpus_revision");
+      if (revision === null)
+        throw new CliError("conflict", "Ingest iMessage before applying a profile");
+      const scope = analysisScope(this.#database, parsedProfile.contactId);
+      if (scope === null)
+        throw new CliError("not-found", `Unknown contact ${parsedProfile.contactId}`);
+      const packet = get(this.#database, `
+        SELECT scope_id,evidence_revision,example_ids_json,evidence_json
+        FROM study_packets
+        WHERE sha256 = ? AND contact_id = ? AND corpus_revision = ?
+      `, parsedProfile.packetSha256, parsedProfile.contactId, parsedProfile.corpusRevision);
+      if (packet === null) {
+        throw new CliError("conflict", "Profile does not bind a study packet prepared by this installation");
+      }
+      if (packet.scope_id !== scope.id || packet.evidence_revision === null) {
+        throw new CliError("conflict", "Profile study scope changed; prepare and analyze a new study packet");
+      }
+      let window = UNBOUNDED_EVIDENCE_WINDOW;
+      if (parsedProfile.schemaVersion === 2) {
+        if (parsedProfile.evidence.evidenceRevision !== packet.evidence_revision) {
+          throw new CliError("conflict", "Profile evidence revision does not match its study packet");
+        }
+        if (packet.example_ids_json === null || packet.evidence_json === null) {
+          throw new CliError("conflict", "Profile requires a study packet with a recorded evidence manifest");
+        }
+        const exampleIds = studyExampleIds(parsedJson(packet.example_ids_json, "Stored study packet example IDs"), "Stored study packet example IDs");
+        const evidence = studyEvidenceManifest(parsedJson(packet.evidence_json, "Stored study packet evidence"), "Stored study packet evidence");
+        if (evidence.studyExamples !== exampleIds.length) {
+          throw new CliError("invalid-data", "Stored study packet evidence manifest is inconsistent");
+        }
+        if (canonicalJson(evidence) !== canonicalJson(profileEvidenceManifest(parsedProfile))) {
+          throw new CliError("conflict", "Profile evidence summary does not match its study packet");
+        }
+        window = Object.freeze({ after: evidence.after, before: evidence.before });
+        assertProfileEvidenceIds(parsedProfile, new Set(exampleIds));
+      }
+      const currentEvidenceRevision = scopeEvidenceRevision(this.#database, scope, undefined, window);
+      if (packet.evidence_revision !== currentEvidenceRevision) {
+        throw new CliError("conflict", "Profile evidence is stale; prepare and analyze a new study packet");
+      }
+      this.#database.query("DELETE FROM profiles WHERE scope_id=?").run(scope.id);
+      this.#database.query(`
+        INSERT INTO profiles (
+          contact_id,corpus_revision,scope_id,evidence_revision,
+          packet_sha256,analyzed_at,profile_json,applied_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (contact_id) DO UPDATE SET
+          corpus_revision = excluded.corpus_revision,
+          scope_id = excluded.scope_id,
+          evidence_revision = excluded.evidence_revision,
+          packet_sha256 = excluded.packet_sha256,
+          analyzed_at = excluded.analyzed_at,
+          profile_json = excluded.profile_json,
+          applied_at = excluded.applied_at
+      `).run(parsedProfile.contactId, parsedProfile.corpusRevision, scope.id, currentEvidenceRevision, parsedProfile.packetSha256, parsedProfile.analyzedAt, canonicalJson(parsedProfile), appliedAt);
+    });
   }
   profile(contactId) {
-    const row = get(this.#database, "SELECT corpus_revision, profile_json, applied_at FROM profiles WHERE contact_id = ?", contactId);
-    if (row === null)
+    const scope = analysisScope(this.#database, contactId);
+    if (scope === null)
       return null;
+    const rows = all(this.#database, `
+      SELECT evidence_revision,profile_json,applied_at
+      FROM profiles
+      WHERE scope_id=?
+      ORDER BY applied_at DESC,CASE WHEN contact_id=? THEN 0 ELSE 1 END,contact_id
+    `, scope.id, contactId);
+    const fallback = rows.length === 0 ? get(this.#database, `
+      SELECT evidence_revision,profile_json,applied_at FROM profiles WHERE contact_id=?
+    `, contactId) : null;
+    const candidates = (fallback === null ? rows : [fallback]).map((row) => ({
+      row,
+      profile: parseStyleProfile(parsedJson(row.profile_json, "Stored profile"))
+    }));
+    if (candidates.length === 0)
+      return null;
+    const selected = candidates.find(({ row, profile }) => row.evidence_revision !== null && storedProfileIsCurrent(this.#database, scope, row.evidence_revision, profile)) ?? candidates[0];
     return {
-      state: row.corpus_revision === this.corpusRevision() ? "current" : "stale",
-      profile: JSON.parse(row.profile_json),
-      appliedAt: row.applied_at
+      state: selected.row.evidence_revision !== null && storedProfileIsCurrent(this.#database, scope, selected.row.evidence_revision, selected.profile) ? "current" : "stale",
+      profile: selected.profile,
+      appliedAt: selected.row.applied_at
     };
   }
   doctor() {
@@ -3159,6 +4093,7 @@ class LocalStore {
     const foreignKeys = all(this.#database, "PRAGMA foreign_key_check").length;
     const count = (table) => get(this.#database, `SELECT count(*) AS value FROM ${table}`)?.value ?? 0;
     return {
+      storeSchemaVersion: userVersion(this.#database),
       quickCheck: quick,
       foreignKeyViolations: foreignKeys,
       corpusRevision: this.corpusRevision(),
@@ -3173,7 +4108,7 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.1.0";
+var MESSAGE_LIKE_ME_VERSION = "0.2.0";
 
 // src/commands.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -3185,9 +4120,14 @@ Usage:
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
-  messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--json]
-  messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--json]
-  messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N] [--json]
+  messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
+                    [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+                    [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
+                    --prompt-output FILE --reference-output FILE [--before ISO_TIMESTAMP]
+                    [--limit N] [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] profile apply FILE [--json]
   messagelikeme [--data-dir PATH] profile show CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
@@ -3246,22 +4186,43 @@ function requireContact(store, contactId, privateLabels = false) {
     throw new CliError("not-found", `Unknown contact ${contactId}`);
   return conversation;
 }
-function contactEvidence(store, contactId) {
+function contactEvidence(store, contactId, window) {
   if (contactId.length < 1 || contactId.length > 256)
     throw new CliError("usage", "Invalid contact ID");
-  const evidence = store.contactCorpus(contactId);
+  const evidence = store.contactCorpus(contactId, window);
   if (evidence === null)
     throw new CliError("not-found", `Unknown contact ${contactId}`);
   return evidence;
 }
-function contactMetrics(store, contactId) {
+function contactMetrics(store, contactId, options = {}) {
   const evidence = contactEvidence(store, contactId);
-  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId);
+  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, options);
+}
+function metricOptions(parsed) {
+  return {
+    sessionGapSeconds: integerOption(parsed, "session-gap", 8 * 60 * 60, 1, 30 * 24 * 60 * 60),
+    burstGapSeconds: integerOption(parsed, "burst-gap", 5 * 60, 1, 30 * 24 * 60 * 60)
+  };
+}
+function canonicalTimestampOption(parsed, key, required = false) {
+  const value = parsed.options.get(key);
+  if (value === undefined) {
+    if (required)
+      throw new CliError("usage", `--${key} is required`);
+    return null;
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
+    throw new CliError("usage", `--${key} must be a canonical ISO timestamp`);
+  }
+  return value;
 }
 function safeContactDetail(store, contactId, privateLabels) {
   const conversation = requireContact(store, contactId, privateLabels);
   return {
     id: conversation.id,
+    scopeKind: conversation.scopeKind,
+    conversationCount: conversation.conversationCount,
     ...privateLabels ? {
       privateLabel: conversation.privateLabel,
       privateParticipants: conversation.privateParticipants
@@ -3460,10 +4421,10 @@ async function runCommand(argv, io) {
     return;
   }
   if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier);
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const result = compactMetrics(metrics);
       emit(io, json, result, `Tempo metrics for ${identifier}: ${metrics.tempo.responseEpisodes} response episodes`);
     } finally {
@@ -3472,10 +4433,10 @@ async function runCommand(argv, io) {
     return;
   }
   if (command === "inspect" && subcommand === "sessions" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir", "limit"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "limit", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier);
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const limit = integerOption(parsed, "limit", 20, 1, 1000);
       const sessions = metrics.sessions.slice(-limit);
       const result = { contactId: identifier, total: metrics.sessions.length, sessions };
@@ -3486,15 +4447,34 @@ async function runCommand(argv, io) {
     return;
   }
   if (command === "study" && subcommand === "prepare" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir", "output", "limit"], ["json"]);
+    rejectUnused(parsed, [
+      "data-dir",
+      "output",
+      "limit",
+      "after",
+      "before",
+      "session-gap",
+      "burst-gap"
+    ], ["json"]);
     const output = absolutePrivatePath(parsed.options.get("output"), "--output");
     const context = await existingStore(parsed);
     try {
-      const evidence = contactEvidence(context.store, identifier);
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier);
+      const after = canonicalTimestampOption(parsed, "after");
+      const before = canonicalTimestampOption(parsed, "before");
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError)
+          throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, metricOptions(parsed));
       const packet = buildStudyPacket(evidence.messages, metrics, {
         limit: integerOption(parsed, "limit", 24, 1, 50),
-        generatedAt: canonicalNow(io)
+        generatedAt: canonicalNow(io),
+        evidenceRevision: evidence.evidenceRevision,
+        evidenceWindow: { after, before }
       });
       const bytes = prettyJson(packet);
       const packetSha256 = sha256(bytes);
@@ -3503,17 +4483,90 @@ async function runCommand(argv, io) {
         sha256: packetSha256,
         contactId: identifier,
         corpusRevision: metrics.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
         createdAt: packet.generatedAt,
-        privatePath: output
+        privatePath: output,
+        exampleIds: packet.examples.map(({ id }) => id),
+        evidence: {
+          firstMessageAt: packet.metrics.firstMessageAt,
+          lastMessageAt: packet.metrics.lastMessageAt,
+          messageCount: packet.metrics.messageCount,
+          outgoingTextMessages: packet.metrics.surface.outgoingTextMessages,
+          responseEpisodes: packet.metrics.tempo.responseEpisodes,
+          studyExamples: packet.examples.length,
+          selectionAlgorithm: packet.selection.algorithm,
+          after: packet.evidenceWindow.after,
+          before: packet.evidenceWindow.before
+        }
       });
       const result = {
         contactId: identifier,
         corpusRevision: metrics.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
         packetSha256,
         examples: packet.examples.length,
+        evidenceWindow: packet.evidenceWindow,
         output
       };
       emit(io, json, result, `Prepared ${packet.examples.length} private study examples at ${output} (SHA-256 ${packetSha256})`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir",
+      "after",
+      "before",
+      "prompt-output",
+      "reference-output",
+      "limit",
+      "session-gap",
+      "burst-gap"
+    ], ["json"]);
+    const promptOutput = absolutePrivatePath(parsed.options.get("prompt-output"), "--prompt-output");
+    const referenceOutput = absolutePrivatePath(parsed.options.get("reference-output"), "--reference-output");
+    if (promptOutput === referenceOutput) {
+      throw new CliError("usage", "--prompt-output and --reference-output must be different paths");
+    }
+    const after = canonicalTimestampOption(parsed, "after", true);
+    const before = canonicalTimestampOption(parsed, "before");
+    const context = await existingStore(parsed);
+    try {
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError)
+          throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, metricOptions(parsed));
+      const packets = buildEvaluationPackets(evidence.messages, metrics, {
+        after,
+        before,
+        limit: integerOption(parsed, "limit", 8, 1, 25),
+        generatedAt: canonicalNow(io),
+        evidenceRevision: evidence.evidenceRevision
+      });
+      if (packets.prompt.cases.length === 0) {
+        throw new CliError("not-found", "No complete held-out response cases exist in that time window");
+      }
+      await atomicWritePrivate(promptOutput, prettyJson(packets.prompt));
+      await atomicWritePrivate(referenceOutput, prettyJson(packets.reference));
+      const result = {
+        evaluationId: packets.prompt.evaluationId,
+        contactId: identifier,
+        corpusRevision: evidence.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
+        cases: packets.prompt.cases.length,
+        evidenceWindow: packets.prompt.evidenceWindow,
+        promptOutput,
+        referenceOutput,
+        referenceNotice: packets.reference.notice
+      };
+      emit(io, json, result, `Prepared ${packets.prompt.cases.length} held-out cases. Draft from ${promptOutput} before opening ${referenceOutput}`);
     } finally {
       context.store.close();
     }

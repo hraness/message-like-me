@@ -6,7 +6,11 @@ import { DEFAULT_CONTACTS_DIRECTORY, readMacOSContacts } from "./contacts.ts";
 import { CliError } from "./errors.ts";
 import { DEFAULT_IMESSAGE_DATABASE, readIMessageDatabase } from "./imessage.ts";
 import type { CommandIo } from "./io.ts";
-import { analyzeContact, buildStudyPacket } from "./metrics.ts";
+import {
+  analyzeContact,
+  buildEvaluationPackets,
+  buildStudyPacket,
+} from "./metrics.ts";
 import {
   atomicWritePrivate,
   dataPaths,
@@ -29,9 +33,14 @@ Usage:
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
-  messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--json]
-  messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--json]
-  messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N] [--json]
+  messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
+                    [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+                    [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
+                    --prompt-output FILE --reference-output FILE [--before ISO_TIMESTAMP]
+                    [--limit N] [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] profile apply FILE [--json]
   messagelikeme [--data-dir PATH] profile show CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
@@ -101,22 +110,56 @@ function requireContact(store: LocalStore, contactId: string, privateLabels = fa
 function contactEvidence(
   store: LocalStore,
   contactId: string,
+  window?: Readonly<{ after: string | null; before: string | null }>,
 ): NonNullable<ReturnType<LocalStore["contactCorpus"]>> {
   if (contactId.length < 1 || contactId.length > 256) throw new CliError("usage", "Invalid contact ID");
-  const evidence = store.contactCorpus(contactId);
+  const evidence = store.contactCorpus(contactId, window);
   if (evidence === null) throw new CliError("not-found", `Unknown contact ${contactId}`);
   return evidence;
 }
 
-function contactMetrics(store: LocalStore, contactId: string): ContactMetrics {
+function contactMetrics(
+  store: LocalStore,
+  contactId: string,
+  options: Parameters<typeof analyzeContact>[3] = {},
+): ContactMetrics {
   const evidence = contactEvidence(store, contactId);
-  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId);
+  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, options);
+}
+
+function metricOptions(parsed: ParsedArguments): Readonly<{
+  sessionGapSeconds: number;
+  burstGapSeconds: number;
+}> {
+  return {
+    sessionGapSeconds: integerOption(parsed, "session-gap", 8 * 60 * 60, 1, 30 * 24 * 60 * 60),
+    burstGapSeconds: integerOption(parsed, "burst-gap", 5 * 60, 1, 30 * 24 * 60 * 60),
+  };
+}
+
+function canonicalTimestampOption(
+  parsed: ParsedArguments,
+  key: "after" | "before",
+  required = false,
+): string | null {
+  const value = parsed.options.get(key);
+  if (value === undefined) {
+    if (required) throw new CliError("usage", `--${key} is required`);
+    return null;
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
+    throw new CliError("usage", `--${key} must be a canonical ISO timestamp`);
+  }
+  return value;
 }
 
 function safeContactDetail(store: LocalStore, contactId: string, privateLabels: boolean): unknown {
   const conversation = requireContact(store, contactId, privateLabels);
   return {
     id: conversation.id,
+    scopeKind: conversation.scopeKind,
+    conversationCount: conversation.conversationCount,
     ...(privateLabels ? {
       privateLabel: conversation.privateLabel,
       privateParticipants: conversation.privateParticipants,
@@ -345,10 +388,10 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
   }
 
   if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier);
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const result = compactMetrics(metrics);
       emit(io, json, result, `Tempo metrics for ${identifier}: ${metrics.tempo.responseEpisodes} response episodes`);
     } finally {
@@ -358,10 +401,10 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
   }
 
   if (command === "inspect" && subcommand === "sessions" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir", "limit"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "limit", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier);
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const limit = integerOption(parsed, "limit", 20, 1, 1_000);
       const sessions = metrics.sessions.slice(-limit);
       const result = { contactId: identifier, total: metrics.sessions.length, sessions };
@@ -373,15 +416,32 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
   }
 
   if (command === "study" && subcommand === "prepare" && identifier !== undefined) {
-    rejectUnused(parsed, ["data-dir", "output", "limit"], ["json"]);
+    rejectUnused(parsed, [
+      "data-dir", "output", "limit", "after", "before", "session-gap", "burst-gap",
+    ], ["json"]);
     const output = absolutePrivatePath(parsed.options.get("output"), "--output");
     const context = await existingStore(parsed);
     try {
-      const evidence = contactEvidence(context.store, identifier);
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier);
+      const after = canonicalTimestampOption(parsed, "after");
+      const before = canonicalTimestampOption(parsed, "before");
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const metrics = analyzeContact(
+        evidence.messages,
+        evidence.corpusRevision,
+        identifier,
+        metricOptions(parsed),
+      );
       const packet = buildStudyPacket(evidence.messages, metrics, {
         limit: integerOption(parsed, "limit", 24, 1, 50),
         generatedAt: canonicalNow(io),
+        evidenceRevision: evidence.evidenceRevision,
+        evidenceWindow: { after, before },
       });
       const bytes = prettyJson(packet);
       const packetSha256 = sha256(bytes);
@@ -390,17 +450,97 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         sha256: packetSha256,
         contactId: identifier,
         corpusRevision: metrics.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
         createdAt: packet.generatedAt,
         privatePath: output,
+        exampleIds: packet.examples.map(({ id }) => id),
+        evidence: {
+          firstMessageAt: packet.metrics.firstMessageAt,
+          lastMessageAt: packet.metrics.lastMessageAt,
+          messageCount: packet.metrics.messageCount,
+          outgoingTextMessages: packet.metrics.surface.outgoingTextMessages,
+          responseEpisodes: packet.metrics.tempo.responseEpisodes,
+          studyExamples: packet.examples.length,
+          selectionAlgorithm: packet.selection.algorithm,
+          after: packet.evidenceWindow.after,
+          before: packet.evidenceWindow.before,
+        },
       });
       const result = {
         contactId: identifier,
         corpusRevision: metrics.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
         packetSha256,
         examples: packet.examples.length,
+        evidenceWindow: packet.evidenceWindow,
         output,
       };
       emit(io, json, result, `Prepared ${packet.examples.length} private study examples at ${output} (SHA-256 ${packetSha256})`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir", "after", "before", "prompt-output", "reference-output", "limit",
+      "session-gap", "burst-gap",
+    ], ["json"]);
+    const promptOutput = absolutePrivatePath(parsed.options.get("prompt-output"), "--prompt-output");
+    const referenceOutput = absolutePrivatePath(
+      parsed.options.get("reference-output"),
+      "--reference-output",
+    );
+    if (promptOutput === referenceOutput) {
+      throw new CliError("usage", "--prompt-output and --reference-output must be different paths");
+    }
+    const after = canonicalTimestampOption(parsed, "after", true)!;
+    const before = canonicalTimestampOption(parsed, "before");
+    const context = await existingStore(parsed);
+    try {
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const metrics = analyzeContact(
+        evidence.messages,
+        evidence.corpusRevision,
+        identifier,
+        metricOptions(parsed),
+      );
+      const packets = buildEvaluationPackets(evidence.messages, metrics, {
+        after,
+        before,
+        limit: integerOption(parsed, "limit", 8, 1, 25),
+        generatedAt: canonicalNow(io),
+        evidenceRevision: evidence.evidenceRevision,
+      });
+      if (packets.prompt.cases.length === 0) {
+        throw new CliError("not-found", "No complete held-out response cases exist in that time window");
+      }
+      await atomicWritePrivate(promptOutput, prettyJson(packets.prompt));
+      await atomicWritePrivate(referenceOutput, prettyJson(packets.reference));
+      const result = {
+        evaluationId: packets.prompt.evaluationId,
+        contactId: identifier,
+        corpusRevision: evidence.corpusRevision,
+        evidenceRevision: evidence.evidenceRevision,
+        cases: packets.prompt.cases.length,
+        evidenceWindow: packets.prompt.evidenceWindow,
+        promptOutput,
+        referenceOutput,
+        referenceNotice: packets.reference.notice,
+      };
+      emit(
+        io,
+        json,
+        result,
+        `Prepared ${packets.prompt.cases.length} held-out cases. Draft from ${promptOutput} before opening ${referenceOutput}`,
+      );
     } finally {
       context.store.close();
     }

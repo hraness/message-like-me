@@ -1,8 +1,8 @@
 # Draft messages that sound like the user
 
-Use this workflow only for an unsent draft. A convincing draft preserves the
-user's meaning first, then applies the smallest set of well-supported style and
-tempo choices.
+Use this workflow only for an unsent draft. The profile is evidence for
+relationship-aware choices, not a simulation of the user or a source of facts
+about what they believe now.
 
 ## Select the applicable profile
 
@@ -14,11 +14,12 @@ messagelikeme context <contact-id> --json
 
 This view is preferred over reopening a study packet. It combines the current
 stored profile with deterministic metrics and reports when the profile is
-missing or stale for the current corpus revision.
+missing or stale for the current person or conversation evidence revision.
 
 Use the narrowest profile supported by the situation:
 
-1. A current contact-specific rule for a comparable context.
+1. A current person-specific or conversation-specific rule for a comparable
+   context.
 2. A current context rule supported across contacts.
 3. The general baseline.
 
@@ -27,11 +28,19 @@ and offer a neutral draft or analyze a bounded study packet first.
 
 ## Resolve the content before styling it
 
-List what the incoming message calls for: facts to answer, decisions to make,
-emotions to acknowledge, questions to return, and any point that should remain
-open. Preserve the user's stated intent and factual constraints. Do not add a
-commitment, excuse, intimacy, opinion, availability claim, or personal detail
-the user did not provide.
+List what the current incoming message and the user's request call for: facts
+to answer, decisions to make, emotions to acknowledge, questions to return,
+and any point that should remain open. Resolve conflicts in this order:
+
+1. current truth, supplied facts, and necessary uncertainty;
+2. the user's present intent, audience, and requested format;
+3. complete and safe handling of the current message; and
+4. well-supported historical style and delivery-shape tendencies.
+
+Do not add a commitment, excuse, intimacy, opinion, availability claim, belief,
+or personal detail the user did not provide. Never import historical content
+merely because it appeared in an example. Ask the user when a missing current
+fact materially changes the reply.
 
 When several things need a response, decide the content order before choosing
 message boundaries. Apply the profile's observed behavior for grouping,
@@ -40,7 +49,9 @@ sentence if the user normally consolidates related points.
 
 ## Apply voice and tempo
 
-Match durable dimensions rather than copying private phrases:
+Apply the `draftingConsequence` of claims whose scope and confidence fit the
+current context. Treat inferred claims more cautiously than measured shape
+facts. Match durable dimensions rather than copying private phrases:
 
 - register, directness, warmth, and amount of explanation;
 - fragments or full sentences, capitalization, and punctuation;
@@ -51,7 +62,10 @@ Match durable dimensions rather than copying private phrases:
   support them.
 
 Do not simulate a delayed response or claim the user will reply at a particular
-time. Tempo here means the shape of the outgoing turn, not automated timing.
+time. Historical timing is **within-session response latency under recorded
+gap settings**. It describes selected past response episodes and never tells
+the agent when to answer. Tempo used in a draft means the shape of the outgoing
+turn, not automated timing.
 
 ## Present drafts clearly
 

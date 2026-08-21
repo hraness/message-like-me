@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseStyleProfile, readStyleProfile } from "./profile.ts";
-import { syntheticProfile } from "./test-fixtures.ts";
+import { syntheticProfile, syntheticProfileV2 } from "./test-fixtures.ts";
 
 describe("style profile validation", () => {
   test("parses the closed profile contract", () => {
@@ -14,9 +14,24 @@ describe("style profile validation", () => {
     });
   });
 
+  test("parses evidence-bound schema version two profiles", () => {
+    expect(parseStyleProfile(syntheticProfileV2())).toMatchObject({
+      schemaVersion: 2,
+      contactId: "contact_0123456789abcdef",
+      evidence: {
+        evidenceRevision: "c".repeat(64),
+        studyExamples: 8,
+      },
+      confidence: { tempo: "medium", replies: "low" },
+    });
+  });
+
   test("rejects extra fields and stale schema versions", () => {
     expect(() => parseStyleProfile(syntheticProfile({ remotePrompt: "upload it" }))).toThrow("not supported");
-    expect(() => parseStyleProfile(syntheticProfile({ schemaVersion: 2 }))).toThrow("schemaVersion");
+    expect(() => parseStyleProfile(syntheticProfile({ schemaVersion: 3 }))).toThrow("schemaVersion");
+    expect(() => parseStyleProfile(syntheticProfileV2({
+      evidence: { ...(syntheticProfileV2() as { evidence: object }).evidence, evidenceRevision: "nope" },
+    }))).toThrow("evidenceRevision");
   });
 
   test("reads one bounded owner-private physical profile", async () => {

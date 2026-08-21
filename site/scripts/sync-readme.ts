@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { renderReadmeHtml } from './readme-html.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 const repositoryRoot = resolve(siteRoot, '..');
@@ -6,12 +7,7 @@ const readmePath = resolve(repositoryRoot, 'README.md');
 const outputPath = resolve(siteRoot, 'app/readme.generated.ts');
 
 const source = await Bun.file(readmePath).text();
-const html = Bun.markdown
-  .html(source)
-  .replaceAll(
-    'href="SECURITY.md"',
-    'href="https://github.com/hraness/message-like-me/blob/main/SECURITY.md"',
-  );
+const html = renderReadmeHtml(source);
 
 await Bun.write(
   outputPath,

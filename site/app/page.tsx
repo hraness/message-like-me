@@ -1,7 +1,7 @@
 import { readmeHtml } from './readme.generated';
 
 const githubUrl = 'https://github.com/hraness/message-like-me';
-const releaseUrl = `${githubUrl}/releases/tag/v0.1.0`;
+const releaseUrl = `${githubUrl}/releases/tag/v0.2.0`;
 
 export default function Home() {
   return (
@@ -29,7 +29,7 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="#install">
-              Install v0.1.0 <span aria-hidden="true">↓</span>
+              Install v0.2.0 <span aria-hidden="true">↓</span>
             </a>
             <a className="button button-secondary" href={githubUrl}>
               View the source <span aria-hidden="true">↗</span>
@@ -46,7 +46,7 @@ export default function Home() {
         <div className="hero-visual" aria-label="A local Message Like Me workflow">
           <div className="privacy-stamp">
             <span className="privacy-dot" />
-            stays on your mac
+            no product server
           </div>
           <div className="message-stage">
             <p className="stage-label">synthetic example</p>
@@ -113,7 +113,7 @@ export default function Home() {
 
       <section className="analysis-section">
         <div className="analysis-intro">
-          <p className="eyebrow">A behavioral profile</p>
+          <p className="eyebrow">A relationship-aware evidence profile</p>
           <h2>Voice has a rhythm.</h2>
           <p>
             Word choice matters. So do the pauses, the bursts, the afterthought,
@@ -130,15 +130,36 @@ export default function Home() {
         </dl>
       </section>
 
+      <section className="boundary-section">
+        <div>
+          <p className="eyebrow">What it is</p>
+          <h2>Evidence for a draft.</h2>
+          <p>
+            Message Like Me measures your outgoing prose and delivery shape for
+            one person, then gives your agent a bounded, inspectable profile.
+          </p>
+        </div>
+        <div>
+          <p className="eyebrow">What it is not</p>
+          <h2>Not a digital clone.</h2>
+          <p>
+            It does not train a model, represent your identity, predict your
+            beliefs, or send a message. Meaning and your current intent always
+            outrank historical style.
+          </p>
+          <a href={`${githubUrl}/blob/main/docs/research.md`}>Read the research review ↗</a>
+        </div>
+      </section>
+
       <section className="privacy-section">
         <div>
           <p className="eyebrow">The private boundary</p>
           <h2>Your history is evidence, not inventory.</h2>
         </div>
         <ul>
-          <li><span>01</span> Message bodies stay in your private local store.</li>
+          <li><span>01</span> The CLI keeps its store and analysis local.</li>
           <li><span>02</span> Ordinary inspection omits prose, handles, and names.</li>
-          <li><span>03</span> Study packets are bounded and written only where you choose.</li>
+          <li><span>03</span> Study packets are bounded. Provide or open them for an agent only intentionally.</li>
           <li><span>04</span> There is no Message Like Me account, server, or model API.</li>
           <li><span>05</span> Drafting ends as text. Nothing is sent.</li>
         </ul>
@@ -146,13 +167,13 @@ export default function Home() {
 
       <section className="install-section" id="install">
         <div>
-          <p className="eyebrow">Install v0.1.0</p>
+          <p className="eyebrow">Install v0.2.0</p>
           <h2>Bring your own agent.</h2>
           <p>Bun 1.3.14 or newer is required.</p>
           <a href={releaseUrl}>View the immutable release ↗</a>
         </div>
         <div className="command-stack" aria-label="Installation commands">
-          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.1.0</code></p>
+          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.2.0</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
         </div>

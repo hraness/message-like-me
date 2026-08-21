@@ -200,6 +200,7 @@ function sameFile(left: BigIntStats, right: BigIntStats): boolean {
 }
 
 function inspectSource(path: string, maximumBytes: number): SourceFile {
+  if (!isAbsolute(path)) return fail("path must be absolute");
   const requested = resolve(path);
   const requestedStats = lstatSync(requested, { bigint: true });
   if (
@@ -619,6 +620,11 @@ function appleTimestamp(value: string | null): string | null {
   return year >= 2001 && year <= 2200 ? result.toISOString() : null;
 }
 
+function hasAppleTimestampMarker(value: string | null): boolean {
+  if (value === null || value === "") return false;
+  return !/^0+(?:\.0+)?$/u.test(value);
+}
+
 function columnExpression(
   columns: ReadonlySet<string>,
   column: string,
@@ -919,7 +925,7 @@ export function readIMessageDatabase(
     // The clone is disposable and may be recovered by SQLite. No SQLite handle
     // is ever opened on the authoritative source database or its sidecars.
     database = new Database(isolated.path, { strict: true });
-    database.exec("PRAGMA query_only=ON");
+    database.exec("PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0; PRAGMA query_only=ON");
     const queryOnly = getRow<{ query_only: number }>(database, "PRAGMA query_only");
     if (queryOnly?.query_only !== 1) return fail("could not enable query-only mode");
     database.exec("BEGIN");
@@ -988,12 +994,20 @@ export function readIMessageDatabase(
         if (row.isFromMe === 0 && row.handleId !== null && !handles.has(row.handleId)) {
           warningCounts.missingSenderHandle += 1;
         }
-        const body = messageBody(row, maximumAttributedBodyBytes, maximumBodyBytes);
-        if (row.text === null && row.attributedBody !== null && body.body === null) {
+        const decodedBody = messageBody(row, maximumAttributedBodyBytes, maximumBodyBytes);
+        if (row.text === null && row.attributedBody !== null && decodedBody.body === null) {
           warningCounts.unsupportedAttributedBody += 1;
         }
         const attachmentCount = attachments.get(row.sourceRowId)
           ?? (row.cacheHasAttachments === 1 ? 1 : 0);
+        const kind = messageKind(row, decodedBody.body, attachmentCount);
+        const retractedAt = appleTimestamp(row.retractedDateText);
+        const retainBody = !hasAppleTimestampMarker(row.retractedDateText)
+          && kind !== "reaction"
+          && kind !== "system";
+        const body = retainBody
+          ? decodedBody
+          : Object.freeze({ body: null, bodySource: "unavailable" as const });
         messages.push(Object.freeze({
           id,
           sourceRowId: row.sourceRowId,
@@ -1003,10 +1017,10 @@ export function readIMessageDatabase(
           direction: row.isFromMe === 1 ? "outgoing" : "incoming",
           body: body.body,
           bodySource: body.bodySource,
-          kind: messageKind(row, body.body, attachmentCount),
+          kind,
           replyToSourceGuid: (row.threadOriginatorGuid || row.replyToGuid) ?? null,
           editedAt: appleTimestamp(row.editedDateText),
-          retractedAt: appleTimestamp(row.retractedDateText),
+          retractedAt,
           service: row.service === "" ? null : row.service,
           attachmentCount,
         }));

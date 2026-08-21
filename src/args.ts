@@ -2,13 +2,17 @@ import { CliError } from "./errors.ts";
 
 const VALUE_OPTIONS = new Set([
   "addressbook",
+  "after",
+  "before",
   "burst-gap",
   "data-dir",
   "database",
   "limit",
   "min-outgoing",
   "output",
+  "prompt-output",
   "project",
+  "reference-output",
   "scope",
   "session-gap",
   "target",

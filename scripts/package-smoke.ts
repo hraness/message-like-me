@@ -210,9 +210,9 @@ export async function packageSmoke(): Promise<void> {
       join(consumer, "index.ts"),
       [
         `import { canonicalJson, sha256 } from ${JSON.stringify(PACKAGE_NAME)};`,
-        `import type { ContactMetrics, StyleProfileV1 } from ${JSON.stringify(PACKAGE_NAME)};`,
+        `import type { ContactMetrics, StyleProfileV2 } from ${JSON.stringify(PACKAGE_NAME)};`,
         "const digest: string = sha256(canonicalJson({ fixture: true }));",
-        "const profile = null as unknown as StyleProfileV1;",
+        "const profile = null as unknown as StyleProfileV2;",
         "const metrics = null as unknown as ContactMetrics;",
         "void [digest, profile, metrics];",
         "",
