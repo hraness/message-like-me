@@ -113,19 +113,10 @@ jobs:
             exit 1
           fi
           create_release=false
+          # GITHUB_TOKEN cannot read the Administration-scoped immutable-release
+          # setting. The published release's isImmutable field is authoritative.
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             create_release=true
-            if ! immutable_releases="$(gh api \
-              "/repos/$GITHUB_REPOSITORY/immutable-releases" \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
-              --jq '.enabled')"; then
-              echo "::error::Release immutability is not enabled; refusing to create a mutable release"
-              exit 1
-            fi
-            if [[ "$immutable_releases" != true ]]; then
-              echo "::error::Release immutability is not enabled; refusing to create a mutable release"
-              exit 1
-            fi
             published_tags="$(gh api --paginate \
               "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
               --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')"
@@ -172,6 +163,9 @@ jobs:
             --jq '[.tagName, .isDraft, .isPrerelease, .isImmutable, (.assets | length)] | @tsv')"
           expected_state="$GITHUB_REF_NAME"$'\tfalse\tfalse\ttrue\t0'
           if [[ "$release_state" != "$expected_state" ]]; then
+            if [[ "$create_release" == true && "$release_state" != *$'\ttrue\t0' ]]; then
+              gh release delete "$GITHUB_REF_NAME" --yes || true
+            fi
             echo "::error::Release $GITHUB_REF_NAME is not published and immutable"
             exit 1
           fi

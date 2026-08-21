@@ -19,7 +19,7 @@ test("CI runs the standalone package on Ubuntu and only synthetic local-data fix
   expect(workflow).not.toContain("Library/Messages/chat.db");
 });
 
-test("stable version tags pass an exact-main immutable release gate", async () => {
+test("stable version tags pass exact-main and post-publication immutable release gates", async () => {
   const workflow = await readFile(join(WORKFLOWS, "release.yml"), "utf8");
 
   expect(workflow).toContain('tags:\n      - "v*"');
@@ -39,9 +39,7 @@ test("stable version tags pass an exact-main immutable release gate", async () =
   expect(workflow).toContain("bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts");
   expect(workflow).toContain("needs: [verify, macos_fixtures]");
   expect(workflow).toContain("contents: write");
-  expect(workflow).toContain('"/repos/$GITHUB_REPOSITORY/immutable-releases"');
-  expect(workflow).toContain('X-GitHub-Api-Version: 2026-03-10');
-  expect(workflow).toContain("Release immutability is not enabled; refusing to create a mutable release");
+  expect(workflow).not.toContain('"/repos/$GITHUB_REPOSITORY/immutable-releases"');
   expect(workflow).toContain('"/repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME"');
   expect(workflow).toContain('[[ "$remote_tag_sha" != "$VERIFIED_SHA" ]]');
   expect(workflow).toContain('gh release create "$GITHUB_REF_NAME"');
@@ -49,6 +47,7 @@ test("stable version tags pass an exact-main immutable release gate", async () =
   expect(workflow).toContain("--generate-notes");
   expect(workflow).toContain("--latest");
   expect(workflow).toContain("--json assets,isDraft,isImmutable,isPrerelease,tagName");
+  expect(workflow).toContain('gh release delete "$GITHUB_REF_NAME" --yes || true');
   expect(workflow).toContain("(.assets | length)");
   expect(workflow).toContain('"/repos/$GITHUB_REPOSITORY/releases/latest"');
   expect(workflow).not.toContain("pull_request:");
@@ -57,10 +56,10 @@ test("stable version tags pass an exact-main immutable release gate", async () =
   expect(workflow).not.toContain("messagelikeme.com");
   expect(workflow).not.toContain("homepage");
   expect(workflow).not.toContain("--clobber");
-  const immutabilityPreflight = workflow.indexOf('"/repos/$GITHUB_REPOSITORY/immutable-releases"');
   const remoteTagCheck = workflow.indexOf('"/repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME"');
   const releaseCreation = workflow.indexOf('gh release create "$GITHUB_REF_NAME"');
-  expect(immutabilityPreflight).toBeGreaterThan(0);
-  expect(remoteTagCheck).toBeGreaterThan(immutabilityPreflight);
+  const immutableStateCheck = workflow.indexOf("--json assets,isDraft,isImmutable,isPrerelease,tagName");
+  expect(remoteTagCheck).toBeGreaterThan(0);
   expect(releaseCreation).toBeGreaterThan(remoteTagCheck);
+  expect(immutableStateCheck).toBeGreaterThan(releaseCreation);
 });
