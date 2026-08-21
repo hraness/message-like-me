@@ -268,8 +268,9 @@ contact record, private path, or derived profile to a fixture.
 
 The canonical repository is
 [`hraness/message-like-me`](https://github.com/hraness/message-like-me).
-`messagelikeme.com` is reserved for the project, but the CLI does not connect
-to it and this repository does not claim that a site is deployed.
+The informational project page is
+[`messagelikeme.com`](https://messagelikeme.com). The CLI does not connect to
+the site, and the site never receives message or contact data.
 
 ## License
 

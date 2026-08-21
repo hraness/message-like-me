@@ -302,8 +302,8 @@ function checkPackageManifest(value: unknown): string[] {
   ) {
     problems.push("package.json version must be a stable semantic version");
   }
-  if (manifest.homepage !== undefined) {
-    problems.push("package.json must not claim a homepage before a site is live");
+  if (manifest.homepage !== "https://messagelikeme.com") {
+    problems.push("package.json homepage must be https://messagelikeme.com");
   }
   const repository = record(manifest.repository, "package.json repository");
   if (repository.url !== "git+https://github.com/hraness/message-like-me.git") {

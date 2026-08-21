@@ -7,6 +7,8 @@
   agent-authored profiles.
 - `skills/message-like-me/` – the canonical Message Like Me Agent Skill and its
   progressive analysis, drafting, privacy, and profile references.
+- `site/` – the informational public project page; it has no private-data or
+  product-runtime connection.
 - `scripts/` – skill, standalone-boundary, built-output, and packed-consumer
   verification.
 - `dist/` – committed Bun-targeted JavaScript used by immutable GitHub installs.
@@ -48,8 +50,8 @@
   sending. The installed Agent Skill supplies semantic analysis and unsent
   drafting through the agent already running it.
 - Keep the command name `messagelikeme`, the repository and package name
-  `message-like-me`, and the Agent Skill name `message-like-me`. Do not claim
-  that `messagelikeme.com` is deployed or treat it as a data plane.
+  `message-like-me`, and the Agent Skill name `message-like-me`. Treat
+  `messagelikeme.com` as an informational project page, never as a data plane.
 - Keep CLI commands namespaced as `ingest imessage|contacts`,
   `contacts list|show|resolve`,
   `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`, plus

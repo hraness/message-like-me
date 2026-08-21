@@ -12,6 +12,7 @@
     "type": "git",
     "url": "git+https://github.com/hraness/message-like-me.git"
   },
+  "homepage": "https://messagelikeme.com",
   "bugs": {
     "url": "https://github.com/hraness/message-like-me/issues"
   },
