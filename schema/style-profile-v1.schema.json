@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Message Like Me style profile v1",
+  "description": "A locally derived, evidence-bound messaging style profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contactId",
+    "corpusRevision",
+    "packetSha256",
+    "analyzedAt",
+    "overview",
+    "prose",
+    "tempo",
+    "replies",
+    "contexts",
+    "invariants",
+    "avoid",
+    "confidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "contactId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "corpusRevision": {
+      "$ref": "#/$defs/identifier"
+    },
+    "packetSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "analyzedAt": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "overview": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "prose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "register",
+        "capitalization",
+        "punctuation",
+        "vocabulary",
+        "warmth",
+        "humor",
+        "openings",
+        "closings",
+        "notablePatterns"
+      ],
+      "properties": {
+        "register": {
+          "$ref": "#/$defs/profileText"
+        },
+        "capitalization": {
+          "$ref": "#/$defs/profileText"
+        },
+        "punctuation": {
+          "$ref": "#/$defs/profileText"
+        },
+        "vocabulary": {
+          "$ref": "#/$defs/profileText"
+        },
+        "warmth": {
+          "$ref": "#/$defs/profileText"
+        },
+        "humor": {
+          "$ref": "#/$defs/profileText"
+        },
+        "openings": {
+          "$ref": "#/$defs/textList"
+        },
+        "closings": {
+          "$ref": "#/$defs/textList"
+        },
+        "notablePatterns": {
+          "$ref": "#/$defs/textList"
+        }
+      }
+    },
+    "tempo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultBundle",
+        "singleLongMessage",
+        "multipleMessages",
+        "responseTiming",
+        "followUps"
+      ],
+      "properties": {
+        "defaultBundle": {
+          "$ref": "#/$defs/profileText"
+        },
+        "singleLongMessage": {
+          "$ref": "#/$defs/profileText"
+        },
+        "multipleMessages": {
+          "$ref": "#/$defs/profileText"
+        },
+        "responseTiming": {
+          "$ref": "#/$defs/profileText"
+        },
+        "followUps": {
+          "$ref": "#/$defs/profileText"
+        }
+      }
+    },
+    "replies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usage",
+        "useWhen",
+        "avoidWhen"
+      ],
+      "properties": {
+        "usage": {
+          "$ref": "#/$defs/profileText"
+        },
+        "useWhen": {
+          "$ref": "#/$defs/textList"
+        },
+        "avoidWhen": {
+          "$ref": "#/$defs/textList"
+        }
+      }
+    },
+    "contexts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "when",
+          "incomingPattern",
+          "responseStrategy",
+          "prosePattern",
+          "tempoPattern",
+          "evidenceExampleIds"
+        ],
+        "properties": {
+          "when": {
+            "$ref": "#/$defs/profileText"
+          },
+          "incomingPattern": {
+            "$ref": "#/$defs/profileText"
+          },
+          "responseStrategy": {
+            "$ref": "#/$defs/profileText"
+          },
+          "prosePattern": {
+            "$ref": "#/$defs/profileText"
+          },
+          "tempoPattern": {
+            "$ref": "#/$defs/profileText"
+          },
+          "evidenceExampleIds": {
+            "$ref": "#/$defs/textList"
+          }
+        }
+      }
+    },
+    "invariants": {
+      "$ref": "#/$defs/textList"
+    },
+    "avoid": {
+      "$ref": "#/$defs/textList"
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall",
+        "limitations"
+      ],
+      "properties": {
+        "overall": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "limitations": {
+          "$ref": "#/$defs/textList"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "profileText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "textList": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    }
+  }
+}

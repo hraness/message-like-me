@@ -1,0 +1,73 @@
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+
+const PACKAGE_ROOT = resolve(import.meta.dir, "..");
+const TYPESCRIPT_CLI = join(PACKAGE_ROOT, "node_modules", "typescript", "bin", "tsc");
+
+function outputDirectory(argv: readonly string[]): string {
+  if (argv.length === 0) return join(PACKAGE_ROOT, "dist");
+  if (argv.length !== 2 || argv[0] !== "--outdir" || argv[1] === undefined) {
+    throw new Error("Usage: bun scripts/build-dist.ts [--outdir PATH]");
+  }
+  const output = isAbsolute(argv[1]) ? resolve(argv[1]) : resolve(PACKAGE_ROOT, argv[1]);
+  const fromPackage = relative(PACKAGE_ROOT, output);
+  if (output === PACKAGE_ROOT) throw new Error("Build output must not be the package root");
+  if (!isAbsolute(argv[1]) && (fromPackage === ".." || fromPackage.startsWith(`..${sep}`))) {
+    throw new Error("Relative build output must stay inside the package");
+  }
+  return output;
+}
+
+async function run(command: readonly string[]): Promise<void> {
+  const child = Bun.spawn([...command], {
+    cwd: PACKAGE_ROOT,
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    throw new Error([
+      `Command failed (${String(exitCode)}): ${command.join(" ")}`,
+      stdout.trim(),
+      stderr.trim(),
+    ].filter((line) => line !== "").join("\n"));
+  }
+  if (stdout.trim() !== "") process.stdout.write(stdout);
+  if (stderr.trim() !== "") process.stderr.write(stderr);
+}
+
+export async function buildDist(argv: readonly string[]): Promise<void> {
+  const outdir = outputDirectory(argv);
+  await mkdir(outdir, { recursive: true });
+  await run([
+    process.execPath,
+    "build",
+    "src/cli.ts",
+    "src/index.ts",
+    "--outdir",
+    outdir,
+    "--root",
+    "src",
+    "--target",
+    "bun",
+    "--format",
+    "esm",
+    "--splitting",
+    "--packages",
+    "external",
+  ]);
+  await run([
+    process.execPath,
+    TYPESCRIPT_CLI,
+    "--project",
+    join(PACKAGE_ROOT, "tsconfig.build.json"),
+    "--outDir",
+    outdir,
+  ]);
+}
+
+if (import.meta.main) await buildDist(process.argv.slice(2));

@@ -1,0 +1,19 @@
+node_modules/
+coverage/
+*.tgz
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Private Message Like Me data when --data-dir points at the checkout root.
+/message-like-me.sqlite3
+/message-like-me.sqlite3-shm
+/message-like-me.sqlite3-wal
+/install.key
+/study-packets/
+/profiles/
+*.profile.json
+*.study-packet.json
+/.message-like-me/

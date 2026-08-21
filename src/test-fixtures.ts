@@ -1,0 +1,45 @@
+export function syntheticProfile(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    schemaVersion: 1,
+    contactId: "contact_0123456789abcdef",
+    corpusRevision: "a".repeat(64),
+    packetSha256: "b".repeat(64),
+    analyzedAt: "2026-08-21T12:00:00.000Z",
+    overview: "Short, warm, and direct in this fabricated fixture.",
+    prose: {
+      register: "casual",
+      capitalization: "mostly lowercase",
+      punctuation: "light",
+      vocabulary: "plain",
+      warmth: "explicit",
+      humor: "dry",
+      openings: ["hey"],
+      closings: ["talk soon"],
+      notablePatterns: ["answers the concrete point first"],
+    },
+    tempo: {
+      defaultBundle: "two short messages",
+      singleLongMessage: "when detail must remain together",
+      multipleMessages: "when the incoming message has several parts",
+      responseTiming: "usually within the active session",
+      followUps: "small correction as a separate message",
+    },
+    replies: {
+      usage: "sparse",
+      useWhen: ["the target would otherwise be ambiguous"],
+      avoidWhen: ["the preceding message is obvious"],
+    },
+    contexts: [{
+      when: "several questions arrive together",
+      incomingPattern: "multiple concrete asks",
+      responseStrategy: "answer in the same order",
+      prosePattern: "brief and literal",
+      tempoPattern: "one send per answer cluster",
+      evidenceExampleIds: ["example_1"],
+    }],
+    invariants: ["do not invent certainty"],
+    avoid: ["formal sign-offs"],
+    confidence: { overall: "medium", limitations: ["fabricated test corpus"] },
+    ...overrides,
+  };
+}

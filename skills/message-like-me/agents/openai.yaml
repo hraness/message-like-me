@@ -1,0 +1,4 @@
+interface:
+  display_name: "Message Like Me"
+  short_description: "Study and draft in your private messaging style"
+  default_prompt: "Use $message-like-me to study my local messaging style or draft an unsent reply that sounds like me."
