@@ -7,10 +7,10 @@
   },
   "scripts": {
     "sync:readme": "bun scripts/sync-readme.ts",
-    "dev": "bun run sync:readme && vinext dev",
-    "build": "bun run sync:readme && vinext build",
-    "start": "vinext start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "dev": "bun run sync:readme && node node_modules/vinext/dist/cli.js dev",
+    "build": "bun run sync:readme && node node_modules/vinext/dist/cli.js build",
+    "start": "node node_modules/vinext/dist/cli.js start",
+    "lint": "node node_modules/eslint/bin/eslint.js . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
     "next": "16.2.6",
