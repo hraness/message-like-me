@@ -93,11 +93,20 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench uses the pinned local
-Beeper CLI export without attachment bytes, writes a mode-`0700` directory
-with mode-`0600` files, and writes `manifest.json` last. Provider URLs and
-credentials are excluded. Message Like Me does not receive the Beeper
-credential and does not call Beeper or Wrench itself.
+path to a directory that does not already exist. Wrench calls the pinned
+[official Beeper CLI](https://github.com/beeper/cli) directly. It enumerates
+the connected account realm, invokes `export --no-attachments` once per
+account in deterministic order, and reports the account ordinal, elapsed-time
+heartbeats, and cumulative validated chat and message counts on stderr. It
+retains each private raw shard until it can atomically publish the complete
+mode-`0700` seven-file bundle with mode-`0600` files.
+
+The export does not use the separate
+[Beeper Desktop API MCP project](https://github.com/beeper/desktop-api-mcp).
+The CLI path supplies the bounded account snapshots and local files needed for
+hash validation, deterministic conversion, crash recovery, and atomic
+publication. Provider URLs and credentials are excluded. Message Like Me does
+not receive the Beeper credential and does not call Beeper or Wrench itself.
 
 Ingest the finished directory, then inspect its redacted source health:
 

@@ -10,6 +10,8 @@
   terminal state suppresses evidence, and later reappearance restores it.
 - Add `sources list` and `sources show` with active message, conversation,
   reaction, undated-reaction, completeness, and warning health.
+- Document Wrench's direct official Beeper CLI path, sequential per-account
+  progress, retained-shard validation, and atomic seven-file publication.
 - Partition sessions, bursts, and response episodes by conversation, preserve
   truncated text bubbles as tempo evidence, and count undated reactions without
   inventing timestamps.
