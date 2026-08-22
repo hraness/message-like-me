@@ -15,7 +15,7 @@ import {
 } from "node:path";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
-const PUBLIC_DESCRIPTION = "A local-first CLI and Agent Skill for studying your private iMessage history and drafting messages that sound like you.";
+const PUBLIC_DESCRIPTION = "A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.";
 const SCANNED_DIRECTORIES = [
   ".github",
   "dist",

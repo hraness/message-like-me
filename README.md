@@ -1,12 +1,14 @@
 # Message Like Me
 
-**A local-first CLI and Agent Skill for studying your private iMessage history
-and drafting messages that sound like you.**
+**A local-first CLI and Agent Skill for studying private messaging history and
+drafting messages that sound like you.**
 
-Message Like Me turns a local Messages database into deterministic conversation
-metrics, bounded study packets, and reusable style profiles. Its Agent Skill
-teaches Codex, Claude, and other coding agents how to interpret those local
-artifacts and draft unsent replies in your voice.
+Message Like Me turns private local messaging history into deterministic
+conversation metrics, bounded study packets, and reusable style profiles. It
+reads native iMessage history and strict local source bundles, including
+multi-account Beeper exports produced through Wrench. Its Agent Skill teaches
+Codex, Claude, and other coding agents how to interpret those local artifacts
+and draft unsent replies in your voice.
 
 The CLI does not call an AI service, authenticate with a product account, send
 messages, or operate Messages. The agent already running the skill supplies the
@@ -23,7 +25,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.2.0
+bun add --global github:hraness/message-like-me#v0.3.0
 messagelikeme skill install
 ```
 
@@ -40,7 +42,7 @@ messagelikeme skill path
 Message Like Me is distributed directly through GitHub and is not published to
 npm.
 
-## Start with your local history
+## Start with private local history
 
 Initialize the private data store and inspect its location:
 
@@ -79,6 +81,48 @@ copy of the database and its transactional sidecars, and opens only that copy
 with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
 require permission for the terminal or agent host to read Messages data.
 
+To study accounts connected through Beeper, first ask Wrench to create a new
+private Message Like Me bundle:
+
+```sh
+wrench beeper export-message-like-me \
+  --auth <beeper-auth-id> \
+  --output /absolute/private/path/beeper-bundle \
+  --json
+```
+
+The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
+flags lower the export bounds. The output path must be a normalized absolute
+path to a directory that does not already exist. Wrench uses the pinned local
+Beeper CLI export without attachment bytes, writes a mode-`0700` directory
+with mode-`0600` files, and writes `manifest.json` last. Provider URLs and
+credentials are excluded. Message Like Me does not receive the Beeper
+credential and does not call Beeper or Wrench itself.
+
+Ingest the finished directory, then inspect its redacted source health:
+
+```sh
+messagelikeme ingest bundle --input /absolute/private/path/beeper-bundle --json
+messagelikeme sources list --json
+messagelikeme sources show <source-id> --json
+```
+
+The importer verifies the fixed version-one inventory, canonical UTF-8 NDJSON,
+record and byte bounds, owner-only permissions, artifact digests, and manifest
+digest before changing the store. One bundle may contain several connected
+accounts and networks; each becomes a separate source namespace. Native
+iMessage and prior bundle sources remain alongside it.
+
+The complete interchange, integrity, identity, and reimport laws are in the
+[version-one local message bundle contract](docs/local-message-bundle-v1.md).
+
+Beeper exports describe bounded local observations. A later bounded export
+that omits an older record does not delete retained history. Explicit deletion,
+removal, replacement, and tombstone records suppress their target, and a later
+reappearance restores it. Older snapshots cannot overwrite newer state. Use
+`sources show <source-id> --private --json` only when you deliberately need the
+private provider account and source metadata.
+
 Optionally enrich and join direct conversations with private identities from
 macOS Contacts:
 
@@ -96,16 +140,17 @@ messagelikeme ingest contacts \
   --json
 ```
 
-Contacts ingest may run before or after iMessage ingest. It reads only bounded
-name, email, and phone fields from a stable private copy. Exact normalized
-email or phone handles can join several one-to-one iMessage, SMS, and email
-threads for the same AddressBook person into one analysis scope. Existing
-conversation IDs remain aliases for that person scope. Shared handles remain
-ambiguous, local phone numbers never gain a guessed country code, unmatched
-threads stay separate, and groups are never collapsed to one person. Contact
-labels have their own revision, so a rename does not stale a messaging-style
-profile. `messagelikeme doctor` reports local aggregate state without asking
-for an account or credential.
+Contacts ingest may run before or after any message source. It reads only
+bounded name, email, and phone fields from a stable private copy. Exact
+normalized email or E.164 phone handles can join several one-to-one threads
+for the same AddressBook person into one analysis scope. A bundle conversation
+is eligible only when the producer positively marks its direct participant
+roster complete. Existing conversation IDs remain aliases for that person
+scope. Shared handles remain ambiguous, local phone numbers never gain a
+guessed country code, unmatched threads stay separate, and groups are never
+collapsed to one person. Contact labels have their own revision, so a rename
+does not stale a messaging-style profile. `messagelikeme doctor` reports local
+aggregate state without asking for an account or credential.
 
 ## Inspect behavior without exposing prose
 
@@ -124,8 +169,13 @@ outgoing turns, within-session response latency, single-message versus
 multi-message replies, surface prose features, multi-point response contexts,
 reactions, and explicit reply use. Incoming messages establish what you were
 responding to; they are never counted as examples of your writing style.
-Session and burst gaps are configurable seconds and are recorded with each
-result. They are segmentation choices, not universal facts about conversation.
+Sessions, bursts, and response episodes never cross a source conversation
+boundary. Person scopes spanning several apps expose a sorted `services`
+breakdown instead of hiding the mixed-channel evidence behind a null service.
+Reactions with no provider timestamp still contribute to reaction counts and
+direction, but never to temporal metrics. Session and burst gaps are
+configurable seconds and are recorded with each result. They are segmentation
+choices, not universal facts about conversation.
 
 Pass `--private` to `contacts list` or `contacts show` only when you need to
 resolve a pseudonymous contact to its local private label or participants.
@@ -244,6 +294,9 @@ Run `messagelikeme --help` for the checked grammar. The public surfaces are:
 messagelikeme init [--json]
 messagelikeme ingest imessage [--database PATH] [--json]
 messagelikeme ingest contacts [--addressbook PATH] [--json]
+messagelikeme ingest bundle --input ABS_PATH [--json]
+messagelikeme sources list [--private] [--json]
+messagelikeme sources show SOURCE_ID [--private] [--json]
 messagelikeme contacts list [--min-outgoing N] [--limit N] [--private] [--json]
 messagelikeme contacts show CONTACT_ID [--private] [--json]
 messagelikeme contacts resolve QUERY --private [--limit N] [--json]
@@ -271,10 +324,13 @@ Place global `--data-dir PATH` before the command.
 
 - The original `chat.db` and AddressBook databases remain authoritative.
   SQLite opens only stable private copies, never the source files or sidecars.
+- Source bundles remain private caller-owned inputs. Import verifies their
+  fixed inventory, canonical bytes, digests, bounds, and owner-only modes.
 - The normalized corpus, profiles, and installation key stay in a private local
   store with owner-only permissions.
-- Stable contact, conversation, and message IDs are derived with a private
-  per-install HMAC key. Pseudonymous IDs are not encryption.
+- Stable source, contact, participant, conversation, message, and reaction IDs
+  are derived with a private per-install HMAC key. Pseudonymous IDs are not
+  encryption.
 - Aggregate commands omit bodies and private labels. Study and evaluation
   packets are bounded, explicit body-bearing exports.
 - Message text never goes to a Message Like Me server. There is no service,
@@ -312,9 +368,9 @@ bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
-Tests use synthetic Messages and AddressBook databases plus synthetic
-conversations. Never add a real message, handle, group title, attachment,
-contact record, private path, or derived profile to a fixture.
+Tests use synthetic Messages and AddressBook databases plus synthetic source
+bundles and conversations. Never add a real message, handle, group title,
+attachment, contact record, private path, or derived profile to a fixture.
 
 The canonical repository is
 [`hraness/message-like-me`](https://github.com/hraness/message-like-me).

@@ -1,10 +1,11 @@
 export const CORPUS_SCHEMA_VERSION = 1 as const;
-export const METRICS_SCHEMA_VERSION = 1 as const;
+export const METRICS_SCHEMA_VERSION = 2 as const;
 export const PROFILE_SCHEMA_VERSION = 2 as const;
 export const LEGACY_PROFILE_SCHEMA_VERSION = 1 as const;
 export const STUDY_PACKET_SCHEMA_VERSION = 2 as const;
 export const EVALUATION_PACKET_SCHEMA_VERSION = 1 as const;
 export const CONTACTS_SCHEMA_VERSION = 1 as const;
+export const MESSAGE_BUNDLE_SCHEMA_VERSION = 1 as const;
 
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
@@ -59,6 +60,102 @@ export type CorpusSnapshot = Readonly<{
   conversations: readonly CorpusConversation[];
   messages: readonly CorpusMessage[];
   warnings: readonly string[];
+}>;
+
+export type CorpusSourceKind = "imessage" | "bundle";
+
+export type CorpusSourceCoverage = Readonly<{
+  history: "complete-current-local" | "bounded" | "unknown";
+  observedFrom: string | null;
+  observedTo: string | null;
+  /** Producer-specific completeness classification, when the import format has one. */
+  kind?: string;
+  /** Producer-supplied categorical reason for incomplete coverage. */
+  reason?: string | null;
+}>;
+
+export type CorpusSourceDescriptor = Readonly<{
+  /** Per-install source pseudonym used by the local store and CLI. */
+  id: string;
+  kind: CorpusSourceKind;
+  provider: string;
+  network: string | null;
+  /** Private provider account identifier. Ordinary source views omit it. */
+  accountId: string | null;
+  /** Private producer-local source identifier. Ordinary source views omit it. */
+  externalId: string;
+  revision: string;
+  generatedAt: string | null;
+  producer: Readonly<{ id: string; version: string }>;
+  coverage: CorpusSourceCoverage;
+  manifestSha256: string | null;
+  identity: unknown;
+  warnings: readonly string[];
+}>;
+
+export type CorpusConversationProvenance = Readonly<{
+  conversationId: string;
+  externalId: string;
+  metadata?: unknown;
+}>;
+
+export type CorpusAttachmentProvenance = Readonly<{
+  id: string;
+  kind: string | null;
+  mimeType: string | null;
+  fileName: string | null;
+  bytes: number | null;
+}>;
+
+export type CorpusMessageProvenance = Readonly<{
+  messageId: string;
+  externalId: string;
+  replyToExternalId: string | null;
+  attachments: readonly CorpusAttachmentProvenance[];
+  metadata?: unknown;
+}>;
+
+export type CorpusReactionFact = Readonly<{
+  id: string;
+  externalId: string;
+  targetExternalId: string;
+  conversationId: string | null;
+  direction: Direction | null;
+  body: string;
+  reactedAt: string | null;
+  state: "active" | "removed";
+}>;
+
+export type CorpusSourceRecord = Readonly<{
+  kind: "account" | "participant" | "reaction" | "tombstone" | "excluded-message";
+  id: string;
+  record: unknown;
+}>;
+
+export type CorpusSourceDeletion = Readonly<{
+  entityKind: "account" | "participant" | "conversation" | "message" | "reaction" | "reaction-timeline";
+  localEntityId: string | null;
+  externalId: string;
+  deletedAt: string;
+  expectedConversationId?: string;
+  reason?: "tombstone" | "explicit-exclusion" | "replacement";
+}>;
+
+export type SourceCorpusSnapshot = Readonly<{
+  source: CorpusSourceDescriptor;
+  conversations: readonly CorpusConversation[];
+  conversationProvenance: readonly CorpusConversationProvenance[];
+  messages: readonly CorpusMessage[];
+  messageProvenance: readonly CorpusMessageProvenance[];
+  reactionFacts?: readonly CorpusReactionFact[];
+  auxiliaryRecords?: readonly CorpusSourceRecord[];
+  deletions?: readonly CorpusSourceDeletion[];
+}>;
+
+export type MessageBundleSnapshot = Readonly<{
+  schemaVersion: typeof MESSAGE_BUNDLE_SCHEMA_VERSION;
+  manifestSha256: string;
+  sources: readonly SourceCorpusSnapshot[];
 }>;
 
 export type ContactHandle = Readonly<{
@@ -160,7 +257,17 @@ export type ReactionMetrics = Readonly<{
   total: number;
   incoming: number;
   outgoing: number;
+  unknownDirection: number;
+  dated: number;
+  undated: number;
   outgoingReactionRatio: number;
+  byBody: readonly Readonly<{
+    body: string;
+    total: number;
+    incoming: number;
+    outgoing: number;
+    unknownDirection: number;
+  }>[];
 }>;
 
 export type ContactMetrics = Readonly<{

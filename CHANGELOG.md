@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+- Add strict private version-one source-bundle ingestion for local Beeper
+  exports produced through Wrench, including account and network provenance,
+  replies, edits, deletions, attachments, reactions, and tombstones.
+- Namespace corpus ownership by source so native iMessage and multiple provider
+  accounts coexist. Bounded snapshot absence retains prior history, explicit
+  terminal state suppresses evidence, and later reappearance restores it.
+- Add `sources list` and `sources show` with active message, conversation,
+  reaction, undated-reaction, completeness, and warning health.
+- Partition sessions, bursts, and response episodes by conversation, preserve
+  truncated text bubbles as tempo evidence, and count undated reactions without
+  inventing timestamps.
+- Upgrade existing version-two stores in place while retaining conversations,
+  profiles, study packets, and evidence provenance.
+
 ## 0.2.0
 
 - Aggregate conservatively matched direct threads into one AddressBook person

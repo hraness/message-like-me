@@ -7,7 +7,13 @@ import { parseStyleProfile } from "./profile.ts";
 import { contactHandleMatchId, normalizeContactHandle } from "./contacts.ts";
 import { LocalStore } from "./store.ts";
 import { syntheticProfile, syntheticProfileV2 } from "./test-fixtures.ts";
-import type { ContactsSnapshot, CorpusSnapshot } from "./types.ts";
+import type {
+  ContactsSnapshot,
+  CorpusMessage,
+  CorpusReactionFact,
+  CorpusSnapshot,
+  SourceCorpusSnapshot,
+} from "./types.ts";
 
 const CONTACTS_TEST_KEY = "synthetic-contacts-store-key-32";
 
@@ -87,6 +93,102 @@ function snapshotWithLaterMessage(revision: string): CorpusSnapshot {
         replyToSourceGuid: null,
       },
     ],
+  };
+}
+
+const BUNDLE_SOURCE_ID = `source_${"7".repeat(64)}`;
+const BUNDLE_CONVERSATION_ID = "conversation_bundle_synthetic";
+
+function bundleMessage(
+  id: string,
+  sourceRowId: number,
+  sentAt: string,
+  kind: CorpusMessage["kind"] = "text",
+): CorpusMessage {
+  return {
+    id: `bundle-message-${id}`,
+    sourceRowId,
+    sourceGuid: `provider-message-${id}`,
+    conversationId: BUNDLE_CONVERSATION_ID,
+    sentAt,
+    direction: id === "a" ? "incoming" : "outgoing",
+    body: kind === "text" ? `Synthetic bundle ${id}.` : null,
+    bodySource: kind === "text" ? "text" : "unavailable",
+    kind,
+    replyToSourceGuid: null,
+    editedAt: null,
+    retractedAt: null,
+    service: "whatsapp",
+    attachmentCount: 0,
+  };
+}
+
+function bundleReaction(state: "active" | "removed" = "active"): CorpusReactionFact {
+  return {
+    id: "bundle-reaction-r",
+    externalId: "provider-reaction-r",
+    targetExternalId: "provider-message-a",
+    conversationId: BUNDLE_CONVERSATION_ID,
+    direction: "outgoing",
+    body: "heart",
+    reactedAt: null,
+    state,
+  };
+}
+
+function bundleSnapshot(options: Readonly<{
+  revision: string;
+  generatedAt: string;
+  messages: readonly CorpusMessage[];
+  reactions?: readonly CorpusReactionFact[];
+  history?: "bounded" | "complete-current-local";
+  deletions?: SourceCorpusSnapshot["deletions"];
+}>): SourceCorpusSnapshot {
+  return {
+    source: {
+      id: BUNDLE_SOURCE_ID,
+      kind: "bundle",
+      provider: "beeper",
+      network: "whatsapp",
+      accountId: "synthetic-connected-account",
+      externalId: "synthetic-connected-account",
+      revision: options.revision,
+      generatedAt: options.generatedAt,
+      producer: { id: "beeper-local", version: "test" },
+      coverage: {
+        history: options.history ?? "bounded",
+        observedFrom: "2026-08-20T10:00:00.000Z",
+        observedTo: "2026-08-20T11:00:00.000Z",
+        kind: options.history === "complete-current-local" ? "complete-current-local" : "bounded-local",
+        reason: null,
+      },
+      manifestSha256: options.revision,
+      identity: { synthetic: true },
+      warnings: [],
+    },
+    conversations: [{
+      id: BUNDLE_CONVERSATION_ID,
+      sourceKey: "provider-conversation-bundle",
+      privateLabel: "Synthetic Bundle Contact",
+      service: "whatsapp",
+      participantCount: 1,
+      participantIds: ["participant-bundle-peer"],
+      privateParticipants: [],
+      group: false,
+    }],
+    conversationProvenance: [{
+      conversationId: BUNDLE_CONVERSATION_ID,
+      externalId: "provider-conversation-bundle",
+    }],
+    messages: options.messages,
+    messageProvenance: options.messages.map((message) => ({
+      messageId: message.id,
+      externalId: message.sourceGuid,
+      replyToExternalId: message.replyToSourceGuid,
+      attachments: [],
+    })),
+    reactionFacts: options.reactions ?? [],
+    deletions: options.deletions ?? [],
   };
 }
 
@@ -270,6 +372,31 @@ function createLegacyV1Store(path: string): void {
   }
 }
 
+function createLegacyV2Store(path: string): void {
+  createLegacyV1Store(path);
+  const database = new Database(path, { strict: true });
+  try {
+    database.exec(`
+      ALTER TABLE study_packets ADD COLUMN scope_id TEXT;
+      ALTER TABLE study_packets ADD COLUMN evidence_revision TEXT;
+      ALTER TABLE study_packets ADD COLUMN example_ids_json TEXT;
+      ALTER TABLE study_packets ADD COLUMN evidence_json TEXT;
+      ALTER TABLE profiles ADD COLUMN scope_id TEXT;
+      ALTER TABLE profiles ADD COLUMN evidence_revision TEXT;
+      CREATE TABLE conversation_contact_scopes(
+        conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+        contact_id TEXT NOT NULL REFERENCES addressbook_contacts(id) ON DELETE CASCADE,
+        contacts_revision TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX conversation_contact_scopes_lookup
+        ON conversation_contact_scopes(contact_id,conversation_id);
+      PRAGMA user_version=2;
+    `);
+  } finally {
+    database.close();
+  }
+}
+
 function contactsSnapshot(revision: string, label = "Synthetic Friend"): ContactsSnapshot {
   const handle = (value: string) => {
     const normalized = normalizeContactHandle(value)!;
@@ -358,7 +485,7 @@ describe("local corpus store", () => {
       store.replaceCorpus(snapshot("d".repeat(64)), "2026-08-21T13:00:00.000Z");
       expect(store.profile(profile.contactId)?.state).toBe("current");
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 2,
+        storeSchemaVersion: 3,
         quickCheck: "ok",
         foreignKeyViolations: 0,
       });
@@ -536,6 +663,8 @@ describe("local corpus store", () => {
         messageCount: 4,
         incomingCount: 2,
         outgoingCount: 2,
+        service: null,
+        services: ["SMS", "iMessage"],
       });
       expect(store.conversation("email-conversation", true)?.id).toBe(personId);
       expect(store.contactCorpus(personId)?.messages.map(({ conversationId }) => conversationId))
@@ -800,6 +929,142 @@ describe("local corpus store", () => {
     }
   });
 
+  test("merges bounded sources, applies explicit suppression, and rejects stale snapshots", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-source-merge-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    const a = bundleMessage("a", 1, "2026-08-20T10:00:00.000Z");
+    const b = bundleMessage("b", 2, "2026-08-20T10:01:00.000Z");
+    try {
+      store.replaceCorpus(snapshot("a".repeat(64)), "2026-08-21T12:00:00.000Z");
+      const first = bundleSnapshot({
+        revision: "1".repeat(64),
+        generatedAt: "2026-08-21T12:01:00.000Z",
+        messages: [a, b],
+        reactions: [bundleReaction()],
+      });
+      store.replaceSources([first], "2026-08-21T12:01:01.000Z");
+      expect(store.listSources()).toHaveLength(2);
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toMatchObject({
+        messages: [{ id: a.id }, { id: b.id }],
+        reactions: [{ id: "bundle-reaction-r", reactedAt: null, state: "active" }],
+      });
+
+      const retained = store.replaceSources([bundleSnapshot({
+        revision: "2".repeat(64),
+        generatedAt: "2026-08-21T12:02:00.000Z",
+        messages: [a],
+        reactions: [bundleReaction()],
+      })], "2026-08-21T12:02:01.000Z");
+      expect(retained.sources[0]?.changed).toBeFalse();
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)?.messages.map(({ id }) => id))
+        .toEqual([a.id, b.id]);
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({ conversations: 1, messages: 2 });
+
+      store.replaceSources([bundleSnapshot({
+        revision: "3".repeat(64),
+        generatedAt: "2026-08-21T12:03:00.000Z",
+        messages: [a],
+        reactions: [bundleReaction("removed")],
+        deletions: [
+          {
+            entityKind: "message",
+            localEntityId: null,
+            externalId: b.sourceGuid,
+            deletedAt: "2026-08-21T12:03:00.000Z",
+            expectedConversationId: BUNDLE_CONVERSATION_ID,
+            reason: "tombstone",
+          },
+          {
+            entityKind: "reaction",
+            localEntityId: "bundle-reaction-r",
+            externalId: "provider-reaction-r",
+            deletedAt: "2026-08-21T12:03:00.000Z",
+            expectedConversationId: BUNDLE_CONVERSATION_ID,
+            reason: "tombstone",
+          },
+        ],
+      })], "2026-08-21T12:03:01.000Z");
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toMatchObject({
+        messages: [{ id: a.id }],
+        reactions: [],
+      });
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({ conversations: 1, messages: 1 });
+
+      const reappeared = bundleSnapshot({
+        revision: "4".repeat(64),
+        generatedAt: "2026-08-21T12:04:00.000Z",
+        messages: [a, b],
+        reactions: [bundleReaction()],
+      });
+      store.replaceSources([reappeared], "2026-08-21T12:04:01.000Z");
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toMatchObject({
+        messages: [{ id: a.id }, { id: b.id }],
+        reactions: [{ id: "bundle-reaction-r", state: "active" }],
+      });
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({ conversations: 1, messages: 2 });
+      expect(() => store.replaceSources([first], "2026-08-21T12:05:00.000Z"))
+        .toThrow("older than stored state");
+      expect(() => store.replaceSources([bundleSnapshot({
+        ...reappeared,
+        revision: "5".repeat(64),
+        generatedAt: "2026-08-21T12:04:00.000Z",
+        messages: [a, b],
+      })], "2026-08-21T12:05:00.000Z")).toThrow("reuses generatedAt");
+      expect(store.replaceSources([reappeared], "2026-08-21T12:05:00.000Z").sources[0])
+        .toMatchObject({ changed: false, conversations: 1, messages: 2 });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("authoritative reaction absence and reappearance affect only that source", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-reaction-reappearance-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    const a = bundleMessage("a", 1, "2026-08-20T10:00:00.000Z");
+    const reactionMessage = {
+      ...bundleMessage("reaction-r", 2, "2026-08-20T10:00:30.000Z", "reaction"),
+      sourceGuid: "provider-reaction-r",
+    };
+    const reaction = { ...bundleReaction(), id: reactionMessage.id };
+    try {
+      store.replaceSources([bundleSnapshot({
+        revision: "1".repeat(64),
+        generatedAt: "2026-08-21T12:01:00.000Z",
+        messages: [a, reactionMessage],
+        reactions: [reaction],
+        history: "complete-current-local",
+      })], "2026-08-21T12:01:01.000Z");
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)?.reactions).toHaveLength(1);
+
+      store.replaceSources([bundleSnapshot({
+        revision: "2".repeat(64),
+        generatedAt: "2026-08-21T12:02:00.000Z",
+        messages: [a],
+        reactions: [],
+        history: "complete-current-local",
+      })], "2026-08-21T12:02:01.000Z");
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toMatchObject({
+        messages: [{ id: a.id }],
+        reactions: [],
+      });
+
+      store.replaceSources([bundleSnapshot({
+        revision: "3".repeat(64),
+        generatedAt: "2026-08-21T12:03:00.000Z",
+        messages: [a, reactionMessage],
+        reactions: [reaction],
+        history: "complete-current-local",
+      })], "2026-08-21T12:03:01.000Z");
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)?.reactions).toHaveLength(1);
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)?.messages.map(({ id }) => id))
+        .toEqual([a.id, reactionMessage.id]);
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("keeps a person profile current across unrelated changes and stales relevant evidence", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-scope-revision-"));
     const store = LocalStore.open(join(root, "store.sqlite3"));
@@ -934,7 +1199,7 @@ describe("local corpus store", () => {
     createLegacyV1Store(path);
     const store = LocalStore.open(path);
     try {
-      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 2, profiles: 1 });
+      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 3, profiles: 1 });
       expect(store.profile("contact_0123456789abcdef")).toMatchObject({
         state: "current",
         profile: { schemaVersion: 1, corpusRevision: "a".repeat(64) },
@@ -945,7 +1210,7 @@ describe("local corpus store", () => {
 
     const migrated = new Database(path, { strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
       const profileColumns = migrated.query("PRAGMA table_info(profiles)").all() as Array<{ name: string }>;
       expect(profileColumns.map(({ name }) => name)).toContain("scope_id");
       expect(profileColumns.map(({ name }) => name)).toContain("evidence_revision");
@@ -956,6 +1221,52 @@ describe("local corpus store", () => {
         WHERE type='table' AND name='conversation_contact_scopes'`).get()).toEqual({
         name: "conversation_contact_scopes",
       });
+    } finally {
+      migrated.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("upgrades a populated v0.2 store in place without rebuilding evidence rows", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-v2-upgrade-"));
+    const path = join(root, "store.sqlite3");
+    createLegacyV2Store(path);
+    const store = LocalStore.open(path);
+    try {
+      expect(store.doctor()).toMatchObject({
+        storeSchemaVersion: 3,
+        conversations: 1,
+        messages: 1,
+        profiles: 1,
+        sources: 1,
+      });
+      expect(store.corpusRevision()).toBe("a".repeat(64));
+      expect(store.profile("contact_0123456789abcdef")).toMatchObject({
+        state: "current",
+        profile: { schemaVersion: 1, corpusRevision: "a".repeat(64) },
+      });
+    } finally {
+      store.close();
+    }
+    const migrated = new Database(path, { readonly: true, strict: true });
+    try {
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(migrated.query("SELECT count(*) AS value FROM conversations").get())
+        .toEqual({ value: 1 });
+      expect(migrated.query("SELECT count(*) AS value FROM messages").get())
+        .toEqual({ value: 1 });
+      expect(migrated.query("SELECT count(*) AS value FROM profiles").get())
+        .toEqual({ value: 1 });
+      expect(migrated.query("SELECT count(*) AS value FROM study_packets").get())
+        .toEqual({ value: 1 });
+      expect(migrated.query(`SELECT source_id,external_id FROM conversation_sources`).get())
+        .toEqual({ source_id: "source_imessage_local", external_id: "legacy-conversation" });
+      expect(migrated.query(`SELECT source_id,external_id FROM message_provenance`).get())
+        .toEqual({ source_id: "source_imessage_local", external_id: "legacy-guid" });
+      expect(migrated.query(`SELECT evidence_revision IS NOT NULL AS value FROM profiles`).get())
+        .toEqual({ value: 1 });
+      expect(migrated.query(`SELECT evidence_revision IS NOT NULL AS value FROM study_packets`).get())
+        .toEqual({ value: 1 });
     } finally {
       migrated.close();
       await rm(root, { recursive: true, force: true });

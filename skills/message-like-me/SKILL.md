@@ -63,6 +63,21 @@ database with `messagelikeme ingest imessage --json`; pass `--database` only
 when the user names a different source. The ingest is read-only. It stores a
 private normalized corpus and aggregate metrics without changing `chat.db`.
 
+When the user supplies a finished Wrench/Beeper Message Like Me bundle, ingest
+only its normalized absolute directory path:
+
+```sh
+messagelikeme ingest bundle --input <absolute-private-bundle-directory> --json
+messagelikeme sources list --json
+```
+
+Do not request or handle the Beeper credential, call Beeper directly, improvise
+a provider parser, or open the bundle's NDJSON files. Wrench owns provider
+capture; Message Like Me owns strict verification, normalization, and local
+analysis. Use `sources show <source-id> --json` for redacted completeness and
+health. Add `--private` only when the user's task requires provider account
+metadata.
+
 When the user wants AddressBook names attached to direct conversations, run
 `messagelikeme ingest contacts --json`. Pass `--addressbook` only for an
 explicit alternative AddressBook root, source directory, or database. The
@@ -70,10 +85,13 @@ optional enrichment is also read-only, may run before or after Messages
 ingestion, and keeps ambiguous methods and group conversations unresolved.
 
 When Contacts supplies an unambiguous exact handle match, the CLI can combine
-that person's direct Messages conversations into one pseudonymous `person_...`
-analysis scope. Unmatched conversations and groups remain separate. Treat each
-scope as evidence about messaging with that observed person or conversation,
-not as a label for the relationship or a complete model of either participant.
+that person's complete-roster direct conversations across message sources into
+one pseudonymous `person_...` analysis scope. Unmatched conversations,
+incomplete rosters, and groups remain separate. Treat each scope as evidence
+about messaging with that observed person or conversation, not as a label for
+the relationship or a complete model of either participant. Inspect the
+`services` breakdown before applying a multi-app profile as though it described
+one channel.
 
 Use the CLI's aggregate views before requesting message text. Ask for the
 narrowest bounded study packet that answers the question. Prefer stable local

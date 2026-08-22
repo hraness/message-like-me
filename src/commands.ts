@@ -2,6 +2,7 @@ import { lstat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { integerOption, parseArguments, rejectUnused, type ParsedArguments } from "./args.ts";
 import { prettyJson, sha256 } from "./canonical-json.ts";
+import { readMessageBundle } from "./bundle.ts";
 import { DEFAULT_CONTACTS_DIRECTORY, readMacOSContacts } from "./contacts.ts";
 import { CliError } from "./errors.ts";
 import { DEFAULT_IMESSAGE_DATABASE, readIMessageDatabase } from "./imessage.ts";
@@ -29,7 +30,10 @@ export const HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
+  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
+  messagelikeme [--data-dir PATH] sources list [--private] [--json]
+  messagelikeme [--data-dir PATH] sources show SOURCE_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
@@ -50,9 +54,9 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads caller-owned macOS Messages and optional Contacts data,
-then stores private analysis locally. It has no network, account, AI-provider,
-or message-sending surface.
+Message Like Me reads caller-owned macOS Messages, optional Contacts data, and
+strict private local message bundles, then stores private analysis locally. It
+has no network, account, AI-provider, or message-sending surface.
 `;
 
 async function exists(path: string): Promise<boolean> {
@@ -124,7 +128,10 @@ function contactMetrics(
   options: Parameters<typeof analyzeContact>[3] = {},
 ): ContactMetrics {
   const evidence = contactEvidence(store, contactId);
-  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, options);
+  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, {
+    ...options,
+    reactionFacts: evidence.reactions,
+  });
 }
 
 function metricOptions(parsed: ParsedArguments): Readonly<{
@@ -165,6 +172,7 @@ function safeContactDetail(store: LocalStore, contactId: string, privateLabels: 
       privateParticipants: conversation.privateParticipants,
     } : {}),
     service: conversation.service,
+    services: conversation.services,
     group: conversation.group,
     participantCount: conversation.participantCount,
     participantIds: conversation.participantIds,
@@ -240,6 +248,22 @@ function translateContactsError(error: unknown): never {
   );
 }
 
+function translateBundleError(error: unknown): never {
+  if (error instanceof CliError) throw error;
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError("permission", "The selected private bundle is not readable", { cause: error });
+  }
+  if (code === "ENOENT") {
+    throw new CliError("not-found", "The selected private bundle does not exist", { cause: error });
+  }
+  throw new CliError(
+    "invalid-data",
+    "The selected private message bundle could not be read safely",
+    { cause: error },
+  );
+}
+
 export async function runCommand(argv: readonly string[], io: CommandIo): Promise<void> {
   const parsed = parseArguments(argv);
   if (parsed.flags.has("version")) {
@@ -299,6 +323,38 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
     return;
   }
 
+  if (command === "ingest" && subcommand === "bundle" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir", "input"], ["json"]);
+    const input = absolutePrivatePath(parsed.options.get("input"), "--input");
+    const context = await writableStore(parsed);
+    try {
+      let bundle;
+      try {
+        bundle = await readMessageBundle(input, { hmacKey: context.key });
+      } catch (error) {
+        translateBundleError(error);
+      }
+      const stored = context.store.replaceSources(bundle.sources, canonicalNow(io), context.key);
+      const result = {
+        schemaVersion: bundle.schemaVersion,
+        manifestSha256: bundle.manifestSha256,
+        corpusRevision: stored.corpusRevision,
+        sources: stored.sources,
+        conversations: stored.sources.reduce((sum, source) => sum + source.conversations, 0),
+        messages: stored.sources.reduce((sum, source) => sum + source.messages, 0),
+      };
+      emit(
+        io,
+        json,
+        result,
+        `Ingested ${result.messages} active messages across ${result.conversations} conversations from ${result.sources.length} sources`,
+      );
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
   if (command === "ingest" && subcommand === "contacts" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "addressbook"], ["json"]);
     const context = await writableStore(parsed);
@@ -345,6 +401,31 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         limit: integerOption(parsed, "limit", 50, 1, 1_000),
       });
       emit(io, json, { contacts }, `${contacts.length} contacts`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "sources" && subcommand === "list" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json", "private"]);
+    const context = await existingStore(parsed);
+    try {
+      const sources = context.store.listSources(parsed.flags.has("private"));
+      emit(io, json, { sources }, `${sources.length} message sources`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "sources" && subcommand === "show" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json", "private"]);
+    const context = await existingStore(parsed);
+    try {
+      const source = context.store.source(identifier, parsed.flags.has("private"));
+      if (source === null) throw new CliError("not-found", `Unknown source ${identifier}`);
+      emit(io, json, source, `Message source ${identifier}`);
     } finally {
       context.store.close();
     }
@@ -435,7 +516,7 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         evidence.messages,
         evidence.corpusRevision,
         identifier,
-        metricOptions(parsed),
+        { ...metricOptions(parsed), reactionFacts: evidence.reactions },
       );
       const packet = buildStudyPacket(evidence.messages, metrics, {
         limit: integerOption(parsed, "limit", 24, 1, 50),
@@ -510,7 +591,7 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         evidence.messages,
         evidence.corpusRevision,
         identifier,
-        metricOptions(parsed),
+        { ...metricOptions(parsed), reactionFacts: evidence.reactions },
       );
       const packets = buildEvaluationPackets(evidence.messages, metrics, {
         after,
