@@ -6,7 +6,8 @@ provider capture from analysis: a producer handles provider access and writes
 the bundle, while `messagelikeme ingest bundle` verifies and normalizes it. The
 importer never receives provider credentials and never calls the producer.
 
-The current producer is Wrench's local Beeper export:
+The current producer is the local Beeper export in
+[Wrench 0.13.0 or newer](https://github.com/hraness/wrench/releases):
 
 ```sh
 wrench beeper export-message-like-me \
@@ -140,7 +141,8 @@ matching. It never uses an incomplete roster for that join.
 
 `sentAt` is the message's actual temporal coordinate. `sortKey` is an opaque
 provider ordering key. Within one account and conversation, Message Like Me
-orders lexical `sortKey`, then `sentAt` and ID as deterministic tie-breakers.
+orders lexical `sortKey`, then `sentAt` and stable provider ID as deterministic
+tie-breakers.
 
 `bodyTruncated: true` means the body cannot be prose evidence. The record still
 becomes a text bubble for tempo, reply, and delivery-shape analysis. A message
@@ -194,7 +196,9 @@ None is authoritative for deletion by absence. Reimport therefore upserts
 present records and retains prior records omitted by a later bundle. Explicit
 message deletion, removed reaction state, replacement edges, and tombstones
 are applied separately. A valid later reappearance clears the matching
-suppression.
+suppression. Present and retained messages are reranked together by the provider
+ordering coordinates, so a bounded backfill converges with a fresh import of
+the same final records.
 
 The manifest completeness kind and reason apply conservatively to every
 account. Stored `observedFrom` and `observedTo` bounds are derived from the

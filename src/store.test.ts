@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseStyleProfile } from "./profile.ts";
 import { contactHandleMatchId, normalizeContactHandle } from "./contacts.ts";
-import { LocalStore } from "./store.ts";
+import { analyzeContact } from "./metrics.ts";
+import { IMESSAGE_SOURCE_ID, LocalStore } from "./store.ts";
 import { syntheticProfile, syntheticProfileV2 } from "./test-fixtures.ts";
 import type {
   ContactsSnapshot,
@@ -143,7 +144,21 @@ function bundleSnapshot(options: Readonly<{
   reactions?: readonly CorpusReactionFact[];
   history?: "bounded" | "complete-current-local";
   deletions?: SourceCorpusSnapshot["deletions"];
+  includeConversation?: boolean;
+  providerSortKeys?: Readonly<Record<string, string>>;
 }>): SourceCorpusSnapshot {
+  const conversations: SourceCorpusSnapshot["conversations"] = options.includeConversation === false
+    ? []
+    : [{
+      id: BUNDLE_CONVERSATION_ID,
+      sourceKey: "provider-conversation-bundle",
+      privateLabel: "Synthetic Bundle Contact",
+      service: "whatsapp",
+      participantCount: 1,
+      participantIds: ["participant-bundle-peer"],
+      privateParticipants: [],
+      group: false,
+    }];
   return {
     source: {
       id: BUNDLE_SOURCE_ID,
@@ -166,24 +181,18 @@ function bundleSnapshot(options: Readonly<{
       identity: { synthetic: true },
       warnings: [],
     },
-    conversations: [{
-      id: BUNDLE_CONVERSATION_ID,
-      sourceKey: "provider-conversation-bundle",
-      privateLabel: "Synthetic Bundle Contact",
-      service: "whatsapp",
-      participantCount: 1,
-      participantIds: ["participant-bundle-peer"],
-      privateParticipants: [],
-      group: false,
-    }],
-    conversationProvenance: [{
-      conversationId: BUNDLE_CONVERSATION_ID,
+    conversations,
+    conversationProvenance: conversations.map((conversation) => ({
+      conversationId: conversation.id,
       externalId: "provider-conversation-bundle",
-    }],
+    })),
     messages: options.messages,
     messageProvenance: options.messages.map((message) => ({
       messageId: message.id,
       externalId: message.sourceGuid,
+      providerSortKey: message.kind === "reaction"
+        ? null
+        : options.providerSortKeys?.[message.id] ?? message.sourceGuid,
       replyToExternalId: message.replyToSourceGuid,
       attachments: [],
     })),
@@ -1012,6 +1021,187 @@ describe("local corpus store", () => {
       })], "2026-08-21T12:05:00.000Z")).toThrow("reuses generatedAt");
       expect(store.replaceSources([reappeared], "2026-08-21T12:05:00.000Z").sources[0])
         .toMatchObject({ changed: false, conversations: 1, messages: 2 });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("converges provider order across bounded backfill, omission, and replay", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-provider-order-"));
+    const incremental = LocalStore.open(join(root, "incremental.sqlite3"));
+    const fresh = LocalStore.open(join(root, "fresh.sqlite3"));
+    const omitted = LocalStore.open(join(root, "omitted.sqlite3"));
+    const sentAt = "2026-08-20T10:00:00.000Z";
+    const incoming = bundleMessage("a", 1, sentAt);
+    const outgoing = bundleMessage("b", 2, sentAt);
+    const first = bundleSnapshot({
+      revision: "1".repeat(64),
+      generatedAt: "2026-08-21T12:01:00.000Z",
+      messages: [outgoing],
+      providerSortKeys: { [outgoing.id]: "b" },
+    });
+    const complete = bundleSnapshot({
+      revision: "2".repeat(64),
+      generatedAt: "2026-08-21T12:02:00.000Z",
+      messages: [incoming, outgoing],
+      providerSortKeys: { [incoming.id]: "a", [outgoing.id]: "b" },
+    });
+    try {
+      incremental.replaceSources([first], "2026-08-21T12:01:01.000Z");
+      incremental.replaceSources([complete], "2026-08-21T12:02:01.000Z");
+      fresh.replaceSources([complete], "2026-08-21T12:02:01.000Z");
+
+      const incrementalCorpus = incremental.contactCorpus(BUNDLE_CONVERSATION_ID)!;
+      const freshCorpus = fresh.contactCorpus(BUNDLE_CONVERSATION_ID)!;
+      expect(incrementalCorpus.messages.map(({ id }) => id)).toEqual([incoming.id, outgoing.id]);
+      expect(incrementalCorpus.messages).toEqual(freshCorpus.messages);
+      expect(incrementalCorpus.evidenceRevision).toBe(freshCorpus.evidenceRevision);
+      expect(incremental.source(BUNDLE_SOURCE_ID)?.revision)
+        .toBe(fresh.source(BUNDLE_SOURCE_ID)?.revision);
+      expect(incremental.corpusRevision()).toBe(fresh.corpusRevision());
+      expect(analyzeContact(
+        incrementalCorpus.messages,
+        incrementalCorpus.corpusRevision,
+        BUNDLE_CONVERSATION_ID,
+        { reactionFacts: incrementalCorpus.reactions },
+      ).tempo.responseEpisodes).toBe(1);
+
+      const stableRevision = incremental.corpusRevision();
+      expect(incremental.replaceSources([complete], "2026-08-21T12:03:00.000Z").sources[0])
+        .toMatchObject({ changed: false, conversations: 1, messages: 2 });
+      expect(incremental.corpusRevision()).toBe(stableRevision);
+
+      omitted.replaceSources([first], "2026-08-21T12:01:01.000Z");
+      omitted.replaceSources([bundleSnapshot({
+        revision: "3".repeat(64),
+        generatedAt: "2026-08-21T12:03:00.000Z",
+        messages: [incoming],
+        providerSortKeys: { [incoming.id]: "a" },
+      })], "2026-08-21T12:03:01.000Z");
+      const omittedCorpus = omitted.contactCorpus(BUNDLE_CONVERSATION_ID)!;
+      expect(omittedCorpus.messages.map(({ id }) => id)).toEqual([incoming.id, outgoing.id]);
+      expect(omittedCorpus.messages).toEqual(freshCorpus.messages);
+      expect(omittedCorpus.evidenceRevision).toBe(freshCorpus.evidenceRevision);
+      expect(omitted.source(BUNDLE_SOURCE_ID)?.revision)
+        .toBe(fresh.source(BUNDLE_SOURCE_ID)?.revision);
+      expect(omitted.corpusRevision()).toBe(fresh.corpusRevision());
+    } finally {
+      omitted.close();
+      fresh.close();
+      incremental.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("clears external-only conversation, message, and reaction tombstones on reappearance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-external-reappearance-"));
+    const incremental = LocalStore.open(join(root, "incremental.sqlite3"));
+    const fresh = LocalStore.open(join(root, "fresh.sqlite3"));
+    const message = bundleMessage("a", 1, "2026-08-20T10:00:00.000Z");
+    const tombstones = bundleSnapshot({
+      revision: "1".repeat(64),
+      generatedAt: "2026-08-21T12:01:00.000Z",
+      includeConversation: false,
+      messages: [],
+      deletions: [
+        {
+          entityKind: "conversation",
+          localEntityId: null,
+          externalId: "provider-conversation-bundle",
+          deletedAt: "2026-08-21T12:01:00.000Z",
+          reason: "tombstone",
+        },
+        {
+          entityKind: "message",
+          localEntityId: null,
+          externalId: message.sourceGuid,
+          deletedAt: "2026-08-21T12:01:00.000Z",
+          reason: "tombstone",
+        },
+        {
+          entityKind: "reaction",
+          localEntityId: null,
+          externalId: "provider-reaction-r",
+          deletedAt: "2026-08-21T12:01:00.000Z",
+          reason: "tombstone",
+        },
+      ],
+    });
+    const active = bundleSnapshot({
+      revision: "2".repeat(64),
+      generatedAt: "2026-08-21T12:02:00.000Z",
+      messages: [message],
+      reactions: [bundleReaction()],
+    });
+    try {
+      incremental.replaceSources([tombstones], "2026-08-21T12:01:01.000Z");
+      expect(incremental.source(BUNDLE_SOURCE_ID)).toMatchObject({
+        conversations: 0,
+        messages: 0,
+        reactions: 0,
+      });
+      incremental.replaceSources([active], "2026-08-21T12:02:01.000Z");
+      fresh.replaceSources([active], "2026-08-21T12:02:01.000Z");
+
+      const incrementalCorpus = incremental.contactCorpus(BUNDLE_CONVERSATION_ID)!;
+      const freshCorpus = fresh.contactCorpus(BUNDLE_CONVERSATION_ID)!;
+      expect(incrementalCorpus).toMatchObject({
+        messages: [{ id: message.id }],
+        reactions: [{ id: "bundle-reaction-r" }],
+      });
+      expect(incrementalCorpus.messages).toEqual(freshCorpus.messages);
+      expect(incrementalCorpus.reactions).toEqual(freshCorpus.reactions);
+      expect(incrementalCorpus.evidenceRevision).toBe(freshCorpus.evidenceRevision);
+      expect(incremental.source(BUNDLE_SOURCE_ID)?.revision)
+        .toBe(fresh.source(BUNDLE_SOURCE_ID)?.revision);
+      expect(incremental.corpusRevision()).toBe(fresh.corpusRevision());
+      expect(incremental.replaceSources([active], "2026-08-21T12:03:00.000Z").sources[0]?.changed)
+        .toBeFalse();
+    } finally {
+      fresh.close();
+      incremental.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reports native iMessage reactions consistently with contact metrics", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-imessage-reaction-health-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    const base = snapshot("a".repeat(64));
+    const reaction: CorpusMessage = {
+      ...base.messages[1]!,
+      id: "message_reaction",
+      sourceRowId: 3,
+      sourceGuid: "synthetic-reaction-guid",
+      sentAt: "2026-08-21T11:02:00.000Z",
+      body: null,
+      bodySource: "unavailable",
+      kind: "reaction",
+      replyToSourceGuid: base.messages[0]!.sourceGuid,
+    };
+    try {
+      store.replaceCorpus({ ...base, messages: [...base.messages, reaction] }, "2026-08-21T12:00:00.000Z");
+      expect(store.source(IMESSAGE_SOURCE_ID)).toMatchObject({
+        conversations: 1,
+        messages: 3,
+        reactions: 1,
+        undatedReactions: 0,
+      });
+      const corpus = store.contactCorpus(base.conversations[0]!.id)!;
+      const metrics = analyzeContact(
+        corpus.messages,
+        corpus.corpusRevision,
+        base.conversations[0]!.id,
+        { reactionFacts: corpus.reactions },
+      );
+      expect(metrics.reactions).toMatchObject({
+        total: 1,
+        incoming: 0,
+        outgoing: 1,
+        dated: 1,
+        undated: 0,
+      });
     } finally {
       store.close();
       await rm(root, { recursive: true, force: true });

@@ -59,11 +59,11 @@ export default function Home() {
           </div>
           <div className="terminal-card">
             <p>
-              <span>$</span> wrench beeper export-message-like-me --auth beeper-main --output /private/export
+              <span>$</span> wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
             </p>
-            <p className="terminal-result">✓ private source bundle written</p>
+            <p className="terminal-result">✓ Wrench 0.13.0+ private bundle written</p>
             <p>
-              <span>$</span> messagelikeme ingest bundle --input /private/export
+              <span>$</span> messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
             </p>
             <p className="terminal-result">✓ source-aware history merged</p>
           </div>
@@ -87,9 +87,10 @@ export default function Home() {
             <h3>Read stable local copies.</h3>
             <p>
               Import Messages and optional Contacts directly, or merge a
-              private source-aware bundle exported by Wrench from Beeper.
+              private source-aware bundle exported by Wrench 0.13.0+ from
+              Beeper.
             </p>
-            <code>messagelikeme ingest bundle --input /private/export</code>
+            <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code>
           </article>
           <article>
             <p className="section-number">02 / understand</p>
@@ -178,7 +179,7 @@ export default function Home() {
           <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.3.0</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
-          <p><span>4</span><code>messagelikeme ingest bundle --input /private/export</code></p>
+          <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code></p>
         </div>
       </section>
 

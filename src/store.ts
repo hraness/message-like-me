@@ -1272,6 +1272,69 @@ function sourceStateRevision(database: Database, sourceId: string): string {
   return hash.digest("hex");
 }
 
+type BundleMessageOrderRow = Readonly<{
+  id: string;
+  conversation_id: string;
+  sent_at: string;
+  kind: CorpusMessage["kind"];
+  external_id: string;
+  metadata_json: string;
+}>;
+
+type RankedBundleMessageOrderRow = BundleMessageOrderRow & Readonly<{
+  provider_sort_key: string | null;
+}>;
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function storedProviderSortKey(row: BundleMessageOrderRow): string | null {
+  const parsed = parsedJson(row.metadata_json, `Message ${row.id} provenance`);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const value = "providerSortKey" in record ? record.providerSortKey : record.sortKey;
+  return typeof value === "string" ? value : null;
+}
+
+function rerankBundleMessages(database: Database, sourceId: string): void {
+  const rows = all<BundleMessageOrderRow>(database, `
+    SELECT message.id,message.conversation_id,message.sent_at,message.kind,
+      provenance.external_id,provenance.metadata_json
+    FROM message_provenance provenance
+    JOIN messages message ON message.id=provenance.message_id
+    WHERE provenance.source_id=?
+    ORDER BY message.conversation_id,message.id
+  `, sourceId);
+  const byConversation = new Map<string, RankedBundleMessageOrderRow[]>();
+  for (const value of rows) {
+    const row = Object.freeze({ ...value, provider_sort_key: storedProviderSortKey(value) });
+    const values = byConversation.get(row.conversation_id) ?? [];
+    values.push(row);
+    byConversation.set(row.conversation_id, values);
+  }
+  const update = database.query("UPDATE messages SET source_row_id=? WHERE id=?");
+  for (const values of byConversation.values()) {
+    for (const [index, row] of values.entries()) update.run(-(index + 1), row.id);
+    values.sort((left, right) => {
+      const leftReaction = left.kind === "reaction";
+      const rightReaction = right.kind === "reaction";
+      if (leftReaction !== rightReaction) return leftReaction ? 1 : -1;
+      if (!leftReaction) {
+        const sort = compareCodeUnits(
+          left.provider_sort_key ?? left.external_id,
+          right.provider_sort_key ?? right.external_id,
+        );
+        if (sort !== 0) return sort;
+      }
+      return compareCodeUnits(left.sent_at, right.sent_at)
+        || compareCodeUnits(left.external_id, right.external_id)
+        || compareCodeUnits(left.id, right.id);
+    });
+    for (const [index, row] of values.entries()) update.run(index + 1, row.id);
+  }
+}
+
 function setCorpusRevision(database: Database): string | null {
   const revision = globalCorpusRevision(database);
   if (revision === null) {
@@ -1373,6 +1436,7 @@ function validateSourceSnapshot(snapshot: SourceCorpusSnapshot): void {
     externalConversations.add(provenance.externalId);
   }
   const messageIds = new Set(snapshot.messages.map(({ id }) => id));
+  const messagesById = new Map(snapshot.messages.map((message) => [message.id, message]));
   if (messageIds.size !== snapshot.messages.length) {
     throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats message IDs`);
   }
@@ -1388,11 +1452,25 @@ function validateSourceSnapshot(snapshot: SourceCorpusSnapshot): void {
   ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid message provenance`);
   const externalMessages = new Set<string>();
   for (const provenance of snapshot.messageProvenance) {
+    const message = messagesById.get(provenance.messageId)!;
     if (
       provenance.externalId.length < 1
       || Buffer.byteLength(provenance.externalId, "utf8") > 4_096
       || externalMessages.has(provenance.externalId)
       || provenance.attachments.length > 256
+      || (
+        provenance.providerSortKey !== null
+        && (
+          provenance.providerSortKey.length < 1
+          || Buffer.byteLength(provenance.providerSortKey, "utf8") > 1_024
+          || /[\u0000-\u001f\u007f]/u.test(provenance.providerSortKey)
+        )
+      )
+      || (
+        snapshot.source.kind === "bundle"
+          ? (message.kind === "reaction") === (provenance.providerSortKey !== null)
+          : provenance.providerSortKey !== null
+      )
     ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid external message provenance`);
     externalMessages.add(provenance.externalId);
   }
@@ -1746,6 +1824,11 @@ export class LocalStore {
           external_id=excluded.external_id,suppressed_at=excluded.suppressed_at,
           reason=excluded.reason,suppressed=excluded.suppressed
       `);
+      const clearExternalSuppression = this.#database.query(`
+        UPDATE corpus_source_suppressions
+        SET suppressed_at=?,reason='reappeared',suppressed=0
+        WHERE source_id=? AND kind=? AND external_id=? AND suppressed=1
+      `);
       const results: Array<Readonly<{
         id: string;
         changed: boolean;
@@ -1890,6 +1973,12 @@ export class LocalStore {
             "reappeared",
             0,
           );
+          clearExternalSuppression.run(
+            ingestedAt,
+            snapshot.source.id,
+            "conversation",
+            provenance.externalId,
+          );
         }
         const messageProvenance = new Map(
           snapshot.messageProvenance.map((value) => [value.messageId, value]),
@@ -1941,7 +2030,10 @@ export class LocalStore {
             provenance.externalId,
             provenance.replyToExternalId,
             canonicalJson(provenance.attachments),
-            canonicalJson(provenance.metadata ?? {}),
+            canonicalJson({
+              providerSortKey: provenance.providerSortKey,
+              metadata: provenance.metadata ?? {},
+            }),
           );
           setSuppression.run(
             snapshot.source.id,
@@ -1952,6 +2044,12 @@ export class LocalStore {
             "reappeared",
             0,
           );
+          clearExternalSuppression.run(
+            ingestedAt,
+            snapshot.source.id,
+            message.kind === "reaction" ? "reaction" : "message",
+            provenance.externalId,
+          );
           if (message.kind === "reaction") {
             setSuppression.run(
               snapshot.source.id,
@@ -1961,6 +2059,12 @@ export class LocalStore {
               ingestedAt,
               "reappeared",
               0,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction-timeline",
+              provenance.externalId,
             );
           }
         }
@@ -2004,6 +2108,18 @@ export class LocalStore {
               ingestedAt,
               "reappeared",
               0,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction",
+              reaction.externalId,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction-timeline",
+              reaction.externalId,
             );
           }
         }
@@ -2139,6 +2255,9 @@ export class LocalStore {
             1,
           );
         }
+        if (snapshot.source.kind === "bundle") {
+          rerankBundleMessages(this.#database, snapshot.source.id);
+        }
         const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
         this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?")
           .run(stateRevision, snapshot.source.id);
@@ -2217,6 +2336,7 @@ export class LocalStore {
       messageProvenance: Object.freeze(snapshot.messages.map((message) => ({
         messageId: message.id,
         externalId: message.sourceGuid,
+        providerSortKey: null,
         replyToExternalId: message.replyToSourceGuid,
         attachments: Object.freeze(Array.from({ length: message.attachmentCount }, (_value, index) => ({
           id: `unavailable-${index + 1}`,
@@ -2291,33 +2411,56 @@ export class LocalStore {
       SELECT source.*,
         count(distinct ownership.conversation_id) AS conversations,
         count(message.id) AS messages,
-        (SELECT count(*) FROM corpus_reaction_facts reaction
-          WHERE reaction.source_id=source.id AND reaction.state='active'
-            AND NOT EXISTS (
-              SELECT 1 FROM corpus_source_suppressions suppression
-              WHERE suppression.source_id=source.id AND suppression.kind='reaction'
-                AND suppression.local_id=reaction.id AND suppression.suppressed=1
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM corpus_source_suppressions suppression
-              WHERE suppression.source_id=source.id AND suppression.kind='conversation'
-                AND suppression.local_id=reaction.conversation_id
-                AND suppression.suppressed=1
-            )) AS reactions,
-        (SELECT count(*) FROM corpus_reaction_facts reaction
-          WHERE reaction.source_id=source.id AND reaction.state='active'
-            AND reaction.reacted_at IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM corpus_source_suppressions suppression
-              WHERE suppression.source_id=source.id AND suppression.kind='reaction'
-                AND suppression.local_id=reaction.id AND suppression.suppressed=1
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM corpus_source_suppressions suppression
-              WHERE suppression.source_id=source.id AND suppression.kind='conversation'
-                AND suppression.local_id=reaction.conversation_id
-                AND suppression.suppressed=1
-            )) AS undated_reactions
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE
+          (SELECT count(*) FROM messages reaction_message
+            JOIN message_provenance reaction_provenance
+              ON reaction_provenance.message_id=reaction_message.id
+            WHERE reaction_provenance.source_id=source.id
+              AND reaction_message.kind='reaction' AND reaction_message.retracted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id
+                  AND suppression.kind IN ('message','reaction','reaction-timeline')
+                  AND suppression.local_id=reaction_message.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction_message.conversation_id
+                  AND suppression.suppressed=1
+              ))
+        END AS reactions,
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND reaction.reacted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE 0
+        END AS undated_reactions
       FROM corpus_sources source
       LEFT JOIN conversation_sources ownership ON ownership.source_id=source.id
         AND NOT EXISTS (

@@ -81,8 +81,9 @@ copy of the database and its transactional sidecars, and opens only that copy
 with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
 require permission for the terminal or agent host to read Messages data.
 
-To study accounts connected through Beeper, first ask Wrench to create a new
-private Message Like Me bundle:
+To study accounts connected through Beeper, install or update to
+[Wrench 0.13.0 or newer](https://github.com/hraness/wrench/releases), then ask
+it to create a new private Message Like Me bundle:
 
 ```sh
 wrench beeper export-message-like-me \

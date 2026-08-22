@@ -97,6 +97,8 @@ export type CorpusAttachmentProvenance = Readonly<{
 export type CorpusMessageProvenance = Readonly<{
     messageId: string;
     externalId: string;
+    /** Provider ordering coordinate. Null when this record has no such coordinate. */
+    providerSortKey: string | null;
     replyToExternalId: string | null;
     attachments: readonly CorpusAttachmentProvenance[];
     metadata?: unknown;

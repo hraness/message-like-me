@@ -1122,7 +1122,7 @@ function normalizeBundle(
         compareCodeUnits(left.conversationId, right.conversationId)
         || compareCodeUnits(left.sortKey, right.sortKey)
         || compareCodeUnits(left.sentAt, right.sentAt)
-        || compareCodeUnits(left.id, right.id));
+        || compareCodeUnits(left.provenance.providerId, right.provenance.providerId));
     const normalizedMessages: CorpusMessage[] = [];
     const messageProvenance: CorpusMessageProvenance[] = [];
     const localMessageIds = new Map<string, string>();
@@ -1153,6 +1153,7 @@ function normalizeBundle(
       messageProvenance.push(Object.freeze({
         messageId: localId,
         externalId: message.provenance.providerId,
+        providerSortKey: message.sortKey,
         replyToExternalId: message.replyTo?.providerId ?? null,
         attachments: attachmentProvenance(localId, message.attachments),
         metadata: message,
@@ -1230,6 +1231,7 @@ function normalizeBundle(
       messageProvenance.push(Object.freeze({
         messageId: localId,
         externalId: timelineCoordinate,
+        providerSortKey: null,
         replyToExternalId: reaction.messageProviderId,
         attachments: Object.freeze([]),
         metadata: reaction,
