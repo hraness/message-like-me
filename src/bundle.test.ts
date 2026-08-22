@@ -13,7 +13,7 @@ import {
 } from "./test-bundle-fixture.ts";
 
 const TEST_KEY = "synthetic-bundle-test-key-32-bytes";
-const GOLDEN_MANIFEST_SHA256 = "e46f4a524d53f849cfac594fb5bc8cf28e7a9743c138039b81a0aad4ff4830ef";
+const GOLDEN_MANIFEST_SHA256 = "dcef93293af9af0f3b0ff303992517ce2eece6d4bf0b7477e30c0b9d77a2c7f1";
 const GOLDEN_FILES = Object.freeze([
   "accounts.ndjson",
   "participants.ndjson",
@@ -74,46 +74,68 @@ describe("private local message bundle", () => {
       const path = await materializeWrenchGoldenBundle(root);
       const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
       expect(bundle.manifestSha256).toBe(GOLDEN_MANIFEST_SHA256);
-      expect(bundle.sources).toHaveLength(1);
-      expect(bundle.sources[0]!.source).toMatchObject({
+      expect(bundle.sources).toHaveLength(2);
+      const primary = bundle.sources.find(({ source }) => source.network === "synthetic");
+      const secondary = bundle.sources.find(({ source }) =>
+        source.network === "synthetic-secondary");
+      expect(primary).toBeDefined();
+      expect(secondary).toBeDefined();
+      expect(primary!.source).toMatchObject({
         provider: "beeper",
         network: "synthetic",
-        producer: { id: "beeper-local", version: "1.0.0" },
+        producer: { id: "beeper-local", version: "1.1.0" },
         coverage: {
-          kind: "truncated",
-          reason: "explicit-source-limit",
+          kind: "bounded-local",
+          reason: "desktop-local-sequential-export",
         },
       });
-      expect(bundle.sources[0]!.messages[0]).toMatchObject({
+      expect(primary!.source.warnings).toContain("sequential-account-snapshot");
+      expect(secondary!.source).toMatchObject({
+        provider: "beeper",
+        network: "synthetic-secondary",
+        producer: { id: "beeper-local", version: "1.1.0" },
+        coverage: {
+          kind: "bounded-local",
+          reason: "desktop-local-sequential-export",
+          observedFrom: null,
+          observedTo: null,
+        },
+      });
+      expect(secondary!.source.warnings).toContain("sequential-account-snapshot");
+      expect(secondary!.conversations).toHaveLength(0);
+      expect(secondary!.messages).toHaveLength(0);
+      expect(primary!.messages[0]).toMatchObject({
         body: "edited synthetic reply",
         editedAt: "2026-08-21T15:58:30.000Z",
         retractedAt: null,
         replyToSourceGuid: "beeper-message:synthetic-external-reply-target",
       });
-      expect(bundle.sources[0]!.messages[1]).toMatchObject({
+      expect(primary!.messages[1]).toMatchObject({
         body: null,
         retractedAt: "2026-08-21T15:59:00.000Z",
         direction: "incoming",
       });
-      expect(bundle.sources[0]!.reactionFacts).toMatchObject([{
+      expect(primary!.reactionFacts).toMatchObject([{
         body: "👍",
         reactedAt: null,
         direction: "incoming",
       }]);
-      expect(bundle.sources[0]!.deletions).toEqual(expect.arrayContaining([
+      expect(primary!.deletions).toEqual(expect.arrayContaining([
         expect.objectContaining({
           entityKind: "message",
           externalId: "beeper-message:synthetic-deleted",
           deletedAt: "2026-08-21T15:59:00.000Z",
         }),
       ]));
-      expect(bundle.sources[0]!.deletions?.some(({ externalId }) =>
+      expect(primary!.deletions?.some(({ externalId }) =>
         externalId === "beeper-message:synthetic-edited")).toBeFalse();
 
       const store = LocalStore.open(join(root, "golden-store.sqlite3"));
       try {
         store.replaceSources(bundle.sources, "2026-08-21T16:01:00.000Z", TEST_KEY);
-        expect(store.listSources()).toMatchObject([{
+        const storedSources = store.listSources();
+        expect(storedSources).toHaveLength(2);
+        expect(storedSources.find(({ network }) => network === "synthetic")).toMatchObject({
           provider: "beeper",
           network: "synthetic",
           conversations: 1,
@@ -121,10 +143,25 @@ describe("private local message bundle", () => {
           reactions: 1,
           undatedReactions: 1,
           coverage: {
-            kind: "truncated",
-            reason: "explicit-source-limit",
+            kind: "bounded-local",
+            reason: "desktop-local-sequential-export",
           },
-        }]);
+        });
+        expect(storedSources.find(({ network }) => network === "synthetic-secondary"))
+          .toMatchObject({
+            provider: "beeper",
+            network: "synthetic-secondary",
+            conversations: 0,
+            messages: 0,
+            reactions: 0,
+            undatedReactions: 0,
+            coverage: {
+              kind: "bounded-local",
+              reason: "desktop-local-sequential-export",
+              observedFrom: null,
+              observedTo: null,
+            },
+          });
       } finally {
         store.close();
       }
