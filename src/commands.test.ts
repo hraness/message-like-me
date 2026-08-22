@@ -158,18 +158,30 @@ describe("messagelikeme CLI", () => {
       expect(await main([
         "--data-dir", state, "inspect", "tempo", contacts.contacts[0]!.id, "--json",
       ], capture.io)).toBe(0);
-      expect(JSON.parse(capture.stdout())).toMatchObject({
+      const tempoOutput = capture.stdout();
+      expect(JSON.parse(tempoOutput)).toMatchObject({
         reactions: {
           total: 2,
           incoming: 1,
           outgoing: 1,
           undated: 1,
-          byBody: [
-            { body: "heart", total: 1 },
-            { body: "thumbs-up", total: 1 },
-          ],
         },
       });
+      expect(tempoOutput).not.toContain("heart");
+      expect(tempoOutput).not.toContain("thumbs-up");
+      expect(Object.hasOwn(
+        (JSON.parse(tempoOutput) as { reactions: Record<string, unknown> }).reactions,
+        "byBody",
+      )).toBeFalse();
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "context", contacts.contacts[0]!.id, "--json",
+      ], capture.io)).toBe(0);
+      const contextOutput = capture.stdout();
+      expect(contextOutput).not.toContain("heart");
+      expect(contextOutput).not.toContain("thumbs-up");
+      expect(contextOutput).not.toContain("byBody");
 
       capture.clear();
       expect(await main([

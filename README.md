@@ -182,9 +182,11 @@ Sessions, bursts, and response episodes never cross a source conversation
 boundary. Person scopes spanning several apps expose a sorted `services`
 breakdown instead of hiding the mixed-channel evidence behind a null service.
 Reactions with no provider timestamp still contribute to reaction counts and
-direction, but never to temporal metrics. Session and burst gaps are
-configurable seconds and are recorded with each result. They are segmentation
-choices, not universal facts about conversation.
+direction, but never to temporal metrics. Raw provider reaction values remain
+private; ordinary metrics and drafting context expose only fixed-size counts,
+direction, datedness, and the outgoing reaction ratio. Session and burst gaps
+are configurable seconds and are recorded with each result. They are
+segmentation choices, not universal facts about conversation.
 
 Pass `--private` to `contacts list` or `contacts show` only when you need to
 resolve a pseudonymous contact to its local private label or participants.

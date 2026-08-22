@@ -261,13 +261,6 @@ export type ReactionMetrics = Readonly<{
   dated: number;
   undated: number;
   outgoingReactionRatio: number;
-  byBody: readonly Readonly<{
-    body: string;
-    total: number;
-    incoming: number;
-    outgoing: number;
-    unknownDirection: number;
-  }>[];
 }>;
 
 export type ContactMetrics = Readonly<{

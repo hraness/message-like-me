@@ -14,7 +14,8 @@
   progress, retained-shard validation, and atomic seven-file publication.
 - Partition sessions, bursts, and response episodes by conversation, preserve
   truncated text bubbles as tempo evidence, and count undated reactions without
-  inventing timestamps.
+  inventing timestamps or exposing raw provider reaction values in aggregate
+  output.
 - Upgrade existing version-two stores in place while retaining conversations,
   profiles, study packets, and evidence provenance.
 

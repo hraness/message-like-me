@@ -128,8 +128,11 @@ it.
 ## Inspection and study packets
 
 Aggregate contact, session, tempo, and surface-style views omit message bodies
-and private labels by default. `--private` deliberately reveals local private
-identity fields. Use it only when the current task needs that mapping.
+and private labels by default. Raw provider reaction values also remain private;
+aggregate and drafting-context views expose only fixed-size reaction counts,
+direction, datedness, and the outgoing reaction ratio. `--private` deliberately
+reveals local private identity fields. Use it only when the current task needs
+that mapping.
 
 `contacts resolve QUERY --private` performs bounded exact matching against
 private labels. It does not do prefix, substring, phonetic, or fuzzy matching,

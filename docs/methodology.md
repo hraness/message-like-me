@@ -60,7 +60,9 @@ The analysis uses several operational units:
   message. It is distinct from a reaction or an ordinary adjacent response.
 - A **reaction** is counted as interaction behavior, not authored prose. A
   reaction without a provider timestamp contributes to counts and direction
-  but not to temporal order, sessions, bursts, or response episodes.
+  but not to temporal order, sessions, bursts, or response episodes. Raw
+  provider reaction values remain private and are not categorical dimensions
+  in aggregate metrics or drafting context.
 
 Five minutes and eight hours are reproducible segmentation parameters, not
 claims about natural conversational boundaries. Every metrics artifact records

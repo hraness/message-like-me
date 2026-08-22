@@ -3072,23 +3072,6 @@ function reactionMetrics(messages, facts) {
   const incoming = reactions.filter(({ direction }) => direction === "incoming").length;
   const unknownDirection = reactions.length - outgoing - incoming;
   const outgoingActions = messages.filter(({ message }) => message.kind !== "reaction" && message.direction === "outgoing" && timelineEligible(message)).length + outgoing;
-  const bodies2 = new Map;
-  for (const reaction of reactions) {
-    const counts = bodies2.get(reaction.body) ?? {
-      total: 0,
-      incoming: 0,
-      outgoing: 0,
-      unknownDirection: 0
-    };
-    counts.total += 1;
-    if (reaction.direction === "incoming")
-      counts.incoming += 1;
-    else if (reaction.direction === "outgoing")
-      counts.outgoing += 1;
-    else
-      counts.unknownDirection += 1;
-    bodies2.set(reaction.body, counts);
-  }
   return Object.freeze({
     total: reactions.length,
     incoming,
@@ -3096,8 +3079,7 @@ function reactionMetrics(messages, facts) {
     unknownDirection,
     dated: reactions.filter(({ reactedAt }) => reactedAt !== null).length,
     undated: reactions.filter(({ reactedAt }) => reactedAt === null).length,
-    outgoingReactionRatio: ratio(outgoing, outgoingActions),
-    byBody: Object.freeze([...bodies2].map(([body, counts]) => Object.freeze({ body, ...counts })).sort((left, right) => right.total - left.total || left.body.localeCompare(right.body, "en-US")))
+    outgoingReactionRatio: ratio(outgoing, outgoingActions)
   });
 }
 function analyzeContact(messages, corpusRevision, contactId, options = {}) {
@@ -3377,8 +3359,7 @@ function aggregateStudyMetrics(metrics) {
       unknownDirection: metrics.reactions.unknownDirection,
       dated: metrics.reactions.dated,
       undated: metrics.reactions.undated,
-      outgoingReactionRatio: metrics.reactions.outgoingReactionRatio,
-      byBody: metrics.reactions.byBody
+      outgoingReactionRatio: metrics.reactions.outgoingReactionRatio
     }),
     surface: Object.freeze({
       outgoingTextMessages: metrics.surface.outgoingTextMessages,

@@ -189,13 +189,6 @@ describe("analyzeContact", () => {
       dated: 2,
       undated: 0,
       outgoingReactionRatio: 0.125,
-      byBody: [{
-        body: "unknown",
-        total: 2,
-        incoming: 1,
-        outgoing: 1,
-        unknownDirection: 0,
-      }],
     });
     expect(analyzeContact(messages, CORPUS_REVISION, CONTACT_ID, { reactionFacts: [] }).reactions)
       .toEqual(metrics.reactions);
@@ -271,7 +264,6 @@ describe("analyzeContact", () => {
       dated: 0,
       undated: 0,
       outgoingReactionRatio: 0,
-      byBody: [],
     });
     expect(() => analyzeContact([], CORPUS_REVISION, CONTACT_ID, {
       sessionGapSeconds: 30,
@@ -324,11 +316,36 @@ describe("analyzeContact", () => {
       dated: 0,
       undated: 3,
       outgoingReactionRatio: 0.5,
-      byBody: [
-        { body: "heart", total: 2, incoming: 1, outgoing: 1, unknownDirection: 0 },
-        { body: "question", total: 1, incoming: 0, outgoing: 0, unknownDirection: 1 },
-      ],
     });
+  });
+
+  test("keeps aggregate output fixed-size for many unique maximum-size reaction values", () => {
+    const reactionFacts = Object.freeze(Array.from({ length: 2_048 }, (_, index) => {
+      const prefix = `private-reaction-value-${index}:`;
+      return Object.freeze({
+        id: `reaction-${index}`,
+        externalId: `external-${index}`,
+        targetExternalId: "target-1",
+        conversationId: "conversation_1",
+        direction: index % 3 === 0 ? "incoming" as const
+          : index % 3 === 1 ? "outgoing" as const
+          : null,
+        body: `${prefix}${"x".repeat(8_192 - prefix.length)}`,
+        reactedAt: null,
+        state: "active" as const,
+      });
+    }));
+    expect(Buffer.byteLength(reactionFacts[0]!.body, "utf8")).toBe(8_192);
+    expect(Buffer.byteLength(reactionFacts.at(-1)!.body, "utf8")).toBe(8_192);
+
+    const metrics = analyzeContact([], CORPUS_REVISION, CONTACT_ID, { reactionFacts });
+    expect(metrics.reactions.total).toBe(reactionFacts.length);
+    expect(metrics.reactions.incoming + metrics.reactions.outgoing
+      + metrics.reactions.unknownDirection).toBe(reactionFacts.length);
+    expect(Object.hasOwn(metrics.reactions, "byBody")).toBeFalse();
+    const encoded = JSON.stringify(metrics.reactions);
+    expect(Buffer.byteLength(encoded, "utf8")).toBeLessThan(256);
+    expect(encoded).not.toContain("private-reaction-value");
   });
 
   test("excludes retracted and system records from style and tempo evidence", () => {
@@ -385,7 +402,6 @@ describe("analyzeContact", () => {
       dated: 0,
       undated: 0,
       outgoingReactionRatio: 0,
-      byBody: [],
     });
   });
 });
@@ -507,6 +523,8 @@ describe("buildStudyPacket", () => {
     expect(Object.hasOwn(packet.metrics, "responses")).toBeFalse();
     expect(Object.hasOwn(packet.metrics, "corpusRevision")).toBeFalse();
     expect(Object.hasOwn(packet.metrics, "contactId")).toBeFalse();
+    expect(Object.hasOwn(packet.metrics.reactions, "byBody")).toBeFalse();
+    expect(JSON.stringify(packet.metrics.reactions)).not.toContain(':"unknown"');
     expect(packet.examples).toHaveLength(2);
     expect(packet.examples[0]!.messages.map(({ id }) => id)).toEqual(["m01", "m02", "m03", "m04"]);
     expect(packet.examples[0]!.messages.map(({ offsetSeconds }) => offsetSeconds)).toEqual([0, 10, 70, 90]);
