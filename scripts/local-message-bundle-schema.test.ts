@@ -37,7 +37,25 @@ test("local message bundle schema publishes the frozen v1 contract", async () =>
   const artifacts = object(manifestProperties.artifacts, "manifest.artifacts");
   expect(artifacts.minItems).toBe(6);
   expect(artifacts.maxItems).toBe(6);
-  expect(array(artifacts.prefixItems, "manifest.artifacts.prefixItems")).toHaveLength(6);
+  const artifactPrefixes = array(artifacts.prefixItems, "manifest.artifacts.prefixItems");
+  expect(artifactPrefixes).toHaveLength(6);
+  for (const [index, prefixValue] of artifactPrefixes.entries()) {
+    const prefix = object(prefixValue, `manifest.artifacts.prefixItems[${index}]`);
+    const refinement = object(
+      array(prefix.allOf, `manifest.artifacts.prefixItems[${index}].allOf`)[1],
+      `manifest.artifacts.prefixItems[${index}].allOf[1]`,
+    );
+    expect(refinement.type).toBe("object");
+  }
+
+  const mimeType = object(definitions.mimeType, "mimeType");
+  expect(mimeType.maxLength).toBe(256);
+  expect(mimeType.pattern).toBe("^[^\\u0000]*$");
+  expect(mimeType.description).toBe("Runtime bound is 256 UTF-8 bytes.");
+  const attachment = object(definitions.attachment, "attachment");
+  const attachmentProperties = object(attachment.properties, "attachment.properties");
+  expect(object(attachmentProperties.mimeType, "attachment.mimeType").$ref)
+    .toBe("#/$defs/nullableMimeType");
 
   const message = object(definitions.message, "message");
   const messageProperties = object(message.properties, "message.properties");

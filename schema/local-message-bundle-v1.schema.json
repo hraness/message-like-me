@@ -26,6 +26,12 @@
       "pattern": "^[^\\u0000]*$",
       "description": "Runtime bound is 8 KiB UTF-8."
     },
+    "mimeType": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[^\\u0000]*$",
+      "description": "Runtime bound is 256 UTF-8 bytes."
+    },
     "body": {
       "type": "string",
       "maxLength": 1048576,
@@ -67,6 +73,12 @@
       "oneOf": [
         { "type": "null" },
         { "$ref": "#/$defs/shortText" }
+      ]
+    },
+    "nullableMimeType": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/mimeType" }
       ]
     },
     "nullableTimestamp": {
@@ -162,7 +174,7 @@
       "required": ["kind", "mimeType", "name", "sizeBytes"],
       "properties": {
         "kind": { "enum": ["audio", "document", "image", "link", "sticker", "video", "unknown"] },
-        "mimeType": { "$ref": "#/$defs/nullableShortText" },
+        "mimeType": { "$ref": "#/$defs/nullableMimeType" },
         "name": { "$ref": "#/$defs/nullableShortText" },
         "sizeBytes": {
           "oneOf": [
@@ -411,12 +423,12 @@
           "minItems": 6,
           "maxItems": 6,
           "prefixItems": [
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "accounts.ndjson" }, "recordKind": { "const": "account" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "participants.ndjson" }, "recordKind": { "const": "participant" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "conversations.ndjson" }, "recordKind": { "const": "conversation" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "messages.ndjson" }, "recordKind": { "const": "message" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "reactions.ndjson" }, "recordKind": { "const": "reaction" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "properties": { "path": { "const": "tombstones.ndjson" }, "recordKind": { "const": "tombstone" } } }] }
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "accounts.ndjson" }, "recordKind": { "const": "account" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "participants.ndjson" }, "recordKind": { "const": "participant" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "conversations.ndjson" }, "recordKind": { "const": "conversation" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "messages.ndjson" }, "recordKind": { "const": "message" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "reactions.ndjson" }, "recordKind": { "const": "reaction" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "tombstones.ndjson" }, "recordKind": { "const": "tombstone" } } }] }
           ]
         },
         "integrity": {

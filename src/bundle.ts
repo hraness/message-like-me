@@ -212,6 +212,10 @@ function identifier(value: unknown, label: string): string {
   return result;
 }
 
+function nullableIdentifier(value: unknown, label: string): string | null {
+  return value === null ? null : identifier(value, label);
+}
+
 function token(value: unknown, label: string, maximum = 128): string {
   const result = boundedText(value, label, maximum);
   if (!/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?$/u.test(result)) {
@@ -292,7 +296,7 @@ function parseProvenance(value: unknown, label: string): Provenance {
   exactKeys(record, ["providerId", "providerRevision", "observedAt", "connectedAccountProviderId"], label);
   return Object.freeze({
     providerId: identifier(record.providerId, `${label}.providerId`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
     observedAt: timestamp(record.observedAt, `${label}.observedAt`),
     connectedAccountProviderId: identifier(
       record.connectedAccountProviderId,
@@ -418,7 +422,7 @@ function parseDeletion(value: unknown, label: string): MessageRecord["deletion"]
   return Object.freeze({
     state: oneOf(record.state, ["revoked", "deleted-for-me", "revoked-and-deleted-for-me"] as const, `${label}.state`),
     observedAt: timestamp(record.observedAt, `${label}.observedAt`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
   });
 }
 
@@ -500,7 +504,7 @@ function parseTombstone(record: JsonObject, label: string): TombstoneRecord {
     entityProviderId: identifier(record.entityProviderId, `${label}.entityProviderId`),
     deletedAt: timestamp(record.deletedAt, `${label}.deletedAt`),
     scope: oneOf(record.scope, ["remote", "local", "unknown"] as const, `${label}.scope`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
   });
 }
 

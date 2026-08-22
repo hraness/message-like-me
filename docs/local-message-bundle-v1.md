@@ -61,6 +61,7 @@ Version one has these hard importer and producer ceilings:
 - 1,024 UTF-8 bytes for an identifier, sort key, or provider revision;
 - 8 KiB of UTF-8 for a display name, handle, title, reaction body, or
   attachment filename;
+- 256 UTF-8 bytes for an attachment MIME type;
 - 10,000 known participants in one conversation;
 - 256 attachment metadata items in one message; and
 - 128 unique categorical warning codes.

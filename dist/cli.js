@@ -870,6 +870,9 @@ function identifier(value, label) {
   }
   return result;
 }
+function nullableIdentifier(value, label) {
+  return value === null ? null : identifier(value, label);
+}
 function token(value, label, maximum = 128) {
   const result = boundedText2(value, label, maximum);
   if (!/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?$/u.test(result)) {
@@ -941,7 +944,7 @@ function parseProvenance(value, label) {
   exactKeys(record, ["providerId", "providerRevision", "observedAt", "connectedAccountProviderId"], label);
   return Object.freeze({
     providerId: identifier(record.providerId, `${label}.providerId`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES2),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
     observedAt: timestamp(record.observedAt, `${label}.observedAt`),
     connectedAccountProviderId: identifier(record.connectedAccountProviderId, `${label}.connectedAccountProviderId`)
   });
@@ -1064,7 +1067,7 @@ function parseDeletion(value, label) {
   return Object.freeze({
     state: oneOf(record.state, ["revoked", "deleted-for-me", "revoked-and-deleted-for-me"], `${label}.state`),
     observedAt: timestamp(record.observedAt, `${label}.observedAt`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES2)
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
   });
 }
 function parseAttachments(value, label) {
@@ -1157,7 +1160,7 @@ function parseTombstone(record, label) {
     entityProviderId: identifier(record.entityProviderId, `${label}.entityProviderId`),
     deletedAt: timestamp(record.deletedAt, `${label}.deletedAt`),
     scope: oneOf(record.scope, ["remote", "local", "unknown"], `${label}.scope`),
-    providerRevision: nullableText(record.providerRevision, `${label}.providerRevision`, MAX_IDENTIFIER_BYTES2)
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
   });
 }
 function parseRecord(value, kind, label) {

@@ -247,6 +247,97 @@ describe("private local message bundle", () => {
     }
   });
 
+  test("requires every nullable provider revision to be an identifier", async () => {
+    const locations: Array<Readonly<{
+      mutate: (
+        records: ReturnType<typeof syntheticBundleRecords>,
+        value: string,
+      ) => void;
+    }>> = [
+      {
+        mutate: (records, value) => {
+          const provenance = records.account[0]!.provenance as Record<string, unknown>;
+          provenance.providerRevision = value;
+        },
+      },
+      {
+        mutate: (records, value) => {
+          const deletion = records.message[3]!.deletion as Record<string, unknown>;
+          deletion.providerRevision = value;
+        },
+      },
+      {
+        mutate: (records, value) => {
+          records.tombstone.push({
+            schemaVersion: 1,
+            kind: "tombstone",
+            id: "tombstone-local",
+            accountId: "account-local",
+            network: "whatsapp",
+            provenance: {
+              providerId: "tombstone-provider",
+              providerRevision: null,
+              observedAt: "2026-08-20T12:05:00.000Z",
+              connectedAccountProviderId: "synthetic-connected-account",
+            },
+            entityKind: "message",
+            entityId: "message-incoming",
+            entityProviderId: "message-provider-incoming",
+            deletedAt: "2026-08-20T12:05:00.000Z",
+            scope: "remote",
+            providerRevision: value,
+          });
+        },
+      },
+    ];
+    const invalidValues = ["", "\t", "\n"];
+    for (const [locationIndex, location] of locations.entries()) {
+      for (const [valueIndex, value] of invalidValues.entries()) {
+        const root = await mkdtemp(join(
+          tmpdir(),
+          `message-like-me-bundle-revision-${locationIndex}-${valueIndex}-`,
+        ));
+        try {
+          const records = syntheticBundleRecords();
+          location.mutate(records, value);
+          const path = await writeSyntheticMessageBundle(root, records);
+          await expect(readMessageBundle(path, { hmacKey: TEST_KEY }))
+            .rejects.toThrow("providerRevision");
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
+      }
+    }
+  });
+
+  test("enforces the exact UTF-8 byte bound for attachment MIME types", async () => {
+    const cases = [
+      { value: "m".repeat(256), bytes: 256, accepted: true },
+      { value: "m".repeat(257), bytes: 257, accepted: false },
+      { value: "é".repeat(128), bytes: 256, accepted: true },
+      { value: "é".repeat(129), bytes: 258, accepted: false },
+    ] as const;
+    for (const [index, candidate] of cases.entries()) {
+      const root = await mkdtemp(join(tmpdir(), `message-like-me-bundle-mime-${index}-`));
+      try {
+        expect(Buffer.byteLength(candidate.value, "utf8")).toBe(candidate.bytes);
+        const records = syntheticBundleRecords();
+        const attachments = records.message[1]!.attachments as Array<Record<string, unknown>>;
+        attachments[0]!.mimeType = candidate.value;
+        const path = await writeSyntheticMessageBundle(root, records);
+        if (candidate.accepted) {
+          const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
+          expect(bundle.sources).toHaveLength(1);
+        } else {
+          await expect(readMessageBundle(path, { hmacKey: TEST_KEY }))
+            .rejects.toThrow("mimeType");
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   test("rejects deeply nested foreign fields before recursive canonicalization", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-bundle-depth-"));
     const deepValue = `${"[".repeat(20_000)}0${"]".repeat(20_000)}`;
