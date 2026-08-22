@@ -1672,6 +1672,18 @@ export class LocalStore {
           manifest_sha256=excluded.manifest_sha256,identity_json=excluded.identity_json,
           warnings_json=excluded.warnings_json,ingested_at=excluded.ingested_at
       `);
+      const relabelSourceConversations = this.#database.query(`
+        UPDATE conversations SET service=?
+        WHERE id IN (
+          SELECT conversation_id FROM conversation_sources WHERE source_id=?
+        )
+      `);
+      const relabelSourceMessages = this.#database.query(`
+        UPDATE messages SET service=?
+        WHERE id IN (
+          SELECT message_id FROM message_provenance WHERE source_id=?
+        )
+      `);
       const upsertConversation = this.#database.query(`
         INSERT INTO conversations(
           id,source_key,private_label,service,participant_count,
@@ -1744,12 +1756,13 @@ export class LocalStore {
       for (const snapshot of snapshots) {
         const existing = get<{
           kind: string;
+          network: string | null;
           input_revision: string;
           revision: string;
           generated_at: string | null;
           manifest_sha256: string | null;
         }>(this.#database, `
-          SELECT kind,input_revision,revision,generated_at,manifest_sha256
+          SELECT kind,network,input_revision,revision,generated_at,manifest_sha256
           FROM corpus_sources WHERE id=?
         `, snapshot.source.id);
         if (existing !== null && existing.kind !== snapshot.source.kind) {
@@ -1837,6 +1850,10 @@ export class LocalStore {
           canonicalJson(snapshot.source.warnings),
           ingestedAt,
         );
+        if (existing !== null && existing.network !== snapshot.source.network) {
+          relabelSourceConversations.run(snapshot.source.network, snapshot.source.id);
+          relabelSourceMessages.run(snapshot.source.network, snapshot.source.id);
+        }
         const conversationProvenance = new Map(
           snapshot.conversationProvenance.map((value) => [value.conversationId, value]),
         );
@@ -2280,6 +2297,12 @@ export class LocalStore {
               SELECT 1 FROM corpus_source_suppressions suppression
               WHERE suppression.source_id=source.id AND suppression.kind='reaction'
                 AND suppression.local_id=reaction.id AND suppression.suppressed=1
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                AND suppression.local_id=reaction.conversation_id
+                AND suppression.suppressed=1
             )) AS reactions,
         (SELECT count(*) FROM corpus_reaction_facts reaction
           WHERE reaction.source_id=source.id AND reaction.state='active'
@@ -2288,6 +2311,12 @@ export class LocalStore {
               SELECT 1 FROM corpus_source_suppressions suppression
               WHERE suppression.source_id=source.id AND suppression.kind='reaction'
                 AND suppression.local_id=reaction.id AND suppression.suppressed=1
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                AND suppression.local_id=reaction.conversation_id
+                AND suppression.suppressed=1
             )) AS undated_reactions
       FROM corpus_sources source
       LEFT JOIN conversation_sources ownership ON ownership.source_id=source.id

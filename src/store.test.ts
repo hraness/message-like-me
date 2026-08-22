@@ -1018,6 +1018,67 @@ describe("local corpus store", () => {
     }
   });
 
+  test("hides source reaction health with a conversation tombstone and restores it on reappearance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-source-conversation-suppression-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    const message = bundleMessage("a", 1, "2026-08-20T10:00:00.000Z");
+    try {
+      store.replaceSources([bundleSnapshot({
+        revision: "1".repeat(64),
+        generatedAt: "2026-08-21T12:01:00.000Z",
+        messages: [message],
+        reactions: [bundleReaction()],
+      })], "2026-08-21T12:01:01.000Z");
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({
+        conversations: 1,
+        messages: 1,
+        reactions: 1,
+        undatedReactions: 1,
+      });
+
+      store.replaceSources([bundleSnapshot({
+        revision: "2".repeat(64),
+        generatedAt: "2026-08-21T12:02:00.000Z",
+        messages: [message],
+        reactions: [bundleReaction()],
+        deletions: [{
+          entityKind: "conversation",
+          localEntityId: BUNDLE_CONVERSATION_ID,
+          externalId: "provider-conversation-bundle",
+          deletedAt: "2026-08-21T12:02:00.000Z",
+          reason: "tombstone",
+        }],
+      })], "2026-08-21T12:02:01.000Z");
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({
+        conversations: 0,
+        messages: 0,
+        reactions: 0,
+        undatedReactions: 0,
+      });
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toBeNull();
+
+      store.replaceSources([bundleSnapshot({
+        revision: "3".repeat(64),
+        generatedAt: "2026-08-21T12:03:00.000Z",
+        messages: [message],
+        reactions: [bundleReaction()],
+      })], "2026-08-21T12:03:01.000Z");
+      expect(store.source(BUNDLE_SOURCE_ID)).toMatchObject({
+        conversations: 1,
+        messages: 1,
+        reactions: 1,
+        undatedReactions: 1,
+      });
+      expect(store.contactCorpus(BUNDLE_CONVERSATION_ID)).toMatchObject({
+        messages: [{ id: message.id }],
+        reactions: [{ id: "bundle-reaction-r" }],
+      });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("authoritative reaction absence and reappearance affect only that source", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-reaction-reappearance-"));
     const store = LocalStore.open(join(root, "store.sqlite3"));

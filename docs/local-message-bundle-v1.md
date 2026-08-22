@@ -175,8 +175,9 @@ A reaction has a required target provider message ID and an optional
 bundle-local target. When present, the local target must resolve to the same
 provider coordinate. `reactedAt` is nullable because the provider may not
 expose a reaction time. Producers never synthesize one. Active undated
-reactions contribute to body and direction counts but never enter the message
-timeline, sessions, bursts, response episodes, or latency metrics.
+reactions contribute to fixed aggregate reaction counts, direction counts, and
+timestamp-coverage counts but never enter the message timeline, sessions,
+bursts, response episodes, or latency metrics.
 
 Tombstones identify a conversation, message, or reaction kind, required
 provider coordinate, optional bundle-local coordinate, deletion time, scope,

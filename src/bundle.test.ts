@@ -642,6 +642,11 @@ describe("private local message bundle", () => {
       for (const values of Object.values(changedRecords)) {
         for (const record of values) record.network = "whatsapp-business";
       }
+      changedRecords.participant = [changedRecords.participant[0]!];
+      changedRecords.conversation = [];
+      changedRecords.message = [];
+      changedRecords.reaction = [];
+      changedRecords.tombstone = [];
       const changedPath = await writeSyntheticMessageBundle(root, changedRecords, {
         directoryName: "renamed-network",
         createdAt: "2026-08-20T12:06:00.000Z",
@@ -649,8 +654,8 @@ describe("private local message bundle", () => {
       const first = (await readMessageBundle(firstPath, { hmacKey: TEST_KEY })).sources[0]!;
       const changed = (await readMessageBundle(changedPath, { hmacKey: TEST_KEY })).sources[0]!;
       expect(changed.source.id).toBe(first.source.id);
-      expect(changed.conversations.map(({ id }) => id)).toEqual(first.conversations.map(({ id }) => id));
-      expect(changed.messages.map(({ id }) => id).sort()).toEqual(first.messages.map(({ id }) => id).sort());
+      expect(changed.conversations).toEqual([]);
+      expect(changed.messages).toEqual([]);
 
       const store = LocalStore.open(join(root, "network-store.sqlite3"));
       try {
@@ -662,6 +667,15 @@ describe("private local message bundle", () => {
           conversations: 1,
           messages: 4,
         }]);
+        const contactId = first.conversations[0]!.id;
+        expect(store.conversation(contactId, true)).toMatchObject({
+          service: "whatsapp-business",
+          services: ["whatsapp-business"],
+        });
+        const retainedMessages = store.contactCorpus(contactId)?.messages;
+        expect(retainedMessages).toHaveLength(4);
+        expect(retainedMessages?.every(({ service }) => service === "whatsapp-business"))
+          .toBeTrue();
       } finally {
         store.close();
       }
