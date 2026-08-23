@@ -7,6 +7,7 @@ import {
   type BurstMetric,
   type ContactMetrics,
   type CorpusMessage,
+  type CorpusReactionFact,
   type Direction,
   type EvaluationPromptPacket,
   type EvaluationReferencePacket,
@@ -79,6 +80,7 @@ type StudySelection = Readonly<{
 export type AnalyzeContactOptions = Readonly<{
   sessionGapSeconds?: number;
   burstGapSeconds?: number;
+  reactionFacts?: readonly CorpusReactionFact[];
 }>;
 
 export type BuildStudyPacketOptions = Readonly<{
@@ -508,16 +510,52 @@ function tempoMetrics(messages: readonly OrderedMessage[], responses: readonly R
   });
 }
 
-function reactionMetrics(messages: readonly OrderedMessage[]): ReactionMetrics {
-  const reactions = messages.filter(({ message }) =>
-    message.kind === "reaction" && message.retractedAt === null);
-  const outgoing = reactions.filter(({ message }) => message.direction === "outgoing").length;
+function reactionMetrics(
+  messages: readonly OrderedMessage[],
+  facts: readonly CorpusReactionFact[] | undefined,
+): ReactionMetrics {
+  const legacy = messages.filter(({ message }) =>
+    message.kind === "reaction" && message.retractedAt === null).map(({ message }) => ({
+      id: message.id,
+      externalId: message.sourceGuid,
+      targetExternalId: message.replyToSourceGuid ?? message.sourceGuid,
+      conversationId: message.conversationId,
+      direction: message.direction,
+      body: "unknown",
+      reactedAt: message.sentAt,
+      state: "active" as const,
+    }));
+  const merged = new Map(legacy.map((fact) => [fact.id, fact as CorpusReactionFact]));
+  for (const fact of facts ?? []) merged.set(fact.id, fact);
+  const source = [...merged.values()];
+  const ids = new Set<string>();
+  const reactions = source.filter((fact, index) => {
+    if (
+      typeof fact.id !== "string"
+      || fact.id.length === 0
+      || ids.has(fact.id)
+      || (fact.direction !== null && fact.direction !== "incoming" && fact.direction !== "outgoing")
+      || typeof fact.body !== "string"
+      || (fact.state !== "active" && fact.state !== "removed")
+    ) throw new Error(`reactionFacts[${index}] is invalid`);
+    if (fact.reactedAt !== null) canonicalTimestamp(fact.reactedAt, `reactionFacts[${index}].reactedAt`);
+    ids.add(fact.id);
+    return fact.state === "active";
+  });
+  const outgoing = reactions.filter(({ direction }) => direction === "outgoing").length;
+  const incoming = reactions.filter(({ direction }) => direction === "incoming").length;
+  const unknownDirection = reactions.length - outgoing - incoming;
   const outgoingActions = messages.filter(({ message }) =>
-    message.direction === "outgoing" && timelineEligible(message)).length;
+    message.kind !== "reaction"
+    && message.direction === "outgoing"
+    && timelineEligible(message)).length + outgoing;
   return Object.freeze({
     total: reactions.length,
-    incoming: reactions.length - outgoing,
+    incoming,
     outgoing,
+    unknownDirection,
+    dated: reactions.filter(({ reactedAt }) => reactedAt !== null).length,
+    undated: reactions.filter(({ reactedAt }) => reactedAt === null).length,
     outgoingReactionRatio: ratio(outgoing, outgoingActions),
   });
 }
@@ -549,19 +587,44 @@ export function analyzeContact(
     throw new Error("burstGapSeconds cannot exceed sessionGapSeconds");
   }
   const ordered = orderedMessages(messages);
-  const sessions = sessionsFor(ordered, corpusRevision, contactId, sessionGapSeconds);
-  const burstRecords = burstsFor(
-    ordered,
-    sessions,
-    corpusRevision,
-    contactId,
-    burstGapSeconds,
-  );
-  const responses = responsesFor(
-    burstRecords,
-    corpusRevision,
-    contactId,
-  );
+  const byConversation = new Map<string, OrderedMessage[]>();
+  for (const row of ordered) {
+    const rows = byConversation.get(row.message.conversationId) ?? [];
+    rows.push(row);
+    byConversation.set(row.message.conversationId, rows);
+  }
+  const sessions: SessionMetric[] = [];
+  const burstRecords: BurstRecord[] = [];
+  const responses: ResponseEpisode[] = [];
+  for (const conversationId of [...byConversation.keys()].sort((left, right) =>
+    left.localeCompare(right, "en-US"))) {
+    const rows = Object.freeze(byConversation.get(conversationId)!);
+    const conversationSessions = sessionsFor(
+      rows,
+      corpusRevision,
+      contactId,
+      sessionGapSeconds,
+    );
+    const conversationBursts = burstsFor(
+      rows,
+      conversationSessions,
+      corpusRevision,
+      contactId,
+      burstGapSeconds,
+    );
+    sessions.push(...conversationSessions);
+    burstRecords.push(...conversationBursts);
+    responses.push(...responsesFor(conversationBursts, corpusRevision, contactId));
+  }
+  sessions.sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt, "en-US")
+    || left.id.localeCompare(right.id, "en-US"));
+  burstRecords.sort((left, right) =>
+    left.metric.startedAt.localeCompare(right.metric.startedAt, "en-US")
+    || left.metric.id.localeCompare(right.metric.id, "en-US"));
+  responses.sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt, "en-US")
+    || left.id.localeCompare(right.id, "en-US"));
   return Object.freeze({
     schemaVersion: METRICS_SCHEMA_VERSION,
     corpusRevision,
@@ -575,11 +638,11 @@ export function analyzeContact(
       message.retractedAt === null && message.kind === "text" && message.body !== null).length,
     sessionGapSeconds,
     burstGapSeconds,
-    sessions,
+    sessions: Object.freeze(sessions),
     bursts: Object.freeze(burstRecords.map(({ metric }) => metric)),
-    responses,
+    responses: Object.freeze(responses),
     tempo: tempoMetrics(ordered, responses),
-    reactions: reactionMetrics(ordered),
+    reactions: reactionMetrics(ordered, options.reactionFacts),
     surface: surfaceMetrics(ordered),
   });
 }
@@ -870,6 +933,9 @@ function aggregateStudyMetrics(metrics: ContactMetrics): StudyAggregateMetrics {
       total: metrics.reactions.total,
       incoming: metrics.reactions.incoming,
       outgoing: metrics.reactions.outgoing,
+      unknownDirection: metrics.reactions.unknownDirection,
+      dated: metrics.reactions.dated,
+      undated: metrics.reactions.undated,
       outgoingReactionRatio: metrics.reactions.outgoingReactionRatio,
     }),
     surface: Object.freeze({

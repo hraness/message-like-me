@@ -1,7 +1,7 @@
 import { readmeHtml } from './readme.generated';
 
 const githubUrl = 'https://github.com/hraness/message-like-me';
-const releaseUrl = `${githubUrl}/releases/tag/v0.2.0`;
+const releaseUrl = `${githubUrl}/releases/tag/v0.3.0`;
 
 export default function Home() {
   return (
@@ -24,12 +24,13 @@ export default function Home() {
             Your messages already know <em>how you write.</em>
           </h1>
           <p className="lede">
-            Turn your private iMessage history into contact-aware style profiles
-            an agent can use to draft unsent replies in your voice.
+            Turn private messaging history from Messages and your connected
+            accounts into contact-aware style profiles an agent can use to draft
+            unsent replies in your voice.
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="#install">
-              Install v0.2.0 <span aria-hidden="true">↓</span>
+              Install v0.3.0 <span aria-hidden="true">↓</span>
             </a>
             <a className="button button-secondary" href={githubUrl}>
               View the source <span aria-hidden="true">↗</span>
@@ -58,13 +59,13 @@ export default function Home() {
           </div>
           <div className="terminal-card">
             <p>
-              <span>$</span> messagelikeme ingest imessage
+              <span>$</span> wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
             </p>
-            <p className="terminal-result">✓ corpus stored locally</p>
+            <p className="terminal-result">✓ Wrench 0.13.0+ private bundle written</p>
             <p>
-              <span>$</span> messagelikeme inspect tempo &lt;contact-id&gt;
+              <span>$</span> messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
             </p>
-            <p className="terminal-result">✓ response shape ready</p>
+            <p className="terminal-result">✓ source-aware history merged</p>
           </div>
         </div>
       </section>
@@ -85,10 +86,11 @@ export default function Home() {
             <p className="section-number">01 / ingest</p>
             <h3>Read stable local copies.</h3>
             <p>
-              Import Messages and optional Contacts data without opening the
-              source databases for mutation.
+              Import Messages and optional Contacts directly, or merge a
+              private source-aware bundle exported by Wrench 0.13.0+ from
+              Beeper.
             </p>
-            <code>messagelikeme ingest imessage</code>
+            <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code>
           </article>
           <article>
             <p className="section-number">02 / understand</p>
@@ -136,7 +138,8 @@ export default function Home() {
           <h2>Evidence for a draft.</h2>
           <p>
             Message Like Me measures your outgoing prose and delivery shape for
-            one person, then gives your agent a bounded, inspectable profile.
+            one person across imported services, then gives your agent a
+            bounded, inspectable profile.
           </p>
         </div>
         <div>
@@ -167,15 +170,16 @@ export default function Home() {
 
       <section className="install-section" id="install">
         <div>
-          <p className="eyebrow">Install v0.2.0</p>
+          <p className="eyebrow">Install v0.3.0</p>
           <h2>Bring your own agent.</h2>
           <p>Bun 1.3.14 or newer is required.</p>
           <a href={releaseUrl}>View the immutable release ↗</a>
         </div>
         <div className="command-stack" aria-label="Installation commands">
-          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.2.0</code></p>
+          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.3.0</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
+          <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code></p>
         </div>
       </section>
 

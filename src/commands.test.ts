@@ -8,6 +8,7 @@ import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
 import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
+import { writeSyntheticMessageBundle } from "./test-bundle-fixture.ts";
 import type { CorpusSnapshot, StudyPacket } from "./types.ts";
 
 function corpus(): CorpusSnapshot {
@@ -108,6 +109,91 @@ async function createContactsFixture(root: string): Promise<string> {
 }
 
 describe("messagelikeme CLI", () => {
+  test("ingests a strict local bundle and exposes redacted source health", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-bundle-"));
+    const capture = ioCapture();
+    try {
+      const bundlePath = await writeSyntheticMessageBundle(root);
+      const state = join(root, "state");
+      expect(await main([
+        "--data-dir", state, "ingest", "bundle", "--input", bundlePath, "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stderr()).toBe("");
+      const receipt = JSON.parse(capture.stdout()) as {
+        sources: Array<{ id: string }>;
+        messages: number;
+      };
+      expect(receipt.messages).toBe(4);
+      expect(receipt.sources[0]!.id).toMatch(/^source_[a-f0-9]{64}$/u);
+      expect(capture.stdout()).not.toContain("Synthetic Peer");
+      expect(capture.stdout()).not.toContain("peer@example.test");
+      expect(capture.stdout()).not.toContain("Synthetic answer");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "sources", "list", "--json",
+      ], capture.io)).toBe(0);
+      const listed = JSON.parse(capture.stdout()) as {
+        sources: Array<Record<string, unknown>>;
+      };
+      expect(listed.sources[0]).toMatchObject({
+        id: receipt.sources[0]!.id,
+        provider: "beeper",
+        network: "whatsapp",
+        conversations: 1,
+        messages: 4,
+        reactions: 2,
+        undatedReactions: 1,
+      });
+      expect(listed.sources[0]).not.toHaveProperty("accountId");
+      expect(capture.stdout()).not.toContain("synthetic-connected-account");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "contacts", "list", "--json",
+      ], capture.io)).toBe(0);
+      const contacts = JSON.parse(capture.stdout()) as { contacts: Array<{ id: string }> };
+      expect(contacts.contacts).toHaveLength(1);
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "inspect", "tempo", contacts.contacts[0]!.id, "--json",
+      ], capture.io)).toBe(0);
+      const tempoOutput = capture.stdout();
+      expect(JSON.parse(tempoOutput)).toMatchObject({
+        reactions: {
+          total: 2,
+          incoming: 1,
+          outgoing: 1,
+          undated: 1,
+        },
+      });
+      expect(tempoOutput).not.toContain("heart");
+      expect(tempoOutput).not.toContain("thumbs-up");
+      expect(Object.hasOwn(
+        (JSON.parse(tempoOutput) as { reactions: Record<string, unknown> }).reactions,
+        "byBody",
+      )).toBeFalse();
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "context", contacts.contacts[0]!.id, "--json",
+      ], capture.io)).toBe(0);
+      const contextOutput = capture.stdout();
+      expect(contextOutput).not.toContain("heart");
+      expect(contextOutput).not.toContain("thumbs-up");
+      expect(contextOutput).not.toContain("byBody");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "sources", "show", receipt.sources[0]!.id,
+        "--private", "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stdout()).toContain("synthetic-connected-account");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("keeps aggregate views redacted and completes packet-to-profile flow", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-"));
     const paths = await initializeDataPaths(dataPaths(join(root, "state")));

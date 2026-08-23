@@ -11,10 +11,12 @@ boundary, observed result, and a reproduction built from synthetic data.
 
 ## Private-data boundary
 
-Message Like Me reads private iMessage history to derive local analysis. The
+Message Like Me reads private messaging history to derive local analysis. The
 following values are sensitive even when they do not contain an obvious name:
 
 - the source Messages and AddressBook databases and their SQLite sidecars;
+- local message bundles, manifests, connected-account metadata, and provider
+  provenance;
 - contact names, email addresses, and phone numbers;
 - message bodies, timestamps, reply links, tapbacks, and attachment metadata;
 - contact, participant, conversation, and group metadata;
@@ -54,6 +56,36 @@ provenance. Missing or unsupported text remains unavailable rather than being
 guessed. Reply targets and tapbacks remain separate from prose so they cannot
 silently become authored style evidence.
 
+## Local message bundle ingestion
+
+`messagelikeme ingest bundle` accepts only a normalized absolute path to a
+current-user-owned physical mode-`0700` directory. The version-one directory
+contains exactly `manifest.json` and six mode-`0600` canonical UTF-8 NDJSON
+artifacts. Files must be regular, singly linked, owner-controlled, stable while
+read, and free of symbolic-link traversal.
+
+The importer validates the manifest before allocating for its artifacts. It
+caps one line at 2 MiB, the complete bundle at 500,000 records and 512 MiB, and
+connected accounts at 128. It streams each artifact, rejects invalid UTF-8,
+requires canonical JSON plus final newlines, and verifies exact record counts,
+bytes, SHA-256 artifact digests, and the canonical manifest projection digest.
+These checks detect malformed or changed local input. They do not establish
+that the provider data is truthful or complete.
+
+The accepted privacy declaration permits attachment metadata only and requires
+provider URLs and credentials to be excluded. The bundle may still contain
+message bodies, names, handles, timestamps, account identifiers, and graph
+coordinates. Keep it under the same controls as the normalized store, and do
+not place it in Git, logs, issues, packages, or ordinary agent context.
+
+Each connected account is stored in its own per-install HMAC namespace.
+Bounded, truncated, and unknown source absence never deletes retained history.
+Explicit tombstones and terminal message or reaction state suppress their
+validated targets. A later matching record can clear suppression, while an
+older or conflicting equal-time snapshot is rejected. `sources list` is
+redacted. `sources show --private` deliberately reveals provider account and
+source metadata.
+
 ## Contacts enrichment
 
 Contacts enrichment is optional. The reader discovers populated
@@ -83,7 +115,8 @@ a prose profile.
 
 ## Local identifiers
 
-Contact, conversation, and message identifiers are derived with an HMAC key
+Source, contact, participant, conversation, message, and reaction identifiers
+are derived with an HMAC key
 created for one local installation. They reduce accidental disclosure and keep
 stable local references without storing handles in ordinary views. They are
 not anonymization against an attacker who can read the local corpus or key.
@@ -95,8 +128,11 @@ it.
 ## Inspection and study packets
 
 Aggregate contact, session, tempo, and surface-style views omit message bodies
-and private labels by default. `--private` deliberately reveals local private
-identity fields. Use it only when the current task needs that mapping.
+and private labels by default. Raw provider reaction values also remain private;
+aggregate and drafting-context views expose only fixed-size reaction counts,
+direction, datedness, and the outgoing reaction ratio. `--private` deliberately
+reveals local private identity fields. Use it only when the current task needs
+that mapping.
 
 `contacts resolve QUERY --private` performs bounded exact matching against
 private labels. It does not do prefix, substring, phonetic, or fuzzy matching,

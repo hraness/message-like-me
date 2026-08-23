@@ -22,13 +22,14 @@ function message(
     replyTo?: string | null;
     attachments?: number;
     retractedAt?: string | null;
+    conversationId?: string;
   }> = {},
 ): CorpusMessage {
   return Object.freeze({
     id,
     sourceRowId,
     sourceGuid: `source-${id}`,
-    conversationId: CONTACT_ID,
+    conversationId: options.conversationId ?? CONTACT_ID,
     sentAt,
     direction,
     body,
@@ -184,8 +185,13 @@ describe("analyzeContact", () => {
       total: 2,
       incoming: 1,
       outgoing: 1,
+      unknownDirection: 0,
+      dated: 2,
+      undated: 0,
       outgoingReactionRatio: 0.125,
     });
+    expect(analyzeContact(messages, CORPUS_REVISION, CONTACT_ID, { reactionFacts: [] }).reactions)
+      .toEqual(metrics.reactions);
     expect(metrics.surface).toMatchObject({
       outgoingTextMessages: 6,
       lowercaseStartsRatio: 0.833333,
@@ -209,6 +215,40 @@ describe("analyzeContact", () => {
       .toThrow("repeat ID");
   });
 
+  test("never joins sessions, bursts, or responses across conversation boundaries", () => {
+    const messages = [
+      message("thread-a-in", 1, "2024-06-01T00:00:00.000Z", "incoming", "Question in A?", {
+        conversationId: "thread-a",
+      }),
+      message("thread-b-out", 2, "2024-06-01T00:00:10.000Z", "outgoing", "Unrelated answer in B", {
+        conversationId: "thread-b",
+      }),
+      message("thread-a-out", 3, "2024-06-01T00:01:00.000Z", "outgoing", "Answer in A", {
+        conversationId: "thread-a",
+      }),
+      message("thread-b-in", 4, "2024-06-01T00:02:00.000Z", "incoming", "Question in B?", {
+        conversationId: "thread-b",
+      }),
+    ] as const;
+
+    const metrics = analyzeContact(messages, CORPUS_REVISION, CONTACT_ID);
+
+    expect(metrics.sessions).toHaveLength(2);
+    expect(metrics.bursts).toHaveLength(4);
+    expect(metrics.responses).toHaveLength(1);
+    expect(metrics.responses[0]).toMatchObject({
+      incomingMessageIds: ["thread-a-in"],
+      outgoingMessageIds: ["thread-a-out"],
+      latencySeconds: 60,
+    });
+    for (const response of metrics.responses) {
+      const ids = [...response.incomingMessageIds, ...response.outgoingMessageIds];
+      const conversations = new Set(ids.map((id) =>
+        messages.find((candidate) => candidate.id === id)!.conversationId));
+      expect(conversations.size).toBe(1);
+    }
+  });
+
   test("returns well-defined empty distributions and rejects invalid bounds", () => {
     const metrics = analyzeContact([], CORPUS_REVISION, CONTACT_ID);
     expect(metrics.sessions).toEqual([]);
@@ -220,12 +260,92 @@ describe("analyzeContact", () => {
       total: 0,
       incoming: 0,
       outgoing: 0,
+      unknownDirection: 0,
+      dated: 0,
+      undated: 0,
       outgoingReactionRatio: 0,
     });
     expect(() => analyzeContact([], CORPUS_REVISION, CONTACT_ID, {
       sessionGapSeconds: 30,
       burstGapSeconds: 31,
     })).toThrow("cannot exceed");
+  });
+
+  test("counts undated reaction facts without inventing timeline timestamps", () => {
+    const metrics = analyzeContact([
+      message("outgoing-text", 1, "2026-08-21T12:00:00.000Z", "outgoing", "ok"),
+    ], CORPUS_REVISION, CONTACT_ID, {
+      reactionFacts: [
+        {
+          id: "reaction-in",
+          externalId: "external-in",
+          targetExternalId: "target-1",
+          conversationId: "conversation_1",
+          direction: "incoming",
+          body: "heart",
+          reactedAt: null,
+          state: "active",
+        },
+        {
+          id: "reaction-out",
+          externalId: "external-out",
+          targetExternalId: "target-1",
+          conversationId: "conversation_1",
+          direction: "outgoing",
+          body: "heart",
+          reactedAt: null,
+          state: "active",
+        },
+        {
+          id: "reaction-unknown",
+          externalId: "external-unknown",
+          targetExternalId: "target-1",
+          conversationId: "conversation_1",
+          direction: null,
+          body: "question",
+          reactedAt: null,
+          state: "active",
+        },
+      ],
+    });
+    expect(metrics.reactions).toEqual({
+      total: 3,
+      incoming: 1,
+      outgoing: 1,
+      unknownDirection: 1,
+      dated: 0,
+      undated: 3,
+      outgoingReactionRatio: 0.5,
+    });
+  });
+
+  test("keeps aggregate output fixed-size for many unique maximum-size reaction values", () => {
+    const reactionFacts = Object.freeze(Array.from({ length: 2_048 }, (_, index) => {
+      const prefix = `private-reaction-value-${index}:`;
+      return Object.freeze({
+        id: `reaction-${index}`,
+        externalId: `external-${index}`,
+        targetExternalId: "target-1",
+        conversationId: "conversation_1",
+        direction: index % 3 === 0 ? "incoming" as const
+          : index % 3 === 1 ? "outgoing" as const
+          : null,
+        body: `${prefix}${"x".repeat(8_192 - prefix.length)}`,
+        reactedAt: null,
+        state: "active" as const,
+      });
+    }));
+    expect(Buffer.byteLength(reactionFacts[0]!.body, "utf8")).toBe(8_192);
+    expect(Buffer.byteLength(reactionFacts.at(-1)!.body, "utf8")).toBe(8_192);
+
+    const metrics = analyzeContact([], CORPUS_REVISION, CONTACT_ID, { reactionFacts });
+    expect(metrics.reactions.total).toBe(reactionFacts.length);
+    expect(metrics.reactions.incoming + metrics.reactions.outgoing
+      + metrics.reactions.unknownDirection).toBe(reactionFacts.length);
+    expect(Object.hasOwn(metrics.reactions, "byBody")).toBeFalse();
+    const encoded = JSON.stringify(metrics.reactions);
+    expect(Buffer.byteLength(encoded, "utf8")).toBeLessThan(256);
+    expect(encoded).not.toContain("private-reaction-value");
   });
 
   test("excludes retracted and system records from style and tempo evidence", () => {
@@ -278,6 +398,9 @@ describe("analyzeContact", () => {
       total: 0,
       incoming: 0,
       outgoing: 0,
+      unknownDirection: 0,
+      dated: 0,
+      undated: 0,
       outgoingReactionRatio: 0,
     });
   });
@@ -400,6 +523,8 @@ describe("buildStudyPacket", () => {
     expect(Object.hasOwn(packet.metrics, "responses")).toBeFalse();
     expect(Object.hasOwn(packet.metrics, "corpusRevision")).toBeFalse();
     expect(Object.hasOwn(packet.metrics, "contactId")).toBeFalse();
+    expect(Object.hasOwn(packet.metrics.reactions, "byBody")).toBeFalse();
+    expect(JSON.stringify(packet.metrics.reactions)).not.toContain(':"unknown"');
     expect(packet.examples).toHaveLength(2);
     expect(packet.examples[0]!.messages.map(({ id }) => id)).toEqual(["m01", "m02", "m03", "m04"]);
     expect(packet.examples[0]!.messages.map(({ offsetSeconds }) => offsetSeconds)).toEqual([0, 10, 70, 90]);

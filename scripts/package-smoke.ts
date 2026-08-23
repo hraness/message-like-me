@@ -269,6 +269,21 @@ export async function packageSmoke(): Promise<void> {
     if (schema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
       throw new Error("Packed style profile schema must use JSON Schema draft 2020-12");
     }
+    const bundleSchema = record(
+      JSON.parse(
+        await readFile(
+          join(installedPackage, "schema", "local-message-bundle-v1.schema.json"),
+          "utf8",
+        ),
+      ) as unknown,
+      "installed local message bundle schema",
+    );
+    if (
+      bundleSchema.$schema !== "https://json-schema.org/draft/2020-12/schema"
+      || bundleSchema.$id !== "https://messagelikeme.com/schema/local-message-bundle-v1.schema.json"
+    ) {
+      throw new Error("Packed local message bundle schema has the wrong identity");
+    }
   } finally {
     await rm(work, { force: true, recursive: true });
   }

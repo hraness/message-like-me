@@ -5,17 +5,18 @@ import {
   CORPUS_SCHEMA_VERSION,
   EVALUATION_PACKET_SCHEMA_VERSION,
   LEGACY_PROFILE_SCHEMA_VERSION,
+  MESSAGE_BUNDLE_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION,
   canonicalJson,
   prettyJson,
   sha256
-} from "./cli-xby0v0et.js";
+} from "./cli-mxxakdqk.js";
 
 // src/commands.ts
-import { lstat as lstat3 } from "fs/promises";
-import { isAbsolute as isAbsolute4, resolve as resolve5 } from "path";
+import { lstat as lstat4 } from "fs/promises";
+import { isAbsolute as isAbsolute5, resolve as resolve6 } from "path";
 
 // src/errors.ts
 var EXIT_CODES = {
@@ -53,6 +54,7 @@ var VALUE_OPTIONS = new Set([
   "burst-gap",
   "data-dir",
   "database",
+  "input",
   "limit",
   "min-outgoing",
   "output",
@@ -133,6 +135,12 @@ function rejectUnused(parsed, allowedOptions, allowedFlags) {
       throw new CliError("usage", `--${key} is not valid for this command`);
   }
 }
+
+// src/bundle.ts
+import { createHash, createHmac as createHmac2 } from "crypto";
+import { constants as fsConstants2, createReadStream } from "fs";
+import { lstat, open, readdir, realpath } from "fs/promises";
+import { isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
 
 // src/contacts.ts
 import { Database } from "bun:sqlite";
@@ -815,12 +823,1152 @@ function readMacOSContacts(path, options) {
   });
 }
 
+// src/bundle.ts
+var MAX_MANIFEST_BYTES = 1024 * 1024;
+var MAX_RECORDS = 500000;
+var MAX_RECORD_BYTES = 2 * 1024 * 1024;
+var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
+var MAX_ACCOUNTS = 128;
+var MAX_IDENTIFIER_BYTES2 = 1024;
+var MAX_SHORT_TEXT_BYTES = 8 * 1024;
+var MAX_BODY_BYTES = 1024 * 1024;
+var MAX_PARTICIPANTS = 1e4;
+var MAX_ATTACHMENTS = 256;
+var MAX_WARNINGS = 128;
+var ARTIFACTS = Object.freeze([
+  Object.freeze({ path: "accounts.ndjson", kind: "account" }),
+  Object.freeze({ path: "participants.ndjson", kind: "participant" }),
+  Object.freeze({ path: "conversations.ndjson", kind: "conversation" }),
+  Object.freeze({ path: "messages.ndjson", kind: "message" }),
+  Object.freeze({ path: "reactions.ndjson", kind: "reaction" }),
+  Object.freeze({ path: "tombstones.ndjson", kind: "tombstone" })
+]);
+function object(value, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+    throw new CliError("invalid-data", `${label} must be a plain object`);
+  return value;
+}
+function exactKeys(value, keys, label) {
+  const expected = [...keys].sort();
+  const observed = Object.keys(value).sort();
+  if (expected.length !== observed.length || observed.some((key, index) => key !== expected[index]))
+    throw new CliError("invalid-data", `${label} must contain exactly: ${keys.join(", ")}`);
+}
+function boundedText2(value, label, maximum) {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > maximum || value.includes("\x00")) {
+    throw new CliError("invalid-data", `${label} must be NUL-free text within ${maximum} UTF-8 bytes`);
+  }
+  return value;
+}
+function nullableText(value, label, maximum) {
+  return value === null ? null : boundedText2(value, label, maximum);
+}
+function identifier(value, label) {
+  const result = boundedText2(value, label, MAX_IDENTIFIER_BYTES2);
+  if (result.length === 0 || /[\u0000-\u001f\u007f]/u.test(result)) {
+    throw new CliError("invalid-data", `${label} must be a non-empty identifier without ASCII controls`);
+  }
+  return result;
+}
+function nullableIdentifier(value, label) {
+  return value === null ? null : identifier(value, label);
+}
+function token(value, label, maximum = 128) {
+  const result = boundedText2(value, label, maximum);
+  if (!/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?$/u.test(result)) {
+    throw new CliError("invalid-data", `${label} must be a lowercase categorical token`);
+  }
+  return result;
+}
+function version(value, label) {
+  const result = boundedText2(value, label, 128);
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9._+-]*[A-Za-z0-9])?$/u.test(result)) {
+    throw new CliError("invalid-data", `${label} must be a bounded version token`);
+  }
+  return result;
+}
+function oneOf(value, values, label) {
+  if (typeof value !== "string" || !values.includes(value)) {
+    throw new CliError("invalid-data", `${label} must be one of: ${values.join(", ")}`);
+  }
+  return value;
+}
+function integer2(value, label, maximum = Number.MAX_SAFE_INTEGER) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new CliError("invalid-data", `${label} must be a non-negative safe integer`);
+  }
+  return value;
+}
+function nullableInteger(value, label) {
+  return value === null ? null : integer2(value, label);
+}
+function boolean(value, label) {
+  if (typeof value !== "boolean")
+    throw new CliError("invalid-data", `${label} must be boolean`);
+  return value;
+}
+function nullableBoolean(value, label) {
+  return value === null ? null : boolean(value, label);
+}
+function timestamp(value, label) {
+  const result = boundedText2(value, label, 64);
+  const date = new Date(result);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== result) {
+    throw new CliError("invalid-data", `${label} must be a canonical UTC timestamp`);
+  }
+  return result;
+}
+function nullableTimestamp(value, label) {
+  return value === null ? null : timestamp(value, label);
+}
+function digest(value, label) {
+  const result = boundedText2(value, label, 64);
+  if (!/^[a-f0-9]{64}$/u.test(result))
+    throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
+  return result;
+}
+function array(value, label, maximum) {
+  if (!Array.isArray(value) || value.length > maximum) {
+    throw new CliError("invalid-data", `${label} must contain at most ${maximum} items`);
+  }
+  return value;
+}
+function identifiers(value, label, maximum) {
+  const result = array(value, label, maximum).map((item, index) => identifier(item, `${label}[${index}]`));
+  if (new Set(result).size !== result.length)
+    throw new CliError("invalid-data", `${label} repeats an ID`);
+  return Object.freeze(result);
+}
+function parseProvenance(value, label) {
+  const record = object(value, label);
+  exactKeys(record, ["providerId", "providerRevision", "observedAt", "connectedAccountProviderId"], label);
+  return Object.freeze({
+    providerId: identifier(record.providerId, `${label}.providerId`),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
+    observedAt: timestamp(record.observedAt, `${label}.observedAt`),
+    connectedAccountProviderId: identifier(record.connectedAccountProviderId, `${label}.connectedAccountProviderId`)
+  });
+}
+function parseCommon(record, kind, extraKeys, label) {
+  exactKeys(record, ["schemaVersion", "kind", "id", "accountId", "network", "provenance", ...extraKeys], label);
+  if (record.schemaVersion !== 1 || record.kind !== kind) {
+    throw new CliError("invalid-data", `${label} has the wrong schemaVersion or kind`);
+  }
+  return Object.freeze({
+    schemaVersion: 1,
+    kind,
+    id: identifier(record.id, `${label}.id`),
+    accountId: identifier(record.accountId, `${label}.accountId`),
+    network: token(record.network, `${label}.network`, 64),
+    provenance: parseProvenance(record.provenance, `${label}.provenance`)
+  });
+}
+function parseAccount(record, label) {
+  const common = parseCommon(record, "account", ["displayName", "handle", "selfParticipantId"], label);
+  if (common.id !== common.accountId || common.provenance.providerId !== common.provenance.connectedAccountProviderId) {
+    throw new CliError("invalid-data", `${label} does not establish one connected account realm`);
+  }
+  return Object.freeze({
+    ...common,
+    kind: "account",
+    displayName: nullableText(record.displayName, `${label}.displayName`, MAX_SHORT_TEXT_BYTES),
+    handle: nullableText(record.handle, `${label}.handle`, MAX_SHORT_TEXT_BYTES),
+    selfParticipantId: identifier(record.selfParticipantId, `${label}.selfParticipantId`)
+  });
+}
+function parseParticipant(record, label) {
+  const common = parseCommon(record, "participant", ["displayName", "handle", "isSelf"], label);
+  return Object.freeze({
+    ...common,
+    kind: "participant",
+    displayName: nullableText(record.displayName, `${label}.displayName`, MAX_SHORT_TEXT_BYTES),
+    handle: nullableText(record.handle, `${label}.handle`, MAX_SHORT_TEXT_BYTES),
+    isSelf: boolean(record.isSelf, `${label}.isSelf`)
+  });
+}
+function parseConversation(record, label) {
+  const common = parseCommon(record, "conversation", [
+    "type",
+    "title",
+    "participantIds",
+    "participantsComplete",
+    "startedAt",
+    "lastMessageAt"
+  ], label);
+  const startedAt = nullableTimestamp(record.startedAt, `${label}.startedAt`);
+  const lastMessageAt = nullableTimestamp(record.lastMessageAt, `${label}.lastMessageAt`);
+  if (startedAt !== null && lastMessageAt !== null && startedAt > lastMessageAt) {
+    throw new CliError("invalid-data", `${label}.startedAt must not follow lastMessageAt`);
+  }
+  return Object.freeze({
+    ...common,
+    kind: "conversation",
+    type: oneOf(record.type, ["direct", "group", "channel", "unknown"], `${label}.type`),
+    title: nullableText(record.title, `${label}.title`, MAX_SHORT_TEXT_BYTES),
+    participantIds: identifiers(record.participantIds, `${label}.participantIds`, MAX_PARTICIPANTS),
+    participantsComplete: nullableBoolean(record.participantsComplete, `${label}.participantsComplete`),
+    startedAt,
+    lastMessageAt
+  });
+}
+function parseReply(value, label) {
+  if (value === null)
+    return null;
+  const record = object(value, label);
+  exactKeys(record, ["messageId", "providerId"], label);
+  return Object.freeze({
+    messageId: record.messageId === null ? null : identifier(record.messageId, `${label}.messageId`),
+    providerId: identifier(record.providerId, `${label}.providerId`)
+  });
+}
+function parseEdit(value, sentAt, label) {
+  if (value === null)
+    return null;
+  const record = object(value, label);
+  if (record.kind === "in-place") {
+    exactKeys(record, ["kind", "editedAt", "providerRevision"], label);
+    const editedAt2 = timestamp(record.editedAt, `${label}.editedAt`);
+    if (editedAt2 < sentAt)
+      throw new CliError("invalid-data", `${label} precedes the message`);
+    return Object.freeze({
+      kind: "in-place",
+      editedAt: editedAt2,
+      providerRevision: identifier(record.providerRevision, `${label}.providerRevision`)
+    });
+  }
+  if (record.kind !== "replacement") {
+    throw new CliError("invalid-data", `${label}.kind must be in-place or replacement`);
+  }
+  exactKeys(record, [
+    "kind",
+    "replacesMessageId",
+    "replacesProviderId",
+    "editedAt",
+    "providerRevision"
+  ], label);
+  const replacesMessageId = record.replacesMessageId === null ? null : identifier(record.replacesMessageId, `${label}.replacesMessageId`);
+  const replacesProviderId = identifier(record.replacesProviderId, `${label}.replacesProviderId`);
+  const editedAt = timestamp(record.editedAt, `${label}.editedAt`);
+  if (editedAt < sentAt)
+    throw new CliError("invalid-data", `${label} precedes the message`);
+  return Object.freeze({
+    kind: "replacement",
+    replacesMessageId,
+    replacesProviderId,
+    editedAt,
+    providerRevision: identifier(record.providerRevision, `${label}.providerRevision`)
+  });
+}
+function parseDeletion(value, label) {
+  if (value === null)
+    return null;
+  const record = object(value, label);
+  exactKeys(record, ["state", "observedAt", "providerRevision"], label);
+  return Object.freeze({
+    state: oneOf(record.state, ["revoked", "deleted-for-me", "revoked-and-deleted-for-me"], `${label}.state`),
+    observedAt: timestamp(record.observedAt, `${label}.observedAt`),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
+  });
+}
+function parseAttachments(value, label) {
+  return Object.freeze(array(value, label, MAX_ATTACHMENTS).map((item, index) => {
+    const itemLabel = `${label}[${index}]`;
+    const record = object(item, itemLabel);
+    exactKeys(record, ["kind", "mimeType", "name", "sizeBytes"], itemLabel);
+    const name = nullableText(record.name, `${itemLabel}.name`, MAX_SHORT_TEXT_BYTES);
+    if (name !== null && (name === "." || name === ".." || name.includes("/") || name.includes("\\"))) {
+      throw new CliError("invalid-data", `${itemLabel}.name must not be a path`);
+    }
+    return Object.freeze({
+      kind: oneOf(record.kind, ["audio", "document", "image", "link", "sticker", "video", "unknown"], `${itemLabel}.kind`),
+      mimeType: nullableText(record.mimeType, `${itemLabel}.mimeType`, 256),
+      name,
+      sizeBytes: nullableInteger(record.sizeBytes, `${itemLabel}.sizeBytes`)
+    });
+  }));
+}
+function parseMessage(record, label) {
+  const common = parseCommon(record, "message", [
+    "conversationId",
+    "senderParticipantId",
+    "direction",
+    "sentAt",
+    "sortKey",
+    "body",
+    "bodyTruncated",
+    "replyTo",
+    "edit",
+    "deletion",
+    "attachments"
+  ], label);
+  const sentAt = timestamp(record.sentAt, `${label}.sentAt`);
+  const deletion = parseDeletion(record.deletion, `${label}.deletion`);
+  const body = nullableText(record.body, `${label}.body`, MAX_BODY_BYTES);
+  if (deletion !== null && body !== null) {
+    throw new CliError("invalid-data", `${label}.body must be null for a deleted message`);
+  }
+  return Object.freeze({
+    ...common,
+    kind: "message",
+    conversationId: identifier(record.conversationId, `${label}.conversationId`),
+    senderParticipantId: record.senderParticipantId === null ? null : identifier(record.senderParticipantId, `${label}.senderParticipantId`),
+    direction: oneOf(record.direction, ["incoming", "outgoing", "unknown"], `${label}.direction`),
+    sentAt,
+    sortKey: identifier(record.sortKey, `${label}.sortKey`),
+    body,
+    bodyTruncated: nullableBoolean(record.bodyTruncated, `${label}.bodyTruncated`),
+    replyTo: parseReply(record.replyTo, `${label}.replyTo`),
+    edit: parseEdit(record.edit, sentAt, `${label}.edit`),
+    deletion,
+    attachments: parseAttachments(record.attachments, `${label}.attachments`)
+  });
+}
+function parseReaction(record, label) {
+  const common = parseCommon(record, "reaction", [
+    "messageId",
+    "messageProviderId",
+    "participantId",
+    "body",
+    "reactedAt",
+    "state"
+  ], label);
+  return Object.freeze({
+    ...common,
+    kind: "reaction",
+    messageId: record.messageId === null ? null : identifier(record.messageId, `${label}.messageId`),
+    messageProviderId: identifier(record.messageProviderId, `${label}.messageProviderId`),
+    participantId: record.participantId === null ? null : identifier(record.participantId, `${label}.participantId`),
+    body: boundedText2(record.body, `${label}.body`, MAX_SHORT_TEXT_BYTES),
+    reactedAt: nullableTimestamp(record.reactedAt, `${label}.reactedAt`),
+    state: oneOf(record.state, ["active", "removed"], `${label}.state`)
+  });
+}
+function parseTombstone(record, label) {
+  const common = parseCommon(record, "tombstone", [
+    "entityKind",
+    "entityId",
+    "entityProviderId",
+    "deletedAt",
+    "scope",
+    "providerRevision"
+  ], label);
+  return Object.freeze({
+    ...common,
+    kind: "tombstone",
+    entityKind: oneOf(record.entityKind, ["conversation", "message", "reaction"], `${label}.entityKind`),
+    entityId: record.entityId === null ? null : identifier(record.entityId, `${label}.entityId`),
+    entityProviderId: identifier(record.entityProviderId, `${label}.entityProviderId`),
+    deletedAt: timestamp(record.deletedAt, `${label}.deletedAt`),
+    scope: oneOf(record.scope, ["remote", "local", "unknown"], `${label}.scope`),
+    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
+  });
+}
+function parseRecord(value, kind, label) {
+  const record = object(value, label);
+  switch (kind) {
+    case "account":
+      return parseAccount(record, label);
+    case "participant":
+      return parseParticipant(record, label);
+    case "conversation":
+      return parseConversation(record, label);
+    case "message":
+      return parseMessage(record, label);
+    case "reaction":
+      return parseReaction(record, label);
+    case "tombstone":
+      return parseTombstone(record, label);
+  }
+}
+function parseArtifact(value, index) {
+  const expected = ARTIFACTS[index];
+  const label = `manifest.artifacts[${index}]`;
+  const record = object(value, label);
+  exactKeys(record, ["path", "mediaType", "recordKind", "records", "bytes", "sha256"], label);
+  if (record.path !== expected.path || record.mediaType !== "application/x-ndjson" || record.recordKind !== expected.kind)
+    throw new CliError("invalid-data", `${label} does not match the fixed artifact inventory`);
+  return Object.freeze({
+    path: expected.path,
+    mediaType: "application/x-ndjson",
+    recordKind: expected.kind,
+    records: integer2(record.records, `${label}.records`, MAX_RECORDS),
+    bytes: integer2(record.bytes, `${label}.bytes`, MAX_TOTAL_BYTES),
+    sha256: digest(record.sha256, `${label}.sha256`)
+  });
+}
+function parseManifest(value) {
+  const record = object(value, "manifest");
+  exactKeys(record, [
+    "schemaVersion",
+    "format",
+    "source",
+    "provider",
+    "timestamps",
+    "completeness",
+    "warnings",
+    "privacy",
+    "counts",
+    "artifacts",
+    "integrity"
+  ], "manifest");
+  if (record.schemaVersion !== MESSAGE_BUNDLE_SCHEMA_VERSION || record.format !== "message-like-me.local-message-bundle") {
+    throw new CliError("invalid-data", "Manifest has an unsupported schemaVersion or format");
+  }
+  const source = object(record.source, "manifest.source");
+  exactKeys(source, ["id", "version"], "manifest.source");
+  if (source.id !== "beeper-local")
+    throw new CliError("invalid-data", "manifest.source.id must be beeper-local");
+  const provider = object(record.provider, "manifest.provider");
+  exactKeys(provider, ["id", "version"], "manifest.provider");
+  if (provider.id !== "beeper")
+    throw new CliError("invalid-data", "manifest.provider.id must be beeper");
+  const timestamps = object(record.timestamps, "manifest.timestamps");
+  exactKeys(timestamps, ["startedAt", "finishedAt", "createdAt"], "manifest.timestamps");
+  const startedAt = timestamp(timestamps.startedAt, "manifest.timestamps.startedAt");
+  const finishedAt = timestamp(timestamps.finishedAt, "manifest.timestamps.finishedAt");
+  const createdAt = timestamp(timestamps.createdAt, "manifest.timestamps.createdAt");
+  if (startedAt > finishedAt || finishedAt > createdAt) {
+    throw new CliError("invalid-data", "Manifest timestamps are not monotonic");
+  }
+  const completeness = object(record.completeness, "manifest.completeness");
+  exactKeys(completeness, ["kind", "reason", "observedFrom", "observedThrough"], "manifest.completeness");
+  const observedFrom = nullableTimestamp(completeness.observedFrom, "manifest.completeness.observedFrom");
+  const observedThrough = nullableTimestamp(completeness.observedThrough, "manifest.completeness.observedThrough");
+  if (observedFrom !== null && observedThrough !== null && observedFrom > observedThrough) {
+    throw new CliError("invalid-data", "Manifest completeness bounds are reversed");
+  }
+  const warnings = array(record.warnings, "manifest.warnings", MAX_WARNINGS).map((value2, index) => token(value2, `manifest.warnings[${index}]`));
+  if (new Set(warnings).size !== warnings.length)
+    throw new CliError("invalid-data", "Manifest warnings repeat");
+  const privacy = object(record.privacy, "manifest.privacy");
+  exactKeys(privacy, ["classification", "attachments", "providerUrls", "credentials"], "manifest.privacy");
+  if (privacy.classification !== "private-local" || privacy.attachments !== "metadata-only" || privacy.providerUrls !== "excluded" || privacy.credentials !== "excluded")
+    throw new CliError("invalid-data", "Manifest privacy guarantees are unsupported");
+  const counts = object(record.counts, "manifest.counts");
+  exactKeys(counts, ARTIFACTS.map(({ kind }) => kind), "manifest.counts");
+  const parsedCounts = Object.fromEntries(ARTIFACTS.map(({ kind }) => [
+    kind,
+    integer2(counts[kind], `manifest.counts.${kind}`, MAX_RECORDS)
+  ]));
+  if (parsedCounts.account > MAX_ACCOUNTS) {
+    throw new CliError("invalid-data", `Manifest exceeds the ${MAX_ACCOUNTS}-account safety bound`);
+  }
+  if (!Array.isArray(record.artifacts) || record.artifacts.length !== ARTIFACTS.length) {
+    throw new CliError("invalid-data", "Manifest must list the fixed six artifacts");
+  }
+  const artifacts = Object.freeze(record.artifacts.map(parseArtifact));
+  let totalRecords = 0;
+  let totalBytes = 0;
+  for (const artifact of artifacts) {
+    if (artifact.records !== parsedCounts[artifact.recordKind]) {
+      throw new CliError("invalid-data", `${artifact.path} count disagrees with manifest.counts`);
+    }
+    totalRecords += artifact.records;
+    totalBytes += artifact.bytes;
+  }
+  if (totalRecords > MAX_RECORDS || totalBytes > MAX_TOTAL_BYTES) {
+    throw new CliError("invalid-data", "Manifest exceeds the bundle record or byte bound");
+  }
+  const integrity = object(record.integrity, "manifest.integrity");
+  exactKeys(integrity, ["algorithm", "bundleSha256"], "manifest.integrity");
+  if (integrity.algorithm !== "sha256")
+    throw new CliError("invalid-data", "Manifest integrity algorithm is unsupported");
+  const result = Object.freeze({
+    schemaVersion: 1,
+    format: "message-like-me.local-message-bundle",
+    source: Object.freeze({ id: "beeper-local", version: version(source.version, "manifest.source.version") }),
+    provider: Object.freeze({ id: "beeper", version: version(provider.version, "manifest.provider.version") }),
+    timestamps: Object.freeze({ startedAt, finishedAt, createdAt }),
+    completeness: Object.freeze({
+      kind: oneOf(completeness.kind, ["bounded-local", "truncated", "unknown"], "manifest.completeness.kind"),
+      reason: completeness.reason === null ? null : token(completeness.reason, "manifest.completeness.reason"),
+      observedFrom,
+      observedThrough
+    }),
+    warnings: Object.freeze(warnings),
+    privacy: Object.freeze({
+      classification: "private-local",
+      attachments: "metadata-only",
+      providerUrls: "excluded",
+      credentials: "excluded"
+    }),
+    counts: Object.freeze(parsedCounts),
+    artifacts,
+    integrity: Object.freeze({ algorithm: "sha256", bundleSha256: digest(integrity.bundleSha256, "manifest.integrity.bundleSha256") })
+  });
+  const { integrity: _integrity, ...projection } = result;
+  if (sha256(canonicalJson(projection)) !== result.integrity.bundleSha256) {
+    throw new CliError("invalid-data", "Manifest bundle SHA-256 does not match its canonical projection");
+  }
+  return result;
+}
+function sameFile2(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+async function bundleDirectory(path) {
+  if (!isAbsolute2(path) || resolve2(path) !== path) {
+    throw new CliError("unsafe-path", "Bundle input must be a normalized absolute path");
+  }
+  const before = await lstat(path);
+  if (!before.isDirectory() || before.isSymbolicLink() || (before.mode & 511) !== 448 || typeof process.getuid === "function" && before.uid !== process.getuid())
+    throw new CliError("unsafe-path", "Bundle input must be a current-user-owned mode-0700 physical directory");
+  const physical = await realpath(path);
+  if (physical !== path)
+    throw new CliError("unsafe-path", "Bundle input path must not traverse a symbolic link");
+  const after = await lstat(physical);
+  if (!sameFile2(before, after))
+    throw new CliError("unsafe-path", "Bundle directory changed while resolving");
+  const expected = ["manifest.json", ...ARTIFACTS.map(({ path: artifactPath }) => artifactPath)].sort();
+  const entries = (await readdir(physical)).sort();
+  if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {
+    throw new CliError("invalid-data", "Bundle directory does not contain exactly the version-one inventory");
+  }
+  return physical;
+}
+async function openPrivateFile(path, maximumBytes, allowEmpty) {
+  const handle = await open(path, fsConstants2.O_RDONLY | fsConstants2.O_NOFOLLOW);
+  try {
+    const before = await handle.stat({ bigint: true });
+    if (!before.isFile() || before.nlink !== 1n || before.size > BigInt(maximumBytes) || !allowEmpty && before.size < 1n || (before.mode & 0o777n) !== 0o600n || typeof process.getuid === "function" && before.uid !== BigInt(process.getuid()))
+      throw new CliError("unsafe-path", `${path} must be a private physical file within its bound`);
+    return { handle, before };
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+async function assertFileUnchanged(path, handle, before) {
+  const after = await handle.stat({ bigint: true });
+  if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs)
+    throw new CliError("unsafe-path", `${path} changed while it was read`);
+}
+async function closeReadHandle(handle) {
+  try {
+    await handle.close();
+  } catch (error) {
+    if (error.code !== "EBADF")
+      throw error;
+  }
+}
+function decodeUtf8(bytes, label) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} is not valid UTF-8`, { cause: error });
+  }
+}
+async function readManifest(path) {
+  const opened = await openPrivateFile(path, MAX_MANIFEST_BYTES, false);
+  try {
+    const bytes = Uint8Array.from(await opened.handle.readFile());
+    await assertFileUnchanged(path, opened.handle, opened.before);
+    let value;
+    try {
+      value = JSON.parse(decodeUtf8(bytes, "manifest.json"));
+    } catch (error) {
+      throw new CliError("invalid-data", "manifest.json is not valid UTF-8 JSON", { cause: error });
+    }
+    const manifest = parseManifest(value);
+    if (!Buffer.from(`${canonicalJson(manifest)}
+`, "utf8").equals(Buffer.from(bytes))) {
+      throw new CliError("invalid-data", "manifest.json must use canonical JSON with one final newline");
+    }
+    return Object.freeze({ bytes, manifest });
+  } finally {
+    await closeReadHandle(opened.handle);
+  }
+}
+async function readArtifact(root, artifact) {
+  const path = join2(root, artifact.path);
+  const opened = await openPrivateFile(path, artifact.bytes, true);
+  const hash = createHash("sha256");
+  const records = [];
+  let totalBytes = 0;
+  let pending = Buffer.alloc(0);
+  let endedWithNewline = false;
+  try {
+    const stream = createReadStream(path, {
+      fd: opened.handle.fd,
+      autoClose: false,
+      start: 0,
+      highWaterMark: 64 * 1024
+    });
+    for await (const value of stream) {
+      const chunk = Buffer.from(value);
+      hash.update(chunk);
+      totalBytes += chunk.byteLength;
+      if (totalBytes > artifact.bytes)
+        throw new CliError("invalid-data", `${artifact.path} exceeds manifest bytes`);
+      pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
+      let newline = pending.indexOf(10);
+      while (newline >= 0) {
+        const line = pending.subarray(0, newline);
+        pending = pending.subarray(newline + 1);
+        endedWithNewline = true;
+        if (line.byteLength < 1 || line.byteLength + 1 > MAX_RECORD_BYTES) {
+          throw new CliError("invalid-data", `${artifact.path} contains a blank or oversized record`);
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(decodeUtf8(line, `${artifact.path} record`));
+        } catch (error) {
+          throw new CliError("invalid-data", `${artifact.path} contains invalid UTF-8 JSON`, { cause: error });
+        }
+        const normalized = parseRecord(parsed, artifact.recordKind, `${artifact.path}:${records.length + 1}`);
+        if (!Buffer.from(canonicalJson(normalized), "utf8").equals(line)) {
+          throw new CliError("invalid-data", `${artifact.path} records must use canonical JSON`);
+        }
+        records.push(normalized);
+        if (records.length > artifact.records) {
+          throw new CliError("invalid-data", `${artifact.path} exceeds its manifest record count`);
+        }
+        newline = pending.indexOf(10);
+      }
+      if (pending.byteLength + 1 > MAX_RECORD_BYTES) {
+        throw new CliError("invalid-data", `${artifact.path} contains an oversized record`);
+      }
+      if (pending.length > 0)
+        endedWithNewline = false;
+    }
+    await assertFileUnchanged(path, opened.handle, opened.before);
+  } finally {
+    await closeReadHandle(opened.handle);
+  }
+  if (pending.byteLength !== 0 || artifact.records > 0 && !endedWithNewline) {
+    throw new CliError("invalid-data", `${artifact.path} must end every record with a newline`);
+  }
+  if (totalBytes !== artifact.bytes || records.length !== artifact.records || hash.digest("hex") !== artifact.sha256)
+    throw new CliError("invalid-data", `${artifact.path} does not match its manifest integrity`);
+  return Object.freeze(records);
+}
+function hmacKey(value) {
+  const key = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  if (!(key instanceof Uint8Array) || key.byteLength < 16 || key.byteLength > 1024) {
+    throw new CliError("invalid-data", "Bundle HMAC key must contain 16 through 1024 bytes");
+  }
+  return Uint8Array.from(key);
+}
+function hmac2(key, namespace, value) {
+  return createHmac2("sha256", key).update(`message-like-me\x00bundle-${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
+}
+function compareCodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function recordMap(records, label) {
+  const result = new Map;
+  for (const record of records) {
+    if (result.has(record.id))
+      throw new CliError("invalid-data", `${label} repeats a bundle-local ID`);
+    result.set(record.id, record);
+  }
+  return result;
+}
+function groupByAccount(records) {
+  const grouped = new Map;
+  for (const record of records) {
+    const values = grouped.get(record.accountId) ?? [];
+    values.push(record);
+    grouped.set(record.accountId, values);
+  }
+  return grouped;
+}
+function attachmentProvenance(messageId, attachments) {
+  return Object.freeze(attachments.map((attachment, index) => ({
+    id: `${messageId}:attachment:${index + 1}`,
+    kind: attachment.kind,
+    mimeType: attachment.mimeType,
+    fileName: attachment.name,
+    bytes: attachment.sizeBytes
+  })));
+}
+function reactionTimelineCoordinate(localReactionId) {
+  return `\x1Freaction-timeline:${localReactionId}`;
+}
+function normalizeBundle(manifest, manifestSha256, records, key) {
+  const accounts = records.account;
+  const participants = records.participant;
+  const conversations = records.conversation;
+  const messages = records.message;
+  const reactions = records.reaction;
+  const tombstones = records.tombstone;
+  if (accounts.length > MAX_ACCOUNTS) {
+    throw new CliError("invalid-data", `Bundle exceeds the ${MAX_ACCOUNTS}-account safety bound`);
+  }
+  const accountById = recordMap(accounts, "accounts");
+  recordMap(participants, "participants");
+  recordMap(conversations, "conversations");
+  const messageRecordById = recordMap(messages, "messages");
+  const reactionById = recordMap(reactions, "reactions");
+  recordMap(tombstones, "tombstones");
+  for (const [kind, values] of [
+    ["account", accounts],
+    ["participant", participants],
+    ["conversation", conversations],
+    ["message", messages],
+    ["reaction", reactions],
+    ["tombstone", tombstones]
+  ]) {
+    const providerCoordinates = new Set;
+    for (const record of values) {
+      const coordinate = `${record.accountId}\x00${record.provenance.providerId}`;
+      if (providerCoordinates.has(coordinate)) {
+        throw new CliError("invalid-data", `${kind} records repeat a provider identity within one account`);
+      }
+      providerCoordinates.add(coordinate);
+    }
+  }
+  for (const record of [...participants, ...conversations, ...messages, ...reactions, ...tombstones]) {
+    const account = accountById.get(record.accountId);
+    if (account === undefined || account.network !== record.network || account.provenance.connectedAccountProviderId !== record.provenance.connectedAccountProviderId)
+      throw new CliError("invalid-data", "A record does not match its connected account realm");
+  }
+  const participantsByAccount = groupByAccount(participants);
+  const conversationsByAccount = groupByAccount(conversations);
+  const messagesByAccount = groupByAccount(messages);
+  const reactionsByAccount = groupByAccount(reactions);
+  const tombstonesByAccount = groupByAccount(tombstones);
+  const result = [];
+  const sourceIds = new Set;
+  for (const account of accounts) {
+    const accountParticipants = participantsByAccount.get(account.id) ?? [];
+    const participantById = new Map(accountParticipants.map((participant) => [participant.id, participant]));
+    const self = participantById.get(account.selfParticipantId);
+    if (self === undefined || !self.isSelf || accountParticipants.filter(({ isSelf }) => isSelf).length !== 1) {
+      throw new CliError("invalid-data", "An account must have exactly one matching self participant");
+    }
+    const accountConversations = conversationsByAccount.get(account.id) ?? [];
+    const conversationParticipantIds = new Map(accountConversations.map((conversation) => [
+      conversation.id,
+      new Set(conversation.participantIds)
+    ]));
+    for (const conversation of accountConversations) {
+      for (const participantId of conversation.participantIds) {
+        if (!participantById.has(participantId)) {
+          throw new CliError("invalid-data", "A conversation references an unknown participant");
+        }
+      }
+      if (conversation.type === "direct" && conversation.participantsComplete === true && (conversation.participantIds.length !== 2 || !conversation.participantIds.includes(account.selfParticipantId) || conversation.participantIds.filter((participantId) => participantById.get(participantId)?.isSelf === false).length !== 1)) {
+        throw new CliError("invalid-data", "A complete direct conversation must contain one self and one non-self participant");
+      }
+    }
+    const conversationById = new Map(accountConversations.map((conversation) => [conversation.id, conversation]));
+    const namespace = [
+      manifest.provider.id,
+      account.provenance.connectedAccountProviderId,
+      self.provenance.providerId
+    ].join("\x00");
+    const sourceId = `source_${hmac2(key, "source", namespace)}`;
+    if (sourceIds.has(sourceId)) {
+      throw new CliError("invalid-data", "Connected accounts repeat a stable source realm");
+    }
+    sourceIds.add(sourceId);
+    const conversationLocalIds = new Map(accountConversations.map((conversation) => [
+      conversation.id,
+      `conversation_${hmac2(key, "conversation", `${namespace}\x00${conversation.provenance.providerId}`)}`
+    ]));
+    const participantLocalIds = new Map(accountParticipants.map((participant) => [
+      participant.id,
+      `participant_${hmac2(key, "participant", `${namespace}\x00${participant.provenance.providerId}`)}`
+    ]));
+    const normalizedConversations = accountConversations.map((conversation) => {
+      const known = conversation.participantIds.flatMap((id) => {
+        const participant = participantById.get(id);
+        return participant === undefined ? [] : [participant];
+      });
+      const peers = known.filter(({ isSelf }) => !isSelf);
+      const completeDirectPeer = conversation.type === "direct" && conversation.participantsComplete === true && peers.length === 1 ? peers[0] : null;
+      const canonicalHandle = completeDirectPeer?.handle === null || completeDirectPeer === null ? null : normalizeContactHandle(completeDirectPeer.handle);
+      return Object.freeze({
+        id: conversationLocalIds.get(conversation.id),
+        sourceKey: conversation.provenance.providerId,
+        privateLabel: conversation.title,
+        service: account.network,
+        participantCount: conversation.type === "direct" ? 1 : peers.length,
+        participantIds: Object.freeze(peers.map((participant) => participantLocalIds.get(participant.id))),
+        privateParticipants: canonicalHandle === null ? Object.freeze([]) : Object.freeze([canonicalHandle.normalizedValue]),
+        group: conversation.type !== "direct"
+      });
+    });
+    const accountMessages = messagesByAccount.get(account.id) ?? [];
+    const messageById = new Map(accountMessages.map((message) => [message.id, message]));
+    const messageByProviderId = new Map(accountMessages.map((message) => [
+      message.provenance.providerId,
+      message
+    ]));
+    const replacementTargets = new Map;
+    const replacerByTarget = new Map;
+    for (const message of accountMessages) {
+      if (!conversationById.has(message.conversationId)) {
+        throw new CliError("invalid-data", "A message references an unknown conversation");
+      }
+      if (message.senderParticipantId !== null && !participantById.has(message.senderParticipantId)) {
+        throw new CliError("invalid-data", "A message references an unknown sender participant");
+      }
+      const sender = message.senderParticipantId === null ? null : participantById.get(message.senderParticipantId);
+      const conversation = conversationById.get(message.conversationId);
+      if (sender !== null && (message.direction === "outgoing" && !sender.isSelf || message.direction === "incoming" && sender.isSelf))
+        throw new CliError("invalid-data", "A message direction conflicts with its sender identity");
+      if (sender !== null && conversation.participantsComplete === true && !conversationParticipantIds.get(conversation.id).has(sender.id))
+        throw new CliError("invalid-data", "A message sender is outside its complete conversation roster");
+      if (message.replyTo !== null) {
+        const localTarget = message.replyTo.messageId === null ? undefined : messageRecordById.get(message.replyTo.messageId);
+        if (message.replyTo.messageId !== null && (localTarget === undefined || localTarget.accountId !== account.id || localTarget.provenance.providerId !== message.replyTo.providerId))
+          throw new CliError("invalid-data", "A message reply has mismatched target coordinates");
+        const providerTarget = messageByProviderId.get(message.replyTo.providerId);
+        const target = localTarget ?? providerTarget;
+        if (message.replyTo.providerId === message.provenance.providerId || target !== undefined && target.conversationId !== message.conversationId)
+          throw new CliError("invalid-data", "A message reply has an invalid conversation target");
+      }
+      if (message.edit?.kind === "replacement") {
+        const localTarget = message.edit.replacesMessageId === null ? undefined : messageRecordById.get(message.edit.replacesMessageId);
+        if (message.edit.replacesMessageId !== null && (localTarget === undefined || localTarget.accountId !== account.id || localTarget.provenance.providerId !== message.edit.replacesProviderId))
+          throw new CliError("invalid-data", "A message edit has mismatched replacement coordinates");
+        const providerTarget = messageByProviderId.get(message.edit.replacesProviderId);
+        const target = localTarget ?? providerTarget;
+        if (message.edit.replacesProviderId === message.provenance.providerId || target !== undefined && target.conversationId !== message.conversationId)
+          throw new CliError("invalid-data", "A message edit has an invalid replacement target");
+        if (replacerByTarget.has(message.edit.replacesProviderId)) {
+          throw new CliError("invalid-data", "A message version has multiple replacements");
+        }
+        replacerByTarget.set(message.edit.replacesProviderId, message.provenance.providerId);
+        replacementTargets.set(message.id, Object.freeze({
+          target,
+          externalId: message.edit.replacesProviderId
+        }));
+      }
+    }
+    const editEdges = new Map([...replacementTargets.entries()].map(([messageId, target]) => [
+      messageById.get(messageId).provenance.providerId,
+      target.externalId
+    ]));
+    const completedEditNodes = new Set;
+    for (const start of editEdges.keys()) {
+      if (completedEditNodes.has(start))
+        continue;
+      const seen = new Set;
+      const chain = [];
+      let current = start;
+      while (current !== undefined && !completedEditNodes.has(current)) {
+        if (seen.has(current))
+          throw new CliError("invalid-data", "Message replacement edits contain a cycle");
+        seen.add(current);
+        chain.push(current);
+        current = editEdges.get(current);
+      }
+      for (const node of chain)
+        completedEditNodes.add(node);
+    }
+    const analyzableMessages = accountMessages.filter(({ direction }) => direction !== "unknown").sort((left, right) => compareCodeUnits(left.conversationId, right.conversationId) || compareCodeUnits(left.sortKey, right.sortKey) || compareCodeUnits(left.sentAt, right.sentAt) || compareCodeUnits(left.provenance.providerId, right.provenance.providerId));
+    const normalizedMessages = [];
+    const messageProvenance = [];
+    const localMessageIds = new Map;
+    const localReactionIds = new Map;
+    const timelineReactionIds = new Set;
+    for (const [index, message] of analyzableMessages.entries()) {
+      const localId = `message_${hmac2(key, "message", `${namespace}\x00${message.provenance.providerId}`)}`;
+      localMessageIds.set(message.id, localId);
+      const body = message.bodyTruncated === true || message.deletion !== null ? null : message.body;
+      normalizedMessages.push(Object.freeze({
+        id: localId,
+        sourceRowId: index + 1,
+        sourceGuid: message.provenance.providerId,
+        conversationId: conversationLocalIds.get(message.conversationId),
+        sentAt: message.sentAt,
+        direction: message.direction,
+        body,
+        bodySource: body === null ? "unavailable" : "text",
+        kind: body !== null || message.bodyTruncated === true ? "text" : message.attachments.length > 0 ? "attachment" : "unknown",
+        replyToSourceGuid: message.replyTo?.providerId ?? null,
+        editedAt: message.edit?.editedAt ?? null,
+        retractedAt: message.deletion?.observedAt ?? null,
+        service: account.network,
+        attachmentCount: message.attachments.length
+      }));
+      messageProvenance.push(Object.freeze({
+        messageId: localId,
+        externalId: message.provenance.providerId,
+        providerSortKey: message.sortKey,
+        replyToExternalId: message.replyTo?.providerId ?? null,
+        attachments: attachmentProvenance(localId, message.attachments),
+        metadata: message
+      }));
+    }
+    const accountReactions = reactionsByAccount.get(account.id) ?? [];
+    for (const reaction of accountReactions) {
+      localReactionIds.set(reaction.id, `message_${hmac2(key, "reaction", `${namespace}\x00${reaction.provenance.providerId}`)}`);
+    }
+    const reactionFacts = [];
+    for (const reaction of accountReactions) {
+      const localTarget = reaction.messageId === null ? undefined : messageRecordById.get(reaction.messageId);
+      if (reaction.messageId !== null && (localTarget === undefined || localTarget.accountId !== account.id || localTarget.provenance.providerId !== reaction.messageProviderId))
+        throw new CliError("invalid-data", "A reaction has mismatched target coordinates");
+      if (reaction.participantId !== null && !participantById.has(reaction.participantId)) {
+        throw new CliError("invalid-data", "A reaction references an unknown participant");
+      }
+      const target = localTarget ?? messageByProviderId.get(reaction.messageProviderId);
+      const participant = reaction.participantId === null ? null : participantById.get(reaction.participantId);
+      const targetConversationId = target === undefined ? null : conversationLocalIds.get(target.conversationId) ?? null;
+      if (target !== undefined && participant !== null) {
+        const targetConversation = conversationById.get(target.conversationId);
+        if (targetConversation.participantsComplete === true && !conversationParticipantIds.get(targetConversation.id).has(participant.id))
+          throw new CliError("invalid-data", "A reaction participant is outside its complete conversation roster");
+      }
+      const localId = localReactionIds.get(reaction.id);
+      reactionFacts.push(Object.freeze({
+        id: localId,
+        externalId: reaction.provenance.providerId,
+        targetExternalId: reaction.messageProviderId,
+        conversationId: targetConversationId,
+        direction: participant === null ? null : participant.isSelf ? "outgoing" : "incoming",
+        body: reaction.body,
+        reactedAt: reaction.reactedAt,
+        state: reaction.state
+      }));
+      if (reaction.state !== "active" || reaction.reactedAt === null || reaction.participantId === null)
+        continue;
+      if (participant === null || target === undefined || targetConversationId === null)
+        continue;
+      timelineReactionIds.add(reaction.id);
+      const timelineCoordinate = reactionTimelineCoordinate(localId);
+      normalizedMessages.push(Object.freeze({
+        id: localId,
+        sourceRowId: normalizedMessages.length + 1,
+        sourceGuid: timelineCoordinate,
+        conversationId: targetConversationId,
+        sentAt: reaction.reactedAt,
+        direction: participant.isSelf ? "outgoing" : "incoming",
+        body: null,
+        bodySource: "unavailable",
+        kind: "reaction",
+        replyToSourceGuid: reaction.messageProviderId,
+        editedAt: null,
+        retractedAt: null,
+        service: account.network,
+        attachmentCount: 0
+      }));
+      messageProvenance.push(Object.freeze({
+        messageId: localId,
+        externalId: timelineCoordinate,
+        providerSortKey: null,
+        replyToExternalId: reaction.messageProviderId,
+        attachments: Object.freeze([]),
+        metadata: reaction
+      }));
+    }
+    const reactionFactByExternal = new Map(reactionFacts.map((fact) => [fact.externalId, fact]));
+    const auxiliaryRecords = [
+      { kind: "account", id: account.provenance.providerId, record: account },
+      ...accountParticipants.map((participant) => ({
+        kind: "participant",
+        id: participant.provenance.providerId,
+        record: participant
+      })),
+      ...accountReactions.map((reaction) => ({
+        kind: "reaction",
+        id: reaction.provenance.providerId,
+        record: reaction
+      })),
+      ...(tombstonesByAccount.get(account.id) ?? []).map((tombstone) => ({
+        kind: "tombstone",
+        id: tombstone.provenance.providerId,
+        record: tombstone
+      })),
+      ...accountMessages.filter(({ direction }) => direction === "unknown").map((message) => ({
+        kind: "excluded-message",
+        id: message.provenance.providerId,
+        record: message
+      }))
+    ];
+    const accountTombstones = tombstonesByAccount.get(account.id) ?? [];
+    const deletions = accountTombstones.map((tombstone) => {
+      const entityId = tombstone.entityId;
+      let localEntityId = null;
+      if (entityId !== null) {
+        if (tombstone.entityKind === "conversation") {
+          const target = conversationById.get(entityId);
+          if (target === undefined) {
+            throw new CliError("invalid-data", "A tombstone references an unknown local conversation");
+          }
+          if (target.provenance.providerId !== tombstone.entityProviderId) {
+            throw new CliError("invalid-data", "A tombstone has mismatched conversation identity");
+          }
+          localEntityId = conversationLocalIds.get(entityId) ?? null;
+        } else if (tombstone.entityKind === "message") {
+          const target = messageRecordById.get(entityId);
+          if (target === undefined || target.accountId !== account.id) {
+            throw new CliError("invalid-data", "A tombstone references an unknown local message");
+          }
+          if (target.provenance.providerId !== tombstone.entityProviderId) {
+            throw new CliError("invalid-data", "A tombstone has mismatched message identity");
+          }
+          localEntityId = localMessageIds.get(entityId) ?? null;
+        } else if (tombstone.entityKind === "reaction") {
+          const target = reactionById.get(entityId);
+          if (target === undefined || target.accountId !== account.id) {
+            throw new CliError("invalid-data", "A tombstone references an unknown local reaction");
+          }
+          if (target.provenance.providerId !== tombstone.entityProviderId) {
+            throw new CliError("invalid-data", "A tombstone has mismatched reaction identity");
+          }
+          localEntityId = localReactionIds.get(entityId) ?? null;
+        }
+      }
+      return Object.freeze({
+        entityKind: tombstone.entityKind,
+        localEntityId,
+        externalId: tombstone.entityProviderId,
+        deletedAt: tombstone.deletedAt,
+        reason: "tombstone"
+      });
+    });
+    for (const [messageId, replacement] of replacementTargets) {
+      const message = messageById.get(messageId);
+      deletions.push(Object.freeze({
+        entityKind: "message",
+        localEntityId: replacement.target === undefined ? null : localMessageIds.get(replacement.target.id) ?? null,
+        externalId: replacement.externalId,
+        deletedAt: message.edit.editedAt,
+        expectedConversationId: conversationLocalIds.get(message.conversationId),
+        reason: "replacement"
+      }));
+    }
+    for (const message of accountMessages) {
+      if (message.deletion === null)
+        continue;
+      deletions.push(Object.freeze({
+        entityKind: "message",
+        localEntityId: localMessageIds.get(message.id) ?? null,
+        externalId: message.provenance.providerId,
+        deletedAt: message.deletion.observedAt,
+        expectedConversationId: conversationLocalIds.get(message.conversationId),
+        reason: "tombstone"
+      }));
+    }
+    for (const message of accountMessages) {
+      if (message.direction !== "unknown")
+        continue;
+      deletions.push(Object.freeze({
+        entityKind: "message",
+        localEntityId: null,
+        externalId: message.provenance.providerId,
+        deletedAt: message.provenance.observedAt,
+        expectedConversationId: conversationLocalIds.get(message.conversationId),
+        reason: "explicit-exclusion"
+      }));
+    }
+    for (const reaction of accountReactions) {
+      if (timelineReactionIds.has(reaction.id))
+        continue;
+      const fact = reactionFactByExternal.get(reaction.provenance.providerId);
+      deletions.push(Object.freeze({
+        entityKind: reaction.state === "removed" ? "reaction" : "reaction-timeline",
+        localEntityId: localReactionIds.get(reaction.id),
+        externalId: reaction.provenance.providerId,
+        deletedAt: reaction.provenance.observedAt,
+        ...fact.conversationId === null ? {} : { expectedConversationId: fact.conversationId },
+        reason: reaction.state === "removed" ? "tombstone" : "explicit-exclusion"
+      }));
+    }
+    const sourceWarnings = [...manifest.warnings];
+    const unknownDirections = accountMessages.filter(({ direction }) => direction === "unknown").length;
+    const undatedReactions = accountReactions.filter(({ reactedAt }) => reactedAt === null).length;
+    if (unknownDirections > 0)
+      sourceWarnings.push(`unknown-direction-messages:${unknownDirections}`);
+    if (undatedReactions > 0)
+      sourceWarnings.push(`undated-reactions:${undatedReactions}`);
+    const accountTimelineBounds = [
+      ...accountMessages.map(({ sentAt }) => sentAt),
+      ...accountReactions.flatMap(({ reactedAt }) => reactedAt === null ? [] : [reactedAt])
+    ].sort(compareCodeUnits);
+    const accountObservedFrom = accountTimelineBounds[0] ?? null;
+    const accountObservedThrough = accountTimelineBounds.at(-1) ?? null;
+    const revisionHash = createHash("sha256");
+    const revisionHeader = canonicalJson({
+      schemaVersion: 1,
+      source: manifest.source,
+      provider: manifest.provider,
+      completeness: manifest.completeness,
+      warnings: manifest.warnings
+    });
+    revisionHash.update(`${revisionHeader.length}:`, "utf8").update(revisionHeader, "utf8");
+    for (const [kind, values] of [
+      ["account", [account]],
+      ["participant", accountParticipants],
+      ["conversation", accountConversations],
+      ["message", accountMessages],
+      ["reaction", accountReactions],
+      ["tombstone", accountTombstones]
+    ]) {
+      revisionHash.update(`${kind.length}:${kind}`, "utf8");
+      for (const record of values) {
+        const encoded = canonicalJson(record);
+        revisionHash.update(`${Buffer.byteLength(encoded, "utf8")}:`, "utf8").update(encoded, "utf8");
+      }
+    }
+    const revision = revisionHash.digest("hex");
+    result.push(Object.freeze({
+      source: Object.freeze({
+        id: sourceId,
+        kind: "bundle",
+        provider: manifest.provider.id,
+        network: account.network,
+        accountId: account.provenance.connectedAccountProviderId,
+        externalId: account.provenance.connectedAccountProviderId,
+        revision,
+        generatedAt: manifest.timestamps.createdAt,
+        producer: manifest.source,
+        coverage: Object.freeze({
+          history: manifest.completeness.kind === "unknown" ? "unknown" : "bounded",
+          observedFrom: accountObservedFrom,
+          observedTo: accountObservedThrough,
+          kind: manifest.completeness.kind,
+          reason: manifest.completeness.reason
+        }),
+        manifestSha256,
+        identity: Object.freeze({ account, selfParticipantProviderId: self.provenance.providerId }),
+        warnings: Object.freeze(sourceWarnings)
+      }),
+      conversations: Object.freeze(normalizedConversations),
+      conversationProvenance: Object.freeze(accountConversations.map((conversation) => ({
+        conversationId: conversationLocalIds.get(conversation.id),
+        externalId: conversation.provenance.providerId,
+        metadata: conversation
+      }))),
+      messages: Object.freeze(normalizedMessages),
+      messageProvenance: Object.freeze(messageProvenance),
+      reactionFacts: Object.freeze(reactionFacts),
+      auxiliaryRecords: Object.freeze(auxiliaryRecords),
+      deletions: Object.freeze(deletions)
+    }));
+  }
+  return Object.freeze(result);
+}
+async function readMessageBundle(path, options) {
+  const key = hmacKey(options.hmacKey);
+  const root = await bundleDirectory(path);
+  const manifestResult = await readManifest(join2(root, "manifest.json"));
+  const manifest = manifestResult.manifest;
+  const manifestSha256 = sha256(manifestResult.bytes);
+  const parsedRecords = [];
+  for (const artifact of manifest.artifacts)
+    parsedRecords.push(await readArtifact(root, artifact));
+  const records = Object.fromEntries(manifest.artifacts.map((artifact, index) => [
+    artifact.recordKind,
+    parsedRecords[index]
+  ]));
+  return Object.freeze({
+    schemaVersion: MESSAGE_BUNDLE_SCHEMA_VERSION,
+    manifestSha256,
+    sources: normalizeBundle(manifest, manifestSha256, records, key)
+  });
+}
+
 // src/imessage.ts
 import { Database as Database2 } from "bun:sqlite";
-import { createHash, createHmac as createHmac2 } from "crypto";
+import { createHash as createHash2, createHmac as createHmac3 } from "crypto";
 import {
   chmodSync as chmodSync2,
-  constants as fsConstants2,
+  constants as fsConstants3,
   copyFileSync as copyFileSync2,
   lstatSync as lstatSync2,
   mkdirSync as mkdirSync2,
@@ -829,8 +1977,8 @@ import {
   rmSync as rmSync2
 } from "fs";
 import { homedir as homedir2, tmpdir as tmpdir2 } from "os";
-import { basename as basename2, isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
-var DEFAULT_IMESSAGE_DATABASE = join2(homedir2(), "Library", "Messages", "chat.db");
+import { basename as basename2, isAbsolute as isAbsolute3, join as join3, resolve as resolve3 } from "path";
+var DEFAULT_IMESSAGE_DATABASE = join3(homedir2(), "Library", "Messages", "chat.db");
 var APPLE_EPOCH_MILLISECONDS = Date.UTC(2001, 0, 1);
 var DEFAULT_MAX_DATABASE_BYTES = 16 * 1024 * 1024 * 1024;
 var MAX_CONFIGURABLE_DATABASE_BYTES = 64 * 1024 * 1024 * 1024;
@@ -879,12 +2027,12 @@ function stableJson(value) {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
 }
 function sha2562(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
-function hmac2(key, namespace, value) {
-  return createHmac2("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
+function hmac3(key, namespace, value) {
+  return createHmac3("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
 }
-function hmacKey(value) {
+function hmacKey2(value) {
   const key = typeof value === "string" ? new TextEncoder().encode(value) : value;
   if (!(key instanceof Uint8Array) || key.byteLength < 16 || key.byteLength > 1024) {
     throw new Error("iMessage HMAC key must contain 16 through 1024 bytes");
@@ -901,20 +2049,20 @@ function boundedInteger2(value, fallback, minimum, maximum, label) {
 function ownedByCurrentUser(stats) {
   return typeof process.getuid !== "function" || stats.uid === BigInt(process.getuid());
 }
-function sameFile2(left, right) {
+function sameFile3(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 function inspectSource(path, maximumBytes) {
-  if (!isAbsolute2(path))
+  if (!isAbsolute3(path))
     return fail2("path must be absolute");
-  const requested = resolve2(path);
+  const requested = resolve3(path);
   const requestedStats = lstatSync2(requested, { bigint: true });
   if (!requestedStats.isFile() || requestedStats.isSymbolicLink() || requestedStats.nlink !== 1n || !ownedByCurrentUser(requestedStats) || requestedStats.size < 1n || requestedStats.size > BigInt(maximumBytes)) {
     return fail2("must be one current-user-owned regular non-symlink file within the configured size bound");
   }
   const physicalPath = realpathSync2(requested);
   const physicalStats = lstatSync2(physicalPath, { bigint: true });
-  if (!sameFile2(requestedStats, physicalStats)) {
+  if (!sameFile3(requestedStats, physicalStats)) {
     return fail2("changed identity while its path was resolved");
   }
   return Object.freeze({ path: physicalPath, stats: physicalStats });
@@ -935,7 +2083,7 @@ function validateSidecar2(path, stats, maximumBytes) {
 }
 function snapshotMembers2(source, maximumBytes) {
   const current = inspectSource(source.path, maximumBytes);
-  if (!sameFile2(source.stats, current.stats))
+  if (!sameFile3(source.stats, current.stats))
     return fail2("changed identity before its snapshot was isolated");
   const members = [{ suffix: "", path: current.path, stats: current.stats }];
   for (const suffix of ["-wal", "-journal"]) {
@@ -959,25 +2107,25 @@ function snapshotMembers2(source, maximumBytes) {
 function sameSnapshotMembers(left, right) {
   return left.length === right.length && left.every((member, index) => {
     const other = right[index];
-    return other !== undefined && member.suffix === other.suffix && sameFile2(member.stats, other.stats) && member.stats.size === other.stats.size && member.stats.mtimeNs === other.stats.mtimeNs && member.stats.ctimeNs === other.stats.ctimeNs;
+    return other !== undefined && member.suffix === other.suffix && sameFile3(member.stats, other.stats) && member.stats.size === other.stats.size && member.stats.mtimeNs === other.stats.mtimeNs && member.stats.ctimeNs === other.stats.ctimeNs;
   });
 }
 function isolateSource2(source, maximumBytes) {
   const temporaryRoot = tmpdir2();
-  if (!isAbsolute2(temporaryRoot))
+  if (!isAbsolute3(temporaryRoot))
     return fail2("requires an absolute temporary directory");
-  const temporaryDirectory = mkdtempSync2(join2(temporaryRoot, "message-like-me-source-"));
+  const temporaryDirectory = mkdtempSync2(join3(temporaryRoot, "message-like-me-source-"));
   chmodSync2(temporaryDirectory, 448);
   try {
     for (let attempt = 0;attempt < SOURCE_SNAPSHOT_ATTEMPTS; attempt += 1) {
       const before = snapshotMembers2(source, maximumBytes);
-      const attemptDirectory = join2(temporaryDirectory, `attempt-${attempt}`);
+      const attemptDirectory = join3(temporaryDirectory, `attempt-${attempt}`);
       mkdirSync2(attemptDirectory, { mode: 448 });
       let copyFailedForRace = false;
       try {
         for (const member of before) {
-          const destination = join2(attemptDirectory, `${basename2(source.path)}${member.suffix}`);
-          copyFileSync2(member.path, destination, fsConstants2.COPYFILE_EXCL | fsConstants2.COPYFILE_FICLONE);
+          const destination = join3(attemptDirectory, `${basename2(source.path)}${member.suffix}`);
+          copyFileSync2(member.path, destination, fsConstants3.COPYFILE_EXCL | fsConstants3.COPYFILE_FICLONE);
           chmodSync2(destination, 384);
         }
       } catch (error) {
@@ -991,7 +2139,7 @@ function isolateSource2(source, maximumBytes) {
       if (!copyFailedForRace && sameSnapshotMembers(before, after)) {
         return Object.freeze({
           source: Object.freeze({ path: source.path, stats: before[0].stats }),
-          path: join2(attemptDirectory, basename2(source.path)),
+          path: join3(attemptDirectory, basename2(source.path)),
           temporaryDirectory
         });
       }
@@ -1260,7 +2408,7 @@ function loadHandles(database, key) {
       rowId,
       id,
       service,
-      participantId: hmac2(key, "participant", `${service ?? ""}\x00${id}`)
+      participantId: hmac3(key, "participant", `${service ?? ""}\x00${id}`)
     }));
   }
   return result;
@@ -1296,7 +2444,7 @@ function loadChats(database, schema, handles, key) {
     const participants = [...handleIds.get(rowId) ?? new Set].sort((left, right) => left - right).map((handleId) => handles.get(handleId)).filter((handle) => handle !== undefined);
     const services = [...new Set(participants.map((participant) => participant.service).filter((service) => service !== null))].sort();
     const conversation = Object.freeze({
-      id: hmac2(key, "conversation", sourceKey),
+      id: hmac3(key, "conversation", sourceKey),
       sourceKey,
       privateLabel: privateLabel2,
       service: declaredService === null || declaredService === "" ? services.length === 1 ? services[0] : null : declaredService,
@@ -1429,7 +2577,7 @@ function aggregateWarnings(counts, hasAttachmentJoin) {
   return Object.freeze(warnings);
 }
 function readIMessageDatabase(path, options) {
-  const key = hmacKey(options.hmacKey);
+  const key = hmacKey2(options.hmacKey);
   const maximumDatabaseBytes = boundedInteger2(options.maxDatabaseBytes, DEFAULT_MAX_DATABASE_BYTES, 1, MAX_CONFIGURABLE_DATABASE_BYTES, "maxDatabaseBytes");
   const maximumMessages = boundedInteger2(options.maxMessages, DEFAULT_MAX_MESSAGES, 1, MAX_CONFIGURABLE_MESSAGES, "maxMessages");
   const maximumBodyBytes = boundedInteger2(options.maxBodyBytes, DEFAULT_MAX_BODY_BYTES, 1, MAX_CONFIGURABLE_BODY_BYTES, "maxBodyBytes");
@@ -1475,7 +2623,7 @@ function readIMessageDatabase(path, options) {
       const joins = loadChatJoins(database, first, last);
       const attachments = loadAttachmentCounts(database, schema, first, last);
       for (const row of page) {
-        const id = hmac2(key, "message", row.sourceGuid);
+        const id = hmac3(key, "message", row.sourceGuid);
         if (messageIds.has(id))
           return fail2("contains duplicate message GUIDs");
         if (row.isSpam === 1 || row.isCorrupt === 1) {
@@ -1580,7 +2728,7 @@ function readIMessageDatabase(path, options) {
 }
 
 // src/metrics.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 var DEFAULT_SESSION_GAP_SECONDS = 8 * 60 * 60;
 var DEFAULT_BURST_GAP_SECONDS = 5 * 60;
 var DEFAULT_STUDY_LIMIT = 12;
@@ -1592,8 +2740,8 @@ var MAX_STUDY_MESSAGES_PER_DIRECTION = 64;
 var DEFAULT_MAX_STUDY_PACKET_BODY_BYTES = 256 * 1024;
 var MAX_STUDY_PACKET_BODY_BYTES = 1024 * 1024;
 var MAX_GAP_SECONDS = 30 * 24 * 60 * 60;
-function digest(namespace, parts) {
-  const hash = createHash2("sha256");
+function digest2(namespace, parts) {
+  const hash = createHash3("sha256");
   hash.update(`message-like-me\x00${namespace}\x00`, "utf8");
   for (const part of parts)
     hash.update(`${part.length}:`, "utf8").update(part, "utf8");
@@ -1684,7 +2832,7 @@ function sessionsFor(messages, corpusRevision, contactId, gapSeconds) {
     const incomingCount = group.filter(({ message }) => message.direction === "incoming").length;
     const outgoingCount = group.length - incomingCount;
     return Object.freeze({
-      id: digest("session", [corpusRevision, contactId, String(index), ...group.map(({ message }) => message.id)]),
+      id: digest2("session", [corpusRevision, contactId, String(index), ...group.map(({ message }) => message.id)]),
       startedAt: first.message.sentAt,
       endedAt: last.message.sentAt,
       durationSeconds: round((last.milliseconds - first.milliseconds) / 1000, 3),
@@ -1725,7 +2873,7 @@ function burstsFor(messages, sessions, corpusRevision, contactId, burstGapSecond
       const textBodies = bodies(block.messages);
       result.push(Object.freeze({
         metric: Object.freeze({
-          id: digest("burst", [corpusRevision, contactId, session.id, ...messageIds]),
+          id: digest2("burst", [corpusRevision, contactId, session.id, ...messageIds]),
           sessionId: session.id,
           startedAt: first.message.sentAt,
           endedAt: last.message.sentAt,
@@ -1807,7 +2955,7 @@ function responsesFor(bursts, corpusRevision, contactId) {
       const incomingIds = Object.freeze(incoming.messages.map(({ message }) => message.id));
       const outgoingIds = Object.freeze(outgoing.messages.map(({ message }) => message.id));
       result.push(Object.freeze({
-        id: digest("response", [corpusRevision, contactId, ...incomingIds, "->", ...outgoingIds]),
+        id: digest2("response", [corpusRevision, contactId, ...incomingIds, "->", ...outgoingIds]),
         startedAt: incoming.messages[0].message.sentAt,
         incomingMessageIds: incomingIds,
         outgoingMessageIds: outgoingIds,
@@ -1898,14 +3046,41 @@ function tempoMetrics(messages, responses) {
     multiQuestionEpisodes: responses.filter((response) => response.incomingQuestions > 1).length
   });
 }
-function reactionMetrics(messages) {
-  const reactions = messages.filter(({ message }) => message.kind === "reaction" && message.retractedAt === null);
-  const outgoing = reactions.filter(({ message }) => message.direction === "outgoing").length;
-  const outgoingActions = messages.filter(({ message }) => message.direction === "outgoing" && timelineEligible(message)).length;
+function reactionMetrics(messages, facts) {
+  const legacy = messages.filter(({ message }) => message.kind === "reaction" && message.retractedAt === null).map(({ message }) => ({
+    id: message.id,
+    externalId: message.sourceGuid,
+    targetExternalId: message.replyToSourceGuid ?? message.sourceGuid,
+    conversationId: message.conversationId,
+    direction: message.direction,
+    body: "unknown",
+    reactedAt: message.sentAt,
+    state: "active"
+  }));
+  const merged = new Map(legacy.map((fact) => [fact.id, fact]));
+  for (const fact of facts ?? [])
+    merged.set(fact.id, fact);
+  const source = [...merged.values()];
+  const ids = new Set;
+  const reactions = source.filter((fact, index) => {
+    if (typeof fact.id !== "string" || fact.id.length === 0 || ids.has(fact.id) || fact.direction !== null && fact.direction !== "incoming" && fact.direction !== "outgoing" || typeof fact.body !== "string" || fact.state !== "active" && fact.state !== "removed")
+      throw new Error(`reactionFacts[${index}] is invalid`);
+    if (fact.reactedAt !== null)
+      canonicalTimestamp(fact.reactedAt, `reactionFacts[${index}].reactedAt`);
+    ids.add(fact.id);
+    return fact.state === "active";
+  });
+  const outgoing = reactions.filter(({ direction }) => direction === "outgoing").length;
+  const incoming = reactions.filter(({ direction }) => direction === "incoming").length;
+  const unknownDirection = reactions.length - outgoing - incoming;
+  const outgoingActions = messages.filter(({ message }) => message.kind !== "reaction" && message.direction === "outgoing" && timelineEligible(message)).length + outgoing;
   return Object.freeze({
     total: reactions.length,
-    incoming: reactions.length - outgoing,
+    incoming,
     outgoing,
+    unknownDirection,
+    dated: reactions.filter(({ reactedAt }) => reactedAt !== null).length,
+    undated: reactions.filter(({ reactedAt }) => reactedAt === null).length,
     outgoingReactionRatio: ratio(outgoing, outgoingActions)
   });
 }
@@ -1922,9 +3097,26 @@ function analyzeContact(messages, corpusRevision, contactId, options = {}) {
     throw new Error("burstGapSeconds cannot exceed sessionGapSeconds");
   }
   const ordered = orderedMessages(messages);
-  const sessions = sessionsFor(ordered, corpusRevision, contactId, sessionGapSeconds);
-  const burstRecords = burstsFor(ordered, sessions, corpusRevision, contactId, burstGapSeconds);
-  const responses = responsesFor(burstRecords, corpusRevision, contactId);
+  const byConversation = new Map;
+  for (const row of ordered) {
+    const rows = byConversation.get(row.message.conversationId) ?? [];
+    rows.push(row);
+    byConversation.set(row.message.conversationId, rows);
+  }
+  const sessions = [];
+  const burstRecords = [];
+  const responses = [];
+  for (const conversationId of [...byConversation.keys()].sort((left, right) => left.localeCompare(right, "en-US"))) {
+    const rows = Object.freeze(byConversation.get(conversationId));
+    const conversationSessions = sessionsFor(rows, corpusRevision, contactId, sessionGapSeconds);
+    const conversationBursts = burstsFor(rows, conversationSessions, corpusRevision, contactId, burstGapSeconds);
+    sessions.push(...conversationSessions);
+    burstRecords.push(...conversationBursts);
+    responses.push(...responsesFor(conversationBursts, corpusRevision, contactId));
+  }
+  sessions.sort((left, right) => left.startedAt.localeCompare(right.startedAt, "en-US") || left.id.localeCompare(right.id, "en-US"));
+  burstRecords.sort((left, right) => left.metric.startedAt.localeCompare(right.metric.startedAt, "en-US") || left.metric.id.localeCompare(right.metric.id, "en-US"));
+  responses.sort((left, right) => left.startedAt.localeCompare(right.startedAt, "en-US") || left.id.localeCompare(right.id, "en-US"));
   return Object.freeze({
     schemaVersion: METRICS_SCHEMA_VERSION,
     corpusRevision,
@@ -1937,11 +3129,11 @@ function analyzeContact(messages, corpusRevision, contactId, options = {}) {
     textMessageCount: ordered.filter(({ message }) => message.retractedAt === null && message.kind === "text" && message.body !== null).length,
     sessionGapSeconds,
     burstGapSeconds,
-    sessions,
+    sessions: Object.freeze(sessions),
     bursts: Object.freeze(burstRecords.map(({ metric }) => metric)),
-    responses,
+    responses: Object.freeze(responses),
     tempo: tempoMetrics(ordered, responses),
-    reactions: reactionMetrics(ordered),
+    reactions: reactionMetrics(ordered, options.reactionFacts),
     surface: surfaceMetrics(ordered)
   });
 }
@@ -2166,6 +3358,9 @@ function aggregateStudyMetrics(metrics) {
       total: metrics.reactions.total,
       incoming: metrics.reactions.incoming,
       outgoing: metrics.reactions.outgoing,
+      unknownDirection: metrics.reactions.unknownDirection,
+      dated: metrics.reactions.dated,
+      undated: metrics.reactions.undated,
       outgoingReactionRatio: metrics.reactions.outgoingReactionRatio
     }),
     surface: Object.freeze({
@@ -2283,7 +3478,7 @@ function buildEvaluationPackets(messages, metrics, options) {
     emittedBodyBytes += candidate.bodyBytes;
   }
   const caseIds = selected.map(({ example }) => example.id);
-  const evaluationId = digest("evaluation", [
+  const evaluationId = digest2("evaluation", [
     metrics.corpusRevision,
     evidenceRevision,
     metrics.contactId,
@@ -2352,46 +3547,46 @@ import { randomBytes } from "crypto";
 import {
   chmod,
   link,
-  lstat,
+  lstat as lstat2,
   mkdir,
-  open,
+  open as open2,
   readFile,
-  realpath,
+  realpath as realpath2,
   stat,
   unlink
 } from "fs/promises";
 import { homedir as homedir3, platform } from "os";
-import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute3, join as join3, resolve as resolve3 } from "path";
+import { basename as basename3, dirname as dirname2, isAbsolute as isAbsolute4, join as join4, resolve as resolve4 } from "path";
 function defaultDataDirectory() {
   const override = process.env.XDG_DATA_HOME;
   if (override !== undefined && override.trim() !== "") {
-    if (!isAbsolute3(override)) {
+    if (!isAbsolute4(override)) {
       throw new CliError("unsafe-path", "XDG_DATA_HOME must be absolute");
     }
-    return join3(resolve3(override), "message-like-me");
+    return join4(resolve4(override), "message-like-me");
   }
   if (platform() === "darwin") {
-    return join3(homedir3(), "Library", "Application Support", "Message Like Me");
+    return join4(homedir3(), "Library", "Application Support", "Message Like Me");
   }
-  return join3(homedir3(), ".local", "share", "message-like-me");
+  return join4(homedir3(), ".local", "share", "message-like-me");
 }
 function dataPaths(explicit) {
-  if (explicit !== undefined && !isAbsolute3(explicit)) {
+  if (explicit !== undefined && !isAbsolute4(explicit)) {
     throw new CliError("unsafe-path", "Data directory must be absolute");
   }
-  const root = explicit === undefined ? defaultDataDirectory() : resolve3(explicit);
-  if (!isAbsolute3(root))
+  const root = explicit === undefined ? defaultDataDirectory() : resolve4(explicit);
+  if (!isAbsolute4(root))
     throw new CliError("unsafe-path", "Data directory must be absolute");
   return {
     root,
-    database: join3(root, "message-like-me.sqlite3"),
-    installKey: join3(root, "install.key"),
-    packets: join3(root, "study-packets")
+    database: join4(root, "message-like-me.sqlite3"),
+    installKey: join4(root, "install.key"),
+    packets: join4(root, "study-packets")
   };
 }
 async function existingType(path) {
   try {
-    return await lstat(path);
+    return await lstat2(path);
   } catch (error) {
     if (error.code === "ENOENT")
       return null;
@@ -2414,26 +3609,26 @@ async function ensurePrivateDirectory(path) {
     throw new CliError("unsafe-path", `${path} must be a directory`);
   }
   await mkdir(path, { recursive: true, mode: 448 });
-  const after = await lstat(path);
+  const after = await lstat2(path);
   if (after.isSymbolicLink() || !after.isDirectory()) {
     throw new CliError("unsafe-path", `${path} is not a physical directory`);
   }
   await assertOwned(path);
   await chmod(path, 448);
-  return realpath(path);
+  return realpath2(path);
 }
 async function initializeDataPaths(paths) {
   const physicalRoot = await ensurePrivateDirectory(paths.root);
-  const physicalPackets = await ensurePrivateDirectory(join3(physicalRoot, "study-packets"));
+  const physicalPackets = await ensurePrivateDirectory(join4(physicalRoot, "study-packets"));
   return {
     root: physicalRoot,
-    database: join3(physicalRoot, basename3(paths.database)),
-    installKey: join3(physicalRoot, basename3(paths.installKey)),
+    database: join4(physicalRoot, basename3(paths.database)),
+    installKey: join4(physicalRoot, basename3(paths.installKey)),
     packets: physicalPackets
   };
 }
 async function assertPrivateRegularFile(path) {
-  const metadata = await lstat(path);
+  const metadata = await lstat2(path);
   if (metadata.isSymbolicLink() || !metadata.isFile()) {
     throw new CliError("unsafe-path", `${path} must be a physical regular file`);
   }
@@ -2452,7 +3647,7 @@ async function loadOrCreateInstallKey(path) {
   }
   const key = randomBytes(32);
   try {
-    const handle = await open(path, "wx", 384);
+    const handle = await open2(path, "wx", 384);
     try {
       await handle.writeFile(`${key.toString("hex")}
 `, "utf8");
@@ -2471,7 +3666,7 @@ async function loadOrCreateInstallKey(path) {
 }
 async function privateOutputDirectory(path) {
   await mkdir(path, { recursive: true, mode: 448 });
-  const requested = await lstat(path);
+  const requested = await lstat2(path);
   if (requested.isSymbolicLink() || !requested.isDirectory()) {
     throw new CliError("unsafe-path", `${path} must be a physical directory`);
   }
@@ -2479,12 +3674,12 @@ async function privateOutputDirectory(path) {
   if ((requested.mode & 63) !== 0) {
     throw new CliError("unsafe-path", `${path} must already have private permissions; refusing to change a caller-owned directory`);
   }
-  return realpath(path);
+  return realpath2(path);
 }
 async function syncDirectory(path) {
   let handle = null;
   try {
-    handle = await open(path, "r");
+    handle = await open2(path, "r");
     await handle.sync();
   } catch (error) {
     const code = error.code;
@@ -2496,12 +3691,12 @@ async function syncDirectory(path) {
   }
 }
 async function atomicWritePrivate(path, bytes) {
-  const parent = await privateOutputDirectory(dirname2(resolve3(path)));
-  const destination = join3(parent, basename3(path));
-  const temporary = join3(parent, `.${basename3(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
+  const parent = await privateOutputDirectory(dirname2(resolve4(path)));
+  const destination = join4(parent, basename3(path));
+  const temporary = join4(parent, `.${basename3(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
   let published = false;
   try {
-    const handle = await open(temporary, "wx", 384);
+    const handle = await open2(temporary, "wx", 384);
     try {
       await handle.writeFile(bytes);
       await handle.chmod(384);
@@ -2531,16 +3726,16 @@ async function atomicWritePrivate(path, bytes) {
 }
 
 // src/profile.ts
-import { constants as fsConstants3 } from "fs";
-import { open as open2 } from "fs/promises";
+import { constants as fsConstants4 } from "fs";
+import { open as open3 } from "fs/promises";
 var MAX_PROFILE_FILE_BYTES = 4 * 1024 * 1024;
-function object(value, label) {
+function object2(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new CliError("invalid-data", `${label} must be an object`);
   }
   return value;
 }
-function exactKeys(value, keys, label) {
+function exactKeys2(value, keys, label) {
   const expected = new Set(keys);
   for (const key of Object.keys(value)) {
     if (!expected.has(key))
@@ -2579,7 +3774,7 @@ function isoTimestamp(value, label) {
 function nullableIsoTimestamp(value, label) {
   return value === null ? null : isoTimestamp(value, label);
 }
-function digest2(value, label) {
+function digest3(value, label) {
   const parsed = text(value, label, 64);
   if (!/^[a-f0-9]{64}$/u.test(parsed)) {
     throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
@@ -2599,8 +3794,8 @@ function confidenceLevel(value, label) {
   return value;
 }
 function parseStyleProfileV1(value) {
-  const root = object(value, "profile");
-  exactKeys(root, [
+  const root = object2(value, "profile");
+  exactKeys2(root, [
     "schemaVersion",
     "contactId",
     "corpusRevision",
@@ -2624,8 +3819,8 @@ function parseStyleProfileV1(value) {
   if (!/^[a-f0-9]{64}$/u.test(packetSha256)) {
     throw new CliError("invalid-data", "profile.packetSha256 must be lowercase SHA-256");
   }
-  const prose = object(root.prose, "profile.prose");
-  exactKeys(prose, [
+  const prose = object2(root.prose, "profile.prose");
+  exactKeys2(prose, [
     "register",
     "capitalization",
     "punctuation",
@@ -2636,18 +3831,18 @@ function parseStyleProfileV1(value) {
     "closings",
     "notablePatterns"
   ], "profile.prose");
-  const tempo = object(root.tempo, "profile.tempo");
-  exactKeys(tempo, [
+  const tempo = object2(root.tempo, "profile.tempo");
+  exactKeys2(tempo, [
     "defaultBundle",
     "singleLongMessage",
     "multipleMessages",
     "responseTiming",
     "followUps"
   ], "profile.tempo");
-  const replies = object(root.replies, "profile.replies");
-  exactKeys(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
-  const confidence = object(root.confidence, "profile.confidence");
-  exactKeys(confidence, ["overall", "limitations"], "profile.confidence");
+  const replies = object2(root.replies, "profile.replies");
+  exactKeys2(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
+  const confidence = object2(root.confidence, "profile.confidence");
+  exactKeys2(confidence, ["overall", "limitations"], "profile.confidence");
   if (!Array.isArray(root.contexts) || root.contexts.length > 32) {
     throw new CliError("invalid-data", "profile.contexts must contain at most 32 items");
   }
@@ -2686,8 +3881,8 @@ function parseStyleProfileV1(value) {
       avoidWhen: textArray(replies.avoidWhen, "profile.replies.avoidWhen")
     },
     contexts: root.contexts.map((item, index) => {
-      const context = object(item, `profile.contexts[${index}]`);
-      exactKeys(context, [
+      const context = object2(item, `profile.contexts[${index}]`);
+      exactKeys2(context, [
         "when",
         "incomingPattern",
         "responseStrategy",
@@ -2713,8 +3908,8 @@ function parseStyleProfileV1(value) {
   };
 }
 function parseStyleProfileV2(value) {
-  const root = object(value, "profile");
-  exactKeys(root, [
+  const root = object2(value, "profile");
+  exactKeys2(root, [
     "schemaVersion",
     "contactId",
     "corpusRevision",
@@ -2735,10 +3930,10 @@ function parseStyleProfileV2(value) {
     throw new CliError("invalid-data", `profile.schemaVersion must be ${PROFILE_SCHEMA_VERSION}`);
   }
   const contactId = text(root.contactId, "profile.contactId", 128);
-  const corpusRevision = digest2(root.corpusRevision, "profile.corpusRevision");
-  const packetSha256 = digest2(root.packetSha256, "profile.packetSha256");
-  const evidence = object(root.evidence, "profile.evidence");
-  exactKeys(evidence, [
+  const corpusRevision = digest3(root.corpusRevision, "profile.corpusRevision");
+  const packetSha256 = digest3(root.packetSha256, "profile.packetSha256");
+  const evidence = object2(root.evidence, "profile.evidence");
+  exactKeys2(evidence, [
     "evidenceRevision",
     "firstMessageAt",
     "lastMessageAt",
@@ -2763,8 +3958,8 @@ function parseStyleProfileV2(value) {
   if (after !== null && before !== null && after >= before) {
     throw new CliError("invalid-data", "profile.evidence.after must be earlier than before");
   }
-  const prose = object(root.prose, "profile.prose");
-  exactKeys(prose, [
+  const prose = object2(root.prose, "profile.prose");
+  exactKeys2(prose, [
     "register",
     "capitalization",
     "punctuation",
@@ -2775,18 +3970,18 @@ function parseStyleProfileV2(value) {
     "closingPatterns",
     "notablePatterns"
   ], "profile.prose");
-  const tempo = object(root.tempo, "profile.tempo");
-  exactKeys(tempo, [
+  const tempo = object2(root.tempo, "profile.tempo");
+  exactKeys2(tempo, [
     "defaultBundle",
     "singleLongMessage",
     "multipleMessages",
     "responseTiming",
     "followUps"
   ], "profile.tempo");
-  const replies = object(root.replies, "profile.replies");
-  exactKeys(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
-  const confidence = object(root.confidence, "profile.confidence");
-  exactKeys(confidence, [
+  const replies = object2(root.replies, "profile.replies");
+  exactKeys2(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
+  const confidence = object2(root.confidence, "profile.confidence");
+  exactKeys2(confidence, [
     "overall",
     "prose",
     "tempo",
@@ -2801,8 +3996,8 @@ function parseStyleProfileV2(value) {
     throw new CliError("invalid-data", "profile.claims must contain at most 64 items");
   }
   const contexts = root.contexts.map((item, index) => {
-    const context = object(item, `profile.contexts[${index}]`);
-    exactKeys(context, [
+    const context = object2(item, `profile.contexts[${index}]`);
+    exactKeys2(context, [
       "when",
       "incomingPattern",
       "responseStrategy",
@@ -2820,8 +4015,8 @@ function parseStyleProfileV2(value) {
     };
   });
   const claims = root.claims.map((item, index) => {
-    const claim = object(item, `profile.claims[${index}]`);
-    exactKeys(claim, [
+    const claim = object2(item, `profile.claims[${index}]`);
+    exactKeys2(claim, [
       "dimension",
       "statement",
       "basis",
@@ -2856,7 +4051,7 @@ function parseStyleProfileV2(value) {
     packetSha256,
     analyzedAt: isoTimestamp(root.analyzedAt, "profile.analyzedAt"),
     evidence: {
-      evidenceRevision: digest2(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
+      evidenceRevision: digest3(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
       firstMessageAt,
       lastMessageAt,
       messageCount: nonNegativeInteger(evidence.messageCount, "profile.evidence.messageCount"),
@@ -2906,7 +4101,7 @@ function parseStyleProfileV2(value) {
   };
 }
 function parseStyleProfile(value) {
-  const root = object(value, "profile");
+  const root = object2(value, "profile");
   if (root.schemaVersion === LEGACY_PROFILE_SCHEMA_VERSION)
     return parseStyleProfileV1(root);
   if (root.schemaVersion === PROFILE_SCHEMA_VERSION)
@@ -2916,7 +4111,7 @@ function parseStyleProfile(value) {
 async function readStyleProfile(path) {
   let parsed;
   try {
-    const handle = await open2(path, fsConstants3.O_RDONLY | fsConstants3.O_NOFOLLOW);
+    const handle = await open3(path, fsConstants4.O_RDONLY | fsConstants4.O_NOFOLLOW);
     try {
       const before = await handle.stat();
       const privateMode = (before.mode & 63) === 0;
@@ -2957,13 +4152,13 @@ async function readStyleProfile(path) {
 }
 
 // src/skill-install.ts
-import { cp, lstat as lstat2, mkdir as mkdir2, realpath as realpath2, rm } from "fs/promises";
+import { cp, lstat as lstat3, mkdir as mkdir2, realpath as realpath3, rm } from "fs/promises";
 import { homedir as homedir4 } from "os";
-import { dirname as dirname3, join as join4, resolve as resolve4 } from "path";
+import { dirname as dirname3, join as join5, resolve as resolve5 } from "path";
 import { fileURLToPath } from "url";
 async function exists(path) {
   try {
-    await lstat2(path);
+    await lstat3(path);
     return true;
   } catch (error) {
     if (error.code === "ENOENT")
@@ -2972,25 +4167,25 @@ async function exists(path) {
   }
 }
 function bundledSkillPath() {
-  return resolve4(dirname3(fileURLToPath(import.meta.url)), "../skills/message-like-me");
+  return resolve5(dirname3(fileURLToPath(import.meta.url)), "../skills/message-like-me");
 }
 function targetRoot(target, scope, projectDirectory) {
   const directory = target === "codex" ? ".codex" : target === "claude" ? ".claude" : ".agents";
-  return scope === "user" ? join4(homedir4(), directory, "skills") : join4(resolve4(projectDirectory), directory, "skills");
+  return scope === "user" ? join5(homedir4(), directory, "skills") : join5(resolve5(projectDirectory), directory, "skills");
 }
 async function installSkill(options) {
   const source = bundledSkillPath();
   if (!await exists(source))
     throw new CliError("not-found", `Bundled skill is missing at ${source}`);
-  const sourceMetadata = await lstat2(source);
+  const sourceMetadata = await lstat3(source);
   if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isDirectory()) {
     throw new CliError("unsafe-path", "Bundled skill must be a physical directory");
   }
   const root = targetRoot(options.target, options.scope, options.projectDirectory ?? process.cwd());
   await mkdir2(root, { recursive: true, mode: 448 });
-  const destination = join4(root, "message-like-me");
+  const destination = join5(root, "message-like-me");
   if (await exists(destination)) {
-    const metadata = await lstat2(destination);
+    const metadata = await lstat3(destination);
     if (metadata.isSymbolicLink()) {
       throw new CliError("unsafe-path", `Refusing to replace symbolic link ${destination}`);
     }
@@ -3000,26 +4195,45 @@ async function installSkill(options) {
     await rm(destination, { recursive: true, force: true });
   }
   await cp(source, destination, { recursive: true, errorOnExist: true });
-  return realpath2(destination);
+  return realpath3(destination);
 }
 
 // src/store.ts
 import { Database as Database3 } from "bun:sqlite";
+import { createHash as createHash4 } from "crypto";
 import {
   closeSync,
-  constants as fsConstants4,
+  constants as fsConstants5,
   fchmodSync,
   fstatSync,
   lstatSync as lstatSync3,
   openSync
 } from "fs";
-var STORE_SCHEMA_VERSION = 2;
+var STORE_SCHEMA_VERSION = 3;
 var PERSON_SCOPE_PREFIX = "person_";
+var IMESSAGE_SOURCE_ID = "source_imessage_local";
 var SCHEMA = `
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_sources (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    provider TEXT NOT NULL,
+    network TEXT,
+    account_id TEXT,
+    external_id TEXT NOT NULL,
+    input_revision TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    generated_at TEXT,
+    producer_json TEXT NOT NULL,
+    coverage_json TEXT NOT NULL,
+    manifest_sha256 TEXT,
+    identity_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
   ) STRICT;
   CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
@@ -3031,6 +4245,15 @@ var SCHEMA = `
     private_participants_json TEXT NOT NULL,
     is_group INTEGER NOT NULL CHECK (is_group IN (0, 1))
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_sources (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_sources_lookup
+    ON conversation_sources(source_id, conversation_id);
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     source_row_id INTEGER NOT NULL,
@@ -3051,6 +4274,54 @@ var SCHEMA = `
   CREATE INDEX IF NOT EXISTS messages_conversation_time
     ON messages(conversation_id, sent_at, source_row_id, id);
   CREATE INDEX IF NOT EXISTS messages_source_guid ON messages(source_guid);
+  CREATE TABLE IF NOT EXISTS message_provenance (
+    message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    reply_to_external_id TEXT,
+    attachments_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_provenance_source
+    ON message_provenance(source_id, message_id);
+  CREATE TABLE IF NOT EXISTS corpus_reaction_facts (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    target_external_id TEXT NOT NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    direction TEXT CHECK (direction IN ('incoming','outgoing')),
+    body TEXT NOT NULL,
+    reacted_at TEXT,
+    state TEXT NOT NULL CHECK (state IN ('active','removed')),
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS corpus_reaction_facts_source
+    ON corpus_reaction_facts(source_id,conversation_id,id);
+  CREATE TABLE IF NOT EXISTS corpus_source_records (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('account','participant','reaction','tombstone','excluded-message')
+    ),
+    external_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, kind, external_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_source_suppressions (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('conversation','message','reaction','reaction-timeline','participant','account')
+    ),
+    local_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    suppressed_at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (
+      reason IN ('authoritative-absence','tombstone','explicit-exclusion','replacement','reappeared')
+    ),
+    suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
+    PRIMARY KEY (source_id, kind, local_id)
+  ) WITHOUT ROWID, STRICT;
   CREATE TABLE IF NOT EXISTS study_packets (
     sha256 TEXT PRIMARY KEY,
     contact_id TEXT NOT NULL,
@@ -3106,6 +4377,82 @@ var SCHEMA = `
   ) STRICT;
   CREATE INDEX IF NOT EXISTS conversation_contact_labels_lookup
     ON conversation_contact_labels(normalized_label, conversation_id);
+`;
+var SOURCE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS corpus_sources (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    provider TEXT NOT NULL,
+    network TEXT,
+    account_id TEXT,
+    external_id TEXT NOT NULL,
+    input_revision TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    generated_at TEXT,
+    producer_json TEXT NOT NULL,
+    coverage_json TEXT NOT NULL,
+    manifest_sha256 TEXT,
+    identity_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_sources (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_sources_lookup
+    ON conversation_sources(source_id, conversation_id);
+  CREATE TABLE IF NOT EXISTS message_provenance (
+    message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    reply_to_external_id TEXT,
+    attachments_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_provenance_source
+    ON message_provenance(source_id, message_id);
+  CREATE TABLE IF NOT EXISTS corpus_reaction_facts (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    target_external_id TEXT NOT NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    direction TEXT CHECK (direction IN ('incoming','outgoing')),
+    body TEXT NOT NULL,
+    reacted_at TEXT,
+    state TEXT NOT NULL CHECK (state IN ('active','removed')),
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS corpus_reaction_facts_source
+    ON corpus_reaction_facts(source_id,conversation_id,id);
+  CREATE TABLE IF NOT EXISTS corpus_source_records (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('account','participant','reaction','tombstone','excluded-message')
+    ),
+    external_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, kind, external_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_source_suppressions (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('conversation','message','reaction','reaction-timeline','participant','account')
+    ),
+    local_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    suppressed_at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (
+      reason IN ('authoritative-absence','tombstone','explicit-exclusion','replacement','reappeared')
+    ),
+    suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
+    PRIMARY KEY (source_id, kind, local_id)
+  ) WITHOUT ROWID, STRICT;
 `;
 var CONTACT_SCOPE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS conversation_contact_scopes (
@@ -3313,7 +4660,15 @@ function personScope(database, addressBookContactId) {
     SELECT association.conversation_id
     FROM conversation_contact_scopes association
     JOIN conversations conversation ON conversation.id=association.conversation_id
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
     WHERE association.contact_id=? AND conversation.is_group=0
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
     ORDER BY association.conversation_id
   `, addressBookContactId);
   if (rows.length === 0)
@@ -3332,7 +4687,15 @@ function analysisScope(database, contactId) {
       return personScope(database, addressBookContactId);
     }
   }
-  const conversation = get(database, "SELECT id FROM conversations WHERE id=?", contactId);
+  const conversation = get(database, `SELECT conversation.id FROM conversations conversation
+      JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+      WHERE conversation.id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )`, contactId);
   if (conversation === null)
     return null;
   const matched = get(database, `
@@ -3350,27 +4713,53 @@ function analysisScope(database, contactId) {
 function messageRowsForScope(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
   if (exactConversationId !== undefined) {
     return all(database, `
-      SELECT * FROM messages WHERE conversation_id=?
-        AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
-      ORDER BY sent_at,source_row_id,id
+      SELECT message.* FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE message.conversation_id=?
+        AND (? IS NULL OR message.sent_at>=?) AND (? IS NULL OR message.sent_at<?)
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=provenance.source_id
+            AND suppression.local_id=message.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.suppressed=1
+        )
+      ORDER BY message.sent_at,message.source_row_id,message.id
     `, exactConversationId, window.after, window.after, window.before, window.before);
   }
   if (scope.kind === "person") {
     return all(database, `
       SELECT message.*
       FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
       JOIN conversation_contact_scopes association
         ON association.conversation_id=message.conversation_id
       WHERE association.contact_id=?
         AND (? IS NULL OR message.sent_at>=?)
         AND (? IS NULL OR message.sent_at<?)
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=provenance.source_id
+            AND suppression.local_id=message.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.suppressed=1
+        )
       ORDER BY message.sent_at,message.source_row_id,message.id
     `, scope.addressBookContactId, window.after, window.after, window.before, window.before);
   }
   return all(database, `
-    SELECT * FROM messages WHERE conversation_id=?
-      AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
-    ORDER BY sent_at,source_row_id,id
+    SELECT message.* FROM messages message
+    JOIN message_provenance provenance ON provenance.message_id=message.id
+    WHERE message.conversation_id=?
+      AND (? IS NULL OR message.sent_at>=?) AND (? IS NULL OR message.sent_at<?)
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )
+    ORDER BY message.sent_at,message.source_row_id,message.id
   `, scope.conversationIds[0], window.after, window.after, window.before, window.before);
 }
 function corpusMessage(row) {
@@ -3391,10 +4780,47 @@ function corpusMessage(row) {
     attachmentCount: row.attachment_count
   };
 }
+function reactionFactsForScope(database, scope, window = UNBOUNDED_EVIDENCE_WINDOW) {
+  const select = `SELECT reaction.id,reaction.external_id,reaction.target_external_id,
+    reaction.conversation_id,reaction.direction,reaction.body,reaction.reacted_at,reaction.state
+    FROM corpus_reaction_facts reaction`;
+  const suppression = `NOT EXISTS (
+    SELECT 1 FROM corpus_source_suppressions suppression
+    WHERE suppression.source_id=reaction.source_id
+      AND suppression.kind='reaction'
+      AND suppression.local_id=reaction.id
+      AND suppression.suppressed=1
+  )`;
+  const rows = scope.kind === "person" ? all(database, `${select}
+      JOIN conversation_contact_scopes association
+        ON association.conversation_id=reaction.conversation_id
+      WHERE association.contact_id=? AND reaction.state='active' AND ${suppression}
+      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.addressBookContactId) : all(database, `${select}
+      WHERE reaction.conversation_id=? AND reaction.state='active' AND ${suppression}
+      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.conversationIds[0]);
+  return rows.filter((row) => row.reacted_at === null ? window.after === null && window.before === null : (window.after === null || row.reacted_at >= window.after) && (window.before === null || row.reacted_at < window.before)).map((row) => ({
+    id: row.id,
+    externalId: row.external_id,
+    targetExternalId: row.target_external_id,
+    conversationId: row.conversation_id,
+    direction: row.direction,
+    body: row.body,
+    reactedAt: row.reacted_at,
+    state: row.state
+  }));
+}
 function scopeEvidenceRevision(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
   const conversationIds = exactConversationId === undefined ? scope.conversationIds : Object.freeze([exactConversationId]);
   const messages = messageRowsForScope(database, scope, exactConversationId, window).map(corpusMessage);
-  return sha256(canonicalJson(window.after === null && window.before === null ? {
+  const reactions = reactionFactsForScope(database, scope, window);
+  return sha256(canonicalJson(reactions.length > 0 ? {
+    schemaVersion: 3,
+    scopeId: scope.id,
+    conversationIds,
+    evidenceWindow: window,
+    messages,
+    reactions
+  } : window.after === null && window.before === null ? {
     schemaVersion: 1,
     scopeId: scope.id,
     conversationIds,
@@ -3422,9 +4848,25 @@ function scopeMessageCounts(database, scope) {
     coalesce(sum(CASE WHEN message.direction='outgoing' THEN 1 ELSE 0 END),0) AS outgoing_count`;
   const row = scope.kind === "person" ? get(database, `${select}
       FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
       JOIN conversation_contact_scopes association
         ON association.conversation_id=message.conversation_id
-      WHERE association.contact_id=?`, scope.addressBookContactId) : get(database, `${select} FROM messages message WHERE message.conversation_id=?`, scope.conversationIds[0]);
+      WHERE association.contact_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )`, scope.addressBookContactId) : get(database, `${select}
+      FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE message.conversation_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )`, scope.conversationIds[0]);
   return {
     firstMessageAt: row?.first_message_at ?? null,
     lastMessageAt: row?.last_message_at ?? null,
@@ -3463,11 +4905,49 @@ function backfillLegacyEvidence(database) {
     }
   }
 }
+function backfillLegacySource(database) {
+  const conversations = get(database, "SELECT count(*) AS value FROM conversations")?.value ?? 0;
+  const assigned = get(database, "SELECT count(*) AS value FROM conversation_sources")?.value ?? 0;
+  if (assigned !== 0 && assigned !== conversations) {
+    throw new CliError("invalid-data", "Local store has partially assigned corpus source ownership");
+  }
+  if (conversations === 0 || assigned === conversations)
+    return;
+  const revision = scalarText(database, "corpus_revision");
+  if (revision === null || !/^[a-f0-9]{64}$/u.test(revision)) {
+    throw new CliError("invalid-data", "Legacy local store has no valid corpus revision");
+  }
+  const identity = scalarText(database, "source_identity") ?? canonicalJson({ migrated: true });
+  const warnings = scalarText(database, "warnings") ?? canonicalJson([]);
+  const ingestedAt = scalarText(database, "ingested_at") ?? "1970-01-01T00:00:00.000Z";
+  database.query(`
+    INSERT INTO corpus_sources(
+      id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+      producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(IMESSAGE_SOURCE_ID, "imessage", "apple", null, null, "local-imessage", revision, revision, null, canonicalJson({ id: "message-like-me", version: "legacy" }), canonicalJson({ history: "complete-current-local", observedFrom: null, observedTo: null }), null, identity, warnings, ingestedAt);
+  database.exec(`
+    INSERT INTO conversation_sources(conversation_id,source_id,external_id,metadata_json)
+    SELECT id,'${IMESSAGE_SOURCE_ID}',source_key,'{}' FROM conversations;
+  `);
+  const rows = all(database, `
+    SELECT id,source_guid,reply_to_source_guid,attachment_count
+    FROM messages ORDER BY id
+  `);
+  const insert = database.query(`
+    INSERT INTO message_provenance(
+      message_id,source_id,external_id,reply_to_external_id,attachments_json,metadata_json
+    ) VALUES (?,?,?,?,?,?)
+  `);
+  for (const row of rows) {
+    insert.run(row.id, IMESSAGE_SOURCE_ID, row.source_guid, row.reply_to_source_guid, canonicalJson({ count: row.attachment_count, detailsAvailable: false }), canonicalJson({ migrated: true }));
+  }
+}
 function initializeStoreSchema(database) {
   const existingStore = tableExists(database, "metadata");
-  const version = userVersion(database);
-  if (version > STORE_SCHEMA_VERSION) {
-    throw new CliError("invalid-data", `Local store schema ${version} is newer than supported schema ${STORE_SCHEMA_VERSION}`);
+  const version2 = userVersion(database);
+  if (version2 > STORE_SCHEMA_VERSION) {
+    throw new CliError("invalid-data", `Local store schema ${version2} is newer than supported schema ${STORE_SCHEMA_VERSION}`);
   }
   if (!existingStore) {
     database.exec(SCHEMA);
@@ -3479,6 +4959,7 @@ function initializeStoreSchema(database) {
       throw new CliError("invalid-data", `Local store is missing required table ${table}`);
     }
   }
+  database.exec(SOURCE_SCHEMA);
   transaction(database, () => {
     database.exec(CONTACT_SCOPE_SCHEMA);
     database.exec(`
@@ -3494,12 +4975,13 @@ function initializeStoreSchema(database) {
     addColumn(database, "study_packets", "evidence_json TEXT");
     addColumn(database, "profiles", "scope_id TEXT");
     addColumn(database, "profiles", "evidence_revision TEXT");
+    backfillLegacySource(database);
     backfillLegacyEvidence(database);
     database.exec(`PRAGMA user_version=${STORE_SCHEMA_VERSION}`);
   });
   database.exec(SCHEMA);
 }
-function rebuildConversationLabels(database, hmacKey2) {
+function rebuildConversationLabels(database, hmacKey3) {
   database.exec("DELETE FROM conversation_contact_labels; DELETE FROM conversation_contact_scopes;");
   const contacts = new Map(all(database, `SELECT id,private_label,normalized_label,label_basis,contacts_revision
     FROM addressbook_contacts ORDER BY id`).map((row) => [row.id, row]));
@@ -3512,7 +4994,17 @@ function rebuildConversationLabels(database, hmacKey2) {
     owners.set(key, values);
   }
   const conversations = all(database, `
-    SELECT id,private_participants_json FROM conversations WHERE is_group=0 ORDER BY id
+    SELECT conversation.id,conversation.private_participants_json
+    FROM conversations conversation
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+    WHERE conversation.is_group=0 AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions suppression
+      WHERE suppression.source_id=ownership.source_id
+        AND suppression.kind='conversation'
+        AND suppression.local_id=conversation.id
+        AND suppression.suppressed=1
+    )
+    ORDER BY conversation.id
   `);
   const insertScope = database.query(`INSERT INTO conversation_contact_scopes(
     conversation_id,contact_id,contacts_revision
@@ -3528,10 +5020,10 @@ function rebuildConversationLabels(database, hmacKey2) {
   let matchedWithoutLabel = 0;
   for (const conversation of conversations) {
     const normalizedHandles = stringArray(conversation.private_participants_json, `conversation ${conversation.id} participants`).map(normalizeContactHandle).filter((handle) => handle !== null);
-    if (normalizedHandles.length > 0 && owners.size > 0 && hmacKey2 === undefined) {
+    if (normalizedHandles.length > 0 && owners.size > 0 && hmacKey3 === undefined) {
       throw new CliError("internal", "The installation key is required to rebuild contact labels");
     }
-    const keys = hmacKey2 === undefined ? new Set : new Set(normalizedHandles.map((handle) => `${handle.kind}\x00${contactHandleMatchId(hmacKey2, handle)}`));
+    const keys = hmacKey3 === undefined ? new Set : new Set(normalizedHandles.map((handle) => `${handle.kind}\x00${contactHandleMatchId(hmacKey3, handle)}`));
     if (keys.size > 0)
       eligibleConversations += 1;
     const candidates = new Set;
@@ -3597,7 +5089,7 @@ function hardenDatabaseFiles(path) {
   ]) {
     let descriptor;
     try {
-      descriptor = openSync(candidate, fsConstants4.O_RDONLY | fsConstants4.O_NOFOLLOW);
+      descriptor = openSync(candidate, fsConstants5.O_RDONLY | fsConstants5.O_NOFOLLOW);
     } catch (error) {
       const code = error.code;
       if (!required && code === "ENOENT")
@@ -3619,6 +5111,225 @@ function hardenDatabaseFiles(path) {
     } finally {
       closeSync(descriptor);
     }
+  }
+}
+function globalCorpusRevision(database) {
+  const sources = all(database, "SELECT id,kind,input_revision,revision FROM corpus_sources ORDER BY id");
+  if (sources.length === 0)
+    return null;
+  if (sources.length === 1 && sources[0].id === IMESSAGE_SOURCE_ID && sources[0].kind === "imessage")
+    return sources[0].input_revision;
+  return sha256(canonicalJson({
+    schemaVersion: 1,
+    sources: sources.map(({ id, kind, revision }) => ({ id, kind, revision }))
+  }));
+}
+function sourceStateRevision(database, sourceId) {
+  const hash = createHash4("sha256");
+  hash.update("message-like-me\x00stored-source-state-v1\x00", "utf8");
+  const append = (kind, row) => {
+    const encoded = canonicalJson(row);
+    hash.update(`${kind.length}:${kind}${encoded.length}:`, "utf8").update(encoded, "utf8");
+  };
+  const source = get(database, `
+    SELECT kind,provider,network,account_id,external_id,producer_json,
+      coverage_json,warnings_json
+    FROM corpus_sources WHERE id=?
+  `, sourceId);
+  if (source === null)
+    throw new CliError("internal", `Missing corpus source ${sourceId}`);
+  append("source", source);
+  for (const row of database.query(`
+    SELECT conversation.id,conversation.source_key,conversation.private_label,
+      conversation.service,conversation.participant_count,
+      conversation.participant_ids_json,conversation.private_participants_json,
+      conversation.is_group
+    FROM conversation_sources ownership
+    JOIN conversations conversation ON conversation.id=ownership.conversation_id
+    WHERE ownership.source_id=?
+    ORDER BY ownership.external_id,conversation.id
+  `).iterate(sourceId))
+    append("conversation", row);
+  for (const row of database.query(`
+    SELECT message.id,message.source_row_id,message.source_guid,message.conversation_id,
+      message.sent_at,message.direction,message.body,message.body_source,message.kind,
+      message.reply_to_source_guid,message.edited_at,message.retracted_at,message.service,
+      message.attachment_count,provenance.external_id,
+      provenance.reply_to_external_id,provenance.attachments_json
+    FROM message_provenance provenance
+    JOIN messages message ON message.id=provenance.message_id
+    WHERE provenance.source_id=?
+    ORDER BY provenance.external_id,message.id
+  `).iterate(sourceId))
+    append("message", row);
+  for (const row of database.query(`
+    SELECT id,external_id,target_external_id,conversation_id,direction,body,reacted_at,state
+    FROM corpus_reaction_facts WHERE source_id=? ORDER BY external_id,id
+  `).iterate(sourceId))
+    append("reaction-fact", row);
+  for (const row of database.query(`
+    SELECT kind,local_id,external_id,reason FROM corpus_source_suppressions
+    WHERE source_id=? AND suppressed=1 ORDER BY kind,local_id
+  `).iterate(sourceId))
+    append("suppression", row);
+  return hash.digest("hex");
+}
+function compareCodeUnits2(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function storedProviderSortKey(row) {
+  const parsed = parsedJson(row.metadata_json, `Message ${row.id} provenance`);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    return null;
+  const record = parsed;
+  const value = "providerSortKey" in record ? record.providerSortKey : record.sortKey;
+  return typeof value === "string" ? value : null;
+}
+function rerankBundleMessages(database, sourceId) {
+  const rows = all(database, `
+    SELECT message.id,message.conversation_id,message.sent_at,message.kind,
+      provenance.external_id,provenance.metadata_json
+    FROM message_provenance provenance
+    JOIN messages message ON message.id=provenance.message_id
+    WHERE provenance.source_id=?
+    ORDER BY message.conversation_id,message.id
+  `, sourceId);
+  const byConversation = new Map;
+  for (const value of rows) {
+    const row = Object.freeze({ ...value, provider_sort_key: storedProviderSortKey(value) });
+    const values = byConversation.get(row.conversation_id) ?? [];
+    values.push(row);
+    byConversation.set(row.conversation_id, values);
+  }
+  const update = database.query("UPDATE messages SET source_row_id=? WHERE id=?");
+  for (const values of byConversation.values()) {
+    for (const [index, row] of values.entries())
+      update.run(-(index + 1), row.id);
+    values.sort((left, right) => {
+      const leftReaction = left.kind === "reaction";
+      const rightReaction = right.kind === "reaction";
+      if (leftReaction !== rightReaction)
+        return leftReaction ? 1 : -1;
+      if (!leftReaction) {
+        const sort = compareCodeUnits2(left.provider_sort_key ?? left.external_id, right.provider_sort_key ?? right.external_id);
+        if (sort !== 0)
+          return sort;
+      }
+      return compareCodeUnits2(left.sent_at, right.sent_at) || compareCodeUnits2(left.external_id, right.external_id) || compareCodeUnits2(left.id, right.id);
+    });
+    for (const [index, row] of values.entries())
+      update.run(index + 1, row.id);
+  }
+}
+function setCorpusRevision(database) {
+  const revision = globalCorpusRevision(database);
+  if (revision === null) {
+    database.query("DELETE FROM metadata WHERE key='corpus_revision'").run();
+    return null;
+  }
+  database.query(`
+    INSERT INTO metadata(key,value) VALUES ('corpus_revision',?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+  `).run(revision);
+  return revision;
+}
+function validSourceDescriptor(source) {
+  if (source.id !== IMESSAGE_SOURCE_ID && !/^source_[a-f0-9]{64}$/u.test(source.id) || source.kind !== "imessage" && source.kind !== "bundle" || source.provider.length < 1 || Buffer.byteLength(source.provider, "utf8") > 256 || !/^[a-f0-9]{64}$/u.test(source.revision) || source.externalId.length < 1 || Buffer.byteLength(source.externalId, "utf8") > 4096 || source.warnings.length > 130)
+    throw new CliError("invalid-data", `Corpus source ${source.id} is invalid`);
+  canonicalTimestampOrNull(source.generatedAt, `Corpus source ${source.id} generatedAt`);
+  if (source.kind === "bundle" && source.generatedAt === null) {
+    throw new CliError("invalid-data", `Bundle source ${source.id} requires generatedAt`);
+  }
+  canonicalTimestampOrNull(source.coverage.observedFrom, `Corpus source ${source.id} observedFrom`);
+  canonicalTimestampOrNull(source.coverage.observedTo, `Corpus source ${source.id} observedTo`);
+  if (source.coverage.observedFrom !== null && source.coverage.observedTo !== null && source.coverage.observedFrom > source.coverage.observedTo)
+    throw new CliError("invalid-data", `Corpus source ${source.id} has invalid coverage bounds`);
+  if (source.coverage.history !== "complete-current-local" && source.coverage.history !== "bounded" && source.coverage.history !== "unknown")
+    throw new CliError("invalid-data", `Corpus source ${source.id} has invalid history coverage`);
+  if (source.coverage.kind !== undefined && (source.coverage.kind.length < 1 || Buffer.byteLength(source.coverage.kind, "utf8") > 128 || /\p{Cc}/u.test(source.coverage.kind)) || source.coverage.reason !== undefined && source.coverage.reason !== null && (source.coverage.reason.length < 1 || Buffer.byteLength(source.coverage.reason, "utf8") > 128 || /\p{Cc}/u.test(source.coverage.reason)))
+    throw new CliError("invalid-data", `Corpus source ${source.id} has invalid coverage metadata`);
+  if (source.manifestSha256 !== null && !/^[a-f0-9]{64}$/u.test(source.manifestSha256))
+    throw new CliError("invalid-data", `Corpus source ${source.id} has an invalid manifest digest`);
+  if (source.producer.id.length < 1 || source.producer.version.length < 1 || Buffer.byteLength(source.producer.id, "utf8") > 256 || Buffer.byteLength(source.producer.version, "utf8") > 256)
+    throw new CliError("invalid-data", `Corpus source ${source.id} has invalid producer identity`);
+  for (const warning of source.warnings) {
+    if (Buffer.byteLength(warning, "utf8") > 1024 || warning.includes("\x00")) {
+      throw new CliError("invalid-data", `Corpus source ${source.id} has an invalid warning`);
+    }
+  }
+}
+function validateSourceSnapshot(snapshot) {
+  validSourceDescriptor(snapshot.source);
+  if (snapshot.conversations.length > 2000000 || snapshot.messages.length > 2000000 || (snapshot.reactionFacts?.length ?? 0) > 2000000 || snapshot.conversationProvenance.length !== snapshot.conversations.length || snapshot.messageProvenance.length !== snapshot.messages.length)
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} exceeds its result bounds`);
+  const conversationIds = new Set(snapshot.conversations.map(({ id }) => id));
+  if (conversationIds.size !== snapshot.conversations.length) {
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats conversation IDs`);
+  }
+  const conversationProvenance = new Map(snapshot.conversationProvenance.map((value) => [value.conversationId, value]));
+  if (conversationProvenance.size !== snapshot.conversationProvenance.length || [...conversationIds].some((id) => !conversationProvenance.has(id)))
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid conversation provenance`);
+  const externalConversations = new Set;
+  for (const provenance of snapshot.conversationProvenance) {
+    if (provenance.externalId.length < 1 || Buffer.byteLength(provenance.externalId, "utf8") > 4096 || externalConversations.has(provenance.externalId))
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid external conversation IDs`);
+    externalConversations.add(provenance.externalId);
+  }
+  const messageIds = new Set(snapshot.messages.map(({ id }) => id));
+  const messagesById = new Map(snapshot.messages.map((message) => [message.id, message]));
+  if (messageIds.size !== snapshot.messages.length) {
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats message IDs`);
+  }
+  for (const message of snapshot.messages) {
+    if (!conversationIds.has(message.conversationId)) {
+      throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
+    }
+  }
+  const messageProvenance = new Map(snapshot.messageProvenance.map((value) => [value.messageId, value]));
+  if (messageProvenance.size !== snapshot.messageProvenance.length || [...messageIds].some((id) => !messageProvenance.has(id)))
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid message provenance`);
+  const externalMessages = new Set;
+  for (const provenance of snapshot.messageProvenance) {
+    const message = messagesById.get(provenance.messageId);
+    if (provenance.externalId.length < 1 || Buffer.byteLength(provenance.externalId, "utf8") > 4096 || externalMessages.has(provenance.externalId) || provenance.attachments.length > 256 || provenance.providerSortKey !== null && (provenance.providerSortKey.length < 1 || Buffer.byteLength(provenance.providerSortKey, "utf8") > 1024 || /[\u0000-\u001f\u007f]/u.test(provenance.providerSortKey)) || (snapshot.source.kind === "bundle" ? message.kind === "reaction" === (provenance.providerSortKey !== null) : provenance.providerSortKey !== null))
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid external message provenance`);
+    externalMessages.add(provenance.externalId);
+  }
+  const auxiliaryIds = new Set;
+  for (const record of snapshot.auxiliaryRecords ?? []) {
+    const key = `${record.kind}\x00${record.id}`;
+    if (!["account", "participant", "reaction", "tombstone", "excluded-message"].includes(record.kind) || record.id.length < 1 || Buffer.byteLength(record.id, "utf8") > 4096 || auxiliaryIds.has(key))
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid auxiliary records`);
+    const encoded = canonicalJson(record.record);
+    if (typeof encoded !== "string" || Buffer.byteLength(encoded, "utf8") > 2 * 1024 * 1024) {
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has an oversized auxiliary record`);
+    }
+    auxiliaryIds.add(key);
+  }
+  const reactionIds = new Set;
+  const externalReactionIds = new Set;
+  for (const reaction of snapshot.reactionFacts ?? []) {
+    if (reaction.id.length < 1 || reaction.externalId.length < 1 || reaction.targetExternalId.length < 1 || Buffer.byteLength(reaction.id, "utf8") > 4096 || Buffer.byteLength(reaction.externalId, "utf8") > 4096 || Buffer.byteLength(reaction.targetExternalId, "utf8") > 4096 || Buffer.byteLength(reaction.body, "utf8") > 8 * 1024 || reactionIds.has(reaction.id) || externalReactionIds.has(reaction.externalId) || reaction.conversationId !== null && !conversationIds.has(reaction.conversationId) || reaction.direction !== null && reaction.direction !== "incoming" && reaction.direction !== "outgoing" || reaction.state !== "active" && reaction.state !== "removed")
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid reaction facts`);
+    canonicalTimestampOrNull(reaction.reactedAt, `Corpus source ${snapshot.source.id} reaction time`);
+    reactionIds.add(reaction.id);
+    externalReactionIds.add(reaction.externalId);
+  }
+  for (const deletion of snapshot.deletions ?? []) {
+    if (![
+      "account",
+      "participant",
+      "conversation",
+      "message",
+      "reaction",
+      "reaction-timeline"
+    ].includes(deletion.entityKind) || deletion.externalId.length < 1 || Buffer.byteLength(deletion.externalId, "utf8") > 4096 || deletion.localEntityId !== null && Buffer.byteLength(deletion.localEntityId, "utf8") > 4096 || deletion.expectedConversationId !== undefined && (deletion.expectedConversationId.length < 1 || Buffer.byteLength(deletion.expectedConversationId, "utf8") > 4096) || deletion.reason !== undefined && ![
+      "tombstone",
+      "explicit-exclusion",
+      "replacement"
+    ].includes(deletion.reason))
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has an invalid deletion`);
+    canonicalTimestampOrNull(deletion.deletedAt, `Corpus source ${snapshot.source.id} deletion time`);
   }
 }
 
@@ -3652,13 +5363,15 @@ class LocalStore {
     return scalarText(this.#database, "corpus_revision");
   }
   sourceIdentity() {
-    const encoded = scalarText(this.#database, "source_identity");
-    return encoded === null ? null : JSON.parse(encoded);
+    const encoded = get(this.#database, `
+      SELECT identity_json FROM corpus_sources WHERE id=?
+    `, IMESSAGE_SOURCE_ID)?.identity_json ?? scalarText(this.#database, "source_identity");
+    return encoded === null ? null : parsedJson(encoded, "Stored iMessage source identity");
   }
   contactsRevision() {
     return scalarText(this.#database, "contacts_revision");
   }
-  enrichContacts(snapshot, ingestedAt, hmacKey2) {
+  enrichContacts(snapshot, ingestedAt, hmacKey3) {
     if (snapshot.schemaVersion !== 1 || !/^[a-f0-9]{64}$/u.test(snapshot.snapshotSha256)) {
       throw new CliError("invalid-data", "The Contacts reader returned an invalid snapshot revision");
     }
@@ -3686,7 +5399,7 @@ class LocalStore {
       const handles = new Set;
       for (const handle of contact.handles) {
         const canonical = normalizeContactHandle(handle.normalizedValue);
-        if (canonical === null || canonical.kind !== handle.kind || canonical.normalizedValue !== handle.normalizedValue || handle.matchId !== contactHandleMatchId(hmacKey2, canonical) || !/^[a-f0-9]{64}$/u.test(handle.matchId))
+        if (canonical === null || canonical.kind !== handle.kind || canonical.normalizedValue !== handle.normalizedValue || handle.matchId !== contactHandleMatchId(hmacKey3, canonical) || !/^[a-f0-9]{64}$/u.test(handle.matchId))
           throw new CliError("invalid-data", "The Contacts reader returned a non-canonical handle");
         const key = `${handle.kind}\x00${handle.matchId}`;
         if (handles.has(key)) {
@@ -3714,7 +5427,7 @@ class LocalStore {
           insertHandle.run(contact.id, handle.kind, handle.matchId);
         }
       }
-      const projection = rebuildConversationLabels(this.#database, hmacKey2);
+      const projection = rebuildConversationLabels(this.#database, hmacKey3);
       const setMetadata = this.#database.query(`
         INSERT INTO metadata (key,value) VALUES (?,?)
         ON CONFLICT (key) DO UPDATE SET value=excluded.value
@@ -3758,64 +5471,509 @@ class LocalStore {
       privateLabel: row.private_label
     }));
   }
-  replaceCorpus(snapshot, ingestedAt, hmacKey2) {
-    const corpusRevision = snapshot.source.snapshotSha256;
-    if (!/^[a-f0-9]{64}$/u.test(corpusRevision)) {
+  replaceSources(snapshots, ingestedAt, hmacKey3) {
+    canonicalTimestampOrNull(ingestedAt, "Source ingest time");
+    if (snapshots.length < 1) {
+      throw new CliError("invalid-data", "A source replacement must contain at least one source");
+    }
+    const sourceIds = new Set;
+    for (const snapshot of snapshots) {
+      if (sourceIds.has(snapshot.source.id)) {
+        throw new CliError("invalid-data", `Source replacement repeats ${snapshot.source.id}`);
+      }
+      sourceIds.add(snapshot.source.id);
+      validateSourceSnapshot(snapshot);
+    }
+    return transaction(this.#database, () => {
+      const upsertSource = this.#database.query(`
+        INSERT INTO corpus_sources(
+          id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+          producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          kind=excluded.kind,provider=excluded.provider,network=excluded.network,
+          account_id=excluded.account_id,external_id=excluded.external_id,
+          input_revision=excluded.input_revision,generated_at=excluded.generated_at,
+          producer_json=excluded.producer_json,coverage_json=excluded.coverage_json,
+          manifest_sha256=excluded.manifest_sha256,identity_json=excluded.identity_json,
+          warnings_json=excluded.warnings_json,ingested_at=excluded.ingested_at
+      `);
+      const relabelSourceConversations = this.#database.query(`
+        UPDATE conversations SET service=?
+        WHERE id IN (
+          SELECT conversation_id FROM conversation_sources WHERE source_id=?
+        )
+      `);
+      const relabelSourceMessages = this.#database.query(`
+        UPDATE messages SET service=?
+        WHERE id IN (
+          SELECT message_id FROM message_provenance WHERE source_id=?
+        )
+      `);
+      const upsertConversation = this.#database.query(`
+        INSERT INTO conversations(
+          id,source_key,private_label,service,participant_count,
+          participant_ids_json,private_participants_json,is_group
+        ) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          source_key=excluded.source_key,private_label=excluded.private_label,
+          service=excluded.service,participant_count=excluded.participant_count,
+          participant_ids_json=excluded.participant_ids_json,
+          private_participants_json=excluded.private_participants_json,is_group=excluded.is_group
+      `);
+      const upsertConversationSource = this.#database.query(`
+        INSERT INTO conversation_sources(conversation_id,source_id,external_id,metadata_json)
+        VALUES (?,?,?,?)
+        ON CONFLICT(conversation_id) DO UPDATE SET
+          external_id=excluded.external_id,metadata_json=excluded.metadata_json
+      `);
+      const upsertMessage = this.#database.query(`
+        INSERT INTO messages(
+          id,source_row_id,source_guid,conversation_id,sent_at,direction,
+          body,body_source,kind,reply_to_source_guid,edited_at,retracted_at,
+          service,attachment_count
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          source_guid=excluded.source_guid,conversation_id=excluded.conversation_id,
+          sent_at=excluded.sent_at,direction=excluded.direction,body=excluded.body,
+          body_source=excluded.body_source,kind=excluded.kind,
+          reply_to_source_guid=excluded.reply_to_source_guid,edited_at=excluded.edited_at,
+          retracted_at=excluded.retracted_at,service=excluded.service,
+          attachment_count=excluded.attachment_count
+      `);
+      const upsertMessageProvenance = this.#database.query(`
+        INSERT INTO message_provenance(
+          message_id,source_id,external_id,reply_to_external_id,attachments_json,metadata_json
+        ) VALUES (?,?,?,?,?,?)
+        ON CONFLICT(message_id) DO UPDATE SET
+          external_id=excluded.external_id,reply_to_external_id=excluded.reply_to_external_id,
+          attachments_json=excluded.attachments_json,metadata_json=excluded.metadata_json
+      `);
+      const upsertReactionFact = this.#database.query(`
+        INSERT INTO corpus_reaction_facts(
+          id,source_id,external_id,target_external_id,conversation_id,
+          direction,body,reacted_at,state
+        ) VALUES (?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          external_id=excluded.external_id,target_external_id=excluded.target_external_id,
+          conversation_id=excluded.conversation_id,direction=excluded.direction,
+          body=excluded.body,reacted_at=excluded.reacted_at,state=excluded.state
+      `);
+      const upsertSourceRecord = this.#database.query(`
+        INSERT INTO corpus_source_records(source_id,kind,external_id,record_json)
+        VALUES (?,?,?,?)
+        ON CONFLICT(source_id,kind,external_id) DO UPDATE SET record_json=excluded.record_json
+      `);
+      const setSuppression = this.#database.query(`
+        INSERT INTO corpus_source_suppressions(
+          source_id,kind,local_id,external_id,suppressed_at,reason,suppressed
+        ) VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(source_id,kind,local_id) DO UPDATE SET
+          external_id=excluded.external_id,suppressed_at=excluded.suppressed_at,
+          reason=excluded.reason,suppressed=excluded.suppressed
+      `);
+      const clearExternalSuppression = this.#database.query(`
+        UPDATE corpus_source_suppressions
+        SET suppressed_at=?,reason='reappeared',suppressed=0
+        WHERE source_id=? AND kind=? AND external_id=? AND suppressed=1
+      `);
+      const results = [];
+      let changedAny = false;
+      for (const snapshot of snapshots) {
+        const existing = get(this.#database, `
+          SELECT kind,network,input_revision,revision,generated_at,manifest_sha256
+          FROM corpus_sources WHERE id=?
+        `, snapshot.source.id);
+        if (existing !== null && existing.kind !== snapshot.source.kind) {
+          throw new CliError("conflict", `Source ${snapshot.source.id} changed kind`);
+        }
+        if (existing !== null && snapshot.source.kind === "bundle") {
+          if (existing.generated_at === null || snapshot.source.generatedAt < existing.generated_at) {
+            throw new CliError("conflict", `Source ${snapshot.source.id} snapshot is older than stored state`);
+          }
+          if (snapshot.source.generatedAt === existing.generated_at && (snapshot.source.revision !== existing.input_revision || snapshot.source.manifestSha256 !== existing.manifest_sha256))
+            throw new CliError("conflict", `Source ${snapshot.source.id} reuses generatedAt for different input`);
+        }
+        const authoritative = snapshot.source.kind === "imessage" || snapshot.source.coverage.history === "complete-current-local";
+        if (authoritative) {
+          for (const row of this.#database.query(`
+            SELECT conversation_id,external_id FROM conversation_sources WHERE source_id=?
+          `).iterate(snapshot.source.id)) {
+            setSuppression.run(snapshot.source.id, "conversation", row.conversation_id, row.external_id, ingestedAt, "authoritative-absence", 1);
+          }
+          for (const row of this.#database.query(`
+            SELECT id,external_id FROM corpus_reaction_facts WHERE source_id=?
+          `).iterate(snapshot.source.id)) {
+            setSuppression.run(snapshot.source.id, "reaction", row.id, row.external_id, ingestedAt, "authoritative-absence", 1);
+          }
+          for (const row of this.#database.query(`
+            SELECT provenance.message_id,provenance.external_id,message.kind
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.source_id=?
+          `).iterate(snapshot.source.id)) {
+            setSuppression.run(snapshot.source.id, row.kind === "reaction" ? "reaction" : "message", row.message_id, row.external_id, ingestedAt, "authoritative-absence", 1);
+          }
+        }
+        upsertSource.run(snapshot.source.id, snapshot.source.kind, snapshot.source.provider, snapshot.source.network, snapshot.source.accountId, snapshot.source.externalId, snapshot.source.revision, existing?.revision ?? snapshot.source.revision, snapshot.source.generatedAt, canonicalJson(snapshot.source.producer), canonicalJson(snapshot.source.coverage), snapshot.source.manifestSha256, canonicalJson(snapshot.source.identity), canonicalJson(snapshot.source.warnings), ingestedAt);
+        if (existing !== null && existing.network !== snapshot.source.network) {
+          relabelSourceConversations.run(snapshot.source.network, snapshot.source.id);
+          relabelSourceMessages.run(snapshot.source.network, snapshot.source.id);
+        }
+        const conversationProvenance = new Map(snapshot.conversationProvenance.map((value) => [value.conversationId, value]));
+        for (const conversation of snapshot.conversations) {
+          const owner = get(this.#database, `
+            SELECT source_id FROM conversation_sources WHERE conversation_id=?
+          `, conversation.id);
+          if (owner !== null && owner.source_id !== snapshot.source.id) {
+            throw new CliError("conflict", `Conversation ${conversation.id} belongs to another source`);
+          }
+          upsertConversation.run(conversation.id, conversation.sourceKey, conversation.privateLabel, conversation.service, conversation.participantCount, canonicalJson(conversation.participantIds), canonicalJson(conversation.privateParticipants), conversation.group ? 1 : 0);
+          const provenance = conversationProvenance.get(conversation.id);
+          upsertConversationSource.run(conversation.id, snapshot.source.id, provenance.externalId, canonicalJson(provenance.metadata ?? {}));
+          setSuppression.run(snapshot.source.id, "conversation", conversation.id, provenance.externalId, ingestedAt, "reappeared", 0);
+          clearExternalSuppression.run(ingestedAt, snapshot.source.id, "conversation", provenance.externalId);
+        }
+        const messageProvenance = new Map(snapshot.messageProvenance.map((value) => [value.messageId, value]));
+        for (const message of snapshot.messages) {
+          const owner = get(this.#database, `
+            SELECT provenance.source_id,message.source_row_id
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.message_id=?
+          `, message.id);
+          if (owner !== null && owner.source_id !== snapshot.source.id) {
+            throw new CliError("conflict", `Message ${message.id} belongs to another source`);
+          }
+          const preferredRowId = authoritative ? message.sourceRowId : null;
+          const preferredCollision = preferredRowId === null ? null : get(this.#database, "SELECT id FROM messages WHERE conversation_id=? AND source_row_id=?", message.conversationId, preferredRowId);
+          const sourceRowId = owner?.source_row_id ?? (preferredRowId !== null && preferredCollision === null ? preferredRowId : (get(this.#database, `
+                SELECT max(source_row_id) AS value FROM messages WHERE conversation_id=?
+              `, message.conversationId)?.value ?? 0) + 1);
+          upsertMessage.run(message.id, sourceRowId, message.sourceGuid, message.conversationId, message.sentAt, message.direction, message.body, message.bodySource, message.kind, message.replyToSourceGuid, message.editedAt, message.retractedAt, message.service, message.attachmentCount);
+          const provenance = messageProvenance.get(message.id);
+          upsertMessageProvenance.run(message.id, snapshot.source.id, provenance.externalId, provenance.replyToExternalId, canonicalJson(provenance.attachments), canonicalJson({
+            providerSortKey: provenance.providerSortKey,
+            metadata: provenance.metadata ?? {}
+          }));
+          setSuppression.run(snapshot.source.id, message.kind === "reaction" ? "reaction" : "message", message.id, provenance.externalId, ingestedAt, "reappeared", 0);
+          clearExternalSuppression.run(ingestedAt, snapshot.source.id, message.kind === "reaction" ? "reaction" : "message", provenance.externalId);
+          if (message.kind === "reaction") {
+            setSuppression.run(snapshot.source.id, "reaction-timeline", message.id, provenance.externalId, ingestedAt, "reappeared", 0);
+            clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction-timeline", provenance.externalId);
+          }
+        }
+        for (const reaction of snapshot.reactionFacts ?? []) {
+          const existingReaction = get(this.#database, `
+            SELECT source_id,external_id FROM corpus_reaction_facts WHERE id=?
+          `, reaction.id);
+          if (existingReaction !== null && (existingReaction.source_id !== snapshot.source.id || existingReaction.external_id !== reaction.externalId))
+            throw new CliError("conflict", `Reaction ${reaction.id} belongs to another source coordinate`);
+          const conversationId = reaction.conversationId ?? get(this.#database, `SELECT message.conversation_id
+             FROM message_provenance provenance
+             JOIN messages message ON message.id=provenance.message_id
+             WHERE provenance.source_id=? AND provenance.external_id=?`, snapshot.source.id, reaction.targetExternalId)?.conversation_id ?? null;
+          upsertReactionFact.run(reaction.id, snapshot.source.id, reaction.externalId, reaction.targetExternalId, conversationId, reaction.direction, reaction.body, reaction.reactedAt, reaction.state);
+          if (reaction.state === "active") {
+            setSuppression.run(snapshot.source.id, "reaction", reaction.id, reaction.externalId, ingestedAt, "reappeared", 0);
+            clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction", reaction.externalId);
+            clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction-timeline", reaction.externalId);
+          }
+        }
+        this.#database.query(`
+          UPDATE corpus_reaction_facts AS reaction
+          SET conversation_id=(
+            SELECT message.conversation_id
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.source_id=reaction.source_id
+              AND provenance.external_id=reaction.target_external_id
+          )
+          WHERE reaction.source_id=? AND reaction.conversation_id IS NULL
+            AND EXISTS (
+              SELECT 1 FROM message_provenance provenance
+              WHERE provenance.source_id=reaction.source_id
+                AND provenance.external_id=reaction.target_external_id
+            )
+        `).run(snapshot.source.id);
+        for (const record of snapshot.auxiliaryRecords ?? []) {
+          upsertSourceRecord.run(snapshot.source.id, record.kind, record.id, canonicalJson(record.record));
+        }
+        for (const deletion of snapshot.deletions ?? []) {
+          let localId = deletion.localEntityId;
+          if (deletion.entityKind === "conversation") {
+            const specifiedLocal = localId !== null;
+            const target = localId === null ? get(this.#database, `
+              SELECT conversation_id,external_id FROM conversation_sources
+              WHERE source_id=? AND external_id=?
+            `, snapshot.source.id, deletion.externalId) : get(this.#database, `
+                SELECT conversation_id,external_id FROM conversation_sources
+                WHERE source_id=? AND conversation_id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (target.external_id !== deletion.externalId) {
+                throw new CliError("invalid-data", "A conversation deletion has mismatched coordinates");
+              }
+              localId = target.conversation_id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A conversation deletion references an unknown local entity");
+            }
+          }
+          if (deletion.entityKind === "message") {
+            const specifiedLocal = localId !== null;
+            const target = localId === null ? get(this.#database, `
+                SELECT provenance.message_id,provenance.external_id,
+                  message.conversation_id,message.kind
+                FROM message_provenance provenance
+                JOIN messages message ON message.id=provenance.message_id
+                WHERE provenance.source_id=? AND provenance.external_id=?
+              `, snapshot.source.id, deletion.externalId) : get(this.#database, `
+                SELECT provenance.message_id,provenance.external_id,
+                  message.conversation_id,message.kind
+                FROM message_provenance provenance
+                JOIN messages message ON message.id=provenance.message_id
+                WHERE provenance.source_id=? AND provenance.message_id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (target.external_id !== deletion.externalId || target.kind === "reaction" || deletion.expectedConversationId !== undefined && deletion.expectedConversationId !== target.conversation_id)
+                throw new CliError("invalid-data", "A message deletion has mismatched coordinates");
+              localId = target.message_id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A message deletion references an unknown local entity");
+            }
+          }
+          if (deletion.entityKind === "reaction" || deletion.entityKind === "reaction-timeline") {
+            const specifiedLocal = localId !== null;
+            const target = localId === null ? get(this.#database, `
+                SELECT id,external_id,conversation_id FROM corpus_reaction_facts
+                WHERE source_id=? AND external_id=?
+              `, snapshot.source.id, deletion.externalId) : get(this.#database, `
+                SELECT id,external_id,conversation_id FROM corpus_reaction_facts
+                WHERE source_id=? AND id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (target.external_id !== deletion.externalId || deletion.expectedConversationId !== undefined && deletion.expectedConversationId !== target.conversation_id)
+                throw new CliError("invalid-data", "A reaction deletion has mismatched coordinates");
+              localId = target.id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A reaction deletion references an unknown local entity");
+            }
+          }
+          setSuppression.run(snapshot.source.id, deletion.entityKind, localId ?? `external:${deletion.externalId}`, deletion.externalId, deletion.deletedAt, deletion.reason ?? "tombstone", 1);
+        }
+        if (snapshot.source.kind === "bundle") {
+          rerankBundleMessages(this.#database, snapshot.source.id);
+        }
+        const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
+        this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(stateRevision, snapshot.source.id);
+        const changed = existing?.revision !== stateRevision;
+        changedAny ||= changed;
+        const counts = get(this.#database, `
+          SELECT count(distinct conversation.id) AS conversations,
+            count(message.id) AS messages
+          FROM conversation_sources ownership
+          JOIN conversations conversation ON conversation.id=ownership.conversation_id
+          LEFT JOIN messages message ON message.conversation_id=conversation.id
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=ownership.source_id
+                AND suppression.local_id=message.id
+                AND suppression.kind IN ('message','reaction','reaction-timeline')
+                AND suppression.suppressed=1
+            )
+          WHERE ownership.source_id=?
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=ownership.source_id
+                AND suppression.local_id=conversation.id
+                AND suppression.kind='conversation'
+                AND suppression.suppressed=1
+            )
+        `, snapshot.source.id) ?? { conversations: 0, messages: 0 };
+        results.push(Object.freeze({ id: snapshot.source.id, changed, ...counts }));
+      }
+      if (changedAny)
+        rebuildConversationLabels(this.#database, hmacKey3);
+      const corpusRevision = setCorpusRevision(this.#database);
+      if (corpusRevision === null)
+        throw new CliError("internal", "Source replacement produced no corpus revision");
+      return Object.freeze({ corpusRevision, sources: Object.freeze(results) });
+    });
+  }
+  replaceCorpus(snapshot, ingestedAt, hmacKey3) {
+    if (!/^[a-f0-9]{64}$/u.test(snapshot.source.snapshotSha256)) {
       throw new CliError("invalid-data", "The iMessage reader returned an invalid corpus revision");
     }
-    const conversationIds = new Set(snapshot.conversations.map((conversation) => conversation.id));
-    if (conversationIds.size !== snapshot.conversations.length) {
-      throw new CliError("invalid-data", "The iMessage reader returned duplicate conversation IDs");
-    }
-    const messageIds = new Set;
-    for (const message of snapshot.messages) {
-      if (!conversationIds.has(message.conversationId)) {
-        throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
-      }
-      if (messageIds.has(message.id))
-        throw new CliError("invalid-data", `Duplicate message ID ${message.id}`);
-      messageIds.add(message.id);
-    }
+    const observed = snapshot.messages.map(({ sentAt }) => sentAt).sort();
+    const sourceSnapshot = Object.freeze({
+      source: Object.freeze({
+        id: IMESSAGE_SOURCE_ID,
+        kind: "imessage",
+        provider: "apple",
+        network: null,
+        accountId: null,
+        externalId: "local-imessage",
+        revision: snapshot.source.snapshotSha256,
+        generatedAt: null,
+        producer: Object.freeze({ id: "message-like-me", version: "imessage-reader-v1" }),
+        coverage: Object.freeze({
+          history: "complete-current-local",
+          observedFrom: observed[0] ?? null,
+          observedTo: observed.at(-1) ?? null
+        }),
+        manifestSha256: null,
+        identity: snapshot.source,
+        warnings: snapshot.warnings
+      }),
+      conversations: snapshot.conversations,
+      conversationProvenance: Object.freeze(snapshot.conversations.map((conversation) => ({
+        conversationId: conversation.id,
+        externalId: conversation.sourceKey
+      }))),
+      messages: snapshot.messages,
+      messageProvenance: Object.freeze(snapshot.messages.map((message) => ({
+        messageId: message.id,
+        externalId: message.sourceGuid,
+        providerSortKey: null,
+        replyToExternalId: message.replyToSourceGuid,
+        attachments: Object.freeze(Array.from({ length: message.attachmentCount }, (_value, index) => ({
+          id: `unavailable-${index + 1}`,
+          kind: null,
+          mimeType: null,
+          fileName: null,
+          bytes: null
+        })))
+      })))
+    });
+    const replaced = this.replaceSources([sourceSnapshot], ingestedAt, hmacKey3);
     transaction(this.#database, () => {
-      this.#database.exec("DELETE FROM messages; DELETE FROM conversations;");
-      const insertConversation = this.#database.query(`
-        INSERT INTO conversations (
-          id, source_key, private_label, service, participant_count,
-          participant_ids_json, private_participants_json, is_group
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const conversation of snapshot.conversations) {
-        insertConversation.run(conversation.id, conversation.sourceKey, conversation.privateLabel, conversation.service, conversation.participantCount, canonicalJson(conversation.participantIds), canonicalJson(conversation.privateParticipants), conversation.group ? 1 : 0);
-      }
-      const insertMessage = this.#database.query(`
-        INSERT INTO messages (
-          id, source_row_id, source_guid, conversation_id, sent_at, direction,
-          body, body_source, kind, reply_to_source_guid, edited_at, retracted_at,
-          service, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const message of snapshot.messages) {
-        insertMessage.run(message.id, message.sourceRowId, message.sourceGuid, message.conversationId, message.sentAt, message.direction, message.body, message.bodySource, message.kind, message.replyToSourceGuid, message.editedAt, message.retractedAt, message.service, message.attachmentCount);
-      }
       const setMetadata = this.#database.query(`
-        INSERT INTO metadata (key, value) VALUES (?, ?)
-        ON CONFLICT (key) DO UPDATE SET value = excluded.value
+        INSERT INTO metadata(key,value) VALUES (?,?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
       `);
       for (const [key, value] of [
-        ["corpus_revision", corpusRevision],
         ["source_identity", canonicalJson(snapshot.source)],
         ["ingested_at", ingestedAt],
         ["warnings", canonicalJson(snapshot.warnings)],
         ["corpus_schema_version", String(snapshot.schemaVersion)]
       ])
         setMetadata.run(key, value);
-      rebuildConversationLabels(this.#database, hmacKey2);
     });
     return {
-      corpusRevision,
+      corpusRevision: replaced.corpusRevision,
       conversations: snapshot.conversations.length,
       messages: snapshot.messages.length
     };
+  }
+  listSources(privateDetails = false) {
+    const rows = all(this.#database, `
+      SELECT source.*,
+        count(distinct ownership.conversation_id) AS conversations,
+        count(message.id) AS messages,
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE
+          (SELECT count(*) FROM messages reaction_message
+            JOIN message_provenance reaction_provenance
+              ON reaction_provenance.message_id=reaction_message.id
+            WHERE reaction_provenance.source_id=source.id
+              AND reaction_message.kind='reaction' AND reaction_message.retracted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id
+                  AND suppression.kind IN ('message','reaction','reaction-timeline')
+                  AND suppression.local_id=reaction_message.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction_message.conversation_id
+                  AND suppression.suppressed=1
+              ))
+        END AS reactions,
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND reaction.reacted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE 0
+        END AS undated_reactions
+      FROM corpus_sources source
+      LEFT JOIN conversation_sources ownership ON ownership.source_id=source.id
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=source.id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=ownership.conversation_id
+            AND suppression.suppressed=1
+        )
+      LEFT JOIN messages message ON message.conversation_id=ownership.conversation_id
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=source.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.local_id=message.id
+            AND suppression.suppressed=1
+        )
+      GROUP BY source.id
+      ORDER BY source.provider,source.network,source.id
+    `);
+    return rows.map((row) => {
+      const warnings = parsedJson(row.warnings_json, `Source ${row.id} warnings`);
+      if (!Array.isArray(warnings))
+        throw new CliError("invalid-data", `Source ${row.id} warnings are invalid`);
+      return {
+        id: row.id,
+        kind: row.kind,
+        provider: row.provider,
+        network: row.network,
+        revision: row.revision,
+        generatedAt: row.generated_at,
+        ingestedAt: row.ingested_at,
+        coverage: parsedJson(row.coverage_json, `Source ${row.id} coverage`),
+        warningCount: warnings.length,
+        conversations: row.conversations,
+        messages: row.messages,
+        reactions: row.reactions,
+        undatedReactions: row.undated_reactions,
+        ...privateDetails ? {
+          accountId: row.account_id,
+          externalId: row.external_id,
+          manifestSha256: row.manifest_sha256,
+          inputRevision: row.input_revision,
+          identity: parsedJson(row.identity_json, `Source ${row.id} identity`),
+          warnings
+        } : {}
+      };
+    });
+  }
+  source(sourceId, privateDetails = false) {
+    if (sourceId.length < 1 || sourceId.length > 256) {
+      throw new CliError("usage", "Source ID must be bounded non-empty text");
+    }
+    return this.listSources(privateDetails).find(({ id }) => id === sourceId) ?? null;
   }
   listContacts(options) {
     if (this.corpusRevision() === null)
@@ -3828,16 +5986,30 @@ class LocalStore {
           conversation.id AS conversation_id
         FROM conversation_contact_scopes association
         JOIN conversations conversation ON conversation.id=association.conversation_id
+        JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
         LEFT JOIN conversation_contact_labels label
           ON label.conversation_id=association.conversation_id
-        WHERE conversation.is_group=0
+        WHERE conversation.is_group=0 AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=ownership.source_id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=conversation.id
+            AND suppression.suppressed=1
+        )
         UNION ALL
         SELECT conversation.id,conversation.private_label,'conversation',conversation.is_group,
           conversation.participant_count,conversation.id
         FROM conversations conversation
+        JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
         LEFT JOIN conversation_contact_scopes association
           ON association.conversation_id=conversation.id
-        WHERE association.conversation_id IS NULL
+        WHERE association.conversation_id IS NULL AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=ownership.source_id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=conversation.id
+            AND suppression.suppressed=1
+        )
       )
       SELECT scope.id,min(scope.private_label) AS private_label,
         max(scope.scope_kind) AS scope_kind,
@@ -3849,6 +6021,14 @@ class LocalStore {
         sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
       FROM scope_conversations scope
       JOIN messages message ON message.conversation_id=scope.conversation_id
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )
       GROUP BY scope.id
       HAVING outgoing_count >= ?
       ORDER BY outgoing_count DESC,last_message_at DESC,scope.id
@@ -3930,6 +6110,7 @@ class LocalStore {
       scopeKind: scope.kind,
       conversationCount: scope.conversationIds.length,
       service: services.length === 1 ? services[0] : null,
+      services: Object.freeze(services.sort((left, right) => left < right ? -1 : left > right ? 1 : 0)),
       participantCount: scope.kind === "person" ? 1 : first.participant_count,
       participantIds: participants,
       privateParticipants,
@@ -3954,7 +6135,8 @@ class LocalStore {
       return {
         corpusRevision,
         evidenceRevision: scopeEvidenceRevision(this.#database, scope, undefined, window),
-        messages: messageRowsForScope(this.#database, scope, undefined, window).map(corpusMessage)
+        messages: messageRowsForScope(this.#database, scope, undefined, window).map(corpusMessage),
+        reactions: reactionFactsForScope(this.#database, scope, window)
       };
     });
   }
@@ -4098,6 +6280,7 @@ class LocalStore {
       foreignKeyViolations: foreignKeys,
       corpusRevision: this.corpusRevision(),
       contactsRevision: this.contactsRevision(),
+      sources: count("corpus_sources"),
       conversations: count("conversations"),
       messages: count("messages"),
       profiles: count("profiles"),
@@ -4108,7 +6291,7 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.2.0";
+var MESSAGE_LIKE_ME_VERSION = "0.3.0";
 
 // src/commands.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -4116,7 +6299,10 @@ var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
+  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
+  messagelikeme [--data-dir PATH] sources list [--private] [--json]
+  messagelikeme [--data-dir PATH] sources show SOURCE_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
@@ -4137,13 +6323,13 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads caller-owned macOS Messages and optional Contacts data,
-then stores private analysis locally. It has no network, account, AI-provider,
-or message-sending surface.
+Message Like Me reads caller-owned macOS Messages, optional Contacts data, and
+strict private local message bundles, then stores private analysis locally. It
+has no network, account, AI-provider, or message-sending surface.
 `;
 async function exists2(path) {
   try {
-    await lstat3(path);
+    await lstat4(path);
     return true;
   } catch (error) {
     if (error.code === "ENOENT")
@@ -4196,7 +6382,10 @@ function contactEvidence(store, contactId, window) {
 }
 function contactMetrics(store, contactId, options = {}) {
   const evidence = contactEvidence(store, contactId);
-  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, options);
+  return analyzeContact(evidence.messages, evidence.corpusRevision, contactId, {
+    ...options,
+    reactionFacts: evidence.reactions
+  });
 }
 function metricOptions(parsed) {
   return {
@@ -4228,6 +6417,7 @@ function safeContactDetail(store, contactId, privateLabels) {
       privateParticipants: conversation.privateParticipants
     } : {},
     service: conversation.service,
+    services: conversation.services,
     group: conversation.group,
     participantCount: conversation.participantCount,
     participantIds: conversation.participantIds,
@@ -4261,9 +6451,9 @@ function compactMetrics(metrics) {
 function absolutePrivatePath(value, label) {
   if (value === undefined)
     throw new CliError("usage", `${label} is required`);
-  if (!isAbsolute4(value))
+  if (!isAbsolute5(value))
     throw new CliError("unsafe-path", `${label} must be an absolute private path`);
-  return resolve5(value);
+  return resolve6(value);
 }
 function translateIMessageError(error) {
   const code = error.code;
@@ -4286,6 +6476,18 @@ function translateContactsError(error) {
   const message = error instanceof Error ? error.message : "";
   throw new CliError("invalid-data", message.startsWith("Contacts source ") ? message : "The selected AddressBook source could not be read safely", { cause: error });
 }
+function translateBundleError(error) {
+  if (error instanceof CliError)
+    throw error;
+  const code = error.code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError("permission", "The selected private bundle is not readable", { cause: error });
+  }
+  if (code === "ENOENT") {
+    throw new CliError("not-found", "The selected private bundle does not exist", { cause: error });
+  }
+  throw new CliError("invalid-data", "The selected private message bundle could not be read safely", { cause: error });
+}
 async function runCommand(argv, io) {
   const parsed = parseArguments(argv);
   if (parsed.flags.has("version")) {
@@ -4303,7 +6505,7 @@ async function runCommand(argv, io) {
     return;
   }
   const json = parsed.flags.has("json");
-  const [command, subcommand, identifier, ...extra] = parsed.positionals;
+  const [command, subcommand, identifier2, ...extra] = parsed.positionals;
   if (extra.length !== 0)
     throw new CliError("usage", `Unexpected argument ${extra[0]}`);
   if (command === "init" && subcommand === undefined) {
@@ -4317,7 +6519,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "ingest" && subcommand === "imessage" && identifier === undefined) {
+  if (command === "ingest" && subcommand === "imessage" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir", "database"], ["json"]);
     const context = await writableStore(parsed);
     try {
@@ -4345,7 +6547,33 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "ingest" && subcommand === "contacts" && identifier === undefined) {
+  if (command === "ingest" && subcommand === "bundle" && identifier2 === undefined) {
+    rejectUnused(parsed, ["data-dir", "input"], ["json"]);
+    const input = absolutePrivatePath(parsed.options.get("input"), "--input");
+    const context = await writableStore(parsed);
+    try {
+      let bundle;
+      try {
+        bundle = await readMessageBundle(input, { hmacKey: context.key });
+      } catch (error) {
+        translateBundleError(error);
+      }
+      const stored = context.store.replaceSources(bundle.sources, canonicalNow(io), context.key);
+      const result = {
+        schemaVersion: bundle.schemaVersion,
+        manifestSha256: bundle.manifestSha256,
+        corpusRevision: stored.corpusRevision,
+        sources: stored.sources,
+        conversations: stored.sources.reduce((sum, source) => sum + source.conversations, 0),
+        messages: stored.sources.reduce((sum, source) => sum + source.messages, 0)
+      };
+      emit(io, json, result, `Ingested ${result.messages} active messages across ${result.conversations} conversations from ${result.sources.length} sources`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "ingest" && subcommand === "contacts" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir", "addressbook"], ["json"]);
     const context = await writableStore(parsed);
     try {
@@ -4373,7 +6601,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "contacts" && subcommand === "list" && identifier === undefined) {
+  if (command === "contacts" && subcommand === "list" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir", "min-outgoing", "limit"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
@@ -4388,18 +6616,42 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "contacts" && subcommand === "show" && identifier !== undefined) {
+  if (command === "sources" && subcommand === "list" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
-      const detail = safeContactDetail(context.store, identifier, parsed.flags.has("private"));
-      emit(io, json, detail, `Contact ${identifier}`);
+      const sources = context.store.listSources(parsed.flags.has("private"));
+      emit(io, json, { sources }, `${sources.length} message sources`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "contacts" && subcommand === "resolve" && identifier !== undefined) {
+  if (command === "sources" && subcommand === "show" && identifier2 !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json", "private"]);
+    const context = await existingStore(parsed);
+    try {
+      const source = context.store.source(identifier2, parsed.flags.has("private"));
+      if (source === null)
+        throw new CliError("not-found", `Unknown source ${identifier2}`);
+      emit(io, json, source, `Message source ${identifier2}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "contacts" && subcommand === "show" && identifier2 !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json", "private"]);
+    const context = await existingStore(parsed);
+    try {
+      const detail = safeContactDetail(context.store, identifier2, parsed.flags.has("private"));
+      emit(io, json, detail, `Contact ${identifier2}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "contacts" && subcommand === "resolve" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir", "limit"], ["json", "private"]);
     if (!parsed.flags.has("private")) {
       throw new CliError("usage", "contacts resolve requires --private");
@@ -4408,7 +6660,7 @@ async function runCommand(argv, io) {
     try {
       let matches;
       try {
-        matches = context.store.resolvePrivateContacts(identifier, integerOption(parsed, "limit", 10, 1, 50));
+        matches = context.store.resolvePrivateContacts(identifier2, integerOption(parsed, "limit", 10, 1, 50));
       } catch (error) {
         if (error instanceof CliError)
           throw error;
@@ -4420,33 +6672,33 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
+  if (command === "inspect" && subcommand === "tempo" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
+      const metrics = contactMetrics(context.store, identifier2, metricOptions(parsed));
       const result = compactMetrics(metrics);
-      emit(io, json, result, `Tempo metrics for ${identifier}: ${metrics.tempo.responseEpisodes} response episodes`);
+      emit(io, json, result, `Tempo metrics for ${identifier2}: ${metrics.tempo.responseEpisodes} response episodes`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "inspect" && subcommand === "sessions" && identifier !== undefined) {
+  if (command === "inspect" && subcommand === "sessions" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir", "limit", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
+      const metrics = contactMetrics(context.store, identifier2, metricOptions(parsed));
       const limit = integerOption(parsed, "limit", 20, 1, 1000);
       const sessions = metrics.sessions.slice(-limit);
-      const result = { contactId: identifier, total: metrics.sessions.length, sessions };
-      emit(io, json, result, `${sessions.length} of ${metrics.sessions.length} sessions for ${identifier}`);
+      const result = { contactId: identifier2, total: metrics.sessions.length, sessions };
+      emit(io, json, result, `${sessions.length} of ${metrics.sessions.length} sessions for ${identifier2}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "study" && subcommand === "prepare" && identifier !== undefined) {
+  if (command === "study" && subcommand === "prepare" && identifier2 !== undefined) {
     rejectUnused(parsed, [
       "data-dir",
       "output",
@@ -4463,13 +6715,13 @@ async function runCommand(argv, io) {
       const before = canonicalTimestampOption(parsed, "before");
       let evidence;
       try {
-        evidence = contactEvidence(context.store, identifier, { after, before });
+        evidence = contactEvidence(context.store, identifier2, { after, before });
       } catch (error) {
         if (error instanceof CliError)
           throw error;
         throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
       }
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, metricOptions(parsed));
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier2, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
       const packet = buildStudyPacket(evidence.messages, metrics, {
         limit: integerOption(parsed, "limit", 24, 1, 50),
         generatedAt: canonicalNow(io),
@@ -4481,7 +6733,7 @@ async function runCommand(argv, io) {
       await atomicWritePrivate(output, bytes);
       context.store.recordStudyPacket({
         sha256: packetSha256,
-        contactId: identifier,
+        contactId: identifier2,
         corpusRevision: metrics.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         createdAt: packet.generatedAt,
@@ -4500,7 +6752,7 @@ async function runCommand(argv, io) {
         }
       });
       const result = {
-        contactId: identifier,
+        contactId: identifier2,
         corpusRevision: metrics.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         packetSha256,
@@ -4514,7 +6766,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
+  if (command === "evaluate" && subcommand === "prepare" && identifier2 !== undefined) {
     rejectUnused(parsed, [
       "data-dir",
       "after",
@@ -4536,13 +6788,13 @@ async function runCommand(argv, io) {
     try {
       let evidence;
       try {
-        evidence = contactEvidence(context.store, identifier, { after, before });
+        evidence = contactEvidence(context.store, identifier2, { after, before });
       } catch (error) {
         if (error instanceof CliError)
           throw error;
         throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
       }
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, metricOptions(parsed));
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier2, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
       const packets = buildEvaluationPackets(evidence.messages, metrics, {
         after,
         before,
@@ -4557,7 +6809,7 @@ async function runCommand(argv, io) {
       await atomicWritePrivate(referenceOutput, prettyJson(packets.reference));
       const result = {
         evaluationId: packets.prompt.evaluationId,
-        contactId: identifier,
+        contactId: identifier2,
         corpusRevision: evidence.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         cases: packets.prompt.cases.length,
@@ -4572,9 +6824,9 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "profile" && subcommand === "apply" && identifier !== undefined) {
+  if (command === "profile" && subcommand === "apply" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
-    const path = absolutePrivatePath(identifier, "Profile path");
+    const path = absolutePrivatePath(identifier2, "Profile path");
     const profile = await readStyleProfile(path);
     const context = await existingStore(parsed);
     try {
@@ -4586,38 +6838,38 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "profile" && subcommand === "show" && identifier !== undefined) {
+  if (command === "profile" && subcommand === "show" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      requireContact(context.store, identifier);
-      const result = context.store.profile(identifier);
+      requireContact(context.store, identifier2);
+      const result = context.store.profile(identifier2);
       if (result === null)
-        throw new CliError("not-found", `No profile exists for ${identifier}`);
-      emit(io, json, result, `${result.state} profile for ${identifier}`);
+        throw new CliError("not-found", `No profile exists for ${identifier2}`);
+      emit(io, json, result, `${result.state} profile for ${identifier2}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "profile" && subcommand === "export" && identifier !== undefined) {
+  if (command === "profile" && subcommand === "export" && identifier2 !== undefined) {
     rejectUnused(parsed, ["data-dir", "output"], ["json"]);
     const output = absolutePrivatePath(parsed.options.get("output"), "--output");
     const context = await existingStore(parsed);
     try {
-      requireContact(context.store, identifier);
-      const result = context.store.profile(identifier);
+      requireContact(context.store, identifier2);
+      const result = context.store.profile(identifier2);
       if (result === null)
-        throw new CliError("not-found", `No profile exists for ${identifier}`);
+        throw new CliError("not-found", `No profile exists for ${identifier2}`);
       await atomicWritePrivate(output, prettyJson(result.profile));
-      const receipt = { contactId: identifier, state: result.state, output };
+      const receipt = { contactId: identifier2, state: result.state, output };
       emit(io, json, receipt, `Exported ${result.state} profile to ${output}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "context" && subcommand !== undefined && identifier === undefined) {
+  if (command === "context" && subcommand !== undefined && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const contactId = subcommand;
     const context = await existingStore(parsed);
@@ -4633,13 +6885,13 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "skill" && subcommand === "path" && identifier === undefined) {
+  if (command === "skill" && subcommand === "path" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const path = bundledSkillPath();
     emit(io, json, { path }, path);
     return;
   }
-  if (command === "skill" && subcommand === "install" && identifier === undefined) {
+  if (command === "skill" && subcommand === "install" && identifier2 === undefined) {
     rejectUnused(parsed, ["data-dir", "target", "scope", "project"], ["force", "json"]);
     const target = parsed.options.get("target") ?? "codex";
     const scope = parsed.options.get("scope") ?? "user";

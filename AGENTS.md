@@ -1,8 +1,8 @@
 # Contents
 
-- `src/` – the deterministic local iMessage and Contacts readers, normalized
-  corpus and metrics, private SQLite store, profile parser, Agent Skill
-  installer, and `messagelikeme` CLI.
+- `src/` – the deterministic local iMessage, Contacts, and private source-bundle
+  readers, normalized corpus and metrics, private SQLite store, profile parser,
+  Agent Skill installer, and `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
 - `docs/` – public methodology, evidence limits, research review, and prior-art
@@ -25,7 +25,7 @@
 - Use Bun 1.3.14 and run `bun run check` before handing off a change. Do not add
   another package manager or lockfile.
 - Keep the public description exact: “A local-first CLI and Agent Skill for
-  studying your private iMessage history and drafting messages that sound like
+  studying private messaging history and drafting messages that sound like
   you.”
 - Keep the public repository independently buildable. Do not reference another
   source repository, private packages, sibling paths, private fixtures, or
@@ -33,6 +33,12 @@
 - Keep `chat.db` authoritative and ingestion read-only, query-only,
   ownership-checked, schema-validated, and bounded. Never modify Messages,
   contacts, attachments, or SQLite sidecars.
+- Treat a `message-like-me.local-message-bundle` as an untrusted, private,
+  versioned directory boundary. Require its fixed inventory, canonical UTF-8,
+  owner-only modes, bounded records, artifact digests, and manifest digest.
+  Never let bundle absence erase retained history unless a future contract
+  explicitly declares authoritative coverage; apply explicit deletions and
+  tombstones separately.
 - Treat AddressBook databases as optional label-enrichment sources. Isolate
   every database plus WAL or journal before SQLite opens it, validate contact
   entities and property owners dynamically, read only names and exact
@@ -54,7 +60,8 @@
 - Keep the command name `messagelikeme`, the repository and package name
   `message-like-me`, and the Agent Skill name `message-like-me`. Treat
   `messagelikeme.com` as an informational project page, never as a data plane.
-- Keep CLI commands namespaced as `ingest imessage|contacts`,
+- Keep CLI commands namespaced as `ingest imessage|contacts|bundle`,
+  `sources list|show`,
   `contacts list|show|resolve`,
   `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`, plus
   `init`, `context`, `skill`, and `doctor`. Machine-readable commands support

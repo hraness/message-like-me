@@ -12,9 +12,11 @@ segmentation parameters, and exclusions. Check whether the evidence spans
 enough conversations and contexts to support the requested claim.
 
 An AddressBook-matched `person_...` scope can combine several conservatively
-matched direct Messages conversations with one person. An unmatched contact ID
-or a group remains a conversation scope. Analyze the observed messaging scope
-without inferring a relationship category, importance, or status.
+matched complete-roster direct conversations with one person across message
+sources. An unmatched contact ID, incomplete roster, or group remains a
+conversation scope. Inspect the source and `services` breakdown before
+generalizing across apps. Analyze the observed messaging scope without
+inferring a relationship category, importance, or status.
 
 Start with aggregate metrics. Open bounded text samples only for questions the
 metrics cannot answer, such as how the user acknowledges emotion, resolves
@@ -100,6 +102,10 @@ Examine:
 - whether a correction or afterthought becomes another bubble;
 - explicit reply-link frequency and the situations where replies are used;
 - tapbacks as lightweight acknowledgements, separate from written replies.
+
+Reactions with no provider timestamp remain valid count and direction evidence.
+Do not place them in chronological order, a session, or a response episode, and
+do not synthesize a reaction time.
 
 Do not describe within-session response latency as an obligation, promise,
 availability signal, or general preference. The sample excludes incoming

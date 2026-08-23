@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   constants as fsConstants,
@@ -20,8 +21,11 @@ import type {
   ContactSummary,
   CorpusConversation,
   CorpusMessage,
+  CorpusReactionFact,
   CorpusSnapshot,
+  CorpusSourceDescriptor,
   ProfileEvidenceV2,
+  SourceCorpusSnapshot,
   StyleProfile,
   StyleProfileV2,
 } from "./types.ts";
@@ -29,14 +33,32 @@ import type {
 type Binding = string | number | bigint | Uint8Array | null;
 type Row = Record<string, unknown>;
 
-const STORE_SCHEMA_VERSION = 2;
+const STORE_SCHEMA_VERSION = 3;
 const PERSON_SCOPE_PREFIX = "person_";
+export const IMESSAGE_SOURCE_ID = "source_imessage_local";
 
 const SCHEMA = `
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_sources (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    provider TEXT NOT NULL,
+    network TEXT,
+    account_id TEXT,
+    external_id TEXT NOT NULL,
+    input_revision TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    generated_at TEXT,
+    producer_json TEXT NOT NULL,
+    coverage_json TEXT NOT NULL,
+    manifest_sha256 TEXT,
+    identity_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
   ) STRICT;
   CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
@@ -48,6 +70,15 @@ const SCHEMA = `
     private_participants_json TEXT NOT NULL,
     is_group INTEGER NOT NULL CHECK (is_group IN (0, 1))
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_sources (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_sources_lookup
+    ON conversation_sources(source_id, conversation_id);
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     source_row_id INTEGER NOT NULL,
@@ -68,6 +99,54 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS messages_conversation_time
     ON messages(conversation_id, sent_at, source_row_id, id);
   CREATE INDEX IF NOT EXISTS messages_source_guid ON messages(source_guid);
+  CREATE TABLE IF NOT EXISTS message_provenance (
+    message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    reply_to_external_id TEXT,
+    attachments_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_provenance_source
+    ON message_provenance(source_id, message_id);
+  CREATE TABLE IF NOT EXISTS corpus_reaction_facts (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    target_external_id TEXT NOT NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    direction TEXT CHECK (direction IN ('incoming','outgoing')),
+    body TEXT NOT NULL,
+    reacted_at TEXT,
+    state TEXT NOT NULL CHECK (state IN ('active','removed')),
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS corpus_reaction_facts_source
+    ON corpus_reaction_facts(source_id,conversation_id,id);
+  CREATE TABLE IF NOT EXISTS corpus_source_records (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('account','participant','reaction','tombstone','excluded-message')
+    ),
+    external_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, kind, external_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_source_suppressions (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('conversation','message','reaction','reaction-timeline','participant','account')
+    ),
+    local_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    suppressed_at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (
+      reason IN ('authoritative-absence','tombstone','explicit-exclusion','replacement','reappeared')
+    ),
+    suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
+    PRIMARY KEY (source_id, kind, local_id)
+  ) WITHOUT ROWID, STRICT;
   CREATE TABLE IF NOT EXISTS study_packets (
     sha256 TEXT PRIMARY KEY,
     contact_id TEXT NOT NULL,
@@ -123,6 +202,83 @@ const SCHEMA = `
   ) STRICT;
   CREATE INDEX IF NOT EXISTS conversation_contact_labels_lookup
     ON conversation_contact_labels(normalized_label, conversation_id);
+`;
+
+const SOURCE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS corpus_sources (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    provider TEXT NOT NULL,
+    network TEXT,
+    account_id TEXT,
+    external_id TEXT NOT NULL,
+    input_revision TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    generated_at TEXT,
+    producer_json TEXT NOT NULL,
+    coverage_json TEXT NOT NULL,
+    manifest_sha256 TEXT,
+    identity_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_sources (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_sources_lookup
+    ON conversation_sources(source_id, conversation_id);
+  CREATE TABLE IF NOT EXISTS message_provenance (
+    message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    external_id TEXT NOT NULL,
+    reply_to_external_id TEXT,
+    attachments_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_provenance_source
+    ON message_provenance(source_id, message_id);
+  CREATE TABLE IF NOT EXISTS corpus_reaction_facts (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    target_external_id TEXT NOT NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    direction TEXT CHECK (direction IN ('incoming','outgoing')),
+    body TEXT NOT NULL,
+    reacted_at TEXT,
+    state TEXT NOT NULL CHECK (state IN ('active','removed')),
+    UNIQUE (source_id, external_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS corpus_reaction_facts_source
+    ON corpus_reaction_facts(source_id,conversation_id,id);
+  CREATE TABLE IF NOT EXISTS corpus_source_records (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('account','participant','reaction','tombstone','excluded-message')
+    ),
+    external_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    PRIMARY KEY (source_id, kind, external_id)
+  ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS corpus_source_suppressions (
+    source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+      kind IN ('conversation','message','reaction','reaction-timeline','participant','account')
+    ),
+    local_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    suppressed_at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (
+      reason IN ('authoritative-absence','tombstone','explicit-exclusion','replacement','reappeared')
+    ),
+    suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
+    PRIMARY KEY (source_id, kind, local_id)
+  ) WITHOUT ROWID, STRICT;
 `;
 
 const CONTACT_SCOPE_SCHEMA = `
@@ -413,7 +569,15 @@ function personScope(
     SELECT association.conversation_id
     FROM conversation_contact_scopes association
     JOIN conversations conversation ON conversation.id=association.conversation_id
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
     WHERE association.contact_id=? AND conversation.is_group=0
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
     ORDER BY association.conversation_id
   `, addressBookContactId);
   if (rows.length === 0) return null;
@@ -434,7 +598,15 @@ function analysisScope(database: Database, contactId: string): AnalysisScope | n
   }
   const conversation = get<{ id: string }>(
     database,
-    "SELECT id FROM conversations WHERE id=?",
+    `SELECT conversation.id FROM conversations conversation
+      JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+      WHERE conversation.id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )`,
     contactId,
   );
   if (conversation === null) return null;
@@ -458,20 +630,37 @@ function messageRowsForScope(
 ): StoredMessageRow[] {
   if (exactConversationId !== undefined) {
     return all<StoredMessageRow>(database, `
-      SELECT * FROM messages WHERE conversation_id=?
-        AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
-      ORDER BY sent_at,source_row_id,id
+      SELECT message.* FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE message.conversation_id=?
+        AND (? IS NULL OR message.sent_at>=?) AND (? IS NULL OR message.sent_at<?)
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=provenance.source_id
+            AND suppression.local_id=message.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.suppressed=1
+        )
+      ORDER BY message.sent_at,message.source_row_id,message.id
     `, exactConversationId, window.after, window.after, window.before, window.before);
   }
   if (scope.kind === "person") {
     return all<StoredMessageRow>(database, `
       SELECT message.*
       FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
       JOIN conversation_contact_scopes association
         ON association.conversation_id=message.conversation_id
       WHERE association.contact_id=?
         AND (? IS NULL OR message.sent_at>=?)
         AND (? IS NULL OR message.sent_at<?)
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=provenance.source_id
+            AND suppression.local_id=message.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.suppressed=1
+        )
       ORDER BY message.sent_at,message.source_row_id,message.id
     `,
     scope.addressBookContactId,
@@ -481,9 +670,18 @@ function messageRowsForScope(
     window.before);
   }
   return all<StoredMessageRow>(database, `
-    SELECT * FROM messages WHERE conversation_id=?
-      AND (? IS NULL OR sent_at>=?) AND (? IS NULL OR sent_at<?)
-    ORDER BY sent_at,source_row_id,id
+    SELECT message.* FROM messages message
+    JOIN message_provenance provenance ON provenance.message_id=message.id
+    WHERE message.conversation_id=?
+      AND (? IS NULL OR message.sent_at>=?) AND (? IS NULL OR message.sent_at<?)
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )
+    ORDER BY message.sent_at,message.source_row_id,message.id
   `,
   scope.conversationIds[0]!,
   window.after,
@@ -511,6 +709,56 @@ function corpusMessage(row: StoredMessageRow): CorpusMessage {
   };
 }
 
+type StoredReactionFactRow = Readonly<{
+  id: string;
+  external_id: string;
+  target_external_id: string;
+  conversation_id: string | null;
+  direction: "incoming" | "outgoing" | null;
+  body: string;
+  reacted_at: string | null;
+  state: "active" | "removed";
+}>;
+
+function reactionFactsForScope(
+  database: Database,
+  scope: AnalysisScope,
+  window: EvidenceWindow = UNBOUNDED_EVIDENCE_WINDOW,
+): CorpusReactionFact[] {
+  const select = `SELECT reaction.id,reaction.external_id,reaction.target_external_id,
+    reaction.conversation_id,reaction.direction,reaction.body,reaction.reacted_at,reaction.state
+    FROM corpus_reaction_facts reaction`;
+  const suppression = `NOT EXISTS (
+    SELECT 1 FROM corpus_source_suppressions suppression
+    WHERE suppression.source_id=reaction.source_id
+      AND suppression.kind='reaction'
+      AND suppression.local_id=reaction.id
+      AND suppression.suppressed=1
+  )`;
+  const rows = scope.kind === "person"
+    ? all<StoredReactionFactRow>(database, `${select}
+      JOIN conversation_contact_scopes association
+        ON association.conversation_id=reaction.conversation_id
+      WHERE association.contact_id=? AND reaction.state='active' AND ${suppression}
+      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.addressBookContactId)
+    : all<StoredReactionFactRow>(database, `${select}
+      WHERE reaction.conversation_id=? AND reaction.state='active' AND ${suppression}
+      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.conversationIds[0]!);
+  return rows.filter((row) => row.reacted_at === null
+    ? window.after === null && window.before === null
+    : (window.after === null || row.reacted_at >= window.after)
+      && (window.before === null || row.reacted_at < window.before)).map((row) => ({
+    id: row.id,
+    externalId: row.external_id,
+    targetExternalId: row.target_external_id,
+    conversationId: row.conversation_id,
+    direction: row.direction,
+    body: row.body,
+    reactedAt: row.reacted_at,
+    state: row.state,
+  }));
+}
+
 function scopeEvidenceRevision(
   database: Database,
   scope: AnalysisScope,
@@ -521,8 +769,18 @@ function scopeEvidenceRevision(
     ? scope.conversationIds
     : Object.freeze([exactConversationId]);
   const messages = messageRowsForScope(database, scope, exactConversationId, window).map(corpusMessage);
+  const reactions = reactionFactsForScope(database, scope, window);
   return sha256(canonicalJson(
-    window.after === null && window.before === null
+    reactions.length > 0
+      ? {
+        schemaVersion: 3,
+        scopeId: scope.id,
+        conversationIds,
+        evidenceWindow: window,
+        messages,
+        reactions,
+      }
+      : window.after === null && window.before === null
       ? {
         schemaVersion: 1,
         scopeId: scope.id,
@@ -577,16 +835,32 @@ function scopeMessageCounts(database: Database, scope: AnalysisScope): Readonly<
       outgoing_count: number;
     }>(database, `${select}
       FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
       JOIN conversation_contact_scopes association
         ON association.conversation_id=message.conversation_id
-      WHERE association.contact_id=?`, scope.addressBookContactId)
+      WHERE association.contact_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )`, scope.addressBookContactId)
     : get<{
       first_message_at: string | null;
       last_message_at: string | null;
       message_count: number;
       incoming_count: number;
       outgoing_count: number;
-    }>(database, `${select} FROM messages message WHERE message.conversation_id=?`, scope.conversationIds[0]!);
+    }>(database, `${select}
+      FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE message.conversation_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )`, scope.conversationIds[0]!);
   return {
     firstMessageAt: row?.first_message_at ?? null,
     lastMessageAt: row?.last_message_at ?? null,
@@ -637,6 +911,78 @@ function backfillLegacyEvidence(database: Database): void {
   }
 }
 
+function backfillLegacySource(database: Database): void {
+  const conversations = get<{ value: number }>(
+    database,
+    "SELECT count(*) AS value FROM conversations",
+  )?.value ?? 0;
+  const assigned = get<{ value: number }>(
+    database,
+    "SELECT count(*) AS value FROM conversation_sources",
+  )?.value ?? 0;
+  if (assigned !== 0 && assigned !== conversations) {
+    throw new CliError("invalid-data", "Local store has partially assigned corpus source ownership");
+  }
+  if (conversations === 0 || assigned === conversations) return;
+  const revision = scalarText(database, "corpus_revision");
+  if (revision === null || !/^[a-f0-9]{64}$/u.test(revision)) {
+    throw new CliError("invalid-data", "Legacy local store has no valid corpus revision");
+  }
+  const identity = scalarText(database, "source_identity") ?? canonicalJson({ migrated: true });
+  const warnings = scalarText(database, "warnings") ?? canonicalJson([]);
+  const ingestedAt = scalarText(database, "ingested_at") ?? "1970-01-01T00:00:00.000Z";
+  database.query(`
+    INSERT INTO corpus_sources(
+      id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+      producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    IMESSAGE_SOURCE_ID,
+    "imessage",
+    "apple",
+    null,
+    null,
+    "local-imessage",
+    revision,
+    revision,
+    null,
+    canonicalJson({ id: "message-like-me", version: "legacy" }),
+    canonicalJson({ history: "complete-current-local", observedFrom: null, observedTo: null }),
+    null,
+    identity,
+    warnings,
+    ingestedAt,
+  );
+  database.exec(`
+    INSERT INTO conversation_sources(conversation_id,source_id,external_id,metadata_json)
+    SELECT id,'${IMESSAGE_SOURCE_ID}',source_key,'{}' FROM conversations;
+  `);
+  const rows = all<{
+    id: string;
+    source_guid: string;
+    reply_to_source_guid: string | null;
+    attachment_count: number;
+  }>(database, `
+    SELECT id,source_guid,reply_to_source_guid,attachment_count
+    FROM messages ORDER BY id
+  `);
+  const insert = database.query(`
+    INSERT INTO message_provenance(
+      message_id,source_id,external_id,reply_to_external_id,attachments_json,metadata_json
+    ) VALUES (?,?,?,?,?,?)
+  `);
+  for (const row of rows) {
+    insert.run(
+      row.id,
+      IMESSAGE_SOURCE_ID,
+      row.source_guid,
+      row.reply_to_source_guid,
+      canonicalJson({ count: row.attachment_count, detailsAvailable: false }),
+      canonicalJson({ migrated: true }),
+    );
+  }
+}
+
 function initializeStoreSchema(database: Database): void {
   const existingStore = tableExists(database, "metadata");
   const version = userVersion(database);
@@ -656,6 +1002,7 @@ function initializeStoreSchema(database: Database): void {
       throw new CliError("invalid-data", `Local store is missing required table ${table}`);
     }
   }
+  database.exec(SOURCE_SCHEMA);
   transaction(database, () => {
     database.exec(CONTACT_SCOPE_SCHEMA);
     database.exec(`
@@ -671,6 +1018,7 @@ function initializeStoreSchema(database: Database): void {
     addColumn(database, "study_packets", "evidence_json TEXT");
     addColumn(database, "profiles", "scope_id TEXT");
     addColumn(database, "profiles", "evidence_revision TEXT");
+    backfillLegacySource(database);
     backfillLegacyEvidence(database);
     database.exec(`PRAGMA user_version=${STORE_SCHEMA_VERSION}`);
   });
@@ -713,7 +1061,17 @@ function rebuildConversationLabels(
     owners.set(key, values);
   }
   const conversations = all<{ id: string; private_participants_json: string }>(database, `
-    SELECT id,private_participants_json FROM conversations WHERE is_group=0 ORDER BY id
+    SELECT conversation.id,conversation.private_participants_json
+    FROM conversations conversation
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+    WHERE conversation.is_group=0 AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions suppression
+      WHERE suppression.source_id=ownership.source_id
+        AND suppression.kind='conversation'
+        AND suppression.local_id=conversation.id
+        AND suppression.suppressed=1
+    )
+    ORDER BY conversation.id
   `);
   const insertScope = database.query(`INSERT INTO conversation_contact_scopes(
     conversation_id,contact_id,contacts_revision
@@ -849,6 +1207,329 @@ function hardenDatabaseFiles(path: string): void {
   }
 }
 
+function globalCorpusRevision(database: Database): string | null {
+  const sources = all<{
+    id: string;
+    kind: "imessage" | "bundle";
+    input_revision: string;
+    revision: string;
+  }>(database, "SELECT id,kind,input_revision,revision FROM corpus_sources ORDER BY id");
+  if (sources.length === 0) return null;
+  if (
+    sources.length === 1
+    && sources[0]!.id === IMESSAGE_SOURCE_ID
+    && sources[0]!.kind === "imessage"
+  ) return sources[0]!.input_revision;
+  return sha256(canonicalJson({
+    schemaVersion: 1,
+    sources: sources.map(({ id, kind, revision }) => ({ id, kind, revision })),
+  }));
+}
+
+function sourceStateRevision(database: Database, sourceId: string): string {
+  const hash = createHash("sha256");
+  hash.update("message-like-me\0stored-source-state-v1\0", "utf8");
+  const append = (kind: string, row: Row): void => {
+    const encoded = canonicalJson(row);
+    hash.update(`${kind.length}:${kind}${encoded.length}:`, "utf8").update(encoded, "utf8");
+  };
+  const source = get<Row>(database, `
+    SELECT kind,provider,network,account_id,external_id,producer_json,
+      coverage_json,warnings_json
+    FROM corpus_sources WHERE id=?
+  `, sourceId);
+  if (source === null) throw new CliError("internal", `Missing corpus source ${sourceId}`);
+  append("source", source);
+  for (const row of database.query(`
+    SELECT conversation.id,conversation.source_key,conversation.private_label,
+      conversation.service,conversation.participant_count,
+      conversation.participant_ids_json,conversation.private_participants_json,
+      conversation.is_group
+    FROM conversation_sources ownership
+    JOIN conversations conversation ON conversation.id=ownership.conversation_id
+    WHERE ownership.source_id=?
+    ORDER BY ownership.external_id,conversation.id
+  `).iterate(sourceId) as Iterable<Row>) append("conversation", row);
+  for (const row of database.query(`
+    SELECT message.id,message.source_row_id,message.source_guid,message.conversation_id,
+      message.sent_at,message.direction,message.body,message.body_source,message.kind,
+      message.reply_to_source_guid,message.edited_at,message.retracted_at,message.service,
+      message.attachment_count,provenance.external_id,
+      provenance.reply_to_external_id,provenance.attachments_json
+    FROM message_provenance provenance
+    JOIN messages message ON message.id=provenance.message_id
+    WHERE provenance.source_id=?
+    ORDER BY provenance.external_id,message.id
+  `).iterate(sourceId) as Iterable<Row>) append("message", row);
+  for (const row of database.query(`
+    SELECT id,external_id,target_external_id,conversation_id,direction,body,reacted_at,state
+    FROM corpus_reaction_facts WHERE source_id=? ORDER BY external_id,id
+  `).iterate(sourceId) as Iterable<Row>) append("reaction-fact", row);
+  for (const row of database.query(`
+    SELECT kind,local_id,external_id,reason FROM corpus_source_suppressions
+    WHERE source_id=? AND suppressed=1 ORDER BY kind,local_id
+  `).iterate(sourceId) as Iterable<Row>) append("suppression", row);
+  return hash.digest("hex");
+}
+
+type BundleMessageOrderRow = Readonly<{
+  id: string;
+  conversation_id: string;
+  sent_at: string;
+  kind: CorpusMessage["kind"];
+  external_id: string;
+  metadata_json: string;
+}>;
+
+type RankedBundleMessageOrderRow = BundleMessageOrderRow & Readonly<{
+  provider_sort_key: string | null;
+}>;
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function storedProviderSortKey(row: BundleMessageOrderRow): string | null {
+  const parsed = parsedJson(row.metadata_json, `Message ${row.id} provenance`);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const value = "providerSortKey" in record ? record.providerSortKey : record.sortKey;
+  return typeof value === "string" ? value : null;
+}
+
+function rerankBundleMessages(database: Database, sourceId: string): void {
+  const rows = all<BundleMessageOrderRow>(database, `
+    SELECT message.id,message.conversation_id,message.sent_at,message.kind,
+      provenance.external_id,provenance.metadata_json
+    FROM message_provenance provenance
+    JOIN messages message ON message.id=provenance.message_id
+    WHERE provenance.source_id=?
+    ORDER BY message.conversation_id,message.id
+  `, sourceId);
+  const byConversation = new Map<string, RankedBundleMessageOrderRow[]>();
+  for (const value of rows) {
+    const row = Object.freeze({ ...value, provider_sort_key: storedProviderSortKey(value) });
+    const values = byConversation.get(row.conversation_id) ?? [];
+    values.push(row);
+    byConversation.set(row.conversation_id, values);
+  }
+  const update = database.query("UPDATE messages SET source_row_id=? WHERE id=?");
+  for (const values of byConversation.values()) {
+    for (const [index, row] of values.entries()) update.run(-(index + 1), row.id);
+    values.sort((left, right) => {
+      const leftReaction = left.kind === "reaction";
+      const rightReaction = right.kind === "reaction";
+      if (leftReaction !== rightReaction) return leftReaction ? 1 : -1;
+      if (!leftReaction) {
+        const sort = compareCodeUnits(
+          left.provider_sort_key ?? left.external_id,
+          right.provider_sort_key ?? right.external_id,
+        );
+        if (sort !== 0) return sort;
+      }
+      return compareCodeUnits(left.sent_at, right.sent_at)
+        || compareCodeUnits(left.external_id, right.external_id)
+        || compareCodeUnits(left.id, right.id);
+    });
+    for (const [index, row] of values.entries()) update.run(index + 1, row.id);
+  }
+}
+
+function setCorpusRevision(database: Database): string | null {
+  const revision = globalCorpusRevision(database);
+  if (revision === null) {
+    database.query("DELETE FROM metadata WHERE key='corpus_revision'").run();
+    return null;
+  }
+  database.query(`
+    INSERT INTO metadata(key,value) VALUES ('corpus_revision',?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+  `).run(revision);
+  return revision;
+}
+
+function validSourceDescriptor(source: CorpusSourceDescriptor): void {
+  if (
+    (source.id !== IMESSAGE_SOURCE_ID && !/^source_[a-f0-9]{64}$/u.test(source.id))
+    || (source.kind !== "imessage" && source.kind !== "bundle")
+    || source.provider.length < 1
+    || Buffer.byteLength(source.provider, "utf8") > 256
+    || !/^[a-f0-9]{64}$/u.test(source.revision)
+    || source.externalId.length < 1
+    || Buffer.byteLength(source.externalId, "utf8") > 4_096
+    || source.warnings.length > 130
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} is invalid`);
+  canonicalTimestampOrNull(source.generatedAt, `Corpus source ${source.id} generatedAt`);
+  if (source.kind === "bundle" && source.generatedAt === null) {
+    throw new CliError("invalid-data", `Bundle source ${source.id} requires generatedAt`);
+  }
+  canonicalTimestampOrNull(source.coverage.observedFrom, `Corpus source ${source.id} observedFrom`);
+  canonicalTimestampOrNull(source.coverage.observedTo, `Corpus source ${source.id} observedTo`);
+  if (
+    (
+      source.coverage.observedFrom !== null
+      && source.coverage.observedTo !== null
+      && source.coverage.observedFrom > source.coverage.observedTo
+    )
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} has invalid coverage bounds`);
+  if (
+    source.coverage.history !== "complete-current-local"
+    && source.coverage.history !== "bounded"
+    && source.coverage.history !== "unknown"
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} has invalid history coverage`);
+  if (
+    (source.coverage.kind !== undefined && (
+      source.coverage.kind.length < 1
+      || Buffer.byteLength(source.coverage.kind, "utf8") > 128
+      || /\p{Cc}/u.test(source.coverage.kind)
+    ))
+    || (source.coverage.reason !== undefined && source.coverage.reason !== null && (
+      source.coverage.reason.length < 1
+      || Buffer.byteLength(source.coverage.reason, "utf8") > 128
+      || /\p{Cc}/u.test(source.coverage.reason)
+    ))
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} has invalid coverage metadata`);
+  if (
+    source.manifestSha256 !== null
+    && !/^[a-f0-9]{64}$/u.test(source.manifestSha256)
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} has an invalid manifest digest`);
+  if (
+    source.producer.id.length < 1
+    || source.producer.version.length < 1
+    || Buffer.byteLength(source.producer.id, "utf8") > 256
+    || Buffer.byteLength(source.producer.version, "utf8") > 256
+  ) throw new CliError("invalid-data", `Corpus source ${source.id} has invalid producer identity`);
+  for (const warning of source.warnings) {
+    if (Buffer.byteLength(warning, "utf8") > 1_024 || warning.includes("\u0000")) {
+      throw new CliError("invalid-data", `Corpus source ${source.id} has an invalid warning`);
+    }
+  }
+}
+
+function validateSourceSnapshot(snapshot: SourceCorpusSnapshot): void {
+  validSourceDescriptor(snapshot.source);
+  if (
+    snapshot.conversations.length > 2_000_000
+    || snapshot.messages.length > 2_000_000
+    || (snapshot.reactionFacts?.length ?? 0) > 2_000_000
+    || snapshot.conversationProvenance.length !== snapshot.conversations.length
+    || snapshot.messageProvenance.length !== snapshot.messages.length
+  ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} exceeds its result bounds`);
+  const conversationIds = new Set(snapshot.conversations.map(({ id }) => id));
+  if (conversationIds.size !== snapshot.conversations.length) {
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats conversation IDs`);
+  }
+  const conversationProvenance = new Map(
+    snapshot.conversationProvenance.map((value) => [value.conversationId, value]),
+  );
+  if (
+    conversationProvenance.size !== snapshot.conversationProvenance.length
+    || [...conversationIds].some((id) => !conversationProvenance.has(id))
+  ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid conversation provenance`);
+  const externalConversations = new Set<string>();
+  for (const provenance of snapshot.conversationProvenance) {
+    if (
+      provenance.externalId.length < 1
+      || Buffer.byteLength(provenance.externalId, "utf8") > 4_096
+      || externalConversations.has(provenance.externalId)
+    ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid external conversation IDs`);
+    externalConversations.add(provenance.externalId);
+  }
+  const messageIds = new Set(snapshot.messages.map(({ id }) => id));
+  const messagesById = new Map(snapshot.messages.map((message) => [message.id, message]));
+  if (messageIds.size !== snapshot.messages.length) {
+    throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats message IDs`);
+  }
+  for (const message of snapshot.messages) {
+    if (!conversationIds.has(message.conversationId)) {
+      throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
+    }
+  }
+  const messageProvenance = new Map(snapshot.messageProvenance.map((value) => [value.messageId, value]));
+  if (
+    messageProvenance.size !== snapshot.messageProvenance.length
+    || [...messageIds].some((id) => !messageProvenance.has(id))
+  ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid message provenance`);
+  const externalMessages = new Set<string>();
+  for (const provenance of snapshot.messageProvenance) {
+    const message = messagesById.get(provenance.messageId)!;
+    if (
+      provenance.externalId.length < 1
+      || Buffer.byteLength(provenance.externalId, "utf8") > 4_096
+      || externalMessages.has(provenance.externalId)
+      || provenance.attachments.length > 256
+      || (
+        provenance.providerSortKey !== null
+        && (
+          provenance.providerSortKey.length < 1
+          || Buffer.byteLength(provenance.providerSortKey, "utf8") > 1_024
+          || /[\u0000-\u001f\u007f]/u.test(provenance.providerSortKey)
+        )
+      )
+      || (
+        snapshot.source.kind === "bundle"
+          ? (message.kind === "reaction") === (provenance.providerSortKey !== null)
+          : provenance.providerSortKey !== null
+      )
+    ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid external message provenance`);
+    externalMessages.add(provenance.externalId);
+  }
+  const auxiliaryIds = new Set<string>();
+  for (const record of snapshot.auxiliaryRecords ?? []) {
+    const key = `${record.kind}\0${record.id}`;
+    if (
+      !["account", "participant", "reaction", "tombstone", "excluded-message"].includes(record.kind)
+      || record.id.length < 1
+      || Buffer.byteLength(record.id, "utf8") > 4_096
+      || auxiliaryIds.has(key)
+    ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid auxiliary records`);
+    const encoded = canonicalJson(record.record);
+    if (typeof encoded !== "string" || Buffer.byteLength(encoded, "utf8") > 2 * 1024 * 1024) {
+      throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has an oversized auxiliary record`);
+    }
+    auxiliaryIds.add(key);
+  }
+  const reactionIds = new Set<string>();
+  const externalReactionIds = new Set<string>();
+  for (const reaction of snapshot.reactionFacts ?? []) {
+    if (
+      reaction.id.length < 1
+      || reaction.externalId.length < 1
+      || reaction.targetExternalId.length < 1
+      || Buffer.byteLength(reaction.id, "utf8") > 4_096
+      || Buffer.byteLength(reaction.externalId, "utf8") > 4_096
+      || Buffer.byteLength(reaction.targetExternalId, "utf8") > 4_096
+      || Buffer.byteLength(reaction.body, "utf8") > 8 * 1_024
+      || reactionIds.has(reaction.id)
+      || externalReactionIds.has(reaction.externalId)
+      || (reaction.conversationId !== null && !conversationIds.has(reaction.conversationId))
+      || (reaction.direction !== null && reaction.direction !== "incoming" && reaction.direction !== "outgoing")
+      || (reaction.state !== "active" && reaction.state !== "removed")
+    ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has invalid reaction facts`);
+    canonicalTimestampOrNull(reaction.reactedAt, `Corpus source ${snapshot.source.id} reaction time`);
+    reactionIds.add(reaction.id);
+    externalReactionIds.add(reaction.externalId);
+  }
+  for (const deletion of snapshot.deletions ?? []) {
+    if (
+      ![
+        "account", "participant", "conversation", "message", "reaction", "reaction-timeline",
+      ].includes(deletion.entityKind)
+      || deletion.externalId.length < 1
+      || Buffer.byteLength(deletion.externalId, "utf8") > 4_096
+      || (deletion.localEntityId !== null && Buffer.byteLength(deletion.localEntityId, "utf8") > 4_096)
+      || (deletion.expectedConversationId !== undefined && (
+        deletion.expectedConversationId.length < 1
+        || Buffer.byteLength(deletion.expectedConversationId, "utf8") > 4_096
+      ))
+      || (deletion.reason !== undefined && ![
+        "tombstone", "explicit-exclusion", "replacement",
+      ].includes(deletion.reason))
+    ) throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has an invalid deletion`);
+    canonicalTimestampOrNull(deletion.deletedAt, `Corpus source ${snapshot.source.id} deletion time`);
+  }
+}
+
 export class LocalStore {
   readonly #database: Database;
 
@@ -886,8 +1567,10 @@ export class LocalStore {
   }
 
   sourceIdentity(): unknown | null {
-    const encoded = scalarText(this.#database, "source_identity");
-    return encoded === null ? null : JSON.parse(encoded) as unknown;
+    const encoded = get<{ identity_json: string }>(this.#database, `
+      SELECT identity_json FROM corpus_sources WHERE id=?
+    `, IMESSAGE_SOURCE_ID)?.identity_json ?? scalarText(this.#database, "source_identity");
+    return encoded === null ? null : parsedJson(encoded, "Stored iMessage source identity");
   }
 
   contactsRevision(): string | null {
@@ -1027,6 +1710,590 @@ export class LocalStore {
     }));
   }
 
+  replaceSources(
+    snapshots: readonly SourceCorpusSnapshot[],
+    ingestedAt: string,
+    hmacKey?: string | Uint8Array,
+  ): Readonly<{
+    corpusRevision: string;
+    sources: readonly Readonly<{
+      id: string;
+      changed: boolean;
+      conversations: number;
+      messages: number;
+    }>[];
+  }> {
+    canonicalTimestampOrNull(ingestedAt, "Source ingest time");
+    if (snapshots.length < 1) {
+      throw new CliError("invalid-data", "A source replacement must contain at least one source");
+    }
+    const sourceIds = new Set<string>();
+    for (const snapshot of snapshots) {
+      if (sourceIds.has(snapshot.source.id)) {
+        throw new CliError("invalid-data", `Source replacement repeats ${snapshot.source.id}`);
+      }
+      sourceIds.add(snapshot.source.id);
+      validateSourceSnapshot(snapshot);
+    }
+
+    return transaction(this.#database, () => {
+      const upsertSource = this.#database.query(`
+        INSERT INTO corpus_sources(
+          id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+          producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          kind=excluded.kind,provider=excluded.provider,network=excluded.network,
+          account_id=excluded.account_id,external_id=excluded.external_id,
+          input_revision=excluded.input_revision,generated_at=excluded.generated_at,
+          producer_json=excluded.producer_json,coverage_json=excluded.coverage_json,
+          manifest_sha256=excluded.manifest_sha256,identity_json=excluded.identity_json,
+          warnings_json=excluded.warnings_json,ingested_at=excluded.ingested_at
+      `);
+      const relabelSourceConversations = this.#database.query(`
+        UPDATE conversations SET service=?
+        WHERE id IN (
+          SELECT conversation_id FROM conversation_sources WHERE source_id=?
+        )
+      `);
+      const relabelSourceMessages = this.#database.query(`
+        UPDATE messages SET service=?
+        WHERE id IN (
+          SELECT message_id FROM message_provenance WHERE source_id=?
+        )
+      `);
+      const upsertConversation = this.#database.query(`
+        INSERT INTO conversations(
+          id,source_key,private_label,service,participant_count,
+          participant_ids_json,private_participants_json,is_group
+        ) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          source_key=excluded.source_key,private_label=excluded.private_label,
+          service=excluded.service,participant_count=excluded.participant_count,
+          participant_ids_json=excluded.participant_ids_json,
+          private_participants_json=excluded.private_participants_json,is_group=excluded.is_group
+      `);
+      const upsertConversationSource = this.#database.query(`
+        INSERT INTO conversation_sources(conversation_id,source_id,external_id,metadata_json)
+        VALUES (?,?,?,?)
+        ON CONFLICT(conversation_id) DO UPDATE SET
+          external_id=excluded.external_id,metadata_json=excluded.metadata_json
+      `);
+      const upsertMessage = this.#database.query(`
+        INSERT INTO messages(
+          id,source_row_id,source_guid,conversation_id,sent_at,direction,
+          body,body_source,kind,reply_to_source_guid,edited_at,retracted_at,
+          service,attachment_count
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          source_guid=excluded.source_guid,conversation_id=excluded.conversation_id,
+          sent_at=excluded.sent_at,direction=excluded.direction,body=excluded.body,
+          body_source=excluded.body_source,kind=excluded.kind,
+          reply_to_source_guid=excluded.reply_to_source_guid,edited_at=excluded.edited_at,
+          retracted_at=excluded.retracted_at,service=excluded.service,
+          attachment_count=excluded.attachment_count
+      `);
+      const upsertMessageProvenance = this.#database.query(`
+        INSERT INTO message_provenance(
+          message_id,source_id,external_id,reply_to_external_id,attachments_json,metadata_json
+        ) VALUES (?,?,?,?,?,?)
+        ON CONFLICT(message_id) DO UPDATE SET
+          external_id=excluded.external_id,reply_to_external_id=excluded.reply_to_external_id,
+          attachments_json=excluded.attachments_json,metadata_json=excluded.metadata_json
+      `);
+      const upsertReactionFact = this.#database.query(`
+        INSERT INTO corpus_reaction_facts(
+          id,source_id,external_id,target_external_id,conversation_id,
+          direction,body,reacted_at,state
+        ) VALUES (?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          external_id=excluded.external_id,target_external_id=excluded.target_external_id,
+          conversation_id=excluded.conversation_id,direction=excluded.direction,
+          body=excluded.body,reacted_at=excluded.reacted_at,state=excluded.state
+      `);
+      const upsertSourceRecord = this.#database.query(`
+        INSERT INTO corpus_source_records(source_id,kind,external_id,record_json)
+        VALUES (?,?,?,?)
+        ON CONFLICT(source_id,kind,external_id) DO UPDATE SET record_json=excluded.record_json
+      `);
+      const setSuppression = this.#database.query(`
+        INSERT INTO corpus_source_suppressions(
+          source_id,kind,local_id,external_id,suppressed_at,reason,suppressed
+        ) VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(source_id,kind,local_id) DO UPDATE SET
+          external_id=excluded.external_id,suppressed_at=excluded.suppressed_at,
+          reason=excluded.reason,suppressed=excluded.suppressed
+      `);
+      const clearExternalSuppression = this.#database.query(`
+        UPDATE corpus_source_suppressions
+        SET suppressed_at=?,reason='reappeared',suppressed=0
+        WHERE source_id=? AND kind=? AND external_id=? AND suppressed=1
+      `);
+      const results: Array<Readonly<{
+        id: string;
+        changed: boolean;
+        conversations: number;
+        messages: number;
+      }>> = [];
+      let changedAny = false;
+      for (const snapshot of snapshots) {
+        const existing = get<{
+          kind: string;
+          network: string | null;
+          input_revision: string;
+          revision: string;
+          generated_at: string | null;
+          manifest_sha256: string | null;
+        }>(this.#database, `
+          SELECT kind,network,input_revision,revision,generated_at,manifest_sha256
+          FROM corpus_sources WHERE id=?
+        `, snapshot.source.id);
+        if (existing !== null && existing.kind !== snapshot.source.kind) {
+          throw new CliError("conflict", `Source ${snapshot.source.id} changed kind`);
+        }
+        if (existing !== null && snapshot.source.kind === "bundle") {
+          if (existing.generated_at === null || snapshot.source.generatedAt! < existing.generated_at) {
+            throw new CliError("conflict", `Source ${snapshot.source.id} snapshot is older than stored state`);
+          }
+          if (
+            snapshot.source.generatedAt === existing.generated_at
+            && (
+              snapshot.source.revision !== existing.input_revision
+              || snapshot.source.manifestSha256 !== existing.manifest_sha256
+            )
+          ) throw new CliError("conflict", `Source ${snapshot.source.id} reuses generatedAt for different input`);
+        }
+        const authoritative = snapshot.source.kind === "imessage"
+          || snapshot.source.coverage.history === "complete-current-local";
+        if (authoritative) {
+          for (const row of this.#database.query(`
+            SELECT conversation_id,external_id FROM conversation_sources WHERE source_id=?
+          `).iterate(snapshot.source.id) as Iterable<{
+            conversation_id: string;
+            external_id: string;
+          }>) {
+            setSuppression.run(
+              snapshot.source.id,
+              "conversation",
+              row.conversation_id,
+              row.external_id,
+              ingestedAt,
+              "authoritative-absence",
+              1,
+            );
+          }
+          for (const row of this.#database.query(`
+            SELECT id,external_id FROM corpus_reaction_facts WHERE source_id=?
+          `).iterate(snapshot.source.id) as Iterable<{ id: string; external_id: string }>) {
+            setSuppression.run(
+              snapshot.source.id,
+              "reaction",
+              row.id,
+              row.external_id,
+              ingestedAt,
+              "authoritative-absence",
+              1,
+            );
+          }
+          for (const row of this.#database.query(`
+            SELECT provenance.message_id,provenance.external_id,message.kind
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.source_id=?
+          `).iterate(snapshot.source.id) as Iterable<{
+            message_id: string;
+            external_id: string;
+            kind: string;
+          }>) {
+            setSuppression.run(
+              snapshot.source.id,
+              row.kind === "reaction" ? "reaction" : "message",
+              row.message_id,
+              row.external_id,
+              ingestedAt,
+              "authoritative-absence",
+              1,
+            );
+          }
+        }
+        upsertSource.run(
+          snapshot.source.id,
+          snapshot.source.kind,
+          snapshot.source.provider,
+          snapshot.source.network,
+          snapshot.source.accountId,
+          snapshot.source.externalId,
+          snapshot.source.revision,
+          existing?.revision ?? snapshot.source.revision,
+          snapshot.source.generatedAt,
+          canonicalJson(snapshot.source.producer),
+          canonicalJson(snapshot.source.coverage),
+          snapshot.source.manifestSha256,
+          canonicalJson(snapshot.source.identity),
+          canonicalJson(snapshot.source.warnings),
+          ingestedAt,
+        );
+        if (existing !== null && existing.network !== snapshot.source.network) {
+          relabelSourceConversations.run(snapshot.source.network, snapshot.source.id);
+          relabelSourceMessages.run(snapshot.source.network, snapshot.source.id);
+        }
+        const conversationProvenance = new Map(
+          snapshot.conversationProvenance.map((value) => [value.conversationId, value]),
+        );
+        for (const conversation of snapshot.conversations) {
+          const owner = get<{ source_id: string }>(this.#database, `
+            SELECT source_id FROM conversation_sources WHERE conversation_id=?
+          `, conversation.id);
+          if (owner !== null && owner.source_id !== snapshot.source.id) {
+            throw new CliError("conflict", `Conversation ${conversation.id} belongs to another source`);
+          }
+          upsertConversation.run(
+            conversation.id,
+            conversation.sourceKey,
+            conversation.privateLabel,
+            conversation.service,
+            conversation.participantCount,
+            canonicalJson(conversation.participantIds),
+            canonicalJson(conversation.privateParticipants),
+            conversation.group ? 1 : 0,
+          );
+          const provenance = conversationProvenance.get(conversation.id)!;
+          upsertConversationSource.run(
+            conversation.id,
+            snapshot.source.id,
+            provenance.externalId,
+            canonicalJson(provenance.metadata ?? {}),
+          );
+          setSuppression.run(
+            snapshot.source.id,
+            "conversation",
+            conversation.id,
+            provenance.externalId,
+            ingestedAt,
+            "reappeared",
+            0,
+          );
+          clearExternalSuppression.run(
+            ingestedAt,
+            snapshot.source.id,
+            "conversation",
+            provenance.externalId,
+          );
+        }
+        const messageProvenance = new Map(
+          snapshot.messageProvenance.map((value) => [value.messageId, value]),
+        );
+        for (const message of snapshot.messages) {
+          const owner = get<{ source_id: string; source_row_id: number }>(this.#database, `
+            SELECT provenance.source_id,message.source_row_id
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.message_id=?
+          `, message.id);
+          if (owner !== null && owner.source_id !== snapshot.source.id) {
+            throw new CliError("conflict", `Message ${message.id} belongs to another source`);
+          }
+          const preferredRowId = authoritative ? message.sourceRowId : null;
+          const preferredCollision = preferredRowId === null ? null : get<{ id: string }>(
+            this.#database,
+            "SELECT id FROM messages WHERE conversation_id=? AND source_row_id=?",
+            message.conversationId,
+            preferredRowId,
+          );
+          const sourceRowId = owner?.source_row_id ?? (
+            preferredRowId !== null && preferredCollision === null
+              ? preferredRowId
+              : (get<{ value: number | null }>(this.#database, `
+                SELECT max(source_row_id) AS value FROM messages WHERE conversation_id=?
+              `, message.conversationId)?.value ?? 0) + 1
+          );
+          upsertMessage.run(
+            message.id,
+            sourceRowId,
+            message.sourceGuid,
+            message.conversationId,
+            message.sentAt,
+            message.direction,
+            message.body,
+            message.bodySource,
+            message.kind,
+            message.replyToSourceGuid,
+            message.editedAt,
+            message.retractedAt,
+            message.service,
+            message.attachmentCount,
+          );
+          const provenance = messageProvenance.get(message.id)!;
+          upsertMessageProvenance.run(
+            message.id,
+            snapshot.source.id,
+            provenance.externalId,
+            provenance.replyToExternalId,
+            canonicalJson(provenance.attachments),
+            canonicalJson({
+              providerSortKey: provenance.providerSortKey,
+              metadata: provenance.metadata ?? {},
+            }),
+          );
+          setSuppression.run(
+            snapshot.source.id,
+            message.kind === "reaction" ? "reaction" : "message",
+            message.id,
+            provenance.externalId,
+            ingestedAt,
+            "reappeared",
+            0,
+          );
+          clearExternalSuppression.run(
+            ingestedAt,
+            snapshot.source.id,
+            message.kind === "reaction" ? "reaction" : "message",
+            provenance.externalId,
+          );
+          if (message.kind === "reaction") {
+            setSuppression.run(
+              snapshot.source.id,
+              "reaction-timeline",
+              message.id,
+              provenance.externalId,
+              ingestedAt,
+              "reappeared",
+              0,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction-timeline",
+              provenance.externalId,
+            );
+          }
+        }
+        for (const reaction of snapshot.reactionFacts ?? []) {
+          const existingReaction = get<{ source_id: string; external_id: string }>(this.#database, `
+            SELECT source_id,external_id FROM corpus_reaction_facts WHERE id=?
+          `, reaction.id);
+          if (
+            existingReaction !== null
+            && (
+              existingReaction.source_id !== snapshot.source.id
+              || existingReaction.external_id !== reaction.externalId
+            )
+          ) throw new CliError("conflict", `Reaction ${reaction.id} belongs to another source coordinate`);
+          const conversationId = reaction.conversationId ?? get<{ conversation_id: string }>(
+            this.#database,
+            `SELECT message.conversation_id
+             FROM message_provenance provenance
+             JOIN messages message ON message.id=provenance.message_id
+             WHERE provenance.source_id=? AND provenance.external_id=?`,
+            snapshot.source.id,
+            reaction.targetExternalId,
+          )?.conversation_id ?? null;
+          upsertReactionFact.run(
+            reaction.id,
+            snapshot.source.id,
+            reaction.externalId,
+            reaction.targetExternalId,
+            conversationId,
+            reaction.direction,
+            reaction.body,
+            reaction.reactedAt,
+            reaction.state,
+          );
+          if (reaction.state === "active") {
+            setSuppression.run(
+              snapshot.source.id,
+              "reaction",
+              reaction.id,
+              reaction.externalId,
+              ingestedAt,
+              "reappeared",
+              0,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction",
+              reaction.externalId,
+            );
+            clearExternalSuppression.run(
+              ingestedAt,
+              snapshot.source.id,
+              "reaction-timeline",
+              reaction.externalId,
+            );
+          }
+        }
+        this.#database.query(`
+          UPDATE corpus_reaction_facts AS reaction
+          SET conversation_id=(
+            SELECT message.conversation_id
+            FROM message_provenance provenance
+            JOIN messages message ON message.id=provenance.message_id
+            WHERE provenance.source_id=reaction.source_id
+              AND provenance.external_id=reaction.target_external_id
+          )
+          WHERE reaction.source_id=? AND reaction.conversation_id IS NULL
+            AND EXISTS (
+              SELECT 1 FROM message_provenance provenance
+              WHERE provenance.source_id=reaction.source_id
+                AND provenance.external_id=reaction.target_external_id
+            )
+        `).run(snapshot.source.id);
+        for (const record of snapshot.auxiliaryRecords ?? []) {
+          upsertSourceRecord.run(
+            snapshot.source.id,
+            record.kind,
+            record.id,
+            canonicalJson(record.record),
+          );
+        }
+        for (const deletion of snapshot.deletions ?? []) {
+          let localId = deletion.localEntityId;
+          if (deletion.entityKind === "conversation") {
+            const specifiedLocal = localId !== null;
+            const target = localId === null
+              ? get<{ conversation_id: string; external_id: string }>(this.#database, `
+              SELECT conversation_id,external_id FROM conversation_sources
+              WHERE source_id=? AND external_id=?
+            `, snapshot.source.id, deletion.externalId)
+              : get<{ conversation_id: string; external_id: string }>(this.#database, `
+                SELECT conversation_id,external_id FROM conversation_sources
+                WHERE source_id=? AND conversation_id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (target.external_id !== deletion.externalId) {
+                throw new CliError("invalid-data", "A conversation deletion has mismatched coordinates");
+              }
+              localId = target.conversation_id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A conversation deletion references an unknown local entity");
+            }
+          }
+          if (deletion.entityKind === "message") {
+            const specifiedLocal = localId !== null;
+            const target = localId === null
+              ? get<{
+                message_id: string;
+                external_id: string;
+                conversation_id: string;
+                kind: string;
+              }>(this.#database, `
+                SELECT provenance.message_id,provenance.external_id,
+                  message.conversation_id,message.kind
+                FROM message_provenance provenance
+                JOIN messages message ON message.id=provenance.message_id
+                WHERE provenance.source_id=? AND provenance.external_id=?
+              `, snapshot.source.id, deletion.externalId)
+              : get<{
+                message_id: string;
+                external_id: string;
+                conversation_id: string;
+                kind: string;
+              }>(this.#database, `
+                SELECT provenance.message_id,provenance.external_id,
+                  message.conversation_id,message.kind
+                FROM message_provenance provenance
+                JOIN messages message ON message.id=provenance.message_id
+                WHERE provenance.source_id=? AND provenance.message_id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (
+                target.external_id !== deletion.externalId
+                || target.kind === "reaction"
+                || (
+                  deletion.expectedConversationId !== undefined
+                  && deletion.expectedConversationId !== target.conversation_id
+                )
+              ) throw new CliError("invalid-data", "A message deletion has mismatched coordinates");
+              localId = target.message_id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A message deletion references an unknown local entity");
+            }
+          }
+          if (
+            deletion.entityKind === "reaction"
+            || deletion.entityKind === "reaction-timeline"
+          ) {
+            const specifiedLocal = localId !== null;
+            const target = localId === null
+              ? get<{
+                id: string;
+                external_id: string;
+                conversation_id: string | null;
+              }>(this.#database, `
+                SELECT id,external_id,conversation_id FROM corpus_reaction_facts
+                WHERE source_id=? AND external_id=?
+              `, snapshot.source.id, deletion.externalId)
+              : get<{
+                id: string;
+                external_id: string;
+                conversation_id: string | null;
+              }>(this.#database, `
+                SELECT id,external_id,conversation_id FROM corpus_reaction_facts
+                WHERE source_id=? AND id=?
+              `, snapshot.source.id, localId);
+            if (target !== null) {
+              if (
+                target.external_id !== deletion.externalId
+                || (
+                  deletion.expectedConversationId !== undefined
+                  && deletion.expectedConversationId !== target.conversation_id
+                )
+              ) throw new CliError("invalid-data", "A reaction deletion has mismatched coordinates");
+              localId = target.id;
+            } else if (specifiedLocal) {
+              throw new CliError("invalid-data", "A reaction deletion references an unknown local entity");
+            }
+          }
+          setSuppression.run(
+            snapshot.source.id,
+            deletion.entityKind,
+            localId ?? `external:${deletion.externalId}`,
+            deletion.externalId,
+            deletion.deletedAt,
+            deletion.reason ?? "tombstone",
+            1,
+          );
+        }
+        if (snapshot.source.kind === "bundle") {
+          rerankBundleMessages(this.#database, snapshot.source.id);
+        }
+        const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
+        this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?")
+          .run(stateRevision, snapshot.source.id);
+        const changed = existing?.revision !== stateRevision;
+        changedAny ||= changed;
+        const counts = get<{ conversations: number; messages: number }>(this.#database, `
+          SELECT count(distinct conversation.id) AS conversations,
+            count(message.id) AS messages
+          FROM conversation_sources ownership
+          JOIN conversations conversation ON conversation.id=ownership.conversation_id
+          LEFT JOIN messages message ON message.conversation_id=conversation.id
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=ownership.source_id
+                AND suppression.local_id=message.id
+                AND suppression.kind IN ('message','reaction','reaction-timeline')
+                AND suppression.suppressed=1
+            )
+          WHERE ownership.source_id=?
+            AND NOT EXISTS (
+              SELECT 1 FROM corpus_source_suppressions suppression
+              WHERE suppression.source_id=ownership.source_id
+                AND suppression.local_id=conversation.id
+                AND suppression.kind='conversation'
+                AND suppression.suppressed=1
+            )
+        `, snapshot.source.id) ?? { conversations: 0, messages: 0 };
+        results.push(Object.freeze({ id: snapshot.source.id, changed, ...counts }));
+      }
+      if (changedAny) rebuildConversationLabels(this.#database, hmacKey);
+      const corpusRevision = setCorpusRevision(this.#database);
+      if (corpusRevision === null) throw new CliError("internal", "Source replacement produced no corpus revision");
+      return Object.freeze({ corpusRevision, sources: Object.freeze(results) });
+    });
+  }
+
   replaceCorpus(
     snapshot: CorpusSnapshot,
     ingestedAt: string,
@@ -1036,87 +2303,218 @@ export class LocalStore {
     conversations: number;
     messages: number;
   }> {
-    const corpusRevision = snapshot.source.snapshotSha256;
-    if (!/^[a-f0-9]{64}$/u.test(corpusRevision)) {
+    if (!/^[a-f0-9]{64}$/u.test(snapshot.source.snapshotSha256)) {
       throw new CliError("invalid-data", "The iMessage reader returned an invalid corpus revision");
     }
-    const conversationIds = new Set(snapshot.conversations.map((conversation) => conversation.id));
-    if (conversationIds.size !== snapshot.conversations.length) {
-      throw new CliError("invalid-data", "The iMessage reader returned duplicate conversation IDs");
-    }
-    const messageIds = new Set<string>();
-    for (const message of snapshot.messages) {
-      if (!conversationIds.has(message.conversationId)) {
-        throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
-      }
-      if (messageIds.has(message.id)) throw new CliError("invalid-data", `Duplicate message ID ${message.id}`);
-      messageIds.add(message.id);
-    }
-
+    const observed = snapshot.messages.map(({ sentAt }) => sentAt).sort();
+    const sourceSnapshot: SourceCorpusSnapshot = Object.freeze({
+      source: Object.freeze({
+        id: IMESSAGE_SOURCE_ID,
+        kind: "imessage",
+        provider: "apple",
+        network: null,
+        accountId: null,
+        externalId: "local-imessage",
+        revision: snapshot.source.snapshotSha256,
+        generatedAt: null,
+        producer: Object.freeze({ id: "message-like-me", version: "imessage-reader-v1" }),
+        coverage: Object.freeze({
+          history: "complete-current-local",
+          observedFrom: observed[0] ?? null,
+          observedTo: observed.at(-1) ?? null,
+        }),
+        manifestSha256: null,
+        identity: snapshot.source,
+        warnings: snapshot.warnings,
+      }),
+      conversations: snapshot.conversations,
+      conversationProvenance: Object.freeze(snapshot.conversations.map((conversation) => ({
+        conversationId: conversation.id,
+        externalId: conversation.sourceKey,
+      }))),
+      messages: snapshot.messages,
+      messageProvenance: Object.freeze(snapshot.messages.map((message) => ({
+        messageId: message.id,
+        externalId: message.sourceGuid,
+        providerSortKey: null,
+        replyToExternalId: message.replyToSourceGuid,
+        attachments: Object.freeze(Array.from({ length: message.attachmentCount }, (_value, index) => ({
+          id: `unavailable-${index + 1}`,
+          kind: null,
+          mimeType: null,
+          fileName: null,
+          bytes: null,
+        }))),
+      }))),
+    });
+    const replaced = this.replaceSources([sourceSnapshot], ingestedAt, hmacKey);
     transaction(this.#database, () => {
-      this.#database.exec("DELETE FROM messages; DELETE FROM conversations;");
-      const insertConversation = this.#database.query(`
-        INSERT INTO conversations (
-          id, source_key, private_label, service, participant_count,
-          participant_ids_json, private_participants_json, is_group
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const conversation of snapshot.conversations) {
-        insertConversation.run(
-          conversation.id,
-          conversation.sourceKey,
-          conversation.privateLabel,
-          conversation.service,
-          conversation.participantCount,
-          canonicalJson(conversation.participantIds),
-          canonicalJson(conversation.privateParticipants),
-          conversation.group ? 1 : 0,
-        );
-      }
-      const insertMessage = this.#database.query(`
-        INSERT INTO messages (
-          id, source_row_id, source_guid, conversation_id, sent_at, direction,
-          body, body_source, kind, reply_to_source_guid, edited_at, retracted_at,
-          service, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const message of snapshot.messages) {
-        insertMessage.run(
-          message.id,
-          message.sourceRowId,
-          message.sourceGuid,
-          message.conversationId,
-          message.sentAt,
-          message.direction,
-          message.body,
-          message.bodySource,
-          message.kind,
-          message.replyToSourceGuid,
-          message.editedAt,
-          message.retractedAt,
-          message.service,
-          message.attachmentCount,
-        );
-      }
       const setMetadata = this.#database.query(`
-        INSERT INTO metadata (key, value) VALUES (?, ?)
-        ON CONFLICT (key) DO UPDATE SET value = excluded.value
+        INSERT INTO metadata(key,value) VALUES (?,?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
       `);
       for (const [key, value] of [
-        ["corpus_revision", corpusRevision],
         ["source_identity", canonicalJson(snapshot.source)],
         ["ingested_at", ingestedAt],
         ["warnings", canonicalJson(snapshot.warnings)],
         ["corpus_schema_version", String(snapshot.schemaVersion)],
       ] as const) setMetadata.run(key, value);
-      rebuildConversationLabels(this.#database, hmacKey);
     });
-
     return {
-      corpusRevision,
+      corpusRevision: replaced.corpusRevision,
       conversations: snapshot.conversations.length,
       messages: snapshot.messages.length,
     };
+  }
+
+  listSources(privateDetails = false): ReadonlyArray<Readonly<{
+    id: string;
+    kind: "imessage" | "bundle";
+    provider: string;
+    network: string | null;
+    revision: string;
+    generatedAt: string | null;
+    ingestedAt: string;
+    coverage: unknown;
+    warningCount: number;
+    conversations: number;
+    messages: number;
+    reactions: number;
+    undatedReactions: number;
+    accountId?: string | null;
+    externalId?: string;
+    manifestSha256?: string | null;
+    inputRevision?: string;
+    identity?: unknown;
+    warnings?: unknown;
+  }>> {
+    const rows = all<{
+      id: string;
+      kind: "imessage" | "bundle";
+      provider: string;
+      network: string | null;
+      account_id: string | null;
+      external_id: string;
+      input_revision: string;
+      revision: string;
+      generated_at: string | null;
+      coverage_json: string;
+      manifest_sha256: string | null;
+      identity_json: string;
+      warnings_json: string;
+      ingested_at: string;
+      conversations: number;
+      messages: number;
+      reactions: number;
+      undated_reactions: number;
+    }>(this.#database, `
+      SELECT source.*,
+        count(distinct ownership.conversation_id) AS conversations,
+        count(message.id) AS messages,
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE
+          (SELECT count(*) FROM messages reaction_message
+            JOIN message_provenance reaction_provenance
+              ON reaction_provenance.message_id=reaction_message.id
+            WHERE reaction_provenance.source_id=source.id
+              AND reaction_message.kind='reaction' AND reaction_message.retracted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id
+                  AND suppression.kind IN ('message','reaction','reaction-timeline')
+                  AND suppression.local_id=reaction_message.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction_message.conversation_id
+                  AND suppression.suppressed=1
+              ))
+        END AS reactions,
+        CASE source.kind WHEN 'bundle' THEN
+          (SELECT count(*) FROM corpus_reaction_facts reaction
+            WHERE reaction.source_id=source.id AND reaction.state='active'
+              AND reaction.reacted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='reaction'
+                  AND suppression.local_id=reaction.id AND suppression.suppressed=1
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM corpus_source_suppressions suppression
+                WHERE suppression.source_id=source.id AND suppression.kind='conversation'
+                  AND suppression.local_id=reaction.conversation_id
+                  AND suppression.suppressed=1
+              ))
+          ELSE 0
+        END AS undated_reactions
+      FROM corpus_sources source
+      LEFT JOIN conversation_sources ownership ON ownership.source_id=source.id
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=source.id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=ownership.conversation_id
+            AND suppression.suppressed=1
+        )
+      LEFT JOIN messages message ON message.conversation_id=ownership.conversation_id
+        AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=source.id
+            AND suppression.kind IN ('message','reaction','reaction-timeline')
+            AND suppression.local_id=message.id
+            AND suppression.suppressed=1
+        )
+      GROUP BY source.id
+      ORDER BY source.provider,source.network,source.id
+    `);
+    return rows.map((row) => {
+      const warnings = parsedJson(row.warnings_json, `Source ${row.id} warnings`);
+      if (!Array.isArray(warnings)) throw new CliError("invalid-data", `Source ${row.id} warnings are invalid`);
+      return {
+        id: row.id,
+        kind: row.kind,
+        provider: row.provider,
+        network: row.network,
+        revision: row.revision,
+        generatedAt: row.generated_at,
+        ingestedAt: row.ingested_at,
+        coverage: parsedJson(row.coverage_json, `Source ${row.id} coverage`),
+        warningCount: warnings.length,
+        conversations: row.conversations,
+        messages: row.messages,
+        reactions: row.reactions,
+        undatedReactions: row.undated_reactions,
+        ...(privateDetails ? {
+          accountId: row.account_id,
+          externalId: row.external_id,
+          manifestSha256: row.manifest_sha256,
+          inputRevision: row.input_revision,
+          identity: parsedJson(row.identity_json, `Source ${row.id} identity`),
+          warnings,
+        } : {}),
+      };
+    });
+  }
+
+  source(sourceId: string, privateDetails = false): ReturnType<LocalStore["listSources"]>[number] | null {
+    if (sourceId.length < 1 || sourceId.length > 256) {
+      throw new CliError("usage", "Source ID must be bounded non-empty text");
+    }
+    return this.listSources(privateDetails).find(({ id }) => id === sourceId) ?? null;
   }
 
   listContacts(options: Readonly<{
@@ -1145,16 +2543,30 @@ export class LocalStore {
           conversation.id AS conversation_id
         FROM conversation_contact_scopes association
         JOIN conversations conversation ON conversation.id=association.conversation_id
+        JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
         LEFT JOIN conversation_contact_labels label
           ON label.conversation_id=association.conversation_id
-        WHERE conversation.is_group=0
+        WHERE conversation.is_group=0 AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=ownership.source_id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=conversation.id
+            AND suppression.suppressed=1
+        )
         UNION ALL
         SELECT conversation.id,conversation.private_label,'conversation',conversation.is_group,
           conversation.participant_count,conversation.id
         FROM conversations conversation
+        JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
         LEFT JOIN conversation_contact_scopes association
           ON association.conversation_id=conversation.id
-        WHERE association.conversation_id IS NULL
+        WHERE association.conversation_id IS NULL AND NOT EXISTS (
+          SELECT 1 FROM corpus_source_suppressions suppression
+          WHERE suppression.source_id=ownership.source_id
+            AND suppression.kind='conversation'
+            AND suppression.local_id=conversation.id
+            AND suppression.suppressed=1
+        )
       )
       SELECT scope.id,min(scope.private_label) AS private_label,
         max(scope.scope_kind) AS scope_kind,
@@ -1166,6 +2578,14 @@ export class LocalStore {
         sum(CASE WHEN message.direction = 'outgoing' THEN 1 ELSE 0 END) AS outgoing_count
       FROM scope_conversations scope
       JOIN messages message ON message.conversation_id=scope.conversation_id
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )
       GROUP BY scope.id
       HAVING outgoing_count >= ?
       ORDER BY outgoing_count DESC,last_message_at DESC,scope.id
@@ -1224,6 +2644,7 @@ export class LocalStore {
     messageCount: number;
     incomingCount: number;
     outgoingCount: number;
+    services: readonly string[];
   }) | null {
     const scope = analysisScope(this.#database, contactId);
     if (scope === null) return null;
@@ -1286,6 +2707,8 @@ export class LocalStore {
       scopeKind: scope.kind,
       conversationCount: scope.conversationIds.length,
       service: services.length === 1 ? services[0]! : null,
+      services: Object.freeze(services.sort((left, right) =>
+        left < right ? -1 : left > right ? 1 : 0)),
       participantCount: scope.kind === "person" ? 1 : first.participant_count,
       participantIds: participants,
       privateParticipants,
@@ -1306,6 +2729,7 @@ export class LocalStore {
     corpusRevision: string;
     evidenceRevision: string;
     messages: CorpusMessage[];
+    reactions: CorpusReactionFact[];
   }> | null {
     const window = evidenceWindow(options, "Evidence window");
     return readTransaction(this.#database, () => {
@@ -1321,6 +2745,7 @@ export class LocalStore {
         corpusRevision,
         evidenceRevision: scopeEvidenceRevision(this.#database, scope, undefined, window),
         messages: messageRowsForScope(this.#database, scope, undefined, window).map(corpusMessage),
+        reactions: reactionFactsForScope(this.#database, scope, window),
       };
     });
   }
@@ -1556,6 +2981,7 @@ export class LocalStore {
     foreignKeyViolations: number;
     corpusRevision: string | null;
     contactsRevision: string | null;
+    sources: number;
     conversations: number;
     messages: number;
     profiles: number;
@@ -1564,7 +2990,7 @@ export class LocalStore {
   }> {
     const quick = get<{ quick_check: string }>(this.#database, "PRAGMA quick_check")?.quick_check ?? "unknown";
     const foreignKeys = all<Row>(this.#database, "PRAGMA foreign_key_check").length;
-    const count = (table: "conversations" | "messages" | "profiles" | "addressbook_contacts" | "conversation_contact_labels") =>
+    const count = (table: "corpus_sources" | "conversations" | "messages" | "profiles" | "addressbook_contacts" | "conversation_contact_labels") =>
       get<{ value: number }>(this.#database, `SELECT count(*) AS value FROM ${table}`)?.value ?? 0;
     return {
       storeSchemaVersion: userVersion(this.#database),
@@ -1572,6 +2998,7 @@ export class LocalStore {
       foreignKeyViolations: foreignKeys,
       corpusRevision: this.corpusRevision(),
       contactsRevision: this.contactsRevision(),
+      sources: count("corpus_sources"),
       conversations: count("conversations"),
       messages: count("messages"),
       profiles: count("profiles"),

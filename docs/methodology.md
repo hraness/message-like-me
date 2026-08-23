@@ -13,6 +13,10 @@ The CLI makes stable private snapshots and opens only those snapshots through
 SQLite. It does not modify Messages, Contacts, their databases, or their
 transactional sidecars.
 
+A caller-owned local message bundle is a separate versioned source
+observation. The CLI verifies its complete fixed inventory and digests before
+ingest, never obtains its provider credential, and does not call its producer.
+
 The normalized corpus, private installation key, aggregate metrics, profiles,
 and drafting context stay in the local data root. Study and evaluation files
 are written only to explicit paths. Ordinary views use keyed pseudonymous IDs
@@ -26,11 +30,21 @@ of the user's prose.
 
 ## Normalized observations
 
-The corpus preserves message direction, timestamp, body availability and
-source, message kind, attachment count, edit or retraction metadata, explicit
-reply target, service, and conversation membership where the source supports
-them. Unsupported or missing text remains unavailable rather than being
-reconstructed.
+The corpus preserves source, account, network, message direction, provider
+ordering, timestamp, body availability and source, message kind, attachment
+metadata, edit or retraction metadata, explicit reply target, service, and
+conversation membership where the source supports them. Unsupported, deleted,
+or truncated text remains unavailable rather than being reconstructed. A
+truncated text record still represents a message bubble for tempo and reply
+evidence, but never contributes prose.
+
+Native iMessage history and each connected bundle account have distinct source
+namespaces. A bounded, truncated, or unknown bundle is not an authoritative
+statement that omitted history no longer exists. Reimport merges present
+records with retained state. Only explicit deletion, removal, replacement, or
+tombstone state suppresses evidence, and a later record reappearance clears
+that suppression. Bundle creation times are monotonic per source, so an older
+snapshot cannot resurrect or overwrite newer state.
 
 The analysis uses several operational units:
 
@@ -44,7 +58,11 @@ The analysis uses several operational units:
   in the same session.
 - An **explicit reply** is source metadata linking a message to an earlier
   message. It is distinct from a reaction or an ordinary adjacent response.
-- A **reaction** is counted as interaction behavior, not authored prose.
+- A **reaction** is counted as interaction behavior, not authored prose. A
+  reaction without a provider timestamp contributes to counts and direction
+  but not to temporal order, sessions, bursts, or response episodes. Raw
+  provider reaction values remain private and are not categorical dimensions
+  in aggregate metrics or drafting context.
 
 Five minutes and eight hours are reproducible segmentation parameters, not
 claims about natural conversational boundaries. Every metrics artifact records
@@ -57,7 +75,11 @@ For each conversation, the CLI reports the evidence window and counts of
 incoming, outgoing, text, session, burst, and response records. Tempo metrics
 include response-latency quantiles, outgoing messages per response, the ratio
 of single-message to multi-message responses, multi-message inbound contexts,
-visible multi-question contexts, and explicit reply frequency.
+visible multi-question contexts, and explicit reply frequency. Session, burst,
+and response construction runs independently for each source conversation
+before person-scope results are combined. Adjacent timestamps in two apps or
+threads never create one artificial episode. Mixed person scopes expose their
+sorted service breakdown.
 
 Surface measurements cover characters and words, lowercase starts, terminal
 punctuation, question and exclamation marks, emoji-bearing messages, and
@@ -83,7 +105,7 @@ each direction keeps at most 12 text messages per example, and total emitted
 body text is capped at 256 KiB. Coverage metadata states what was truncated or
 omitted. A packet is a sample of response contexts, not a transcript.
 
-Version 0.2 adds temporal bounds to study selection. A profile intended for
+Version 0.2 added temporal bounds to study selection. A profile intended for
 held-out evaluation should use only examples before the chosen cutoff. The
 cutoff, corpus revision, selection parameters, packet receipt, and evidence
 window form part of the analysis provenance. Profile validity uses a digest of
@@ -171,6 +193,8 @@ sending, reacting, scheduling, or operating a messaging application.
 Reported behavior can be distorted by:
 
 - Messages that are not synchronized to the Mac or are no longer present;
+- partial local provider exports whose completeness bounds exclude older or
+  remote history;
 - unsupported body encodings, attachments, edits, retractions, or source
   schema changes;
 - ambiguous or stale Contacts labels;

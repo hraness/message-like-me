@@ -7,6 +7,7 @@ const VALUE_OPTIONS = new Set([
   "burst-gap",
   "data-dir",
   "database",
+  "input",
   "limit",
   "min-outgoing",
   "output",

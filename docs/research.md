@@ -8,7 +8,7 @@ that boundary and the neighboring open-source work that informed it.
 The cited papers are primary research publications or preprints. Project
 descriptions link to their official repositories. A paper result is evidence
 about the task and population it evaluated, not proof that the same result
-holds for private iMessage conversations.
+holds for private conversations across the messaging sources a user imports.
 
 ## Personalization is contextual
 
@@ -25,6 +25,11 @@ separate broadly repeated tendencies from contact-specific and
 context-specific adjustments. Message Like Me therefore treats incoming
 messages as response context and only the user's outgoing messages as evidence
 of the user's prose.
+
+[Catch Me If You Can? Not Yet](https://aclanthology.org/2025.findings-emnlp.532/)
+evaluates nuanced individual style in informal communication, a task close to
+private messaging. Its scope reinforces the same boundary: measured tendencies
+can guide a draft without establishing a faithful digital copy of its author.
 
 [LaMP](https://aclanthology.org/2024.acl-long.399/) evaluated personalized
 classification and generation from user histories and found retrieval-based
@@ -47,6 +52,12 @@ personalized long-form generation by comparing evidence-bearing aspects of
 content and writing style separately. Its reported agreement with human
 judgment improved over the comparison methods in that study. It does not
 measure message timing, bubble boundaries, or reply-link behavior.
+
+[Can You Make It Sound Like You?](https://aclanthology.org/2026.acl-long.2030/)
+studies personalized writing through human review and post-editing. That
+workflow supports Message Like Me's product boundary: the output is an unsent
+candidate for the user to inspect and revise, not an autonomous act on the
+user's behalf.
 
 [Münker, Schwager, and Rettinger](https://arxiv.org/abs/2506.21974) tested
 LLM-based imitation of social-network communication and argue that a
@@ -110,8 +121,9 @@ conversation partner or make a hosted agent local.
 A 2026 preprint on [response times in donated WhatsApp and Instagram chats](https://arxiv.org/abs/2605.03687)
 reported persistent response-speed similarity between chat partners in its
 sample. This is preliminary evidence from different platforms and cannot set a
-norm for iMessage users. It does support comparing tempo within a dyad instead
-of treating one global latency distribution as a personal rule.
+norm for users of any supported messaging source. It does support comparing
+tempo within a dyad instead of treating one global latency distribution as a
+personal rule.
 
 Historical latency is affected by sleep, work, travel, notifications, device
 availability, urgency, and missing data. Message Like Me reports it as
