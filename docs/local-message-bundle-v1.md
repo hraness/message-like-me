@@ -6,8 +6,8 @@ provider capture from analysis: a producer handles provider access and writes
 the bundle, while `messagelikeme ingest bundle` verifies and normalizes it. The
 importer never receives provider credentials and never calls the producer.
 
-The current producer is the local Beeper export in
-[Wrench 0.13.0 or newer](https://github.com/hraness/wrench/releases):
+The current producer is the local Beeper export introduced in
+[Wrench 0.13.0](https://github.com/hraness/wrench/releases/tag/v0.13.0):
 
 ```sh
 wrench beeper export-message-like-me \
@@ -24,6 +24,34 @@ The JSON shape is published as
 Runtime validation also enforces UTF-8 byte bounds, canonical encoding,
 filesystem identity, graph joins, and digest laws that JSON Schema cannot
 express.
+
+## Compatibility coordinates
+
+Message Like Me accepts schema version `1` with source ID `beeper-local` and
+source-transform version `1.1.0`. Wrench `0.13.x` emits that transform. A later
+Wrench package release remains compatible only while its manifest still says
+`source.version: "1.1.0"`; package age or a permissive version range never
+overrides the manifest coordinate. The provider version records the pinned
+Beeper CLI used for capture and may change without changing the bundle
+contract.
+
+The dependency-free package subpath is the executable contract authority for
+producers and consumers:
+
+```ts
+import {
+  LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
+  parseLocalMessageBundleV1Manifest,
+  parseLocalMessageBundleV1Record,
+} from "@hraness/message-like-me/message-bundle-v1"
+```
+
+It exports the exact readonly record and manifest types, fixed artifact
+inventory, safety bounds, compatibility constants, canonical bundle-digest
+helpers, and strict pure parsers. Those parsers operate on already decoded
+unknown values and perform no filesystem, credential, provider, network, AI,
+analytics, or message-sending work. The CLI adds private filesystem and graph
+validation around the same parsers.
 
 ## Directory inventory
 

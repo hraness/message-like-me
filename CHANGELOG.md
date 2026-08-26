@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0
+
+- Publish `@hraness/message-like-me/message-bundle-v1` as the dependency-free
+  authority for the immutable version-one local message bundle wire contract,
+  including exact readonly types, artifact inventory, safety bounds, digest
+  helpers, and strict pure record and manifest parsers.
+- Make source-transform compatibility fail closed at `beeper-local` version
+  `1.1.0`, keep the JSON Schema and checked cross-producer fixture aligned with
+  the executable contract, and verify the public subpath in a packed consumer.
+- Reuse the public contract parsers inside CLI ingestion without changing the
+  bundle inventory, canonical bytes, privacy boundary, graph laws, or command
+  behavior.
+- Keep the informational site, release link, and installation command aligned
+  with the package version through a checked release-identity invariant.
+
 ## 0.3.0
 
 - Add strict private version-one source-bundle ingestion for local Beeper

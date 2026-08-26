@@ -5,8 +5,8 @@ export const SITE_ORIGIN = 'https://messagelikeme.com';
 export const SITE_DESCRIPTION =
   'A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.';
 export const GITHUB_URL = 'https://github.com/hraness/message-like-me';
-export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v0.3.0`;
-export const SOFTWARE_VERSION = '0.3.0';
+export const SOFTWARE_VERSION = '0.4.0';
+export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;
 
 export function absoluteUrl(path = '/'): string {
   return new URL(path, `${SITE_ORIGIN}/`).toString();

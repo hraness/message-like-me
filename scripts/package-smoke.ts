@@ -206,15 +206,24 @@ export async function packageSmoke(): Promise<void> {
     }
     await requirePublishedPaths(installedPackage, manifest);
     await run([process.execPath, "-e", `await import(${JSON.stringify(PACKAGE_NAME)})`], consumer);
+    await run([
+      process.execPath,
+      "-e",
+      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)}); if (contract.LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION !== "1.1.0") throw new Error("wrong bundle contract")`,
+    ], consumer);
     await writeFile(
       join(consumer, "index.ts"),
       [
         `import { canonicalJson, sha256 } from ${JSON.stringify(PACKAGE_NAME)};`,
         `import type { ContactMetrics, StyleProfileV2 } from ${JSON.stringify(PACKAGE_NAME)};`,
+        `import { LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, parseLocalMessageBundleV1Record } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)};`,
+        `import type { LocalMessageBundleV1Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)};`,
         "const digest: string = sha256(canonicalJson({ fixture: true }));",
         "const profile = null as unknown as StyleProfileV2;",
         "const metrics = null as unknown as ContactMetrics;",
-        "void [digest, profile, metrics];",
+        "const manifest = null as unknown as LocalMessageBundleV1Manifest;",
+        "const parseRecord: typeof parseLocalMessageBundleV1Record = parseLocalMessageBundleV1Record;",
+        "void [digest, profile, metrics, manifest, parseRecord, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS];",
         "",
       ].join("\n"),
       { mode: 0o600 },

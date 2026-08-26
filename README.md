@@ -25,7 +25,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.3.0
+bun add --global github:hraness/message-like-me#v0.4.0
 messagelikeme skill install
 ```
 
@@ -81,9 +81,9 @@ copy of the database and its transactional sidecars, and opens only that copy
 with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
 require permission for the terminal or agent host to read Messages data.
 
-To study accounts connected through Beeper, install or update to
-[Wrench 0.13.0 or newer](https://github.com/hraness/wrench/releases), then ask
-it to create a new private Message Like Me bundle:
+To study accounts connected through Beeper, install or update to a compatible
+[Wrench release](https://github.com/hraness/wrench/releases), then ask it to
+create a new private Message Like Me bundle:
 
 ```sh
 wrench beeper export-message-like-me \
@@ -125,6 +125,9 @@ iMessage and prior bundle sources remain alongside it.
 
 The complete interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
+Message Like Me accepts the `beeper-local` source transform `1.1.0`, introduced
+in Wrench 0.13.0 and emitted throughout Wrench 0.13.x. Later Wrench releases are
+compatible only while they preserve that explicit manifest coordinate.
 
 Beeper exports describe bounded local observations. A later bounded export
 that omits an older record does not delete retained history. Explicit deletion,
@@ -369,6 +372,22 @@ types plus deterministic canonical JSON and SHA-256 helpers:
 import type { ContactMetrics, StyleProfileV2 } from "@hraness/message-like-me"
 import { canonicalJson, sha256 } from "@hraness/message-like-me"
 ```
+
+The immutable version-one local message bundle contract has a separate,
+dependency-free producer and consumer surface:
+
+```ts
+import {
+  LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
+  LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
+  parseLocalMessageBundleV1Manifest,
+  parseLocalMessageBundleV1Record,
+} from "@hraness/message-like-me/message-bundle-v1"
+```
+
+That subpath owns the exact readonly wire types, compatibility constants,
+safety bounds, digest helpers, and pure strict parsers. Importing it performs no
+filesystem or network work.
 
 The library does not start the CLI, inspect Messages or Contacts, connect to a
 network, or send a draft merely because it is imported.

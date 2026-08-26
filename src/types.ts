@@ -1,3 +1,5 @@
+import { MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY } from "./message-bundle-v1-identity.ts";
+
 export const CORPUS_SCHEMA_VERSION = 1 as const;
 export const METRICS_SCHEMA_VERSION = 2 as const;
 export const PROFILE_SCHEMA_VERSION = 2 as const;
@@ -5,7 +7,7 @@ export const LEGACY_PROFILE_SCHEMA_VERSION = 1 as const;
 export const STUDY_PACKET_SCHEMA_VERSION = 2 as const;
 export const EVALUATION_PACKET_SCHEMA_VERSION = 1 as const;
 export const CONTACTS_SCHEMA_VERSION = 1 as const;
-export const MESSAGE_BUNDLE_SCHEMA_VERSION = 1 as const;
+export const MESSAGE_BUNDLE_SCHEMA_VERSION = MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY;
 
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
