@@ -6,6 +6,7 @@ import {
   pageMetadata,
   RELEASE_URL,
   SITE_DESCRIPTION,
+  SOFTWARE_VERSION,
 } from './_lib/site';
 
 export const metadata = pageMetadata({
@@ -32,7 +33,7 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="#install">
-              Install v0.3.0 <span aria-hidden="true">↓</span>
+              Install v{SOFTWARE_VERSION} <span aria-hidden="true">↓</span>
             </a>
             <a className="button button-secondary" href={GITHUB_URL}>
               View the source <span aria-hidden="true">↗</span>
@@ -63,7 +64,7 @@ export default function Home() {
             <p>
               <span>$</span> wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
             </p>
-            <p className="terminal-result">✓ Wrench 0.13.0+ private bundle written</p>
+            <p className="terminal-result">✓ compatible Wrench bundle written</p>
             <p>
               <span>$</span> messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
             </p>
@@ -89,7 +90,7 @@ export default function Home() {
             <h3>Read stable local copies.</h3>
             <p>
               Import Messages and optional Contacts directly, or merge a
-              private source-aware bundle exported by Wrench 0.13.0+ from
+              private source-aware bundle exported by a compatible Wrench release from
               Beeper.
             </p>
             <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code>
@@ -172,13 +173,13 @@ export default function Home() {
 
       <section className="install-section" id="install">
         <div>
-          <p className="eyebrow">Install v0.3.0</p>
+          <p className="eyebrow">Install v{SOFTWARE_VERSION}</p>
           <h2>Bring your own agent.</h2>
           <p>Bun 1.3.14 or newer is required.</p>
           <a href={RELEASE_URL}>View the immutable release ↗</a>
         </div>
         <div className="command-stack" aria-label="Installation commands">
-          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.3.0</code></p>
+          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
           <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code></p>

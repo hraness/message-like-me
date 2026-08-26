@@ -8,11 +8,20 @@ import {
   MESSAGE_BUNDLE_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
-  STUDY_PACKET_SCHEMA_VERSION,
+  STUDY_PACKET_SCHEMA_VERSION
+} from "./cli-hb4vzkdq.js";
+import {
+  LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
+  LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
+  MessageBundleV1ContractError,
+  parseLocalMessageBundleV1Manifest,
+  parseLocalMessageBundleV1Record
+} from "./cli-de7k7csy.js";
+import {
   canonicalJson,
   prettyJson,
   sha256
-} from "./cli-mxxakdqk.js";
+} from "./cli-r2t9f324.js";
 
 // src/commands.ts
 import { lstat as lstat4 } from "fs/promises";
@@ -824,483 +833,24 @@ function readMacOSContacts(path, options) {
 }
 
 // src/bundle.ts
-var MAX_MANIFEST_BYTES = 1024 * 1024;
-var MAX_RECORDS = 500000;
-var MAX_RECORD_BYTES = 2 * 1024 * 1024;
-var MAX_TOTAL_BYTES = 512 * 1024 * 1024;
-var MAX_ACCOUNTS = 128;
-var MAX_IDENTIFIER_BYTES2 = 1024;
-var MAX_SHORT_TEXT_BYTES = 8 * 1024;
-var MAX_BODY_BYTES = 1024 * 1024;
-var MAX_PARTICIPANTS = 1e4;
-var MAX_ATTACHMENTS = 256;
-var MAX_WARNINGS = 128;
-var ARTIFACTS = Object.freeze([
-  Object.freeze({ path: "accounts.ndjson", kind: "account" }),
-  Object.freeze({ path: "participants.ndjson", kind: "participant" }),
-  Object.freeze({ path: "conversations.ndjson", kind: "conversation" }),
-  Object.freeze({ path: "messages.ndjson", kind: "message" }),
-  Object.freeze({ path: "reactions.ndjson", kind: "reaction" }),
-  Object.freeze({ path: "tombstones.ndjson", kind: "tombstone" })
-]);
-function object(value, label) {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
-    throw new CliError("invalid-data", `${label} must be a plain object`);
-  return value;
-}
-function exactKeys(value, keys, label) {
-  const expected = [...keys].sort();
-  const observed = Object.keys(value).sort();
-  if (expected.length !== observed.length || observed.some((key, index) => key !== expected[index]))
-    throw new CliError("invalid-data", `${label} must contain exactly: ${keys.join(", ")}`);
-}
-function boundedText2(value, label, maximum) {
-  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > maximum || value.includes("\x00")) {
-    throw new CliError("invalid-data", `${label} must be NUL-free text within ${maximum} UTF-8 bytes`);
-  }
-  return value;
-}
-function nullableText(value, label, maximum) {
-  return value === null ? null : boundedText2(value, label, maximum);
-}
-function identifier(value, label) {
-  const result = boundedText2(value, label, MAX_IDENTIFIER_BYTES2);
-  if (result.length === 0 || /[\u0000-\u001f\u007f]/u.test(result)) {
-    throw new CliError("invalid-data", `${label} must be a non-empty identifier without ASCII controls`);
-  }
-  return result;
-}
-function nullableIdentifier(value, label) {
-  return value === null ? null : identifier(value, label);
-}
-function token(value, label, maximum = 128) {
-  const result = boundedText2(value, label, maximum);
-  if (!/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?$/u.test(result)) {
-    throw new CliError("invalid-data", `${label} must be a lowercase categorical token`);
-  }
-  return result;
-}
-function version(value, label) {
-  const result = boundedText2(value, label, 128);
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9._+-]*[A-Za-z0-9])?$/u.test(result)) {
-    throw new CliError("invalid-data", `${label} must be a bounded version token`);
-  }
-  return result;
-}
-function oneOf(value, values, label) {
-  if (typeof value !== "string" || !values.includes(value)) {
-    throw new CliError("invalid-data", `${label} must be one of: ${values.join(", ")}`);
-  }
-  return value;
-}
-function integer2(value, label, maximum = Number.MAX_SAFE_INTEGER) {
-  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
-    throw new CliError("invalid-data", `${label} must be a non-negative safe integer`);
-  }
-  return value;
-}
-function nullableInteger(value, label) {
-  return value === null ? null : integer2(value, label);
-}
-function boolean(value, label) {
-  if (typeof value !== "boolean")
-    throw new CliError("invalid-data", `${label} must be boolean`);
-  return value;
-}
-function nullableBoolean(value, label) {
-  return value === null ? null : boolean(value, label);
-}
-function timestamp(value, label) {
-  const result = boundedText2(value, label, 64);
-  const date = new Date(result);
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== result) {
-    throw new CliError("invalid-data", `${label} must be a canonical UTC timestamp`);
-  }
-  return result;
-}
-function nullableTimestamp(value, label) {
-  return value === null ? null : timestamp(value, label);
-}
-function digest(value, label) {
-  const result = boundedText2(value, label, 64);
-  if (!/^[a-f0-9]{64}$/u.test(result))
-    throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
-  return result;
-}
-function array(value, label, maximum) {
-  if (!Array.isArray(value) || value.length > maximum) {
-    throw new CliError("invalid-data", `${label} must contain at most ${maximum} items`);
-  }
-  return value;
-}
-function identifiers(value, label, maximum) {
-  const result = array(value, label, maximum).map((item, index) => identifier(item, `${label}[${index}]`));
-  if (new Set(result).size !== result.length)
-    throw new CliError("invalid-data", `${label} repeats an ID`);
-  return Object.freeze(result);
-}
-function parseProvenance(value, label) {
-  const record = object(value, label);
-  exactKeys(record, ["providerId", "providerRevision", "observedAt", "connectedAccountProviderId"], label);
-  return Object.freeze({
-    providerId: identifier(record.providerId, `${label}.providerId`),
-    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`),
-    observedAt: timestamp(record.observedAt, `${label}.observedAt`),
-    connectedAccountProviderId: identifier(record.connectedAccountProviderId, `${label}.connectedAccountProviderId`)
-  });
-}
-function parseCommon(record, kind, extraKeys, label) {
-  exactKeys(record, ["schemaVersion", "kind", "id", "accountId", "network", "provenance", ...extraKeys], label);
-  if (record.schemaVersion !== 1 || record.kind !== kind) {
-    throw new CliError("invalid-data", `${label} has the wrong schemaVersion or kind`);
-  }
-  return Object.freeze({
-    schemaVersion: 1,
-    kind,
-    id: identifier(record.id, `${label}.id`),
-    accountId: identifier(record.accountId, `${label}.accountId`),
-    network: token(record.network, `${label}.network`, 64),
-    provenance: parseProvenance(record.provenance, `${label}.provenance`)
-  });
-}
-function parseAccount(record, label) {
-  const common = parseCommon(record, "account", ["displayName", "handle", "selfParticipantId"], label);
-  if (common.id !== common.accountId || common.provenance.providerId !== common.provenance.connectedAccountProviderId) {
-    throw new CliError("invalid-data", `${label} does not establish one connected account realm`);
-  }
-  return Object.freeze({
-    ...common,
-    kind: "account",
-    displayName: nullableText(record.displayName, `${label}.displayName`, MAX_SHORT_TEXT_BYTES),
-    handle: nullableText(record.handle, `${label}.handle`, MAX_SHORT_TEXT_BYTES),
-    selfParticipantId: identifier(record.selfParticipantId, `${label}.selfParticipantId`)
-  });
-}
-function parseParticipant(record, label) {
-  const common = parseCommon(record, "participant", ["displayName", "handle", "isSelf"], label);
-  return Object.freeze({
-    ...common,
-    kind: "participant",
-    displayName: nullableText(record.displayName, `${label}.displayName`, MAX_SHORT_TEXT_BYTES),
-    handle: nullableText(record.handle, `${label}.handle`, MAX_SHORT_TEXT_BYTES),
-    isSelf: boolean(record.isSelf, `${label}.isSelf`)
-  });
-}
-function parseConversation(record, label) {
-  const common = parseCommon(record, "conversation", [
-    "type",
-    "title",
-    "participantIds",
-    "participantsComplete",
-    "startedAt",
-    "lastMessageAt"
-  ], label);
-  const startedAt = nullableTimestamp(record.startedAt, `${label}.startedAt`);
-  const lastMessageAt = nullableTimestamp(record.lastMessageAt, `${label}.lastMessageAt`);
-  if (startedAt !== null && lastMessageAt !== null && startedAt > lastMessageAt) {
-    throw new CliError("invalid-data", `${label}.startedAt must not follow lastMessageAt`);
-  }
-  return Object.freeze({
-    ...common,
-    kind: "conversation",
-    type: oneOf(record.type, ["direct", "group", "channel", "unknown"], `${label}.type`),
-    title: nullableText(record.title, `${label}.title`, MAX_SHORT_TEXT_BYTES),
-    participantIds: identifiers(record.participantIds, `${label}.participantIds`, MAX_PARTICIPANTS),
-    participantsComplete: nullableBoolean(record.participantsComplete, `${label}.participantsComplete`),
-    startedAt,
-    lastMessageAt
-  });
-}
-function parseReply(value, label) {
-  if (value === null)
-    return null;
-  const record = object(value, label);
-  exactKeys(record, ["messageId", "providerId"], label);
-  return Object.freeze({
-    messageId: record.messageId === null ? null : identifier(record.messageId, `${label}.messageId`),
-    providerId: identifier(record.providerId, `${label}.providerId`)
-  });
-}
-function parseEdit(value, sentAt, label) {
-  if (value === null)
-    return null;
-  const record = object(value, label);
-  if (record.kind === "in-place") {
-    exactKeys(record, ["kind", "editedAt", "providerRevision"], label);
-    const editedAt2 = timestamp(record.editedAt, `${label}.editedAt`);
-    if (editedAt2 < sentAt)
-      throw new CliError("invalid-data", `${label} precedes the message`);
-    return Object.freeze({
-      kind: "in-place",
-      editedAt: editedAt2,
-      providerRevision: identifier(record.providerRevision, `${label}.providerRevision`)
-    });
-  }
-  if (record.kind !== "replacement") {
-    throw new CliError("invalid-data", `${label}.kind must be in-place or replacement`);
-  }
-  exactKeys(record, [
-    "kind",
-    "replacesMessageId",
-    "replacesProviderId",
-    "editedAt",
-    "providerRevision"
-  ], label);
-  const replacesMessageId = record.replacesMessageId === null ? null : identifier(record.replacesMessageId, `${label}.replacesMessageId`);
-  const replacesProviderId = identifier(record.replacesProviderId, `${label}.replacesProviderId`);
-  const editedAt = timestamp(record.editedAt, `${label}.editedAt`);
-  if (editedAt < sentAt)
-    throw new CliError("invalid-data", `${label} precedes the message`);
-  return Object.freeze({
-    kind: "replacement",
-    replacesMessageId,
-    replacesProviderId,
-    editedAt,
-    providerRevision: identifier(record.providerRevision, `${label}.providerRevision`)
-  });
-}
-function parseDeletion(value, label) {
-  if (value === null)
-    return null;
-  const record = object(value, label);
-  exactKeys(record, ["state", "observedAt", "providerRevision"], label);
-  return Object.freeze({
-    state: oneOf(record.state, ["revoked", "deleted-for-me", "revoked-and-deleted-for-me"], `${label}.state`),
-    observedAt: timestamp(record.observedAt, `${label}.observedAt`),
-    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
-  });
-}
-function parseAttachments(value, label) {
-  return Object.freeze(array(value, label, MAX_ATTACHMENTS).map((item, index) => {
-    const itemLabel = `${label}[${index}]`;
-    const record = object(item, itemLabel);
-    exactKeys(record, ["kind", "mimeType", "name", "sizeBytes"], itemLabel);
-    const name = nullableText(record.name, `${itemLabel}.name`, MAX_SHORT_TEXT_BYTES);
-    if (name !== null && (name === "." || name === ".." || name.includes("/") || name.includes("\\"))) {
-      throw new CliError("invalid-data", `${itemLabel}.name must not be a path`);
+var MAX_MANIFEST_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.manifestBytes;
+var MAX_RECORD_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.recordBytes;
+var MAX_ACCOUNTS = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.accounts;
+function contractValue(read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof MessageBundleV1ContractError) {
+      throw new CliError("invalid-data", error.message, { cause: error });
     }
-    return Object.freeze({
-      kind: oneOf(record.kind, ["audio", "document", "image", "link", "sticker", "video", "unknown"], `${itemLabel}.kind`),
-      mimeType: nullableText(record.mimeType, `${itemLabel}.mimeType`, 256),
-      name,
-      sizeBytes: nullableInteger(record.sizeBytes, `${itemLabel}.sizeBytes`)
-    });
-  }));
-}
-function parseMessage(record, label) {
-  const common = parseCommon(record, "message", [
-    "conversationId",
-    "senderParticipantId",
-    "direction",
-    "sentAt",
-    "sortKey",
-    "body",
-    "bodyTruncated",
-    "replyTo",
-    "edit",
-    "deletion",
-    "attachments"
-  ], label);
-  const sentAt = timestamp(record.sentAt, `${label}.sentAt`);
-  const deletion = parseDeletion(record.deletion, `${label}.deletion`);
-  const body = nullableText(record.body, `${label}.body`, MAX_BODY_BYTES);
-  if (deletion !== null && body !== null) {
-    throw new CliError("invalid-data", `${label}.body must be null for a deleted message`);
+    throw error;
   }
-  return Object.freeze({
-    ...common,
-    kind: "message",
-    conversationId: identifier(record.conversationId, `${label}.conversationId`),
-    senderParticipantId: record.senderParticipantId === null ? null : identifier(record.senderParticipantId, `${label}.senderParticipantId`),
-    direction: oneOf(record.direction, ["incoming", "outgoing", "unknown"], `${label}.direction`),
-    sentAt,
-    sortKey: identifier(record.sortKey, `${label}.sortKey`),
-    body,
-    bodyTruncated: nullableBoolean(record.bodyTruncated, `${label}.bodyTruncated`),
-    replyTo: parseReply(record.replyTo, `${label}.replyTo`),
-    edit: parseEdit(record.edit, sentAt, `${label}.edit`),
-    deletion,
-    attachments: parseAttachments(record.attachments, `${label}.attachments`)
-  });
-}
-function parseReaction(record, label) {
-  const common = parseCommon(record, "reaction", [
-    "messageId",
-    "messageProviderId",
-    "participantId",
-    "body",
-    "reactedAt",
-    "state"
-  ], label);
-  return Object.freeze({
-    ...common,
-    kind: "reaction",
-    messageId: record.messageId === null ? null : identifier(record.messageId, `${label}.messageId`),
-    messageProviderId: identifier(record.messageProviderId, `${label}.messageProviderId`),
-    participantId: record.participantId === null ? null : identifier(record.participantId, `${label}.participantId`),
-    body: boundedText2(record.body, `${label}.body`, MAX_SHORT_TEXT_BYTES),
-    reactedAt: nullableTimestamp(record.reactedAt, `${label}.reactedAt`),
-    state: oneOf(record.state, ["active", "removed"], `${label}.state`)
-  });
-}
-function parseTombstone(record, label) {
-  const common = parseCommon(record, "tombstone", [
-    "entityKind",
-    "entityId",
-    "entityProviderId",
-    "deletedAt",
-    "scope",
-    "providerRevision"
-  ], label);
-  return Object.freeze({
-    ...common,
-    kind: "tombstone",
-    entityKind: oneOf(record.entityKind, ["conversation", "message", "reaction"], `${label}.entityKind`),
-    entityId: record.entityId === null ? null : identifier(record.entityId, `${label}.entityId`),
-    entityProviderId: identifier(record.entityProviderId, `${label}.entityProviderId`),
-    deletedAt: timestamp(record.deletedAt, `${label}.deletedAt`),
-    scope: oneOf(record.scope, ["remote", "local", "unknown"], `${label}.scope`),
-    providerRevision: nullableIdentifier(record.providerRevision, `${label}.providerRevision`)
-  });
-}
-function parseRecord(value, kind, label) {
-  const record = object(value, label);
-  switch (kind) {
-    case "account":
-      return parseAccount(record, label);
-    case "participant":
-      return parseParticipant(record, label);
-    case "conversation":
-      return parseConversation(record, label);
-    case "message":
-      return parseMessage(record, label);
-    case "reaction":
-      return parseReaction(record, label);
-    case "tombstone":
-      return parseTombstone(record, label);
-  }
-}
-function parseArtifact(value, index) {
-  const expected = ARTIFACTS[index];
-  const label = `manifest.artifacts[${index}]`;
-  const record = object(value, label);
-  exactKeys(record, ["path", "mediaType", "recordKind", "records", "bytes", "sha256"], label);
-  if (record.path !== expected.path || record.mediaType !== "application/x-ndjson" || record.recordKind !== expected.kind)
-    throw new CliError("invalid-data", `${label} does not match the fixed artifact inventory`);
-  return Object.freeze({
-    path: expected.path,
-    mediaType: "application/x-ndjson",
-    recordKind: expected.kind,
-    records: integer2(record.records, `${label}.records`, MAX_RECORDS),
-    bytes: integer2(record.bytes, `${label}.bytes`, MAX_TOTAL_BYTES),
-    sha256: digest(record.sha256, `${label}.sha256`)
-  });
 }
 function parseManifest(value) {
-  const record = object(value, "manifest");
-  exactKeys(record, [
-    "schemaVersion",
-    "format",
-    "source",
-    "provider",
-    "timestamps",
-    "completeness",
-    "warnings",
-    "privacy",
-    "counts",
-    "artifacts",
-    "integrity"
-  ], "manifest");
-  if (record.schemaVersion !== MESSAGE_BUNDLE_SCHEMA_VERSION || record.format !== "message-like-me.local-message-bundle") {
-    throw new CliError("invalid-data", "Manifest has an unsupported schemaVersion or format");
-  }
-  const source = object(record.source, "manifest.source");
-  exactKeys(source, ["id", "version"], "manifest.source");
-  if (source.id !== "beeper-local")
-    throw new CliError("invalid-data", "manifest.source.id must be beeper-local");
-  const provider = object(record.provider, "manifest.provider");
-  exactKeys(provider, ["id", "version"], "manifest.provider");
-  if (provider.id !== "beeper")
-    throw new CliError("invalid-data", "manifest.provider.id must be beeper");
-  const timestamps = object(record.timestamps, "manifest.timestamps");
-  exactKeys(timestamps, ["startedAt", "finishedAt", "createdAt"], "manifest.timestamps");
-  const startedAt = timestamp(timestamps.startedAt, "manifest.timestamps.startedAt");
-  const finishedAt = timestamp(timestamps.finishedAt, "manifest.timestamps.finishedAt");
-  const createdAt = timestamp(timestamps.createdAt, "manifest.timestamps.createdAt");
-  if (startedAt > finishedAt || finishedAt > createdAt) {
-    throw new CliError("invalid-data", "Manifest timestamps are not monotonic");
-  }
-  const completeness = object(record.completeness, "manifest.completeness");
-  exactKeys(completeness, ["kind", "reason", "observedFrom", "observedThrough"], "manifest.completeness");
-  const observedFrom = nullableTimestamp(completeness.observedFrom, "manifest.completeness.observedFrom");
-  const observedThrough = nullableTimestamp(completeness.observedThrough, "manifest.completeness.observedThrough");
-  if (observedFrom !== null && observedThrough !== null && observedFrom > observedThrough) {
-    throw new CliError("invalid-data", "Manifest completeness bounds are reversed");
-  }
-  const warnings = array(record.warnings, "manifest.warnings", MAX_WARNINGS).map((value2, index) => token(value2, `manifest.warnings[${index}]`));
-  if (new Set(warnings).size !== warnings.length)
-    throw new CliError("invalid-data", "Manifest warnings repeat");
-  const privacy = object(record.privacy, "manifest.privacy");
-  exactKeys(privacy, ["classification", "attachments", "providerUrls", "credentials"], "manifest.privacy");
-  if (privacy.classification !== "private-local" || privacy.attachments !== "metadata-only" || privacy.providerUrls !== "excluded" || privacy.credentials !== "excluded")
-    throw new CliError("invalid-data", "Manifest privacy guarantees are unsupported");
-  const counts = object(record.counts, "manifest.counts");
-  exactKeys(counts, ARTIFACTS.map(({ kind }) => kind), "manifest.counts");
-  const parsedCounts = Object.fromEntries(ARTIFACTS.map(({ kind }) => [
-    kind,
-    integer2(counts[kind], `manifest.counts.${kind}`, MAX_RECORDS)
-  ]));
-  if (parsedCounts.account > MAX_ACCOUNTS) {
-    throw new CliError("invalid-data", `Manifest exceeds the ${MAX_ACCOUNTS}-account safety bound`);
-  }
-  if (!Array.isArray(record.artifacts) || record.artifacts.length !== ARTIFACTS.length) {
-    throw new CliError("invalid-data", "Manifest must list the fixed six artifacts");
-  }
-  const artifacts = Object.freeze(record.artifacts.map(parseArtifact));
-  let totalRecords = 0;
-  let totalBytes = 0;
-  for (const artifact of artifacts) {
-    if (artifact.records !== parsedCounts[artifact.recordKind]) {
-      throw new CliError("invalid-data", `${artifact.path} count disagrees with manifest.counts`);
-    }
-    totalRecords += artifact.records;
-    totalBytes += artifact.bytes;
-  }
-  if (totalRecords > MAX_RECORDS || totalBytes > MAX_TOTAL_BYTES) {
-    throw new CliError("invalid-data", "Manifest exceeds the bundle record or byte bound");
-  }
-  const integrity = object(record.integrity, "manifest.integrity");
-  exactKeys(integrity, ["algorithm", "bundleSha256"], "manifest.integrity");
-  if (integrity.algorithm !== "sha256")
-    throw new CliError("invalid-data", "Manifest integrity algorithm is unsupported");
-  const result = Object.freeze({
-    schemaVersion: 1,
-    format: "message-like-me.local-message-bundle",
-    source: Object.freeze({ id: "beeper-local", version: version(source.version, "manifest.source.version") }),
-    provider: Object.freeze({ id: "beeper", version: version(provider.version, "manifest.provider.version") }),
-    timestamps: Object.freeze({ startedAt, finishedAt, createdAt }),
-    completeness: Object.freeze({
-      kind: oneOf(completeness.kind, ["bounded-local", "truncated", "unknown"], "manifest.completeness.kind"),
-      reason: completeness.reason === null ? null : token(completeness.reason, "manifest.completeness.reason"),
-      observedFrom,
-      observedThrough
-    }),
-    warnings: Object.freeze(warnings),
-    privacy: Object.freeze({
-      classification: "private-local",
-      attachments: "metadata-only",
-      providerUrls: "excluded",
-      credentials: "excluded"
-    }),
-    counts: Object.freeze(parsedCounts),
-    artifacts,
-    integrity: Object.freeze({ algorithm: "sha256", bundleSha256: digest(integrity.bundleSha256, "manifest.integrity.bundleSha256") })
-  });
-  const { integrity: _integrity, ...projection } = result;
-  if (sha256(canonicalJson(projection)) !== result.integrity.bundleSha256) {
-    throw new CliError("invalid-data", "Manifest bundle SHA-256 does not match its canonical projection");
-  }
-  return result;
+  return contractValue(() => parseLocalMessageBundleV1Manifest(value));
+}
+function parseRecord(value, kind, label) {
+  return contractValue(() => parseLocalMessageBundleV1Record(value, kind, label));
 }
 function sameFile2(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
@@ -1318,7 +868,7 @@ async function bundleDirectory(path) {
   const after = await lstat(physical);
   if (!sameFile2(before, after))
     throw new CliError("unsafe-path", "Bundle directory changed while resolving");
-  const expected = ["manifest.json", ...ARTIFACTS.map(({ path: artifactPath }) => artifactPath)].sort();
+  const expected = ["manifest.json", ...LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS.map(({ path: artifactPath }) => artifactPath)].sort();
   const entries = (await readdir(physical)).sort();
   if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {
     throw new CliError("invalid-data", "Bundle directory does not contain exactly the version-one inventory");
@@ -2740,7 +2290,7 @@ var MAX_STUDY_MESSAGES_PER_DIRECTION = 64;
 var DEFAULT_MAX_STUDY_PACKET_BODY_BYTES = 256 * 1024;
 var MAX_STUDY_PACKET_BODY_BYTES = 1024 * 1024;
 var MAX_GAP_SECONDS = 30 * 24 * 60 * 60;
-function digest2(namespace, parts) {
+function digest(namespace, parts) {
   const hash = createHash3("sha256");
   hash.update(`message-like-me\x00${namespace}\x00`, "utf8");
   for (const part of parts)
@@ -2832,7 +2382,7 @@ function sessionsFor(messages, corpusRevision, contactId, gapSeconds) {
     const incomingCount = group.filter(({ message }) => message.direction === "incoming").length;
     const outgoingCount = group.length - incomingCount;
     return Object.freeze({
-      id: digest2("session", [corpusRevision, contactId, String(index), ...group.map(({ message }) => message.id)]),
+      id: digest("session", [corpusRevision, contactId, String(index), ...group.map(({ message }) => message.id)]),
       startedAt: first.message.sentAt,
       endedAt: last.message.sentAt,
       durationSeconds: round((last.milliseconds - first.milliseconds) / 1000, 3),
@@ -2873,7 +2423,7 @@ function burstsFor(messages, sessions, corpusRevision, contactId, burstGapSecond
       const textBodies = bodies(block.messages);
       result.push(Object.freeze({
         metric: Object.freeze({
-          id: digest2("burst", [corpusRevision, contactId, session.id, ...messageIds]),
+          id: digest("burst", [corpusRevision, contactId, session.id, ...messageIds]),
           sessionId: session.id,
           startedAt: first.message.sentAt,
           endedAt: last.message.sentAt,
@@ -2955,7 +2505,7 @@ function responsesFor(bursts, corpusRevision, contactId) {
       const incomingIds = Object.freeze(incoming.messages.map(({ message }) => message.id));
       const outgoingIds = Object.freeze(outgoing.messages.map(({ message }) => message.id));
       result.push(Object.freeze({
-        id: digest2("response", [corpusRevision, contactId, ...incomingIds, "->", ...outgoingIds]),
+        id: digest("response", [corpusRevision, contactId, ...incomingIds, "->", ...outgoingIds]),
         startedAt: incoming.messages[0].message.sentAt,
         incomingMessageIds: incomingIds,
         outgoingMessageIds: outgoingIds,
@@ -3478,7 +3028,7 @@ function buildEvaluationPackets(messages, metrics, options) {
     emittedBodyBytes += candidate.bodyBytes;
   }
   const caseIds = selected.map(({ example }) => example.id);
-  const evaluationId = digest2("evaluation", [
+  const evaluationId = digest("evaluation", [
     metrics.corpusRevision,
     evidenceRevision,
     metrics.contactId,
@@ -3729,13 +3279,13 @@ async function atomicWritePrivate(path, bytes) {
 import { constants as fsConstants4 } from "fs";
 import { open as open3 } from "fs/promises";
 var MAX_PROFILE_FILE_BYTES = 4 * 1024 * 1024;
-function object2(value, label) {
+function object(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new CliError("invalid-data", `${label} must be an object`);
   }
   return value;
 }
-function exactKeys2(value, keys, label) {
+function exactKeys(value, keys, label) {
   const expected = new Set(keys);
   for (const key of Object.keys(value)) {
     if (!expected.has(key))
@@ -3774,7 +3324,7 @@ function isoTimestamp(value, label) {
 function nullableIsoTimestamp(value, label) {
   return value === null ? null : isoTimestamp(value, label);
 }
-function digest3(value, label) {
+function digest2(value, label) {
   const parsed = text(value, label, 64);
   if (!/^[a-f0-9]{64}$/u.test(parsed)) {
     throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
@@ -3794,8 +3344,8 @@ function confidenceLevel(value, label) {
   return value;
 }
 function parseStyleProfileV1(value) {
-  const root = object2(value, "profile");
-  exactKeys2(root, [
+  const root = object(value, "profile");
+  exactKeys(root, [
     "schemaVersion",
     "contactId",
     "corpusRevision",
@@ -3819,8 +3369,8 @@ function parseStyleProfileV1(value) {
   if (!/^[a-f0-9]{64}$/u.test(packetSha256)) {
     throw new CliError("invalid-data", "profile.packetSha256 must be lowercase SHA-256");
   }
-  const prose = object2(root.prose, "profile.prose");
-  exactKeys2(prose, [
+  const prose = object(root.prose, "profile.prose");
+  exactKeys(prose, [
     "register",
     "capitalization",
     "punctuation",
@@ -3831,18 +3381,18 @@ function parseStyleProfileV1(value) {
     "closings",
     "notablePatterns"
   ], "profile.prose");
-  const tempo = object2(root.tempo, "profile.tempo");
-  exactKeys2(tempo, [
+  const tempo = object(root.tempo, "profile.tempo");
+  exactKeys(tempo, [
     "defaultBundle",
     "singleLongMessage",
     "multipleMessages",
     "responseTiming",
     "followUps"
   ], "profile.tempo");
-  const replies = object2(root.replies, "profile.replies");
-  exactKeys2(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
-  const confidence = object2(root.confidence, "profile.confidence");
-  exactKeys2(confidence, ["overall", "limitations"], "profile.confidence");
+  const replies = object(root.replies, "profile.replies");
+  exactKeys(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
+  const confidence = object(root.confidence, "profile.confidence");
+  exactKeys(confidence, ["overall", "limitations"], "profile.confidence");
   if (!Array.isArray(root.contexts) || root.contexts.length > 32) {
     throw new CliError("invalid-data", "profile.contexts must contain at most 32 items");
   }
@@ -3881,8 +3431,8 @@ function parseStyleProfileV1(value) {
       avoidWhen: textArray(replies.avoidWhen, "profile.replies.avoidWhen")
     },
     contexts: root.contexts.map((item, index) => {
-      const context = object2(item, `profile.contexts[${index}]`);
-      exactKeys2(context, [
+      const context = object(item, `profile.contexts[${index}]`);
+      exactKeys(context, [
         "when",
         "incomingPattern",
         "responseStrategy",
@@ -3908,8 +3458,8 @@ function parseStyleProfileV1(value) {
   };
 }
 function parseStyleProfileV2(value) {
-  const root = object2(value, "profile");
-  exactKeys2(root, [
+  const root = object(value, "profile");
+  exactKeys(root, [
     "schemaVersion",
     "contactId",
     "corpusRevision",
@@ -3930,10 +3480,10 @@ function parseStyleProfileV2(value) {
     throw new CliError("invalid-data", `profile.schemaVersion must be ${PROFILE_SCHEMA_VERSION}`);
   }
   const contactId = text(root.contactId, "profile.contactId", 128);
-  const corpusRevision = digest3(root.corpusRevision, "profile.corpusRevision");
-  const packetSha256 = digest3(root.packetSha256, "profile.packetSha256");
-  const evidence = object2(root.evidence, "profile.evidence");
-  exactKeys2(evidence, [
+  const corpusRevision = digest2(root.corpusRevision, "profile.corpusRevision");
+  const packetSha256 = digest2(root.packetSha256, "profile.packetSha256");
+  const evidence = object(root.evidence, "profile.evidence");
+  exactKeys(evidence, [
     "evidenceRevision",
     "firstMessageAt",
     "lastMessageAt",
@@ -3958,8 +3508,8 @@ function parseStyleProfileV2(value) {
   if (after !== null && before !== null && after >= before) {
     throw new CliError("invalid-data", "profile.evidence.after must be earlier than before");
   }
-  const prose = object2(root.prose, "profile.prose");
-  exactKeys2(prose, [
+  const prose = object(root.prose, "profile.prose");
+  exactKeys(prose, [
     "register",
     "capitalization",
     "punctuation",
@@ -3970,18 +3520,18 @@ function parseStyleProfileV2(value) {
     "closingPatterns",
     "notablePatterns"
   ], "profile.prose");
-  const tempo = object2(root.tempo, "profile.tempo");
-  exactKeys2(tempo, [
+  const tempo = object(root.tempo, "profile.tempo");
+  exactKeys(tempo, [
     "defaultBundle",
     "singleLongMessage",
     "multipleMessages",
     "responseTiming",
     "followUps"
   ], "profile.tempo");
-  const replies = object2(root.replies, "profile.replies");
-  exactKeys2(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
-  const confidence = object2(root.confidence, "profile.confidence");
-  exactKeys2(confidence, [
+  const replies = object(root.replies, "profile.replies");
+  exactKeys(replies, ["usage", "useWhen", "avoidWhen"], "profile.replies");
+  const confidence = object(root.confidence, "profile.confidence");
+  exactKeys(confidence, [
     "overall",
     "prose",
     "tempo",
@@ -3996,8 +3546,8 @@ function parseStyleProfileV2(value) {
     throw new CliError("invalid-data", "profile.claims must contain at most 64 items");
   }
   const contexts = root.contexts.map((item, index) => {
-    const context = object2(item, `profile.contexts[${index}]`);
-    exactKeys2(context, [
+    const context = object(item, `profile.contexts[${index}]`);
+    exactKeys(context, [
       "when",
       "incomingPattern",
       "responseStrategy",
@@ -4015,8 +3565,8 @@ function parseStyleProfileV2(value) {
     };
   });
   const claims = root.claims.map((item, index) => {
-    const claim = object2(item, `profile.claims[${index}]`);
-    exactKeys2(claim, [
+    const claim = object(item, `profile.claims[${index}]`);
+    exactKeys(claim, [
       "dimension",
       "statement",
       "basis",
@@ -4051,7 +3601,7 @@ function parseStyleProfileV2(value) {
     packetSha256,
     analyzedAt: isoTimestamp(root.analyzedAt, "profile.analyzedAt"),
     evidence: {
-      evidenceRevision: digest3(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
+      evidenceRevision: digest2(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
       firstMessageAt,
       lastMessageAt,
       messageCount: nonNegativeInteger(evidence.messageCount, "profile.evidence.messageCount"),
@@ -4101,7 +3651,7 @@ function parseStyleProfileV2(value) {
   };
 }
 function parseStyleProfile(value) {
-  const root = object2(value, "profile");
+  const root = object(value, "profile");
   if (root.schemaVersion === LEGACY_PROFILE_SCHEMA_VERSION)
     return parseStyleProfileV1(root);
   if (root.schemaVersion === PROFILE_SCHEMA_VERSION)
@@ -4945,9 +4495,9 @@ function backfillLegacySource(database) {
 }
 function initializeStoreSchema(database) {
   const existingStore = tableExists(database, "metadata");
-  const version2 = userVersion(database);
-  if (version2 > STORE_SCHEMA_VERSION) {
-    throw new CliError("invalid-data", `Local store schema ${version2} is newer than supported schema ${STORE_SCHEMA_VERSION}`);
+  const version = userVersion(database);
+  if (version > STORE_SCHEMA_VERSION) {
+    throw new CliError("invalid-data", `Local store schema ${version} is newer than supported schema ${STORE_SCHEMA_VERSION}`);
   }
   if (!existingStore) {
     database.exec(SCHEMA);
@@ -6291,7 +5841,7 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.3.0";
+var MESSAGE_LIKE_ME_VERSION = "0.4.0";
 
 // src/commands.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -6505,7 +6055,7 @@ async function runCommand(argv, io) {
     return;
   }
   const json = parsed.flags.has("json");
-  const [command, subcommand, identifier2, ...extra] = parsed.positionals;
+  const [command, subcommand, identifier, ...extra] = parsed.positionals;
   if (extra.length !== 0)
     throw new CliError("usage", `Unexpected argument ${extra[0]}`);
   if (command === "init" && subcommand === undefined) {
@@ -6519,7 +6069,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "ingest" && subcommand === "imessage" && identifier2 === undefined) {
+  if (command === "ingest" && subcommand === "imessage" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "database"], ["json"]);
     const context = await writableStore(parsed);
     try {
@@ -6547,7 +6097,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "ingest" && subcommand === "bundle" && identifier2 === undefined) {
+  if (command === "ingest" && subcommand === "bundle" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "input"], ["json"]);
     const input = absolutePrivatePath(parsed.options.get("input"), "--input");
     const context = await writableStore(parsed);
@@ -6573,7 +6123,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "ingest" && subcommand === "contacts" && identifier2 === undefined) {
+  if (command === "ingest" && subcommand === "contacts" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "addressbook"], ["json"]);
     const context = await writableStore(parsed);
     try {
@@ -6601,7 +6151,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "contacts" && subcommand === "list" && identifier2 === undefined) {
+  if (command === "contacts" && subcommand === "list" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "min-outgoing", "limit"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
@@ -6616,7 +6166,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "sources" && subcommand === "list" && identifier2 === undefined) {
+  if (command === "sources" && subcommand === "list" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
@@ -6627,31 +6177,31 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "sources" && subcommand === "show" && identifier2 !== undefined) {
+  if (command === "sources" && subcommand === "show" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
-      const source = context.store.source(identifier2, parsed.flags.has("private"));
+      const source = context.store.source(identifier, parsed.flags.has("private"));
       if (source === null)
-        throw new CliError("not-found", `Unknown source ${identifier2}`);
-      emit(io, json, source, `Message source ${identifier2}`);
+        throw new CliError("not-found", `Unknown source ${identifier}`);
+      emit(io, json, source, `Message source ${identifier}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "contacts" && subcommand === "show" && identifier2 !== undefined) {
+  if (command === "contacts" && subcommand === "show" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json", "private"]);
     const context = await existingStore(parsed);
     try {
-      const detail = safeContactDetail(context.store, identifier2, parsed.flags.has("private"));
-      emit(io, json, detail, `Contact ${identifier2}`);
+      const detail = safeContactDetail(context.store, identifier, parsed.flags.has("private"));
+      emit(io, json, detail, `Contact ${identifier}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "contacts" && subcommand === "resolve" && identifier2 !== undefined) {
+  if (command === "contacts" && subcommand === "resolve" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "limit"], ["json", "private"]);
     if (!parsed.flags.has("private")) {
       throw new CliError("usage", "contacts resolve requires --private");
@@ -6660,7 +6210,7 @@ async function runCommand(argv, io) {
     try {
       let matches;
       try {
-        matches = context.store.resolvePrivateContacts(identifier2, integerOption(parsed, "limit", 10, 1, 50));
+        matches = context.store.resolvePrivateContacts(identifier, integerOption(parsed, "limit", 10, 1, 50));
       } catch (error) {
         if (error instanceof CliError)
           throw error;
@@ -6672,33 +6222,33 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "inspect" && subcommand === "tempo" && identifier2 !== undefined) {
+  if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier2, metricOptions(parsed));
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const result = compactMetrics(metrics);
-      emit(io, json, result, `Tempo metrics for ${identifier2}: ${metrics.tempo.responseEpisodes} response episodes`);
+      emit(io, json, result, `Tempo metrics for ${identifier}: ${metrics.tempo.responseEpisodes} response episodes`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "inspect" && subcommand === "sessions" && identifier2 !== undefined) {
+  if (command === "inspect" && subcommand === "sessions" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "limit", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      const metrics = contactMetrics(context.store, identifier2, metricOptions(parsed));
+      const metrics = contactMetrics(context.store, identifier, metricOptions(parsed));
       const limit = integerOption(parsed, "limit", 20, 1, 1000);
       const sessions = metrics.sessions.slice(-limit);
-      const result = { contactId: identifier2, total: metrics.sessions.length, sessions };
-      emit(io, json, result, `${sessions.length} of ${metrics.sessions.length} sessions for ${identifier2}`);
+      const result = { contactId: identifier, total: metrics.sessions.length, sessions };
+      emit(io, json, result, `${sessions.length} of ${metrics.sessions.length} sessions for ${identifier}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "study" && subcommand === "prepare" && identifier2 !== undefined) {
+  if (command === "study" && subcommand === "prepare" && identifier !== undefined) {
     rejectUnused(parsed, [
       "data-dir",
       "output",
@@ -6715,13 +6265,13 @@ async function runCommand(argv, io) {
       const before = canonicalTimestampOption(parsed, "before");
       let evidence;
       try {
-        evidence = contactEvidence(context.store, identifier2, { after, before });
+        evidence = contactEvidence(context.store, identifier, { after, before });
       } catch (error) {
         if (error instanceof CliError)
           throw error;
         throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
       }
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier2, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
       const packet = buildStudyPacket(evidence.messages, metrics, {
         limit: integerOption(parsed, "limit", 24, 1, 50),
         generatedAt: canonicalNow(io),
@@ -6733,7 +6283,7 @@ async function runCommand(argv, io) {
       await atomicWritePrivate(output, bytes);
       context.store.recordStudyPacket({
         sha256: packetSha256,
-        contactId: identifier2,
+        contactId: identifier,
         corpusRevision: metrics.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         createdAt: packet.generatedAt,
@@ -6752,7 +6302,7 @@ async function runCommand(argv, io) {
         }
       });
       const result = {
-        contactId: identifier2,
+        contactId: identifier,
         corpusRevision: metrics.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         packetSha256,
@@ -6766,7 +6316,7 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "evaluate" && subcommand === "prepare" && identifier2 !== undefined) {
+  if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
     rejectUnused(parsed, [
       "data-dir",
       "after",
@@ -6788,13 +6338,13 @@ async function runCommand(argv, io) {
     try {
       let evidence;
       try {
-        evidence = contactEvidence(context.store, identifier2, { after, before });
+        evidence = contactEvidence(context.store, identifier, { after, before });
       } catch (error) {
         if (error instanceof CliError)
           throw error;
         throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
       }
-      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier2, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
+      const metrics = analyzeContact(evidence.messages, evidence.corpusRevision, identifier, { ...metricOptions(parsed), reactionFacts: evidence.reactions });
       const packets = buildEvaluationPackets(evidence.messages, metrics, {
         after,
         before,
@@ -6809,7 +6359,7 @@ async function runCommand(argv, io) {
       await atomicWritePrivate(referenceOutput, prettyJson(packets.reference));
       const result = {
         evaluationId: packets.prompt.evaluationId,
-        contactId: identifier2,
+        contactId: identifier,
         corpusRevision: evidence.corpusRevision,
         evidenceRevision: evidence.evidenceRevision,
         cases: packets.prompt.cases.length,
@@ -6824,9 +6374,9 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "profile" && subcommand === "apply" && identifier2 !== undefined) {
+  if (command === "profile" && subcommand === "apply" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
-    const path = absolutePrivatePath(identifier2, "Profile path");
+    const path = absolutePrivatePath(identifier, "Profile path");
     const profile = await readStyleProfile(path);
     const context = await existingStore(parsed);
     try {
@@ -6838,38 +6388,38 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "profile" && subcommand === "show" && identifier2 !== undefined) {
+  if (command === "profile" && subcommand === "show" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const context = await existingStore(parsed);
     try {
-      requireContact(context.store, identifier2);
-      const result = context.store.profile(identifier2);
+      requireContact(context.store, identifier);
+      const result = context.store.profile(identifier);
       if (result === null)
-        throw new CliError("not-found", `No profile exists for ${identifier2}`);
-      emit(io, json, result, `${result.state} profile for ${identifier2}`);
+        throw new CliError("not-found", `No profile exists for ${identifier}`);
+      emit(io, json, result, `${result.state} profile for ${identifier}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "profile" && subcommand === "export" && identifier2 !== undefined) {
+  if (command === "profile" && subcommand === "export" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "output"], ["json"]);
     const output = absolutePrivatePath(parsed.options.get("output"), "--output");
     const context = await existingStore(parsed);
     try {
-      requireContact(context.store, identifier2);
-      const result = context.store.profile(identifier2);
+      requireContact(context.store, identifier);
+      const result = context.store.profile(identifier);
       if (result === null)
-        throw new CliError("not-found", `No profile exists for ${identifier2}`);
+        throw new CliError("not-found", `No profile exists for ${identifier}`);
       await atomicWritePrivate(output, prettyJson(result.profile));
-      const receipt = { contactId: identifier2, state: result.state, output };
+      const receipt = { contactId: identifier, state: result.state, output };
       emit(io, json, receipt, `Exported ${result.state} profile to ${output}`);
     } finally {
       context.store.close();
     }
     return;
   }
-  if (command === "context" && subcommand !== undefined && identifier2 === undefined) {
+  if (command === "context" && subcommand !== undefined && identifier === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const contactId = subcommand;
     const context = await existingStore(parsed);
@@ -6885,13 +6435,13 @@ async function runCommand(argv, io) {
     }
     return;
   }
-  if (command === "skill" && subcommand === "path" && identifier2 === undefined) {
+  if (command === "skill" && subcommand === "path" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir"], ["json"]);
     const path = bundledSkillPath();
     emit(io, json, { path }, path);
     return;
   }
-  if (command === "skill" && subcommand === "install" && identifier2 === undefined) {
+  if (command === "skill" && subcommand === "install" && identifier === undefined) {
     rejectUnused(parsed, ["data-dir", "target", "scope", "project"], ["force", "json"]);
     const target = parsed.options.get("target") ?? "codex";
     const scope = parsed.options.get("scope") ?? "user";

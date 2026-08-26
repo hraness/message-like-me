@@ -350,7 +350,10 @@
           "required": ["id", "version"],
           "properties": {
             "id": { "const": "beeper-local" },
-            "version": { "$ref": "#/$defs/version" }
+            "version": {
+              "const": "1.1.0",
+              "description": "Message Like Me v1 source-transform compatibility coordinate."
+            }
           }
         },
         "provider": {

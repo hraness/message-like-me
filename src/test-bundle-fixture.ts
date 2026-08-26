@@ -2,15 +2,16 @@ import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { canonicalJson, sha256 } from "./canonical-json.ts";
+import {
+  LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
+  LOCAL_MESSAGE_BUNDLE_V1_FORMAT,
+  LOCAL_MESSAGE_BUNDLE_V1_PROVIDER_ID,
+  LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
+  LOCAL_MESSAGE_BUNDLE_V1_SOURCE_ID,
+  LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
+} from "./message-bundle-v1.ts";
 
-export const BUNDLE_ARTIFACTS = Object.freeze([
-  Object.freeze({ path: "accounts.ndjson", kind: "account" as const }),
-  Object.freeze({ path: "participants.ndjson", kind: "participant" as const }),
-  Object.freeze({ path: "conversations.ndjson", kind: "conversation" as const }),
-  Object.freeze({ path: "messages.ndjson", kind: "message" as const }),
-  Object.freeze({ path: "reactions.ndjson", kind: "reaction" as const }),
-  Object.freeze({ path: "tombstones.ndjson", kind: "tombstone" as const }),
-]);
+export const BUNDLE_ARTIFACTS = LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS;
 
 export type BundleArtifactKind = typeof BUNDLE_ARTIFACTS[number]["kind"];
 export type SyntheticBundleRecords = Record<BundleArtifactKind, Array<Record<string, unknown>>>;
@@ -29,7 +30,7 @@ function provenance(providerId: string): Record<string, unknown> {
 
 function common(kind: BundleArtifactKind, id: string, providerId: string): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
     kind,
     id,
     accountId: "account-local",
@@ -192,10 +193,13 @@ export async function writeSyntheticMessageBundle(
     });
   }
   const projection = {
-    schemaVersion: 1,
-    format: "message-like-me.local-message-bundle",
-    source: { id: "beeper-local", version: "0.1.0-test" },
-    provider: { id: "beeper", version: "1.2.3-test" },
+    schemaVersion: LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
+    format: LOCAL_MESSAGE_BUNDLE_V1_FORMAT,
+    source: {
+      id: LOCAL_MESSAGE_BUNDLE_V1_SOURCE_ID,
+      version: LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
+    },
+    provider: { id: LOCAL_MESSAGE_BUNDLE_V1_PROVIDER_ID, version: "1.2.3-test" },
     timestamps: {
       startedAt: "2026-08-20T12:00:00.000Z",
       finishedAt: "2026-08-20T12:05:00.000Z",
