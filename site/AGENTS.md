@@ -2,8 +2,8 @@
 
 - `app/` – the public Message Like Me project page, metadata, and visual system.
 - `public/` – finite site-wide images and browser assets.
-- `.openai/hosting.json` – the Sites project identity and logical bindings.
-- `package.json`, `vite.config.ts`, and `bun.lock` – the checked Vinext build.
+- `package.json`, `next.config.ts`, `postcss.config.mjs`, and `bun.lock` – the
+  checked native Next.js build deployed from this directory to Vercel.
 
 # Guidelines
 
@@ -17,6 +17,6 @@
   sends messages.
 - Use synthetic examples only. Do not publish real counts, labels, handles,
   excerpts, identities, private paths, or derived personal profiles.
-- Use Bun 1.3.14 for installation and scripts. Run Vinext and ESLint through
-  the declared Node 22-or-newer runtime; Bun can complete a Vinext build without
-  emitting the application route. Run `bun run build` before publishing.
+- Use Bun 1.3.14 for installation and scripts and Node 24 for Next.js. Run
+  `bun run check` before publishing. Production builds consume the committed
+  generated documentation because the Vercel project root is this directory.

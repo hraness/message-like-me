@@ -1,22 +1,24 @@
-import { readmeHtml } from './readme.generated';
+import Link from 'next/link';
 
-const githubUrl = 'https://github.com/hraness/message-like-me';
-const releaseUrl = `${githubUrl}/releases/tag/v0.3.0`;
+import { SiteFooter, SiteHeader } from './_components/site-chrome';
+import {
+  GITHUB_URL,
+  pageMetadata,
+  RELEASE_URL,
+  SITE_DESCRIPTION,
+} from './_lib/site';
+
+export const metadata = pageMetadata({
+  title: 'Message Like Me — Study how you message',
+  description: SITE_DESCRIPTION,
+  path: '/',
+});
 
 export default function Home() {
   return (
-    <main>
-      <header className="site-header">
-        <a className="wordmark" href="#top" aria-label="Message Like Me home">
-          message <span>like me</span>
-        </a>
-        <nav aria-label="Primary navigation">
-          <a href="#how-it-works">How it works</a>
-          <a href="#install">Install</a>
-          <a href={githubUrl}>GitHub ↗</a>
-        </nav>
-      </header>
-
+    <>
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1}>
       <section className="hero" id="top">
         <div className="hero-copy">
           <p className="eyebrow">Local-first agent tooling for macOS</p>
@@ -32,7 +34,7 @@ export default function Home() {
             <a className="button button-primary" href="#install">
               Install v0.3.0 <span aria-hidden="true">↓</span>
             </a>
-            <a className="button button-secondary" href={githubUrl}>
+            <a className="button button-secondary" href={GITHUB_URL}>
               View the source <span aria-hidden="true">↗</span>
             </a>
           </div>
@@ -150,7 +152,7 @@ export default function Home() {
             beliefs, or send a message. Meaning and your current intent always
             outrank historical style.
           </p>
-          <a href={`${githubUrl}/blob/main/docs/research.md`}>Read the research review ↗</a>
+          <Link href="/research">Read the research review →</Link>
         </div>
       </section>
 
@@ -173,7 +175,7 @@ export default function Home() {
           <p className="eyebrow">Install v0.3.0</p>
           <h2>Bring your own agent.</h2>
           <p>Bun 1.3.14 or newer is required.</p>
-          <a href={releaseUrl}>View the immutable release ↗</a>
+          <a href={RELEASE_URL}>View the immutable release ↗</a>
         </div>
         <div className="command-stack" aria-label="Installation commands">
           <p><span>1</span><code>bun add --global github:hraness/message-like-me#v0.3.0</code></p>
@@ -185,21 +187,33 @@ export default function Home() {
 
       <section className="readme-section" id="readme">
         <div className="readme-heading">
-          <p className="eyebrow">Complete documentation</p>
-          <h2>The README, rendered from source.</h2>
-          <a href={`${githubUrl}#readme`}>Read it on GitHub ↗</a>
+          <p className="eyebrow">Checked documentation</p>
+          <h2>Inspect the product boundary.</h2>
+          <a href={`${GITHUB_URL}#readme`}>Browse the repository ↗</a>
         </div>
-        <article
-          className="readme-prose"
-          dangerouslySetInnerHTML={{ __html: readmeHtml }}
-        />
+        <div className="docs-grid">
+          <article>
+            <p className="section-number">01 / use</p>
+            <h3>Complete documentation</h3>
+            <p>Install, ingest, inspect, study, evaluate, and draft with the checked README rendered on-site.</p>
+            <Link href="/docs">Read the docs →</Link>
+          </article>
+          <article>
+            <p className="section-number">02 / method</p>
+            <h3>How evidence is measured</h3>
+            <p>See the local data boundary, deterministic metrics, bounded study method, and explicit limits.</p>
+            <Link href="/methodology">Read the methodology →</Link>
+          </article>
+          <article>
+            <p className="section-number">03 / evidence</p>
+            <h3>Research and prior art</h3>
+            <p>Review the primary research, neighboring open-source projects, and claims this tool does not make.</p>
+            <Link href="/research">Read the research →</Link>
+          </article>
+        </div>
       </section>
-
-      <footer>
-        <a className="wordmark" href="#top">message <span>like me</span></a>
-        <p>Open source · MIT · local first</p>
-        <a href={githubUrl}>GitHub ↗</a>
-      </footer>
-    </main>
+      </main>
+      <SiteFooter />
+    </>
   );
 }
