@@ -12,6 +12,8 @@
 - Reuse the public contract parsers inside CLI ingestion without changing the
   bundle inventory, canonical bytes, privacy boundary, graph laws, or command
   behavior.
+- Keep the informational site, release link, and installation command aligned
+  with the package version through a checked release-identity invariant.
 
 ## 0.3.0
 
