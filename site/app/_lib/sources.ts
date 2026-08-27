@@ -1,0 +1,83 @@
+export const BEEPER_COMPATIBILITY = Object.freeze({
+  producer: 'Wrench',
+  producerVersion: '0.15.0',
+  providerCliVersion: '0.6.2',
+  bundleSchemaVersion: '1',
+  sourceId: 'beeper-local',
+  sourceTransformVersion: '1.1.0',
+} as const);
+
+export type SourceIconName = 'archive' | 'contacts' | 'messages' | 'wrench';
+export type SourceKind = 'Messaging history' | 'Label enrichment';
+
+export type SupportedSource = Readonly<{
+  id: 'apple-messages' | 'beeper-via-wrench' | 'x-data-archive' | 'macos-contacts';
+  name: string;
+  kind: SourceKind;
+  mode: string;
+  status: 'Supported';
+  summary: string;
+  boundary: string;
+  command: string;
+  icon: SourceIconName;
+}>;
+
+export const SUPPORTED_SOURCES = Object.freeze([
+  {
+    id: 'apple-messages',
+    name: 'Apple Messages',
+    kind: 'Messaging history',
+    mode: 'Native · read-only',
+    status: 'Supported',
+    summary:
+      'Reads a stable private copy of the current macOS user’s iMessage database.',
+    boundary:
+      'Message Like Me never modifies Messages, chat.db, or its transactional sidecars.',
+    command: 'messagelikeme ingest imessage',
+    icon: 'messages',
+  },
+  {
+    id: 'beeper-via-wrench',
+    name: 'Beeper via Wrench',
+    kind: 'Messaging history',
+    mode: 'Bounded local bundle',
+    status: 'Supported',
+    summary:
+      'Ingests a verified, multi-account Beeper observation exported by Wrench.',
+    boundary:
+      'Message Like Me receives no Beeper credential, calls no Beeper or Wrench operation, and never sends.',
+    command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
+    icon: 'wrench',
+  },
+  {
+    id: 'x-data-archive',
+    name: 'X data archive',
+    kind: 'Messaging history',
+    mode: 'Caller-owned archive',
+    status: 'Supported',
+    summary:
+      'Reads supported direct-message entries from a private X archive ZIP without extracting it.',
+    boundary:
+      'This path covers archive DMs, not X Chat, and never accesses X or downloads media.',
+    command: 'messagelikeme ingest x-archive --input /absolute/private/archive.zip',
+    icon: 'archive',
+  },
+  {
+    id: 'macos-contacts',
+    name: 'macOS Contacts',
+    kind: 'Label enrichment',
+    mode: 'Optional · read-only',
+    status: 'Supported',
+    summary:
+      'Adds private local names to exact email and phone matches across direct conversations.',
+    boundary:
+      'Contacts supplies labels only; it is not messaging history and ambiguous matches stay separate.',
+    command: 'messagelikeme ingest contacts',
+    icon: 'contacts',
+  },
+] as const satisfies readonly SupportedSource[]);
+
+export const MESSAGING_HISTORY_SOURCES = Object.freeze(
+  SUPPORTED_SOURCES.filter((source) => source.kind === 'Messaging history'),
+);
+

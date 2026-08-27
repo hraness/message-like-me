@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1
+
+- Present Apple Messages, X data archives, Beeper via Wrench, and optional
+  macOS Contacts through one checked source catalog on the homepage, a dedicated
+  source-boundary page, documentation, and machine-readable discovery surfaces.
+- Verify Wrench v0.15.0 with its pinned Beeper CLI v0.6.2 as the current bundle
+  producer while retaining exact schema `1`, source `beeper-local`, and
+  transform `1.1.0` compatibility instead of accepting a package-version range.
+- Clarify that deterministic storage and measurement are local, body-bearing
+  packets become visible to the chosen agent environment, and Message Like Me
+  never receives Beeper credentials, invokes provider operations, or sends.
+- Harden persisted X overlap revalidation and reaction suppression, and repair
+  mobile command layout so long local commands wrap without widening the page.
+
 ## 0.5.0
 
 - Add strict offline ingestion for caller-owned X data archive ZIPs through

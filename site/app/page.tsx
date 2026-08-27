@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { SiteFooter, SiteHeader } from './_components/site-chrome';
+import { SourceCard } from './_components/source-card';
+import { SUPPORTED_SOURCES } from './_lib/sources';
 import {
   GITHUB_URL,
   pageMetadata,
@@ -22,21 +24,22 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">Local-first agent tooling for macOS</p>
+          <p className="eyebrow">Local-first · drafts only · macOS</p>
           <h1>
-            Your messages already know <em>how you write.</em>
+            Study the evidence. <em>Draft in your voice.</em>
           </h1>
           <p className="lede">
-            Turn private messaging history from Messages and your connected
-            accounts into contact-aware style profiles an agent can use to draft
-            unsent replies in your voice.
+            A local-first CLI and Agent Skill for studying private messaging
+            history and drafting messages that sound like you. It reads Apple
+            Messages, caller-owned X archives, and bounded Beeper exports made
+            by Wrench.
           </p>
           <div className="hero-actions">
-            <a className="button button-primary" href="#install">
+            <Link className="button button-primary" href="/sources">
+              See supported sources <span aria-hidden="true">→</span>
+            </Link>
+            <a className="button button-secondary" href="#install">
               Install v{SOFTWARE_VERSION} <span aria-hidden="true">↓</span>
-            </a>
-            <a className="button button-secondary" href={GITHUB_URL}>
-              View the source <span aria-hidden="true">↗</span>
             </a>
           </div>
           <ul className="signal-list" aria-label="Style signals analyzed">
@@ -62,21 +65,43 @@ export default function Home() {
           </div>
           <div className="terminal-card">
             <p>
-              <span>$</span> wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
+              <span>$</span>{' '}wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
             </p>
             <p className="terminal-result">✓ compatible Wrench bundle written</p>
             <p>
-              <span>$</span> messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
+              <span>$</span>{' '}messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
             </p>
-            <p className="terminal-result">✓ source-aware history merged</p>
+            <p className="terminal-result">✓ verified source observation ingested</p>
           </div>
         </div>
       </section>
 
       <section className="promise-strip" aria-label="Product promises">
         <p><strong>Read-only ingest.</strong> Stable copies, never source mutation.</p>
-        <p><strong>Bring your own agent.</strong> No model account or API key.</p>
+        <p><strong>Bring your own agent.</strong> The CLI has no model integration.</p>
         <p><strong>Drafts only.</strong> Nothing sends, reacts, or schedules.</p>
+      </section>
+
+      <section className="sources-section" aria-labelledby="sources-title">
+        <div className="sources-heading">
+          <div>
+            <p className="eyebrow">Supported sources</p>
+            <h2 id="sources-title">History in. Evidence out.</h2>
+          </div>
+          <div>
+            <p>
+              Three bounded messaging-history inputs and one optional local label
+              source. Beeper support is an explicit Wrench bundle path—not a hidden
+              account connection or a sending integration.
+            </p>
+            <Link href="/sources">Compare every source and boundary →</Link>
+          </div>
+        </div>
+        <div className="source-grid">
+          {SUPPORTED_SOURCES.map((source) => (
+            <SourceCard key={source.id} source={source} />
+          ))}
+        </div>
       </section>
 
       <section className="process-section" id="how-it-works">
@@ -89,9 +114,9 @@ export default function Home() {
             <p className="section-number">01 / ingest</p>
             <h3>Read stable local copies.</h3>
             <p>
-              Import Messages and optional Contacts directly, or merge a
-              private source-aware bundle exported by a compatible Wrench release from
-              Beeper.
+              Import Apple Messages or a caller-owned X archive, optionally add
+              macOS Contacts labels, or ingest a private Beeper bundle exported
+              by a compatible Wrench release.
             </p>
             <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code>
           </article>
@@ -140,7 +165,7 @@ export default function Home() {
           <p className="eyebrow">What it is</p>
           <h2>Evidence for a draft.</h2>
           <p>
-            Message Like Me measures your outgoing prose and delivery shape for
+            Message Like Me measures your outgoing prose and bubble-and-response shape for
             one person across imported services, then gives your agent a
             bounded, inspectable profile.
           </p>
@@ -163,9 +188,9 @@ export default function Home() {
           <h2>Your history is evidence, not inventory.</h2>
         </div>
         <ul>
-          <li><span>01</span> The CLI keeps its store and analysis local.</li>
+          <li><span>01</span> Deterministic storage and measurement stay in the private local data root.</li>
           <li><span>02</span> Ordinary inspection omits prose, handles, and names.</li>
-          <li><span>03</span> Study packets are bounded. Provide or open them for an agent only intentionally.</li>
+          <li><span>03</span> Opening a bounded study packet exposes it to the agent environment you chose.</li>
           <li><span>04</span> There is no Message Like Me account, server, or model API.</li>
           <li><span>05</span> Drafting ends as text. Nothing is sent.</li>
         </ul>

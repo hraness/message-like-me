@@ -12,7 +12,7 @@ import {
 
 export const metadata = pageMetadata({
   title: 'About',
-  description: `What ${SITE_NAME} is, how its local-only boundary works, and why every result remains an unsent draft for user review.`,
+  description: `What ${SITE_NAME} is, how its local-first process boundary works, and why every result remains an unsent draft for user review.`,
   path: '/about',
 });
 
@@ -58,10 +58,25 @@ export default function AboutPage() {
             <p>Message Like Me produces candidate text for review. It has no command for sending, reacting, scheduling, or operating a messaging account.</p>
           </article>
         </section>
+        <section className="about-sources" aria-labelledby="about-sources-title">
+          <div>
+            <p className="eyebrow">Supported inputs</p>
+            <h2 id="about-sources-title">Source-aware by design.</h2>
+          </div>
+          <div>
+            <p>
+              Message Like Me reads Apple Messages locally, caller-owned X archive
+              DMs, and bounded Beeper exports made by Wrench. Optional macOS Contacts
+              adds exact local labels. Each source retains its own provenance and
+              observability limits.
+            </p>
+            <Link href="/sources">Compare the source boundaries →</Link>
+          </div>
+        </section>
         <nav className="document-next" aria-label="Learn more">
+          <Link href="/sources">Compare supported sources →</Link>
           <Link href="/methodology">Read the methodology →</Link>
           <Link href="/research">Review the research →</Link>
-          <Link href="/docs">Open the documentation →</Link>
         </nav>
       </main>
       <SiteFooter />
