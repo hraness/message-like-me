@@ -1502,6 +1502,27 @@ describe("local corpus store", () => {
         plan,
       )).toThrow("ambiguous cross-source fingerprint");
       expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
+      const duplicateReaction = {
+        ...archive.reactionFacts![0]!,
+        id: "x-archive-reaction-ambiguous",
+        externalId: "x-archive-reaction-external-ambiguous",
+      };
+      expect(() => store.replaceSources(
+        [{
+          ...archive,
+          reactionFacts: [...archive.reactionFacts!, duplicateReaction],
+        }],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        {
+          ...plan,
+          reactions: [{
+            duplicateReactionId: "x-beeper-reaction",
+            preferredReactionId: "x-archive-reaction",
+          }],
+        },
+      )).toThrow("ambiguous actor evidence");
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
       expect(store.doctor()).toMatchObject({ sources: 1, foreignKeyViolations: 0 });
     } finally {
       store.close();

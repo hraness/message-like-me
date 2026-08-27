@@ -2095,6 +2095,17 @@ function applyEquivalencePlan(
     if (!targetEquivalent) {
       throw new CliError("conflict", "Reaction equivalence targets non-equivalent messages");
     }
+    const duplicateMatches = get<{ value: number }>(database, `
+      SELECT count(*) AS value FROM corpus_reaction_facts
+      WHERE source_id=? AND target_external_id=? AND direction IS ? AND body=? AND state='active'
+    `, duplicate.source_id, duplicate.target_external_id, duplicate.direction, duplicate.body)?.value ?? 0;
+    const preferredMatches = get<{ value: number }>(database, `
+      SELECT count(*) AS value FROM corpus_reaction_facts
+      WHERE source_id=? AND target_external_id=? AND direction IS ? AND body=? AND state='active'
+    `, preferred.source_id, preferred.target_external_id, preferred.direction, preferred.body)?.value ?? 0;
+    if (duplicateMatches !== 1 || preferredMatches !== 1) {
+      throw new CliError("conflict", "Reaction equivalence has ambiguous actor evidence");
+    }
     matchedReactions.push(Object.freeze({
       duplicateId: duplicate.id,
       preferredId: preferred.id,
