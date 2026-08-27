@@ -10,6 +10,7 @@ import {
   SITE_ORIGIN,
   SOFTWARE_VERSION,
 } from './_lib/site';
+import '@hraness/design-kit/fonts.css';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -30,6 +31,9 @@ export const metadata: Metadata = {
     'messaging style',
     'Agent Skill',
     'iMessage analysis',
+    'Beeper message analysis',
+    'Beeper via Wrench',
+    'X data archive messages',
     'private AI tools',
   ],
   manifest: '/manifest.webmanifest',
@@ -103,6 +107,13 @@ const structuredData = {
       isAccessibleForFree: true,
       sameAs: GITHUB_URL,
       downloadUrl: RELEASE_URL,
+      featureList: [
+        'Read-only Apple Messages history ingestion',
+        'Caller-owned X data archive direct-message ingestion',
+        'Bounded Beeper bundle ingestion via Wrench',
+        'Optional macOS Contacts label enrichment',
+        'Local deterministic measurement and drafts-only Agent Skill',
+      ],
       offers: {
         '@type': 'Offer',
         price: 0,

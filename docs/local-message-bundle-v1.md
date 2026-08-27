@@ -4,10 +4,11 @@
 moving a bounded local provider observation into Message Like Me. It separates
 provider capture from analysis: a producer handles provider access and writes
 the bundle, while `messagelikeme ingest bundle` verifies and normalizes it. The
-importer never receives provider credentials and never calls the producer.
+importer never receives provider credentials, starts Wrench, invokes a Beeper
+operation, or sends a message.
 
-The current producer is the local Beeper export introduced in
-[Wrench 0.13.0](https://github.com/hraness/wrench/releases/tag/v0.13.0):
+The currently verified producer is the local Beeper export in
+[Wrench v0.15.0](https://github.com/hraness/wrench/releases/tag/v0.15.0):
 
 ```sh
 wrench beeper export-message-like-me \
@@ -28,10 +29,11 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench `0.13.x` emits that transform. A later
-Wrench package release remains compatible only while its manifest still says
+source-transform version `1.1.0`. Wrench v0.15.0 emits those coordinates with
+the pinned Beeper CLI version `0.6.2`. A later Wrench package release remains
+compatible only while its manifest still declares that schema, source ID, and
 `source.version: "1.1.0"`; package age or a permissive version range never
-overrides the manifest coordinate. The provider version records the pinned
+overrides the manifest coordinates. The provider version records the pinned
 Beeper CLI used for capture and may change without changing the bundle
 contract.
 
@@ -173,7 +175,7 @@ orders lexical `sortKey`, then `sentAt` and stable provider ID as deterministic
 tie-breakers.
 
 `bodyTruncated: true` means the body cannot be prose evidence. The record still
-becomes a text bubble for tempo, reply, and delivery-shape analysis. A message
+becomes a text bubble for tempo, reply, and response-shape analysis. A message
 with deletion state must have a null body. Attachment entries contain metadata
 only; they never contain paths, URLs, or media bytes.
 

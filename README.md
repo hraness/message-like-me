@@ -10,14 +10,24 @@ source bundles, including multi-account Beeper exports produced through
 Wrench. Its Agent Skill teaches Codex, Claude, and other coding agents how to
 interpret those local artifacts and draft unsent replies in your voice.
 
-The CLI does not call an AI service, authenticate with a product account, send
-messages, or operate Messages. The agent already running the skill supplies the
-semantic analysis and drafting judgment.
+The CLI has no model integration. It does not authenticate with a product
+account, invoke Wrench or Beeper, send messages, or operate Messages. An agent
+you already run may use the installed skill for semantic analysis and drafting;
+opening a study packet exposes its bounded excerpts to that agent environment.
 
-This is an evidence layer for relationship-aware drafting, not a digital clone.
-It does not train a model, represent your identity, infer your beliefs, or claim
-that a draft is what you would have written. Your current meaning, facts, and
-intent outrank historical style.
+This is an evidence layer for relationship-aware drafting. It does not train a
+model, represent your identity, infer your beliefs, or claim that a draft is
+what you would have written. Your current meaning, facts, and intent outrank
+historical style.
+
+## Supported sources
+
+| Source | What Message Like Me reads | Boundary |
+| --- | --- | --- |
+| Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
+| X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
+| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.15.0 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
+| macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Install
 
@@ -120,13 +130,13 @@ for one-to-one direct conversations whose account identity, peer handle, and
 overlapping message evidence match exactly. Both source provenances remain
 inspectable, ambiguity or contradiction fails closed, and exact messages appear
 once in analysis. Group DMs remain separate because the legacy archive does not
-supply enough cross-provider sender proof for safe equivalence. Reimporting the
+supply enough cross-provider sender proof for exact equivalence. Reimporting the
 same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
-To study accounts connected through Beeper, install or update to a compatible
-[Wrench release](https://github.com/hraness/wrench/releases), then ask it to
-create a new private Message Like Me bundle:
+To study accounts connected through Beeper, install the currently verified
+[Wrench v0.15.0 release](https://github.com/hraness/wrench/releases/tag/v0.15.0),
+then use Wrench to create a new private Message Like Me bundle:
 
 ```sh
 wrench beeper export-message-like-me \
@@ -137,8 +147,9 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench calls the pinned
-[official Beeper CLI](https://github.com/beeper/cli) directly. It enumerates
+path to a directory that does not already exist. Wrench v0.15.0 calls the
+pinned [official Beeper CLI 0.6.2 release](https://github.com/beeper/cli/releases/tag/v0%2E6%2E2)
+directly. It enumerates
 the connected account realm, invokes `export --no-attachments` once per
 account in deterministic order, and reports the account ordinal, elapsed-time
 heartbeats, and cumulative validated chat and message counts on stderr. It
@@ -150,7 +161,8 @@ The export does not use the separate
 The CLI path supplies the bounded account snapshots and local files needed for
 hash validation, deterministic conversion, crash recovery, and atomic
 publication. Provider URLs and credentials are excluded. Message Like Me does
-not receive the Beeper credential and does not call Beeper or Wrench itself.
+not receive the Beeper credential, start Wrench, invoke a Beeper operation, or
+send a message.
 
 Ingest the finished directory, then inspect its redacted source health:
 
@@ -166,11 +178,12 @@ digest before changing the store. One bundle may contain several connected
 accounts and networks; each becomes a separate source namespace. Native
 iMessage and prior bundle sources remain alongside it.
 
-The complete interchange, integrity, identity, and reimport laws are in the
+The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
-Message Like Me accepts the `beeper-local` source transform `1.1.0`, introduced
-in Wrench 0.13.0 and emitted throughout Wrench 0.13.x. Later Wrench releases are
-compatible only while they preserve that explicit manifest coordinate.
+Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
+source-transform version `1.1.0`. Wrench v0.15.0 is the currently verified
+producer. Compatibility is determined by those exact manifest coordinates,
+not by an open-ended Wrench package range.
 
 Beeper exports describe bounded local observations. A later bounded export
 that omits an older record does not delete retained history. Explicit deletion,
