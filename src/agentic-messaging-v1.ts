@@ -169,7 +169,22 @@ export type AgentMessageRouteCandidateV1 = Readonly<{
   privateBinding: Readonly<{
     sourceAccountId: string | null;
     sourceExternalId: string;
-    conversationExternalId: string;
+    coordinate:
+      | Readonly<{
+        kind: "beeperConversation";
+        network: string;
+        conversationId: string;
+      }>
+      | Readonly<{
+        kind: "imessageChat";
+        chatGuid: string;
+        service: string | null;
+        observedChatRowId: number | null;
+      }>
+      | Readonly<{
+        kind: "whatsappJid";
+        jid: string;
+      }>;
   }> | null;
 }>;
 

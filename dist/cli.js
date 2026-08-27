@@ -4662,6 +4662,9 @@ function routeCandidatesForScope(database, scope, privateDetails) {
   return Object.freeze(rows.map((row) => {
     const archive = row.source_kind === "x-archive";
     const group = row.is_group === 1;
+    if (privateDetails && !archive && row.source_kind === "bundle" && row.network === null) {
+      throw new CliError("invalid-data", "Beeper route candidate has no provider network");
+    }
     return Object.freeze({
       schemaVersion: 1,
       format: "message-like-me.source-conversation-route",
@@ -4679,10 +4682,19 @@ function routeCandidatesForScope(database, scope, privateDetails) {
         state: "wrench-binding-eligible",
         reason: "requires-exact-wrench-binding"
       }),
-      privateBinding: privateDetails ? Object.freeze({
+      privateBinding: privateDetails && !archive ? Object.freeze({
         sourceAccountId: row.account_id,
         sourceExternalId: row.source_external_id,
-        conversationExternalId: row.conversation_external_id
+        coordinate: row.source_kind === "imessage" ? Object.freeze({
+          kind: "imessageChat",
+          chatGuid: row.conversation_external_id,
+          service: row.service,
+          observedChatRowId: null
+        }) : Object.freeze({
+          kind: "beeperConversation",
+          network: row.network,
+          conversationId: row.conversation_external_id
+        })
       }) : null
     });
   }));

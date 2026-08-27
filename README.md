@@ -273,9 +273,11 @@ A contact or person scope is never itself a destination. Each candidate names
 one pseudonymous source and conversation inside that mode-`0600` output.
 Ordinary stdout reports only its digest, counts, and selection state.
 `--private` additionally reveals only
-the exact account, source, and conversation coordinates already observed in
-that imported source. It never emits names, handles, participants, or a locator
-derived from them.
+the exact account, source, and tagged conversation coordinate already observed
+in that imported source: `beeperConversation` for a Beeper bundle or
+`imessageChat` for Messages. It never emits names, handles, participants, or a
+locator derived from them. Wrench rejects a coordinate whose tag does not match
+the selected provider adapter.
 
 An X archive candidate is always `evidence-only` with reason
 `archive-source`. Handoff v1 also keeps group candidates evidence-only as an

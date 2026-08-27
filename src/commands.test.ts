@@ -164,7 +164,12 @@ describe("messagelikeme CLI", () => {
         privateBinding: {
           sourceAccountId: null,
           sourceExternalId: "local-imessage",
-          conversationExternalId: "synthetic-private-chat-guid",
+          coordinate: {
+            kind: "imessageChat",
+            chatGuid: "synthetic-private-chat-guid",
+            service: "iMessage",
+            observedChatRowId: null,
+          },
         },
         actionability: { state: "wrench-binding-eligible", reason: "requires-exact-wrench-binding" },
       })]);

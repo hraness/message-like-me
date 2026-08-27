@@ -1447,7 +1447,11 @@ describe("local corpus store", () => {
           privateBinding: {
             sourceAccountId: "synthetic-beeper-account",
             sourceExternalId: "synthetic-beeper-account",
-            conversationExternalId: "x-beeper-conversation-external",
+            coordinate: {
+              kind: "beeperConversation",
+              network: "x",
+              conversationId: "x-beeper-conversation-external",
+            },
           },
         }),
         expect.objectContaining({
