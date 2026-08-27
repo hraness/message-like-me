@@ -38,7 +38,7 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.15.0',
+      producerVersion: '0.16.0',
       providerCliVersion: '0.6.2',
       bundleSchemaVersion: '1',
       sourceId: 'beeper-local',

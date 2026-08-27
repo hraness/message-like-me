@@ -8,7 +8,7 @@ importer never receives provider credentials, starts Wrench, invokes a Beeper
 operation, or sends a message.
 
 The currently verified producer is the local Beeper export in
-[Wrench v0.15.0](https://github.com/hraness/wrench/releases/tag/v0.15.0):
+[Wrench v0.16.0](https://github.com/hraness/wrench/releases/tag/v0.16.0):
 
 ```sh
 wrench beeper export-message-like-me \
@@ -29,7 +29,7 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.15.0 emits those coordinates with
+source-transform version `1.1.0`. Wrench v0.16.0 emits those coordinates with
 the pinned Beeper CLI version `0.6.2`. A later Wrench package release remains
 compatible only while its manifest still declares that schema, source ID, and
 `source.version: "1.1.0"`; package age or a permissive version range never

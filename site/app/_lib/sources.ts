@@ -1,6 +1,6 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.15.0',
+  producerVersion: '0.16.0',
   providerCliVersion: '0.6.2',
   bundleSchemaVersion: '1',
   sourceId: 'beeper-local',
@@ -80,4 +80,3 @@ export const SUPPORTED_SOURCES = Object.freeze([
 export const MESSAGING_HISTORY_SOURCES = Object.freeze(
   SUPPORTED_SOURCES.filter((source) => source.kind === 'Messaging history'),
 );
-
