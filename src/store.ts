@@ -697,8 +697,6 @@ const ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
     ON target_duplicate_message.id=target_equivalence.duplicate_message_id
   JOIN messages target_preferred_message
     ON target_preferred_message.id=target_equivalence.preferred_message_id
-  JOIN message_provenance target_preferred_provenance
-    ON target_preferred_provenance.message_id=target_equivalence.preferred_message_id
   WHERE equivalence.duplicate_reaction_id=reaction.id
     AND preferred_reaction.state='active'
     AND preferred_reaction.body=reaction.body
@@ -710,8 +708,8 @@ const ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
     AND target_preferred_message.attachment_count=target_duplicate_message.attachment_count
     AND NOT EXISTS (
       SELECT 1 FROM corpus_source_suppressions target_suppression
-      WHERE target_suppression.source_id=target_preferred_provenance.source_id
-        AND target_suppression.local_id=target_equivalence.preferred_message_id
+      WHERE target_suppression.source_id=preferred_target.source_id
+        AND target_suppression.local_id=preferred_target.message_id
         AND target_suppression.kind IN ('message','reaction','reaction-timeline')
         AND target_suppression.suppressed=1
     )
