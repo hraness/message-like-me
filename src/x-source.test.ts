@@ -343,6 +343,43 @@ describe("normalizeXArchive", () => {
     })]);
   });
 
+  test("does not treat bodyless media coordinates as exact message proof", () => {
+    const archive = evidence();
+    const bodylessArchive = Object.freeze({
+      ...archive,
+      conversations: Object.freeze(archive.conversations.map((conversation) => Object.freeze({
+        ...conversation,
+        events: Object.freeze(conversation.events.map((event) => event.kind === "message-create"
+          ? Object.freeze({
+              ...event,
+              text: null,
+              mediaCount: 1,
+              editHistory: Object.freeze([]),
+              activeReactions: Object.freeze([]),
+            })
+          : event)),
+      }))),
+    });
+    const snapshot = normalizeXArchive(bodylessArchive, TEST_KEY);
+    const preferred = preferredEvidence();
+    const bodylessPreferred = Object.freeze({
+      ...preferred,
+      messages: Object.freeze(preferred.messages.map((message) => Object.freeze({
+        ...message,
+        body: null,
+        kind: "attachment" as const,
+        attachmentCount: 1,
+      }))),
+      reactions: Object.freeze([]),
+    });
+
+    expect(() => planXArchiveEquivalence(
+      bodylessArchive,
+      snapshot,
+      bodylessPreferred,
+    )).toThrow("no unambiguous exact message overlap");
+  });
+
   test("excludes group overlap without exact roster and per-message actor proof", () => {
     const archive = groupEvidence();
     const snapshot = normalizeXArchive(archive, TEST_KEY);

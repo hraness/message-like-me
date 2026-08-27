@@ -464,6 +464,9 @@ function messageFingerprint(message: Readonly<{
   kind: CorpusMessage["kind"];
   attachmentCount: number;
 }>, proof: ExactDirectIdentityProof, senderActorId: string): string | null {
+  // A bodyless media placeholder proves only time, direction, and attachment
+  // count. Those coordinates cannot establish exact cross-source identity.
+  if (message.body === null) return null;
   const actorHandle = senderActorId === proof.selfActorId && message.direction === "outgoing"
     ? "self"
     : senderActorId === proof.peerActorId && message.direction === "incoming"
