@@ -20,7 +20,7 @@ const CONTACTS_TEST_KEY = "synthetic-contacts-store-key-32";
 
 function snapshot(revision: string): CorpusSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     source: {
       physicalPath: "/synthetic/chat.db",
       device: "1",
@@ -52,6 +52,7 @@ function snapshot(revision: string): CorpusSnapshot {
         bodySource: "text",
         kind: "text",
         replyToSourceGuid: null,
+        replyState: "none",
         editedAt: null,
         retractedAt: null,
         service: "iMessage",
@@ -68,6 +69,7 @@ function snapshot(revision: string): CorpusSnapshot {
         bodySource: "text",
         kind: "text",
         replyToSourceGuid: "synthetic-guid-1",
+        replyState: "explicit",
         editedAt: null,
         retractedAt: null,
         service: "iMessage",
@@ -92,6 +94,7 @@ function snapshotWithLaterMessage(revision: string): CorpusSnapshot {
         sentAt: "2026-08-21T13:00:00.000Z",
         body: "Fabricated later answer.",
         replyToSourceGuid: null,
+        replyState: "none",
       },
     ],
   };
@@ -99,6 +102,10 @@ function snapshotWithLaterMessage(revision: string): CorpusSnapshot {
 
 const BUNDLE_SOURCE_ID = `source_${"7".repeat(64)}`;
 const BUNDLE_CONVERSATION_ID = "conversation_bundle_synthetic";
+const X_BEEPER_SOURCE_ID = `source_${"8".repeat(64)}`;
+const X_ARCHIVE_SOURCE_ID = `source_${"9".repeat(64)}`;
+const X_BEEPER_CONVERSATION_ID = "conversation_x_beeper_synthetic";
+const X_ARCHIVE_CONVERSATION_ID = "conversation_x_archive_synthetic";
 
 function bundleMessage(
   id: string,
@@ -117,6 +124,7 @@ function bundleMessage(
     bodySource: kind === "text" ? "text" : "unavailable",
     kind,
     replyToSourceGuid: null,
+    replyState: "none",
     editedAt: null,
     retractedAt: null,
     service: "whatsapp",
@@ -201,6 +209,202 @@ function bundleSnapshot(options: Readonly<{
   };
 }
 
+function xSourceMessage(options: Readonly<{
+  id: string;
+  conversationId: string;
+  sourceGuid: string;
+  sentAt: string;
+  direction: "incoming" | "outgoing";
+  body: string;
+  replyState: "explicit" | "none" | "unavailable";
+  replyToSourceGuid?: string | null;
+}>): CorpusMessage {
+  return {
+    id: options.id,
+    sourceRowId: 1,
+    sourceGuid: options.sourceGuid,
+    conversationId: options.conversationId,
+    sentAt: options.sentAt,
+    direction: options.direction,
+    body: options.body,
+    bodySource: "text",
+    kind: "text",
+    replyToSourceGuid: options.replyToSourceGuid ?? null,
+    replyState: options.replyState,
+    editedAt: null,
+    retractedAt: null,
+    service: "x",
+    attachmentCount: 0,
+  };
+}
+
+function xBeeperSnapshot(extraMessage = false): SourceCorpusSnapshot {
+  const messages = [
+    xSourceMessage({
+      id: "x-beeper-message-overlap",
+      conversationId: X_BEEPER_CONVERSATION_ID,
+      sourceGuid: "x-beeper-external-overlap",
+      sentAt: "2026-08-20T10:00:00.000Z",
+      direction: "incoming",
+      body: "Synthetic exact overlap.",
+      replyState: "none",
+    }),
+    xSourceMessage({
+      id: "x-beeper-message-unique",
+      conversationId: X_BEEPER_CONVERSATION_ID,
+      sourceGuid: "x-beeper-external-unique",
+      sentAt: "2026-08-20T10:01:00.000Z",
+      direction: "outgoing",
+      body: "Synthetic Beeper-only reply.",
+      replyState: "explicit",
+      replyToSourceGuid: "x-beeper-external-overlap",
+    }),
+    ...(extraMessage ? [xSourceMessage({
+      id: "x-beeper-message-later",
+      conversationId: X_BEEPER_CONVERSATION_ID,
+      sourceGuid: "x-beeper-external-later",
+      sentAt: "2026-08-20T10:03:00.000Z",
+      direction: "outgoing",
+      body: "Synthetic later Beeper reply.",
+      replyState: "none",
+    })] : []),
+  ].map((message, index) => ({ ...message, sourceRowId: index + 1 }));
+  return {
+    source: {
+      id: X_BEEPER_SOURCE_ID,
+      kind: "bundle",
+      provider: "beeper",
+      network: "x",
+      accountId: "synthetic-beeper-account",
+      externalId: "synthetic-beeper-account",
+      revision: (extraMessage ? "b" : "a").repeat(64),
+      generatedAt: extraMessage ? "2026-08-21T01:00:00.000Z" : "2026-08-21T00:00:00.000Z",
+      producer: { id: "beeper-local", version: "test" },
+      coverage: {
+        history: extraMessage ? "complete-current-local" : "bounded",
+        observedFrom: "2026-08-20T10:00:00.000Z",
+        observedTo: "2026-08-20T10:03:00.000Z",
+      },
+      manifestSha256: (extraMessage ? "b" : "a").repeat(64),
+      identity: { account: { handle: "@synthetic-self", network: "x" } },
+      warnings: [],
+    },
+    conversations: [{
+      id: X_BEEPER_CONVERSATION_ID,
+      sourceKey: "x-beeper-conversation",
+      privateLabel: "Synthetic X Peer",
+      service: "x",
+      participantCount: 1,
+      participantIds: ["x-beeper-peer"],
+      privateParticipants: ["@synthetic-peer"],
+      group: false,
+    }],
+    conversationProvenance: [{
+      conversationId: X_BEEPER_CONVERSATION_ID,
+      externalId: "x-beeper-conversation-external",
+      metadata: { participantsComplete: true },
+    }],
+    messages,
+    messageProvenance: messages.map((message) => ({
+      messageId: message.id,
+      externalId: message.sourceGuid,
+      providerSortKey: message.sourceGuid,
+      replyToExternalId: message.replyToSourceGuid,
+      attachments: [],
+    })),
+    reactionFacts: [{
+      id: "x-beeper-reaction",
+      externalId: "x-beeper-reaction-external",
+      targetExternalId: "x-beeper-external-overlap",
+      conversationId: X_BEEPER_CONVERSATION_ID,
+      direction: "outgoing",
+      body: "heart",
+      reactedAt: null,
+      state: "active",
+    }],
+    auxiliaryRecords: [
+      { kind: "account", id: "self", record: { isSelf: true, handle: "@synthetic-self" } },
+      { kind: "participant", id: "peer", record: { isSelf: false, handle: "@synthetic-peer" } },
+    ],
+  };
+}
+
+function xArchiveSnapshot(): SourceCorpusSnapshot {
+  const messages = [
+    xSourceMessage({
+      id: "x-archive-message-overlap",
+      conversationId: X_ARCHIVE_CONVERSATION_ID,
+      sourceGuid: "x-archive-external-overlap",
+      sentAt: "2026-08-20T10:00:00.000Z",
+      direction: "incoming",
+      body: "Synthetic exact overlap.",
+      replyState: "unavailable",
+    }),
+    xSourceMessage({
+      id: "x-archive-message-unique",
+      conversationId: X_ARCHIVE_CONVERSATION_ID,
+      sourceGuid: "x-archive-external-unique",
+      sentAt: "2026-08-20T10:02:00.000Z",
+      direction: "outgoing",
+      body: "Synthetic archive-only reply.",
+      replyState: "unavailable",
+    }),
+  ].map((message, index) => ({ ...message, sourceRowId: index + 1 }));
+  return {
+    source: {
+      id: X_ARCHIVE_SOURCE_ID,
+      kind: "x-archive",
+      provider: "x",
+      network: "x",
+      accountId: "123456789",
+      externalId: "123456789",
+      revision: "c".repeat(64),
+      generatedAt: "2026-08-26T03:02:10.221Z",
+      producer: { id: "x-archive", version: "test" },
+      coverage: {
+        history: "bounded",
+        observedFrom: "2026-08-20T10:00:00.000Z",
+        observedTo: "2026-08-20T10:02:00.000Z",
+      },
+      manifestSha256: "c".repeat(64),
+      identity: { account: { providerUserId: "123456789", username: "synthetic-self" } },
+      warnings: [],
+    },
+    conversations: [{
+      id: X_ARCHIVE_CONVERSATION_ID,
+      sourceKey: "x-archive-conversation",
+      privateLabel: "Synthetic X Peer Archive",
+      service: "x",
+      participantCount: 1,
+      participantIds: ["x-archive-peer"],
+      privateParticipants: ["@synthetic-peer"],
+      group: false,
+    }],
+    conversationProvenance: [{
+      conversationId: X_ARCHIVE_CONVERSATION_ID,
+      externalId: "x-archive-conversation-external",
+    }],
+    messages,
+    messageProvenance: messages.map((message) => ({
+      messageId: message.id,
+      externalId: message.sourceGuid,
+      providerSortKey: null,
+      replyToExternalId: null,
+      attachments: [],
+    })),
+    reactionFacts: [{
+      id: "x-archive-reaction",
+      externalId: "x-archive-reaction-external",
+      targetExternalId: "x-archive-external-overlap",
+      conversationId: X_ARCHIVE_CONVERSATION_ID,
+      direction: "outgoing",
+      body: "heart",
+      reactedAt: "2026-08-20T10:00:30.000Z",
+      state: "active",
+    }],
+  };
+}
+
 function enrichmentCorpus(revision: string): CorpusSnapshot {
   const conversation = (
     id: string,
@@ -253,6 +457,7 @@ function scopedCorpus(
     bodySource: "text",
     kind: "text",
     replyToSourceGuid: null,
+    replyState: "none",
     editedAt: null,
     retractedAt: null,
     service: "iMessage",
@@ -406,6 +611,99 @@ function createLegacyV2Store(path: string): void {
   }
 }
 
+function createLegacyV3Store(path: string): void {
+  createLegacyV2Store(path);
+  const database = new Database(path, { strict: true });
+  try {
+    database.exec(`
+      PRAGMA foreign_keys=ON;
+      CREATE TABLE corpus_sources(
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('imessage','bundle')),
+        provider TEXT NOT NULL,network TEXT,account_id TEXT,external_id TEXT NOT NULL,
+        input_revision TEXT NOT NULL,revision TEXT NOT NULL,generated_at TEXT,
+        producer_json TEXT NOT NULL,coverage_json TEXT NOT NULL,manifest_sha256 TEXT,
+        identity_json TEXT NOT NULL,warnings_json TEXT NOT NULL,ingested_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE conversation_sources(
+        conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+        external_id TEXT NOT NULL,metadata_json TEXT NOT NULL,
+        UNIQUE(source_id,external_id)
+      ) STRICT;
+      CREATE TABLE message_provenance(
+        message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+        external_id TEXT NOT NULL,reply_to_external_id TEXT,attachments_json TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,UNIQUE(source_id,external_id)
+      ) STRICT;
+      PRAGMA user_version=3;
+    `);
+    database.query(`INSERT INTO corpus_sources VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      IMESSAGE_SOURCE_ID,
+      "imessage",
+      "apple",
+      null,
+      null,
+      "local-imessage",
+      "a".repeat(64),
+      "a".repeat(64),
+      null,
+      JSON.stringify({ id: "message-like-me", version: "0.4.0" }),
+      JSON.stringify({ history: "complete-current-local", observedFrom: null, observedTo: null }),
+      null,
+      JSON.stringify({ migrated: false }),
+      "[]",
+      "2026-08-21T12:00:00.000Z",
+    );
+    database.query(`INSERT INTO conversation_sources VALUES (?,?,?,?)`).run(
+      "contact_0123456789abcdef",
+      IMESSAGE_SOURCE_ID,
+      "legacy-conversation",
+      "{}",
+    );
+    database.query("UPDATE messages SET reply_to_source_guid=? WHERE id=?")
+      .run("legacy-parent-guid", "legacy-message");
+    database.query(`INSERT INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "legacy-message-none",
+      2,
+      "legacy-guid-none",
+      "contact_0123456789abcdef",
+      "2026-08-21T11:01:00.000Z",
+      "incoming",
+      "Legacy synthetic question.",
+      "text",
+      "text",
+      null,
+      null,
+      null,
+      "iMessage",
+      0,
+    );
+    const insertProvenance = database.query(`
+      INSERT INTO message_provenance VALUES (?,?,?,?,?,?)
+    `);
+    insertProvenance.run(
+      "legacy-message",
+      IMESSAGE_SOURCE_ID,
+      "legacy-guid",
+      "legacy-parent-guid",
+      JSON.stringify({ count: 0, detailsAvailable: false }),
+      JSON.stringify({ migrated: false }),
+    );
+    insertProvenance.run(
+      "legacy-message-none",
+      IMESSAGE_SOURCE_ID,
+      "legacy-guid-none",
+      null,
+      JSON.stringify({ count: 0, detailsAvailable: false }),
+      JSON.stringify({ migrated: false }),
+    );
+  } finally {
+    database.close();
+  }
+}
+
 function contactsSnapshot(revision: string, label = "Synthetic Friend"): ContactsSnapshot {
   const handle = (value: string) => {
     const normalized = normalizeContactHandle(value)!;
@@ -494,7 +792,7 @@ describe("local corpus store", () => {
       store.replaceCorpus(snapshot("d".repeat(64)), "2026-08-21T13:00:00.000Z");
       expect(store.profile(profile.contactId)?.state).toBe("current");
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 3,
+        storeSchemaVersion: 4,
         quickCheck: "ok",
         foreignKeyViolations: 0,
       });
@@ -1027,6 +1325,163 @@ describe("local corpus store", () => {
     }
   });
 
+  test("groups exact X archive overlap without losing archive-only history on later Beeper ingest", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    try {
+      store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      const overlap = store.sourceOverlapEvidence(X_BEEPER_SOURCE_ID);
+      expect(overlap.source).toMatchObject({
+        kind: "bundle",
+        provider: "beeper",
+        network: "x",
+        identity: { account: { handle: "@synthetic-self", network: "x" } },
+      });
+      expect(overlap.auxiliaryRecords).toContainEqual({
+        kind: "account",
+        externalId: "self",
+        record: { isSelf: true, handle: "@synthetic-self" },
+      });
+      expect(() => store.sourceOverlapEvidence(X_BEEPER_SOURCE_ID, 1)).toThrow("record overlap evidence bound");
+
+      const result = store.replaceSources(
+        [xArchiveSnapshot()],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        {
+          duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+          preferredSourceId: X_BEEPER_SOURCE_ID,
+          basis: "exact-message-overlap",
+          evidenceSha256: "d".repeat(64),
+          conversations: [{
+            duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+            preferredConversationId: X_BEEPER_CONVERSATION_ID,
+          }],
+          messages: [{
+            duplicateMessageId: "x-archive-message-overlap",
+            preferredMessageId: "x-beeper-message-overlap",
+          }],
+          reactions: [{
+            duplicateReactionId: "x-beeper-reaction",
+            preferredReactionId: "x-archive-reaction",
+          }],
+        },
+      );
+      expect(result.sources).toEqual([{
+        id: X_ARCHIVE_SOURCE_ID,
+        changed: true,
+        conversations: 1,
+        messages: 1,
+      }]);
+      expect(store.listContacts({ privateLabels: false, minimumOutgoing: 1, limit: 10 }))
+        .toEqual([expect.objectContaining({
+          id: X_BEEPER_CONVERSATION_ID,
+          conversationCount: 1,
+          messageCount: 3,
+          incomingCount: 1,
+          outgoingCount: 2,
+        })]);
+      expect(store.messages(X_ARCHIVE_CONVERSATION_ID).map(({ id, replyState }) => ({ id, replyState })))
+        .toEqual([
+          { id: "x-beeper-message-overlap", replyState: "none" },
+          { id: "x-beeper-message-unique", replyState: "explicit" },
+          { id: "x-archive-message-unique", replyState: "unavailable" },
+        ]);
+      expect(store.conversation(X_ARCHIVE_CONVERSATION_ID, false)).toMatchObject({
+        id: X_BEEPER_CONVERSATION_ID,
+        conversationCount: 1,
+        messageCount: 3,
+      });
+      expect(store.contactCorpus(X_BEEPER_CONVERSATION_ID)?.reactions).toEqual([{
+        id: "x-archive-reaction",
+        externalId: "x-archive-reaction-external",
+        targetExternalId: "x-archive-external-overlap",
+        conversationId: X_ARCHIVE_CONVERSATION_ID,
+        direction: "outgoing",
+        body: "heart",
+        reactedAt: "2026-08-20T10:00:30.000Z",
+        state: "active",
+      }]);
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toMatchObject({
+        kind: "x-archive",
+        messages: 1,
+        reactions: 1,
+      });
+      expect(store.source(X_BEEPER_SOURCE_ID)).toMatchObject({ reactions: 0 });
+
+      store.replaceSources([xBeeperSnapshot(true)], "2026-08-21T01:01:00.000Z");
+      expect(store.listContacts({ privateLabels: false, minimumOutgoing: 1, limit: 10 }))
+        .toEqual([expect.objectContaining({
+          id: X_BEEPER_CONVERSATION_ID,
+          conversationCount: 1,
+          messageCount: 4,
+          incomingCount: 1,
+          outgoingCount: 3,
+        })]);
+      expect(store.messages(X_BEEPER_CONVERSATION_ID).map(({ id }) => id)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+        "x-beeper-message-later",
+      ]);
+      expect(store.replaceSources(
+        [xBeeperSnapshot(true)],
+        "2026-08-21T01:02:00.000Z",
+      ).sources[0]?.changed).toBeFalse();
+      expect(store.doctor()).toMatchObject({
+        quickCheck: "ok",
+        foreignKeyViolations: 0,
+        messages: 5,
+        activeMessages: 4,
+        conversationEquivalences: 1,
+        messageEquivalences: 1,
+        reactionEquivalences: 1,
+      });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects conversation equivalence without exact message overlap atomically", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-reject-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    try {
+      store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      const archive = xArchiveSnapshot();
+      const changed = {
+        ...archive,
+        messages: archive.messages.map((message) => message.id === "x-archive-message-overlap"
+          ? { ...message, body: "Different synthetic body." }
+          : message),
+      };
+      expect(() => store.replaceSources(
+        [changed],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        {
+          duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+          preferredSourceId: X_BEEPER_SOURCE_ID,
+          basis: "exact-message-overlap",
+          evidenceSha256: "d".repeat(64),
+          conversations: [{
+            duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+            preferredConversationId: X_BEEPER_CONVERSATION_ID,
+          }],
+          messages: [{
+            duplicateMessageId: "x-archive-message-overlap",
+            preferredMessageId: "x-beeper-message-overlap",
+          }],
+        },
+      )).toThrow("lacks an exact preferred-source fingerprint");
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
+      expect(store.doctor()).toMatchObject({ sources: 1, foreignKeyViolations: 0 });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("converges provider order across bounded backfill, omission, and replay", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-provider-order-"));
     const incremental = LocalStore.open(join(root, "incremental.sqlite3"));
@@ -1179,6 +1634,7 @@ describe("local corpus store", () => {
       bodySource: "unavailable",
       kind: "reaction",
       replyToSourceGuid: base.messages[0]!.sourceGuid,
+      replyState: "explicit",
     };
     try {
       store.replaceCorpus({ ...base, messages: [...base.messages, reaction] }, "2026-08-21T12:00:00.000Z");
@@ -1450,7 +1906,7 @@ describe("local corpus store", () => {
     createLegacyV1Store(path);
     const store = LocalStore.open(path);
     try {
-      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 3, profiles: 1 });
+      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 4, profiles: 1 });
       expect(store.profile("contact_0123456789abcdef")).toMatchObject({
         state: "current",
         profile: { schemaVersion: 1, corpusRevision: "a".repeat(64) },
@@ -1461,7 +1917,7 @@ describe("local corpus store", () => {
 
     const migrated = new Database(path, { strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       const profileColumns = migrated.query("PRAGMA table_info(profiles)").all() as Array<{ name: string }>;
       expect(profileColumns.map(({ name }) => name)).toContain("scope_id");
       expect(profileColumns.map(({ name }) => name)).toContain("evidence_revision");
@@ -1485,7 +1941,7 @@ describe("local corpus store", () => {
     const store = LocalStore.open(path);
     try {
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 3,
+        storeSchemaVersion: 4,
         conversations: 1,
         messages: 1,
         profiles: 1,
@@ -1501,7 +1957,7 @@ describe("local corpus store", () => {
     }
     const migrated = new Database(path, { readonly: true, strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       expect(migrated.query("SELECT count(*) AS value FROM conversations").get())
         .toEqual({ value: 1 });
       expect(migrated.query("SELECT count(*) AS value FROM messages").get())
@@ -1518,6 +1974,59 @@ describe("local corpus store", () => {
         .toEqual({ value: 1 });
       expect(migrated.query(`SELECT evidence_revision IS NOT NULL AS value FROM study_packets`).get())
         .toEqual({ value: 1 });
+    } finally {
+      migrated.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("upgrades a populated v3 store additively and accepts x-archive through its legacy CHECK", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-v3-upgrade-"));
+    const path = join(root, "store.sqlite3");
+    createLegacyV3Store(path);
+    const store = LocalStore.open(path);
+    try {
+      expect(store.doctor()).toMatchObject({
+        storeSchemaVersion: 4,
+        conversations: 1,
+        messages: 2,
+        sources: 1,
+        foreignKeyViolations: 0,
+      });
+      expect(store.messages("contact_0123456789abcdef").map(({ id, replyState }) => ({
+        id,
+        replyState,
+      }))).toEqual([
+        { id: "legacy-message", replyState: "explicit" },
+        { id: "legacy-message-none", replyState: "none" },
+      ]);
+      store.replaceSources([xArchiveSnapshot()], "2026-08-26T04:00:00.000Z");
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toMatchObject({
+        kind: "x-archive",
+        provider: "x",
+        conversations: 1,
+        messages: 2,
+      });
+      expect(store.doctor()).toMatchObject({
+        storeSchemaVersion: 4,
+        sources: 2,
+        foreignKeyViolations: 0,
+      });
+    } finally {
+      store.close();
+    }
+    const migrated = new Database(path, { readonly: true, strict: true });
+    try {
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.query(`SELECT kind,kind_v4 FROM corpus_sources WHERE id=?`)
+        .get(X_ARCHIVE_SOURCE_ID)).toEqual({ kind: "bundle", kind_v4: "x-archive" });
+      expect(migrated.query(`SELECT reply_state,count(*) AS value FROM messages
+        WHERE id LIKE 'legacy-message%' GROUP BY reply_state ORDER BY reply_state`).all())
+        .toEqual([
+          { reply_state: "explicit", value: 1 },
+          { reply_state: "none", value: 1 },
+        ]);
+      expect(migrated.query("PRAGMA foreign_key_check").all()).toEqual([]);
     } finally {
       migrated.close();
       await rm(root, { recursive: true, force: true });
