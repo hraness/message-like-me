@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0
+
+- Add a dependency-free `agentic-messaging-v1` contract that binds one exact
+  Wrench route and live context to local source, corpus, profile, and authored
+  bubble evidence without giving Message Like Me provider, auth, network,
+  subprocess, or send authority.
+- Add strict private route inventories and handoff preparation, verification,
+  receipt recording, and audit commands. Prose and opaque capability references
+  stay in explicit owner-only files; ordinary output and the durable audit keep
+  only pseudonymous IDs, hashes, counts, states, and timestamps.
+- Mark every official X archive route and every v1 group route evidence-only.
+  Emit tagged Beeper and iMessage coordinates only when the imported source
+  observed them, and never derive a destination from names, handles,
+  participants, titles, or merged person scopes.
+- Freeze the Wrench context and receipt binding identities, canonical turn
+  digest, and cross-package vectors. A recorded receipt cannot insert a sent
+  message or claim delivery; later source ingestion remains the only way a sent
+  message can become style or tempo evidence.
+
 ## 0.5.0
 
 - Add strict offline ingestion for caller-owned X data archive ZIPs through
