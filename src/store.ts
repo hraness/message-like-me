@@ -3927,7 +3927,7 @@ export class LocalStore {
       `, handoffId);
       if (stored === null) throw new CliError("not-found", `Unknown handoff ${handoffId}`);
       if (
-        receipt.handoffSha256 !== stored.handoff_sha256
+        receipt.clientIntentSha256 !== stored.handoff_sha256
         || receipt.routeRefSha256 !== stored.route_ref_sha256
         || receipt.contextRefSha256 !== stored.context_ref_sha256
         || receipt.turnDigest !== stored.turn_digest_sha256

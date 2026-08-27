@@ -319,10 +319,12 @@ messagelikeme handoffs show <handoff-id> --json
 ```
 
 Recording requires Wrench's pinned body-free receipt binding. It carries the
-handoff, route-reference, context-reference, exact turn, and private preview
-digests, plus the proven prefix and a canonical receipt digest. It contains no
-raw route or context reference. Message Like Me stores only those hashes,
-counts, timestamps, states, and pseudonymous run and handoff IDs. It never
+provider-neutral client-intent digest, set to this exact Message Like Me
+handoff digest, along with route-reference, context-reference, exact-turn, and
+private-preview digests. It also carries the proven prefix and a canonical
+receipt digest. It contains no raw route or context reference. Message Like Me
+stores only those hashes, counts, timestamps, states, and pseudonymous run and
+handoff IDs. It never
 inserts a sent message into the corpus. A later independent source ingestion
 must observe that message before it can affect
 style, tempo, reply, or interaction evidence. The pure contract is exported as

@@ -33,7 +33,7 @@ var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
   schemaVersion: 1
 });
 var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID = "wrench.messaging-receipt-binding.v1";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "84ded556cf8bb4d5852cb22d0a0eb9c984613a1cb7c535af18cd6153e9e9bdfb";
+var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
 var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
   contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
@@ -41,7 +41,7 @@ var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
     "format:wrench.messaging-receipt-binding",
     "contractId:wrench.messaging-receipt-binding.v1",
     "contractHash:sha256",
-    "handoffSha256:sha256",
+    "clientIntentSha256:sha256",
     "routeRefSha256:sha256",
     "contextRefSha256:sha256",
     "turnDigest:sha256",
@@ -408,7 +408,7 @@ function wrenchMessagingTurnDigestV1(value) {
   return sha256(canonicalJson({
     schemaVersion: 1,
     format: "wrench.messaging-turn",
-    handoffSha256: handoff.integrity.canonicalSha256,
+    clientIntentSha256: handoff.integrity.canonicalSha256,
     routeRef: handoff.wrench.routeRef,
     contextRef: handoff.wrench.contextRef,
     parts: handoff.turn.bubbles.map((bubble2) => ({
@@ -425,7 +425,7 @@ function parseWrenchMessagingReceiptBindingV1(value) {
     "format",
     "contractId",
     "contractHash",
-    "handoffSha256",
+    "clientIntentSha256",
     "routeRefSha256",
     "contextRefSha256",
     "turnDigest",
@@ -457,7 +457,7 @@ function parseWrenchMessagingReceiptBindingV1(value) {
     format: WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
     contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
     contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-    handoffSha256: digest(record.handoffSha256, "Wrench messaging receipt binding.handoffSha256"),
+    clientIntentSha256: digest(record.clientIntentSha256, "Wrench messaging receipt binding.clientIntentSha256"),
     routeRefSha256: digest(record.routeRefSha256, "Wrench messaging receipt binding.routeRefSha256"),
     contextRefSha256: digest(record.contextRefSha256, "Wrench messaging receipt binding.contextRefSha256"),
     turnDigest: digest(record.turnDigest, "Wrench messaging receipt binding.turnDigest"),

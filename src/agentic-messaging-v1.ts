@@ -36,7 +36,7 @@ export const WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.fr
 export const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID =
   "wrench.messaging-receipt-binding.v1" as const;
 export const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH =
-  "84ded556cf8bb4d5852cb22d0a0eb9c984613a1cb7c535af18cd6153e9e9bdfb" as const;
+  "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4" as const;
 export const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
   contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
@@ -44,7 +44,7 @@ export const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.fr
     "format:wrench.messaging-receipt-binding",
     "contractId:wrench.messaging-receipt-binding.v1",
     "contractHash:sha256",
-    "handoffSha256:sha256",
+    "clientIntentSha256:sha256",
     "routeRefSha256:sha256",
     "contextRefSha256:sha256",
     "turnDigest:sha256",
@@ -184,7 +184,7 @@ export type WrenchMessagingReceiptBindingV1 = Readonly<{
   format: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT;
   contractId: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID;
   contractHash: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH;
-  handoffSha256: string;
+  clientIntentSha256: string;
   routeRefSha256: string;
   contextRefSha256: string;
   turnDigest: string;
@@ -650,7 +650,7 @@ export function wrenchMessagingTurnDigestV1(value: unknown): string {
   return sha256(canonicalJson({
     schemaVersion: 1,
     format: "wrench.messaging-turn",
-    handoffSha256: handoff.integrity.canonicalSha256,
+    clientIntentSha256: handoff.integrity.canonicalSha256,
     routeRef: handoff.wrench.routeRef,
     contextRef: handoff.wrench.contextRef,
     parts: handoff.turn.bubbles.map((bubble) => ({
@@ -666,7 +666,7 @@ export function parseWrenchMessagingReceiptBindingV1(
 ): WrenchMessagingReceiptBindingV1 {
   const record = object(value, "Wrench messaging receipt binding");
   exactKeys(record, [
-    "schemaVersion", "format", "contractId", "contractHash", "handoffSha256",
+    "schemaVersion", "format", "contractId", "contractHash", "clientIntentSha256",
     "routeRefSha256", "contextRefSha256", "turnDigest", "previewDigest", "runId",
     "state", "partCount", "provenPartCount", "receiptSha256", "recordedAt",
   ], "Wrench messaging receipt binding");
@@ -705,7 +705,10 @@ export function parseWrenchMessagingReceiptBindingV1(
     format: WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
     contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
     contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-    handoffSha256: digest(record.handoffSha256, "Wrench messaging receipt binding.handoffSha256"),
+    clientIntentSha256: digest(
+      record.clientIntentSha256,
+      "Wrench messaging receipt binding.clientIntentSha256",
+    ),
     routeRefSha256: digest(
       record.routeRefSha256,
       "Wrench messaging receipt binding.routeRefSha256",

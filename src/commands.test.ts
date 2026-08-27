@@ -265,7 +265,7 @@ describe("messagelikeme CLI", () => {
         format: "wrench.messaging-receipt-binding",
         contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
         contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-        handoffSha256: prepared.handoffSha256,
+        clientIntentSha256: prepared.handoffSha256,
         routeRefSha256: sha256(routeRef),
         contextRefSha256: sha256(contextRef),
         turnDigest: prepared.turnDigest,

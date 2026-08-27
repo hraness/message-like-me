@@ -14,7 +14,7 @@ export declare const WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR: Re
     schemaVersion: 1;
 }>;
 export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID: "wrench.messaging-receipt-binding.v1";
-export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH: "84ded556cf8bb4d5852cb22d0a0eb9c984613a1cb7c535af18cd6153e9e9bdfb";
+export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH: "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
 export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR: Readonly<{
     contractId: "wrench.messaging-receipt-binding.v1";
     fields: readonly string[];
@@ -134,7 +134,7 @@ export type WrenchMessagingReceiptBindingV1 = Readonly<{
     format: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT;
     contractId: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID;
     contractHash: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH;
-    handoffSha256: string;
+    clientIntentSha256: string;
     routeRefSha256: string;
     contextRefSha256: string;
     turnDigest: string;

@@ -81,7 +81,7 @@ describe("agentic messaging v1 contract", () => {
     expect(sha256(canonicalJson(WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR)))
       .toBe(WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH);
     expect(canonicalJson(WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR)).toBe(
-      "{\"contractId\":\"wrench.messaging-receipt-binding.v1\",\"fields\":[\"schemaVersion:1\",\"format:wrench.messaging-receipt-binding\",\"contractId:wrench.messaging-receipt-binding.v1\",\"contractHash:sha256\",\"handoffSha256:sha256\",\"routeRefSha256:sha256\",\"contextRefSha256:sha256\",\"turnDigest:sha256\",\"previewDigest:sha256\",\"runId:opaque\",\"state:submitted|failed|partial|indeterminate\",\"partCount:uint\",\"provenPartCount:uint\",\"receiptSha256:sha256\",\"recordedAt:rfc3339\"],\"format\":\"wrench.messaging-contract-descriptor\",\"schemaVersion\":1}",
+      "{\"contractId\":\"wrench.messaging-receipt-binding.v1\",\"fields\":[\"schemaVersion:1\",\"format:wrench.messaging-receipt-binding\",\"contractId:wrench.messaging-receipt-binding.v1\",\"contractHash:sha256\",\"clientIntentSha256:sha256\",\"routeRefSha256:sha256\",\"contextRefSha256:sha256\",\"turnDigest:sha256\",\"previewDigest:sha256\",\"runId:opaque\",\"state:submitted|failed|partial|indeterminate\",\"partCount:uint\",\"provenPartCount:uint\",\"receiptSha256:sha256\",\"recordedAt:rfc3339\"],\"format\":\"wrench.messaging-contract-descriptor\",\"schemaVersion\":1}",
     );
     expect(sha256(canonicalJson(WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR)))
       .toBe(WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH);
@@ -110,7 +110,7 @@ describe("agentic messaging v1 contract", () => {
       .toBe("9f054fb8eee492b24b3e35a0e3113c7f0e369bb0db3d3733f409cff824f28f61");
     expect(value.wrench.routeRefSha256).toBe(sha256("route_ref_synthetic_001"));
     expect(wrenchMessagingTurnDigestV1(value))
-      .toBe("1f9a1d6be90f48e332f0535417e8866504d9034abd6d8a49f0dfde50e987358d");
+      .toBe("e187756ed8e224b4fc9fdf0dc33f9b44b753dd12b3b045c4521324268e4144ee");
     expect(value.turn.bubbles.map(({ id }) => id)).toEqual(["part_1", "part_2"]);
     const reparsed = parseAgentMessageHandoffV1(JSON.parse(JSON.stringify(value)) as unknown);
     expect(reparsed).toEqual(value);
@@ -165,7 +165,7 @@ describe("agentic messaging v1 contract", () => {
       format: "wrench.messaging-receipt-binding",
       contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
       contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-      handoffSha256: HASH_A,
+      clientIntentSha256: HASH_A,
       routeRefSha256: sha256("route_ref_synthetic_001"),
       contextRefSha256: sha256("context_ref_synthetic_001"),
       turnDigest: HASH_C,
@@ -185,7 +185,7 @@ describe("agentic messaging v1 contract", () => {
       format: "wrench.messaging-receipt-binding",
       contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
       contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-      handoffSha256: vectorHandoff.integrity.canonicalSha256,
+      clientIntentSha256: vectorHandoff.integrity.canonicalSha256,
       routeRefSha256: vectorHandoff.wrench.routeRefSha256,
       contextRefSha256: vectorHandoff.wrench.contextRefSha256,
       turnDigest: wrenchMessagingTurnDigestV1(vectorHandoff),
@@ -197,10 +197,10 @@ describe("agentic messaging v1 contract", () => {
       recordedAt: "2026-08-27T12:01:00.000Z",
     };
     expect(sha256(canonicalJson(vectorCore)))
-      .toBe("96cda009b98f7d9b91f919ff6f82942d6a869e28231e4223ddccb8c32c36ba47");
+      .toBe("cd1570937c4c6523454a76b465fa761322f4b50049bf91eabf6cba5e92ca27e9");
     expect(parseWrenchMessagingReceiptBindingV1({
       ...vectorCore,
-      receiptSha256: "96cda009b98f7d9b91f919ff6f82942d6a869e28231e4223ddccb8c32c36ba47",
+      receiptSha256: "cd1570937c4c6523454a76b465fa761322f4b50049bf91eabf6cba5e92ca27e9",
     })).toMatchObject({ state: "submitted", provenPartCount: 2 });
     for (const [state, provenPartCount] of [
       ["submitted", 3],
@@ -235,6 +235,12 @@ describe("agentic messaging v1 contract", () => {
     expect(() => parseWrenchMessagingReceiptBindingV1({
       ...receipt(),
       routeRef: "raw-ref-is-not-part-of-this-contract",
+    })).toThrow("must contain exactly");
+    const currentReceipt = receipt();
+    const { clientIntentSha256, ...receiptWithoutClientIntent } = currentReceipt;
+    expect(() => parseWrenchMessagingReceiptBindingV1({
+      ...receiptWithoutClientIntent,
+      handoffSha256: clientIntentSha256,
     })).toThrow("must contain exactly");
   });
 });

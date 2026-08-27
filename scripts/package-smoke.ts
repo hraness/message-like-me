@@ -214,7 +214,7 @@ export async function packageSmoke(): Promise<void> {
     await run([
       process.execPath,
       "-e",
-      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "84ded556cf8bb4d5852cb22d0a0eb9c984613a1cb7c535af18cd6153e9e9bdfb") throw new Error("wrong agentic messaging contract")`,
+      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4") throw new Error("wrong agentic messaging contract")`,
     ], consumer);
     await writeFile(
       join(consumer, "index.ts"),

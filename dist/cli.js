@@ -29,7 +29,7 @@ import {
   parseWrenchMessagingContextBindingV1,
   parseWrenchMessagingReceiptBindingV1,
   wrenchMessagingTurnDigestV1
-} from "./cli-z9718t78.js";
+} from "./cli-d7qv38ab.js";
 import {
   canonicalJson,
   prettyJson,
@@ -6584,7 +6584,7 @@ class LocalStore {
       `, handoffId);
       if (stored === null)
         throw new CliError("not-found", `Unknown handoff ${handoffId}`);
-      if (receipt.handoffSha256 !== stored.handoff_sha256 || receipt.routeRefSha256 !== stored.route_ref_sha256 || receipt.contextRefSha256 !== stored.context_ref_sha256 || receipt.turnDigest !== stored.turn_digest_sha256 || receipt.partCount !== stored.part_count || receipt.recordedAt < stored.created_at)
+      if (receipt.clientIntentSha256 !== stored.handoff_sha256 || receipt.routeRefSha256 !== stored.route_ref_sha256 || receipt.contextRefSha256 !== stored.context_ref_sha256 || receipt.turnDigest !== stored.turn_digest_sha256 || receipt.partCount !== stored.part_count || receipt.recordedAt < stored.created_at)
         throw new CliError("conflict", "Wrench receipt does not bind the recorded handoff");
       if (stored.state === "recorded") {
         if (stored.receipt_sha256 === receipt.receiptSha256)

@@ -60,10 +60,12 @@ references never enter argv, ordinary stdout, diagnostics, or the SQLite audit
 table.
 
 The body-free Wrench receipt binding contains no raw route or context
-reference. Its pinned contract binds hashes of those references, the handoff,
-the exact ordered turn, and the private preview, plus its proven-prefix state
-and canonical receipt digest. The local handoff audit stores those hashes,
-counts, timestamps, and pseudonymous run and handoff IDs. Recording a
+reference. Its pinned contract binds hashes of those references, the client
+intent, the exact ordered turn, and the private preview. The generic Wrench
+field is `clientIntentSha256`; Message Like Me sets it to the exact private
+handoff digest. The binding also carries its proven-prefix state and canonical
+receipt digest. The local handoff audit stores those hashes, counts,
+timestamps, and pseudonymous run and handoff IDs. Recording a
 submitted, failed, partial, or indeterminate receipt cannot create corpus
 messages or style evidence. Only later independent provider ingestion can do
 that.
