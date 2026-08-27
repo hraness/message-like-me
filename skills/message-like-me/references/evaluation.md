@@ -72,5 +72,10 @@ Keep failures visible and report uncertainty. Prefer a per-case, per-dimension
 comparison over one similarity score. When useful, compare with an unprofiled
 neutral baseline so surface mimicry is not mistaken for better content.
 
+Reference packets distinguish explicit-reply evidence from unavailable reply
+metadata. Compare reply choices only for eligible historical messages. An X
+archive case with unavailable reply observability cannot confirm either a
+matching reply or a matching non-reply.
+
 Never treat historical agreement as authorship, approval, identity fidelity,
 or permission to send. The audit ends with local findings and unsent text.

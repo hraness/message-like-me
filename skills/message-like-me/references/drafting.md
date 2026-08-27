@@ -61,6 +61,11 @@ facts. Match durable dimensions rather than copying private phrases:
 - explicit reply links only when the observed profile and current ambiguity
   support them.
 
+Unavailable reply metadata is not evidence that the user avoids explicit
+replies. When the profile relies heavily on X archive evidence, use an explicit
+reply only for current clarity or separately observed behavior, and keep any
+historical reply-use claim calibrated to the eligible sample.
+
 Do not simulate a delayed response or claim the user will reply at a particular
 time. Historical timing is **within-session response latency under recorded
 gap settings**. It describes selected past response episodes and never tells

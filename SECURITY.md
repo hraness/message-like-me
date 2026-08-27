@@ -15,6 +15,7 @@ Message Like Me reads private messaging history to derive local analysis. The
 following values are sensitive even when they do not contain an obvious name:
 
 - the source Messages and AddressBook databases and their SQLite sidecars;
+- X data archive ZIPs and their archive, account, and overlap provenance;
 - local message bundles, manifests, connected-account metadata, and provider
   provenance;
 - contact names, email addresses, and phone numbers;
@@ -55,6 +56,35 @@ Message text recovered from ordinary or attributed bodies retains its source
 provenance. Missing or unsupported text remains unavailable rather than being
 guessed. Reply targets and tapbacks remain separate from prose so they cannot
 silently become authored style evidence.
+
+## X data archive ingestion
+
+`messagelikeme ingest x-archive` accepts only a normalized absolute path to a
+caller-owned, owner-only physical ZIP. It validates the archive container and
+reads only bounded supported entries directly from the ZIP. It does not extract
+files, evaluate the archive's JavaScript wrappers, open linked media, access X,
+or make another network request. X Chat is not part of the supported archive
+source.
+
+The importer treats the complete ZIP as untrusted private input. It selects
+direct-message and account evidence plus bounded reply and mention identity
+metadata from reviewed tweet members. Tweet bodies do not become messaging
+corpus or prose evidence. A normal X archive can contain other private account
+data that Message Like Me does not need. Keep the original archive outside Git,
+logs, issues, packages, and ordinary agent context.
+
+The normalized source retains exact archive and account provenance. If the
+caller supplies `--overlap-source`, the named source must be a compatible
+Beeper X source for the same exact account, and shared messages must supply
+exact reconciliation evidence. Missing, conflicting, or ambiguous evidence
+fails closed before partial state is accepted. Reconciliation retains both
+provenances while one exact message contributes once to analysis. Reimporting
+the same or a later archive preserves the deduplication; omission from a later
+archive is not a deletion signal.
+
+X archive direct messages do not reveal whether an explicit reply link was
+used. The importer records reply observability as unavailable rather than
+inventing a reply target or treating absence as an observed non-reply.
 
 ## Local message bundle ingestion
 
@@ -134,6 +164,11 @@ direction, datedness, and the outgoing reaction ratio. `--private` deliberately
 reveals local private identity fields. Use it only when the current task needs
 that mapping.
 
+Explicit-reply ratios use only messages whose source can observe reply links.
+The views report eligible and unavailable counts separately. X archive messages
+remain usable for prose and tempo analysis, but unavailable reply metadata must
+not be interpreted as evidence that the user chose an ordinary non-reply.
+
 `contacts resolve QUERY --private` performs bounded exact matching against
 private labels. It does not do prefix, substring, phonetic, or fuzzy matching,
 and it does not reveal contact methods.
@@ -175,6 +210,10 @@ telemetry, analytics, or synchronization surface. They do not read an API key
 or product credential. The Agent Skill relies on the agent already executing
 the user's task; it must not make a second network or model call with message
 data.
+
+X archive ingestion uses only the ZIP path the caller supplies. It does not log
+in to X, refresh an export, resolve a URL, or download media referenced by the
+archive.
 
 When that agent runs as a hosted service, opening a study packet exposes its
 bounded excerpts to the agent provider under the provider's own data terms.

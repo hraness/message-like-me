@@ -103,6 +103,12 @@ Examine:
 - explicit reply-link frequency and the situations where replies are used;
 - tapbacks as lightweight acknowledgements, separate from written replies.
 
+Read the explicit, eligible, and unavailable reply counts together. Calculate
+or cite a reply ratio only over eligible messages. X archive messages have
+unavailable reply observability, so they cannot support either “used a reply”
+or “chose not to reply” conclusions. Lower reply confidence when unavailable
+messages materially narrow the sample.
+
 Reactions with no provider timestamp remain valid count and direction evidence.
 Do not place them in chronological order, a session, or a response episode, and
 do not synthesize a reaction time.

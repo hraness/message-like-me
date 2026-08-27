@@ -17,6 +17,15 @@ A caller-owned local message bundle is a separate versioned source
 observation. The CLI verifies its complete fixed inventory and digests before
 ingest, never obtains its provider credential, and does not call its producer.
 
+A caller-owned X data archive is another offline source observation. The CLI
+parses bounded supported entries directly from the owner-only ZIP without
+extracting files, evaluating archive JavaScript, accessing a network, or
+downloading media. It preserves exact archive and account provenance. The
+archive source covers direct messages, not X Chat. Bounded reply and mention
+identity observations from selected tweet members may associate a provider user
+ID with an X handle or display name; tweet prose is not added to the messaging
+corpus or used as style evidence.
+
 The normalized corpus, private installation key, aggregate metrics, profiles,
 and drafting context stay in the local data root. Study and evaluation files
 are written only to explicit paths. Ordinary views use keyed pseudonymous IDs
@@ -32,11 +41,11 @@ of the user's prose.
 
 The corpus preserves source, account, network, message direction, provider
 ordering, timestamp, body availability and source, message kind, attachment
-metadata, edit or retraction metadata, explicit reply target, service, and
-conversation membership where the source supports them. Unsupported, deleted,
-or truncated text remains unavailable rather than being reconstructed. A
-truncated text record still represents a message bubble for tempo and reply
-evidence, but never contributes prose.
+metadata, edit or retraction metadata, reply target and reply observability,
+service, and conversation membership where the source supports them.
+Unsupported, deleted, or truncated text remains unavailable rather than being
+reconstructed. A truncated text record still represents a message bubble for
+tempo and any observable reply evidence, but never contributes prose.
 
 Native iMessage history and each connected bundle account have distinct source
 namespaces. A bounded, truncated, or unknown bundle is not an authoritative
@@ -45,6 +54,14 @@ records with retained state. Only explicit deletion, removal, replacement, or
 tombstone state suppresses evidence, and a later record reappearance clears
 that suppression. Bundle creation times are monotonic per source, so an older
 snapshot cannot resurrect or overwrite newer state.
+
+An X archive normally has its own source namespace and retains its exact ZIP
+and account provenance. The caller may name an existing Beeper X source as an
+overlap only when both sources describe the same exact account. Reconciliation
+then requires exact shared-message evidence, retains both provenances, and lets
+one exact message contribute once. Missing or contradictory evidence fails
+closed. This identity survives later reingests, so the same message does not
+return as a duplicate. Archive absence does not suppress retained history.
 
 The analysis uses several operational units:
 
@@ -58,6 +75,9 @@ The analysis uses several operational units:
   in the same session.
 - An **explicit reply** is source metadata linking a message to an earlier
   message. It is distinct from a reaction or an ordinary adjacent response.
+  Reply observability is recorded separately: X data archives do not expose
+  reply links, so their messages are unavailable rather than observed
+  non-replies.
 - A **reaction** is counted as interaction behavior, not authored prose. A
   reaction without a provider timestamp contributes to counts and direction
   but not to temporal order, sessions, bursts, or response episodes. Raw
@@ -75,11 +95,13 @@ For each conversation, the CLI reports the evidence window and counts of
 incoming, outgoing, text, session, burst, and response records. Tempo metrics
 include response-latency quantiles, outgoing messages per response, the ratio
 of single-message to multi-message responses, multi-message inbound contexts,
-visible multi-question contexts, and explicit reply frequency. Session, burst,
-and response construction runs independently for each source conversation
-before person-scope results are combined. Adjacent timestamps in two apps or
-threads never create one artificial episode. Mixed person scopes expose their
-sorted service breakdown.
+visible multi-question contexts, and explicit reply frequency. Reply metrics
+report explicit, eligible, and unavailable messages separately, and calculate
+the ratio only from eligible messages. Session, burst, and response
+construction runs independently for each source conversation before
+person-scope results are combined. Adjacent timestamps in two apps or threads
+never create one artificial episode. Mixed person scopes expose their sorted
+service breakdown.
 
 Surface measurements cover characters and words, lowercase starts, terminal
 punctuation, question and exclamation marks, emoji-bearing messages, and
@@ -195,6 +217,8 @@ Reported behavior can be distorted by:
 - Messages that are not synchronized to the Mac or are no longer present;
 - partial local provider exports whose completeness bounds exclude older or
   remote history;
+- X archives that predate recent messages, omit X Chat, or cannot report
+  explicit reply links;
 - unsupported body encodings, attachments, edits, retractions, or source
   schema changes;
 - ambiguous or stale Contacts labels;

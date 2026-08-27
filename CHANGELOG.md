@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+- Add strict offline ingestion for caller-owned X data archive ZIPs through
+  `ingest x-archive`, preserving exact archive and account provenance without
+  extracting files, evaluating archive JavaScript, accessing a network, or
+  downloading media. X Chat history is not part of this source.
+- Reconcile an archive with an existing Beeper X source only when the caller
+  names that source and exact account and message evidence agree. Retain both
+  provenances, fail closed on ambiguity, and keep exact messages deduplicated
+  across future reingests.
+- Represent reply-link observability explicitly. X archive messages report it
+  as unavailable, so they remain prose and tempo evidence without entering
+  explicit-reply ratios or being counted as observed non-replies.
+- Advance corpus, metrics, study-packet, and evaluation-packet artifacts so
+  reply availability survives deterministic analysis and held-out evaluation.
+
 ## 0.4.0
 
 - Publish `@hraness/message-like-me/message-bundle-v1` as the dependency-free

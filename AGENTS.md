@@ -1,8 +1,8 @@
 # Contents
 
-- `src/` – the deterministic local iMessage, Contacts, and private source-bundle
-  readers, normalized corpus and metrics, private SQLite store, profile parser,
-  Agent Skill installer, and `messagelikeme` CLI.
+- `src/` – the deterministic local iMessage, X archive, Contacts, and private
+  source-bundle readers, normalized corpus and metrics, private SQLite store,
+  profile parser, Agent Skill installer, and `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
 - `docs/` – public methodology, evidence limits, research review, and prior-art
@@ -33,6 +33,10 @@
 - Keep `chat.db` authoritative and ingestion read-only, query-only,
   ownership-checked, schema-validated, and bounded. Never modify Messages,
   contacts, attachments, or SQLite sidecars.
+- Treat an X data archive as an untrusted, private, owner-controlled ZIP. Parse
+  bounded supported entries in memory without extracting files, evaluating
+  JavaScript, accessing a network, or downloading media. Preserve exact archive
+  provenance and reject ambiguous account or cross-source overlap claims.
 - Treat a `message-like-me.local-message-bundle` as an untrusted, private,
   versioned directory boundary. Require its fixed inventory, canonical UTF-8,
   owner-only modes, bounded records, artifact digests, and manifest digest.
@@ -60,7 +64,7 @@
 - Keep the command name `messagelikeme`, the repository and package name
   `message-like-me`, and the Agent Skill name `message-like-me`. Treat
   `messagelikeme.com` as an informational project page, never as a data plane.
-- Keep CLI commands namespaced as `ingest imessage|contacts|bundle`,
+- Keep CLI commands namespaced as `ingest imessage|x-archive|contacts|bundle`,
   `sources list|show`,
   `contacts list|show|resolve`,
   `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`, plus

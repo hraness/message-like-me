@@ -72,6 +72,12 @@ instruction to wait.
 Do not store a reusable list of private catchphrases. A profile should explain
 how to make a choice, not provide text to copy.
 
+For reply conclusions, inspect explicit, eligible, and unavailable message
+counts. A null per-message reply value or unavailable aggregate count is an
+observability limit, not a non-reply. If X archive evidence leaves too few
+eligible messages, state that limitation and lower `confidence.replies` rather
+than inferring avoidance.
+
 ## Claims
 
 Every item in the required `claims` array contains:
