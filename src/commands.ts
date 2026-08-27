@@ -222,7 +222,7 @@ function absolutePrivatePath(value: string | undefined, label: string): string {
 
 function translateIMessageError(error: unknown): never {
   const code = (error as NodeJS.ErrnoException).code;
-  if (code === "EACCES" || code === "EPERM") {
+  if (code === "EACCES" || code === "EPERM" || code === "permission") {
     throw new CliError(
       "permission",
       "Messages data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.",
@@ -274,17 +274,18 @@ function translateBundleError(error: unknown): never {
 }
 
 function translateXArchiveError(error: unknown): never {
-  if (error instanceof CliError) throw error;
-  const code = (error as NodeJS.ErrnoException).code;
+  const code = error instanceof CliError
+    ? error.kind
+    : (error as NodeJS.ErrnoException).code;
   if (code === "EACCES" || code === "EPERM") {
     throw new CliError("permission", "The selected private X archive is not readable", { cause: error });
   }
-  if (code === "ENOENT") {
+  if (code === "ENOENT" || code === "not-found") {
     throw new CliError("not-found", "The selected private X archive does not exist", { cause: error });
   }
   throw new CliError(
     "invalid-data",
-    error instanceof Error ? error.message : "The selected private X archive could not be read safely",
+    "The selected private X archive could not be validated safely",
     { cause: error },
   );
 }

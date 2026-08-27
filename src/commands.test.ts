@@ -161,6 +161,32 @@ describe("messagelikeme CLI", () => {
     }
   });
 
+  test("redacts private X archive coordinates when validation fails", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-x-redaction-"));
+    const capture = ioCapture();
+    try {
+      const archivePath = await writeSyntheticXArchive(root, { mismatchedDirectHeader: true });
+      expect(await main([
+        "--data-dir", join(root, "state"),
+        "ingest", "x-archive", "--input", archivePath, "--json",
+      ], capture.io)).toBe(7);
+      expect(capture.stdout()).toBe("");
+      expect(capture.stderr()).toContain("The selected private X archive could not be validated safely");
+      for (const privateValue of [
+        archivePath,
+        "999-1002",
+        "999-424242",
+        "8001",
+        "Archive Owner",
+        "owner@example.test",
+        "private incoming body",
+        "private outgoing body",
+      ]) expect(capture.stderr()).not.toContain(privateValue);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("ingests a strict local bundle and exposes redacted source health", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-bundle-"));
     const capture = ioCapture();

@@ -64,8 +64,33 @@ function assignment(binding: string, value: unknown): string {
   return `window.YTD.${binding}.part0 = ${JSON.stringify(value)}`;
 }
 
-export async function writeSyntheticXArchive(parent: string): Promise<string> {
+export async function writeSyntheticXArchive(
+  parent: string,
+  options: Readonly<{ mismatchedDirectHeader?: boolean }> = {},
+): Promise<string> {
   const path = join(parent, "synthetic-x-archive.zip");
+  const dataTypes: Record<string, unknown> = {
+    account: {
+      files: [{ fileName: "data/account.js", globalName: "YTD.account.part0", count: "1" }],
+    },
+    directMessages: {
+      mediaDirectory: "data/direct_messages_media",
+      files: [{
+        fileName: "data/direct-messages.js",
+        globalName: "YTD.direct_messages.part0",
+        count: "1",
+      }],
+    },
+  };
+  if (options.mismatchedDirectHeader === true) {
+    dataTypes.directMessageHeaders = {
+      files: [{
+        fileName: "data/direct-message-headers.js",
+        globalName: "YTD.direct_message_headers.part0",
+        count: "1",
+      }],
+    };
+  }
   const manifest = `window.__THAR_CONFIG = ${JSON.stringify({
     userInfo: { accountId: "999", userName: "Owner", displayName: "Archive Owner" },
     archiveInfo: {
@@ -75,19 +100,7 @@ export async function writeSyntheticXArchive(parent: string): Promise<string> {
       maxPartSizeBytes: "53687091200",
     },
     readmeInfo: { fileName: "data/README.txt", directory: "data/", name: "README.txt" },
-    dataTypes: {
-      account: {
-        files: [{ fileName: "data/account.js", globalName: "YTD.account.part0", count: "1" }],
-      },
-      directMessages: {
-        mediaDirectory: "data/direct_messages_media",
-        files: [{
-          fileName: "data/direct-messages.js",
-          globalName: "YTD.direct_messages.part0",
-          count: "1",
-        }],
-      },
-    },
+    dataTypes,
   })}`;
   const account = assignment("account", [{ account: {
     email: "owner@example.test",
@@ -122,11 +135,34 @@ export async function writeSyntheticXArchive(parent: string): Promise<string> {
       } },
     ],
   } }]);
-  await writeFile(path, storedZip([
+  const entries = [
     { name: "data/manifest.js", value: manifest },
     { name: "data/account.js", value: account },
     { name: "data/direct-messages.js", value: directMessages },
-  ]), { mode: 0o600 });
+  ];
+  if (options.mismatchedDirectHeader === true) {
+    entries.push({
+      name: "data/direct-message-headers.js",
+      value: assignment("direct_message_headers", [{ dmConversation: {
+        conversationId: "999-424242",
+        messages: [
+          { messageCreate: {
+            recipientId: "999",
+            senderId: "1002",
+            id: "8001",
+            createdAt: "2026-08-01T12:00:00.000Z",
+          } },
+          { messageCreate: {
+            recipientId: "1002",
+            senderId: "999",
+            id: "8002",
+            createdAt: "2026-08-01T12:01:00.000Z",
+          } },
+        ],
+      } }]),
+    });
+  }
+  await writeFile(path, storedZip(entries), { mode: 0o600 });
   await chmod(path, 0o600);
   return realpath(path);
 }

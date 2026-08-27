@@ -8480,7 +8480,7 @@ function absolutePrivatePath(value, label) {
 }
 function translateIMessageError(error) {
   const code = error.code;
-  if (code === "EACCES" || code === "EPERM") {
+  if (code === "EACCES" || code === "EPERM" || code === "permission") {
     throw new CliError("permission", "Messages data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.", { cause: error });
   }
   if (code === "ENOENT") {
@@ -8512,16 +8512,14 @@ function translateBundleError(error) {
   throw new CliError("invalid-data", "The selected private message bundle could not be read safely", { cause: error });
 }
 function translateXArchiveError(error) {
-  if (error instanceof CliError)
-    throw error;
-  const code = error.code;
+  const code = error instanceof CliError ? error.kind : error.code;
   if (code === "EACCES" || code === "EPERM") {
     throw new CliError("permission", "The selected private X archive is not readable", { cause: error });
   }
-  if (code === "ENOENT") {
+  if (code === "ENOENT" || code === "not-found") {
     throw new CliError("not-found", "The selected private X archive does not exist", { cause: error });
   }
-  throw new CliError("invalid-data", error instanceof Error ? error.message : "The selected private X archive could not be read safely", { cause: error });
+  throw new CliError("invalid-data", "The selected private X archive could not be validated safely", { cause: error });
 }
 async function runCommand(argv, io) {
   const parsed = parseArguments(argv);
