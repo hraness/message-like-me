@@ -110,6 +110,8 @@ export async function distFreshnessProblems(): Promise<string[]> {
       }
     }
     for (const required of [
+      "agentic-messaging-v1.d.ts",
+      "agentic-messaging-v1.js",
       "canonical-json.d.ts",
       "cli.js",
       "index.d.ts",

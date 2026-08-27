@@ -792,7 +792,7 @@ describe("local corpus store", () => {
       store.replaceCorpus(snapshot("d".repeat(64)), "2026-08-21T13:00:00.000Z");
       expect(store.profile(profile.contactId)?.state).toBe("current");
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 4,
+        storeSchemaVersion: 5,
         quickCheck: "ok",
         foreignKeyViolations: 0,
       });
@@ -1006,6 +1006,34 @@ describe("local corpus store", () => {
         group: true,
         messageCount: 2,
       });
+      expect(store.routeCandidates(personId)?.candidates.map(({ conversationId, actionability }) => ({
+        conversationId,
+        actionability,
+      }))).toEqual([
+        {
+          conversationId: "email-conversation",
+          actionability: {
+            state: "wrench-binding-eligible",
+            reason: "requires-exact-wrench-binding",
+          },
+        },
+        {
+          conversationId: "sms-email-conversation",
+          actionability: {
+            state: "wrench-binding-eligible",
+            reason: "requires-exact-wrench-binding",
+          },
+        },
+      ]);
+      const groupRoute = store.routeCandidates("group-conversation")!.candidates[0]!;
+      expect(groupRoute).toMatchObject({
+        conversationId: "group-conversation",
+        group: true,
+        actionability: { state: "evidence-only", reason: "group-conversation" },
+        privateBinding: null,
+      });
+      expect(() => store.handoffPreparation("group-conversation", groupRoute.id))
+        .toThrow("evidence-only (group-conversation)");
     } finally {
       store.close();
       await rm(root, { recursive: true, force: true });
@@ -1408,6 +1436,26 @@ describe("local corpus store", () => {
         reactions: 1,
       });
       expect(store.source(X_BEEPER_SOURCE_ID)).toMatchObject({ reactions: 0 });
+      expect(store.routeCandidates(X_BEEPER_CONVERSATION_ID, true)?.candidates).toEqual([
+        expect.objectContaining({
+          sourceId: X_BEEPER_SOURCE_ID,
+          conversationId: X_BEEPER_CONVERSATION_ID,
+          actionability: {
+            state: "wrench-binding-eligible",
+            reason: "requires-exact-wrench-binding",
+          },
+          privateBinding: {
+            sourceAccountId: "synthetic-beeper-account",
+            sourceExternalId: "synthetic-beeper-account",
+            conversationExternalId: "x-beeper-conversation-external",
+          },
+        }),
+        expect.objectContaining({
+          sourceId: X_ARCHIVE_SOURCE_ID,
+          conversationId: X_ARCHIVE_CONVERSATION_ID,
+          actionability: { state: "evidence-only", reason: "archive-source" },
+        }),
+      ]);
 
       store.replaceSources([xBeeperSnapshot(true)], "2026-08-21T01:01:00.000Z");
       expect(store.listContacts({ privateLabels: false, minimumOutgoing: 1, limit: 10 }))
@@ -1437,6 +1485,34 @@ describe("local corpus store", () => {
         messageEquivalences: 1,
         reactionEquivalences: 1,
       });
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps an archive-only X conversation as style evidence without minting an action route", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-evidence-route-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    try {
+      store.replaceSources([xArchiveSnapshot()], "2026-08-26T04:00:00.000Z");
+      const route = store.routeCandidates(X_ARCHIVE_CONVERSATION_ID)!.candidates[0]!;
+      expect(route).toMatchObject({
+        sourceKind: "x-archive",
+        provider: "x",
+        network: "x",
+        actionability: { state: "evidence-only", reason: "archive-source" },
+        privateBinding: null,
+      });
+      expect(store.contactCorpus(X_ARCHIVE_CONVERSATION_ID)?.messages.map(({ id, replyState }) => ({
+        id,
+        replyState,
+      }))).toEqual([
+        { id: "x-archive-message-overlap", replyState: "unavailable" },
+        { id: "x-archive-message-unique", replyState: "unavailable" },
+      ]);
+      expect(() => store.handoffPreparation(X_ARCHIVE_CONVERSATION_ID, route.id))
+        .toThrow("evidence-only (archive-source)");
     } finally {
       store.close();
       await rm(root, { recursive: true, force: true });
@@ -2098,7 +2174,7 @@ describe("local corpus store", () => {
     createLegacyV1Store(path);
     const store = LocalStore.open(path);
     try {
-      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 4, profiles: 1 });
+      expect(store.doctor()).toMatchObject({ storeSchemaVersion: 5, profiles: 1, handoffs: 0 });
       expect(store.profile("contact_0123456789abcdef")).toMatchObject({
         state: "current",
         profile: { schemaVersion: 1, corpusRevision: "a".repeat(64) },
@@ -2109,7 +2185,7 @@ describe("local corpus store", () => {
 
     const migrated = new Database(path, { strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       const profileColumns = migrated.query("PRAGMA table_info(profiles)").all() as Array<{ name: string }>;
       expect(profileColumns.map(({ name }) => name)).toContain("scope_id");
       expect(profileColumns.map(({ name }) => name)).toContain("evidence_revision");
@@ -2133,7 +2209,7 @@ describe("local corpus store", () => {
     const store = LocalStore.open(path);
     try {
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 4,
+        storeSchemaVersion: 5,
         conversations: 1,
         messages: 1,
         profiles: 1,
@@ -2149,7 +2225,7 @@ describe("local corpus store", () => {
     }
     const migrated = new Database(path, { readonly: true, strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(migrated.query("SELECT count(*) AS value FROM conversations").get())
         .toEqual({ value: 1 });
       expect(migrated.query("SELECT count(*) AS value FROM messages").get())
@@ -2179,7 +2255,7 @@ describe("local corpus store", () => {
     const store = LocalStore.open(path);
     try {
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 4,
+        storeSchemaVersion: 5,
         conversations: 1,
         messages: 2,
         sources: 1,
@@ -2200,7 +2276,7 @@ describe("local corpus store", () => {
         messages: 2,
       });
       expect(store.doctor()).toMatchObject({
-        storeSchemaVersion: 4,
+        storeSchemaVersion: 5,
         sources: 2,
         foreignKeyViolations: 0,
       });
@@ -2209,7 +2285,7 @@ describe("local corpus store", () => {
     }
     const migrated = new Database(path, { readonly: true, strict: true });
     try {
-      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(migrated.query(`SELECT kind,kind_v4 FROM corpus_sources WHERE id=?`)
         .get(X_ARCHIVE_SOURCE_ID)).toEqual({ kind: "bundle", kind_v4: "x-archive" });
       expect(migrated.query(`SELECT reply_state,count(*) AS value FROM messages

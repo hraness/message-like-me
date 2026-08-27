@@ -17,7 +17,4 @@ function prettyJson(value) {
 `;
 }
 
-// src/message-bundle-v1-identity.ts
-var MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY = 1;
-
-export { canonicalJson, sha256, prettyJson, MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY };
+export { canonicalJson, sha256, prettyJson };

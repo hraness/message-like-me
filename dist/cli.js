@@ -9,22 +9,35 @@ import {
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION
-} from "./cli-ptsw1tr2.js";
+} from "./cli-d8tyw38n.js";
 import {
   LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
   LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
   MessageBundleV1ContractError,
   parseLocalMessageBundleV1Manifest,
   parseLocalMessageBundleV1Record
-} from "./cli-de7k7csy.js";
+} from "./cli-ry4128kz.js";
+import"./cli-qqafdvz9.js";
+import {
+  AGENTIC_MESSAGING_V1_LIMITS,
+  AgenticMessagingV1ContractError,
+  agentMessageRouteCandidateId,
+  createAgentMessageHandoffV1,
+  parseAgentMessageDraftV1,
+  parseAgentMessageHandoffRequestV1,
+  parseAgentMessageHandoffV1,
+  parseWrenchMessagingContextBindingV1,
+  parseWrenchMessagingReceiptBindingV1,
+  wrenchMessagingTurnDigestV1
+} from "./cli-z9718t78.js";
 import {
   canonicalJson,
   prettyJson,
   sha256
-} from "./cli-r2t9f324.js";
+} from "./cli-ththzwja.js";
 
 // src/commands.ts
-import { lstat as lstat4 } from "fs/promises";
+import { lstat as lstat5, unlink as unlink2 } from "fs/promises";
 import { isAbsolute as isAbsolute6, resolve as resolve7 } from "path";
 
 // src/errors.ts
@@ -71,9 +84,13 @@ var VALUE_OPTIONS = new Set([
   "prompt-output",
   "project",
   "reference-output",
+  "request",
   "scope",
   "session-gap",
-  "target"
+  "target",
+  "draft",
+  "wrench-context",
+  "wrench-receipt"
 ]);
 var FLAG_OPTIONS = new Set(["force", "help", "json", "private", "version"]);
 function parseArguments(argv) {
@@ -3719,14 +3736,90 @@ async function readStyleProfile(path) {
   return parseStyleProfile(parsed);
 }
 
+// src/private-json.ts
+import { constants as fsConstants5 } from "fs";
+import { lstat as lstat3, open as open4 } from "fs/promises";
+function sameFile4(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+function assertPrivateMetadata(metadata, label, maximumBytes) {
+  if (metadata.isSymbolicLink() || !metadata.isFile() || metadata.nlink !== 1) {
+    throw new CliError("unsafe-path", `${label} must be one physical regular file`);
+  }
+  if (typeof process.getuid === "function" && metadata.uid !== process.getuid()) {
+    throw new CliError("unsafe-path", `${label} must be owned by the current user`);
+  }
+  if ((metadata.mode & 63) !== 0) {
+    throw new CliError("unsafe-path", `${label} must already have owner-only permissions`);
+  }
+  if (metadata.size < 1 || metadata.size > maximumBytes) {
+    throw new CliError("invalid-data", `${label} must be within its private file-size bound`);
+  }
+}
+async function readStablePrivateFile(path, label, maximumBytes) {
+  let before;
+  try {
+    before = await lstat3(path);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new CliError("not-found", `${label} does not exist`, { cause: error });
+    }
+    throw new CliError("permission", `${label} cannot be inspected safely`, { cause: error });
+  }
+  assertPrivateMetadata(before, label, maximumBytes);
+  let handle;
+  try {
+    handle = await open4(path, fsConstants5.O_RDONLY | fsConstants5.O_NOFOLLOW);
+  } catch (error) {
+    throw new CliError("unsafe-path", `${label} could not be opened without following links`, { cause: error });
+  }
+  try {
+    const opened = await handle.stat();
+    assertPrivateMetadata(opened, label, maximumBytes);
+    if (!sameFile4(before, opened)) {
+      throw new CliError("unsafe-path", `${label} changed before it was read`);
+    }
+    const bytes = await handle.readFile();
+    const afterHandle = await handle.stat();
+    let afterPath;
+    try {
+      afterPath = await lstat3(path);
+    } catch (error) {
+      throw new CliError("unsafe-path", `${label} changed while it was read`, { cause: error });
+    }
+    if (bytes.byteLength !== opened.size || !sameFile4(opened, afterHandle) || !sameFile4(opened, afterPath))
+      throw new CliError("unsafe-path", `${label} changed while it was read`);
+    return Uint8Array.from(bytes);
+  } finally {
+    await handle.close();
+  }
+}
+async function readStablePrivateJson(path, label, maximumBytes) {
+  const bytes = await readStablePrivateFile(path, label, maximumBytes);
+  let text2;
+  try {
+    text2 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} must be canonical UTF-8 JSON`, { cause: error });
+  }
+  if (text2.charCodeAt(0) === 65279 || text2.includes("\r")) {
+    throw new CliError("invalid-data", `${label} must be canonical UTF-8 JSON without BOM or CR bytes`);
+  }
+  try {
+    return JSON.parse(text2);
+  } catch (error) {
+    throw new CliError("invalid-data", `${label} is malformed JSON`, { cause: error });
+  }
+}
+
 // src/skill-install.ts
-import { cp, lstat as lstat3, mkdir as mkdir2, realpath as realpath3, rm } from "fs/promises";
+import { cp, lstat as lstat4, mkdir as mkdir2, realpath as realpath3, rm } from "fs/promises";
 import { homedir as homedir4 } from "os";
 import { dirname as dirname3, join as join5, resolve as resolve5 } from "path";
 import { fileURLToPath } from "url";
 async function exists(path) {
   try {
-    await lstat3(path);
+    await lstat4(path);
     return true;
   } catch (error) {
     if (error.code === "ENOENT")
@@ -3745,7 +3838,7 @@ async function installSkill(options) {
   const source = bundledSkillPath();
   if (!await exists(source))
     throw new CliError("not-found", `Bundled skill is missing at ${source}`);
-  const sourceMetadata = await lstat3(source);
+  const sourceMetadata = await lstat4(source);
   if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isDirectory()) {
     throw new CliError("unsafe-path", "Bundled skill must be a physical directory");
   }
@@ -3753,7 +3846,7 @@ async function installSkill(options) {
   await mkdir2(root, { recursive: true, mode: 448 });
   const destination = join5(root, "message-like-me");
   if (await exists(destination)) {
-    const metadata = await lstat3(destination);
+    const metadata = await lstat4(destination);
     if (metadata.isSymbolicLink()) {
       throw new CliError("unsafe-path", `Refusing to replace symbolic link ${destination}`);
     }
@@ -3771,13 +3864,13 @@ import { Database as Database3 } from "bun:sqlite";
 import { createHash as createHash4 } from "crypto";
 import {
   closeSync,
-  constants as fsConstants5,
+  constants as fsConstants6,
   fchmodSync,
   fstatSync,
   lstatSync as lstatSync3,
   openSync
 } from "fs";
-var STORE_SCHEMA_VERSION = 4;
+var STORE_SCHEMA_VERSION = 5;
 var PERSON_SCOPE_PREFIX = "person_";
 var IMESSAGE_SOURCE_ID = "source_imessage_local";
 var SCHEMA = `
@@ -3969,6 +4062,53 @@ var SCHEMA = `
     applied_at TEXT NOT NULL
   ) STRICT;
   CREATE INDEX IF NOT EXISTS profiles_scope ON profiles(scope_id, applied_at);
+  CREATE TABLE IF NOT EXISTS agent_message_handoffs (
+    handoff_id TEXT PRIMARY KEY,
+    handoff_sha256 TEXT NOT NULL CHECK (length(handoff_sha256)=64),
+    contact_id_sha256 TEXT NOT NULL CHECK (length(contact_id_sha256)=64),
+    route_candidate_id_sha256 TEXT NOT NULL CHECK (length(route_candidate_id_sha256)=64),
+    source_id_sha256 TEXT NOT NULL CHECK (length(source_id_sha256)=64),
+    conversation_id_sha256 TEXT NOT NULL CHECK (length(conversation_id_sha256)=64),
+    corpus_revision TEXT NOT NULL CHECK (length(corpus_revision)=64),
+    source_revision TEXT NOT NULL CHECK (length(source_revision)=64),
+    profile_state TEXT NOT NULL CHECK (profile_state IN ('current','missing','stale')),
+    profile_evidence_revision TEXT,
+    wrench_contract_hash TEXT NOT NULL CHECK (length(wrench_contract_hash)=64),
+    route_ref_sha256 TEXT NOT NULL CHECK (length(route_ref_sha256)=64),
+    context_ref_sha256 TEXT NOT NULL CHECK (length(context_ref_sha256)=64),
+    exact_data_revision_sha256 TEXT NOT NULL CHECK (length(exact_data_revision_sha256)=64),
+    latest_message_revision_sha256 TEXT NOT NULL CHECK (length(latest_message_revision_sha256)=64),
+    turn_digest_sha256 TEXT NOT NULL CHECK (length(turn_digest_sha256)=64),
+    part_count INTEGER NOT NULL CHECK (part_count BETWEEN 1 AND 8),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('prepared','recorded')),
+    receipt_sha256 TEXT CHECK (receipt_sha256 IS NULL OR length(receipt_sha256)=64),
+    receipt_contract_hash TEXT CHECK (receipt_contract_hash IS NULL OR length(receipt_contract_hash)=64),
+    preview_digest_sha256 TEXT CHECK (preview_digest_sha256 IS NULL OR length(preview_digest_sha256)=64),
+    run_id_sha256 TEXT CHECK (run_id_sha256 IS NULL OR length(run_id_sha256)=64),
+    receipt_state TEXT CHECK (receipt_state IN ('submitted','failed','partial','indeterminate')),
+    proven_part_count INTEGER,
+    recorded_at TEXT,
+    CHECK (
+      (state='prepared' AND receipt_sha256 IS NULL AND receipt_contract_hash IS NULL
+        AND preview_digest_sha256 IS NULL AND run_id_sha256 IS NULL AND receipt_state IS NULL
+        AND proven_part_count IS NULL AND recorded_at IS NULL)
+      OR
+      (state='recorded' AND receipt_sha256 IS NOT NULL AND receipt_contract_hash IS NOT NULL
+        AND preview_digest_sha256 IS NOT NULL AND run_id_sha256 IS NOT NULL
+        AND receipt_state IS NOT NULL AND proven_part_count IS NOT NULL AND recorded_at IS NOT NULL)
+    ),
+    CHECK (
+      state='prepared'
+      OR (receipt_state='submitted' AND proven_part_count=part_count)
+      OR (receipt_state='failed' AND proven_part_count=0)
+      OR (receipt_state='partial' AND proven_part_count BETWEEN 1 AND part_count-1)
+      OR (receipt_state='indeterminate' AND proven_part_count BETWEEN 0 AND part_count-1)
+    )
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS agent_message_handoffs_contact
+    ON agent_message_handoffs(contact_id_sha256,created_at,handoff_id);
   CREATE TABLE IF NOT EXISTS addressbook_contacts (
     id TEXT PRIMARY KEY,
     private_label TEXT,
@@ -4496,6 +4636,57 @@ function analysisScope(database, contactId) {
     conversationIds
   });
 }
+function routeCandidatesForScope(database, scope, privateDetails) {
+  const placeholders = idPlaceholders(scope.conversationIds);
+  const rows = all(database, `
+    SELECT conversation.id AS conversation_id,conversation.service,conversation.is_group,
+      source.id AS source_id,coalesce(source.kind_v4,source.kind) AS source_kind,
+      source.provider,source.network,source.account_id,
+      source.external_id AS source_external_id,source.revision AS source_revision,
+      ownership.external_id AS conversation_external_id
+    FROM conversations conversation
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+    JOIN corpus_sources source ON source.id=ownership.source_id
+    WHERE conversation.id IN (${placeholders})
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
+    ORDER BY source.provider,source.network,source.id,conversation.id
+  `, ...scope.conversationIds);
+  if (rows.length > 1e4)
+    throw new CliError("invalid-data", "Contact has too many source conversations");
+  return Object.freeze(rows.map((row) => {
+    const archive = row.source_kind === "x-archive";
+    const group = row.is_group === 1;
+    return Object.freeze({
+      schemaVersion: 1,
+      format: "message-like-me.source-conversation-route",
+      id: agentMessageRouteCandidateId(row.source_id, row.conversation_id),
+      contactId: scope.id,
+      sourceId: row.source_id,
+      conversationId: row.conversation_id,
+      sourceKind: row.source_kind,
+      provider: row.provider,
+      network: row.network,
+      service: row.service,
+      group,
+      sourceRevision: row.source_revision,
+      actionability: Object.freeze(archive ? { state: "evidence-only", reason: "archive-source" } : group ? { state: "evidence-only", reason: "group-conversation" } : {
+        state: "wrench-binding-eligible",
+        reason: "requires-exact-wrench-binding"
+      }),
+      privateBinding: privateDetails ? Object.freeze({
+        sourceAccountId: row.account_id,
+        sourceExternalId: row.source_external_id,
+        conversationExternalId: row.conversation_external_id
+      }) : null
+    });
+  }));
+}
 function messageRowsForScope(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
   if (exactConversationId !== undefined) {
     return all(database, `
@@ -4869,7 +5060,7 @@ function hardenDatabaseFiles(path) {
   ]) {
     let descriptor;
     try {
-      descriptor = openSync(candidate, fsConstants5.O_RDONLY | fsConstants5.O_NOFOLLOW);
+      descriptor = openSync(candidate, fsConstants6.O_RDONLY | fsConstants6.O_NOFOLLOW);
     } catch (error) {
       const code = error.code;
       if (!required && code === "ENOENT")
@@ -6300,6 +6491,157 @@ class LocalStore {
       };
     });
   }
+  routeCandidates(contactId, privateDetails = false) {
+    if (contactId.length < 1 || contactId.length > 256) {
+      throw new CliError("usage", "Invalid contact ID");
+    }
+    return readTransaction(this.#database, () => {
+      const scope = analysisScope(this.#database, contactId);
+      if (scope === null)
+        return null;
+      return Object.freeze({
+        contactId: scope.id,
+        candidates: routeCandidatesForScope(this.#database, scope, privateDetails)
+      });
+    });
+  }
+  handoffPreparation(contactId, routeCandidateId) {
+    if (routeCandidateId.length < 1 || routeCandidateId.length > 256) {
+      throw new CliError("usage", "Invalid source-conversation route ID");
+    }
+    return readTransaction(this.#database, () => {
+      const scope = analysisScope(this.#database, contactId);
+      if (scope === null)
+        throw new CliError("not-found", `Unknown contact ${contactId}`);
+      const candidate = routeCandidatesForScope(this.#database, scope, false).find(({ id }) => id === routeCandidateId);
+      if (candidate === undefined) {
+        throw new CliError("not-found", "The selected source-conversation route does not belong to this contact");
+      }
+      if (candidate.actionability.state !== "wrench-binding-eligible") {
+        throw new CliError("conflict", `The selected source-conversation route is evidence-only (${candidate.actionability.reason})`);
+      }
+      const corpusRevision = scalarText(this.#database, "corpus_revision");
+      if (corpusRevision === null)
+        throw new CliError("invalid-data", "Stored conversations have no corpus revision");
+      const storedProfile = this.profile(scope.id);
+      return Object.freeze({
+        contactId: scope.id,
+        candidate,
+        corpusRevision,
+        profileState: storedProfile?.state ?? "missing",
+        profileEvidenceRevision: storedProfile?.profile.schemaVersion === 2 ? storedProfile.profile.evidence.evidenceRevision : null
+      });
+    });
+  }
+  recordPreparedHandoff(value) {
+    const handoff = parseAgentMessageHandoffV1(value);
+    transaction(this.#database, () => {
+      const scope = analysisScope(this.#database, handoff.contact.contactId);
+      if (scope === null || scope.id !== handoff.contact.contactId) {
+        throw new CliError("conflict", "Handoff contact scope is no longer current");
+      }
+      const candidate = routeCandidatesForScope(this.#database, scope, false).find(({ id }) => id === handoff.contact.routeCandidateId);
+      if (candidate === undefined || candidate.sourceId !== handoff.contact.sourceId || candidate.conversationId !== handoff.contact.conversationId || candidate.actionability.state !== "wrench-binding-eligible")
+        throw new CliError("conflict", "Handoff source-conversation route is no longer actionable");
+      const corpusRevision = scalarText(this.#database, "corpus_revision");
+      if (corpusRevision !== handoff.evidence.corpusRevision || candidate.sourceRevision !== handoff.evidence.sourceRevision)
+        throw new CliError("conflict", "Message evidence changed while the handoff was prepared");
+      const storedProfile = this.profile(scope.id);
+      const currentProfileState = storedProfile?.state ?? "missing";
+      const currentProfileEvidenceRevision = storedProfile?.profile.schemaVersion === 2 ? storedProfile.profile.evidence.evidenceRevision : null;
+      if (currentProfileState !== handoff.evidence.profileState || currentProfileEvidenceRevision !== handoff.evidence.profileEvidenceRevision)
+        throw new CliError("conflict", "Style profile evidence changed while the handoff was prepared");
+      this.#database.query(`
+        INSERT INTO agent_message_handoffs(
+          handoff_id,handoff_sha256,contact_id_sha256,route_candidate_id_sha256,
+          source_id_sha256,conversation_id_sha256,
+          corpus_revision,source_revision,profile_state,profile_evidence_revision,
+          wrench_contract_hash,route_ref_sha256,context_ref_sha256,
+          exact_data_revision_sha256,latest_message_revision_sha256,
+          turn_digest_sha256,part_count,created_at,expires_at,state
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'prepared')
+        ON CONFLICT(handoff_id) DO NOTHING
+      `).run(handoff.handoffId, handoff.integrity.canonicalSha256, sha256(handoff.contact.contactId), sha256(handoff.contact.routeCandidateId), sha256(handoff.contact.sourceId), sha256(handoff.contact.conversationId), handoff.evidence.corpusRevision, handoff.evidence.sourceRevision, handoff.evidence.profileState, handoff.evidence.profileEvidenceRevision, handoff.wrench.contractHash, handoff.wrench.routeRefSha256, handoff.wrench.contextRefSha256, handoff.wrench.exactDataRevision, handoff.wrench.latestMessageRevision, wrenchMessagingTurnDigestV1(handoff), handoff.turn.bubbles.length, handoff.createdAt, handoff.expiresAt);
+      const stored = get(this.#database, `
+        SELECT handoff_sha256 FROM agent_message_handoffs WHERE handoff_id=?
+      `, handoff.handoffId);
+      if (stored?.handoff_sha256 !== handoff.integrity.canonicalSha256) {
+        throw new CliError("conflict", "Handoff ID is already bound to different evidence");
+      }
+    });
+    return this.handoffAudit(handoff.handoffId);
+  }
+  recordHandoffReceipt(handoffId, value) {
+    if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
+      throw new CliError("usage", "Invalid handoff ID");
+    }
+    const receipt = parseWrenchMessagingReceiptBindingV1(value);
+    transaction(this.#database, () => {
+      const stored = get(this.#database, `
+        SELECT handoff_sha256,route_ref_sha256,context_ref_sha256,turn_digest_sha256,
+          part_count,created_at,state,receipt_sha256
+        FROM agent_message_handoffs WHERE handoff_id=?
+      `, handoffId);
+      if (stored === null)
+        throw new CliError("not-found", `Unknown handoff ${handoffId}`);
+      if (receipt.handoffSha256 !== stored.handoff_sha256 || receipt.routeRefSha256 !== stored.route_ref_sha256 || receipt.contextRefSha256 !== stored.context_ref_sha256 || receipt.turnDigest !== stored.turn_digest_sha256 || receipt.partCount !== stored.part_count || receipt.recordedAt < stored.created_at)
+        throw new CliError("conflict", "Wrench receipt does not bind the recorded handoff");
+      if (stored.state === "recorded") {
+        if (stored.receipt_sha256 === receipt.receiptSha256)
+          return;
+        throw new CliError("conflict", "Handoff already has a different Wrench receipt");
+      }
+      this.#database.query(`
+        UPDATE agent_message_handoffs SET
+          state='recorded',receipt_sha256=?,receipt_contract_hash=?,preview_digest_sha256=?,
+          run_id_sha256=?,receipt_state=?,proven_part_count=?,recorded_at=?
+        WHERE handoff_id=? AND state='prepared'
+      `).run(receipt.receiptSha256, receipt.contractHash, receipt.previewDigest, sha256(receipt.runId), receipt.state, receipt.provenPartCount, receipt.recordedAt, handoffId);
+    });
+    return this.handoffAudit(handoffId);
+  }
+  handoffAudit(handoffId) {
+    if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
+      throw new CliError("usage", "Invalid handoff ID");
+    }
+    const row = get(this.#database, `SELECT * FROM agent_message_handoffs WHERE handoff_id=?`, handoffId);
+    if (row === null)
+      throw new CliError("not-found", `Unknown handoff ${handoffId}`);
+    const receipt = row.state === "recorded" ? Object.freeze({
+      contractHash: row.receipt_contract_hash,
+      receiptSha256: row.receipt_sha256,
+      previewDigest: row.preview_digest_sha256,
+      runIdSha256: row.run_id_sha256,
+      state: row.receipt_state,
+      provenPartCount: row.proven_part_count,
+      recordedAt: row.recorded_at
+    }) : null;
+    return Object.freeze({
+      schemaVersion: 1,
+      format: "message-like-me.agent-message-handoff-audit",
+      handoffId: row.handoff_id,
+      handoffSha256: row.handoff_sha256,
+      contactIdSha256: row.contact_id_sha256,
+      routeCandidateIdSha256: row.route_candidate_id_sha256,
+      sourceIdSha256: row.source_id_sha256,
+      conversationIdSha256: row.conversation_id_sha256,
+      corpusRevision: row.corpus_revision,
+      sourceRevision: row.source_revision,
+      profileState: row.profile_state,
+      profileEvidenceRevision: row.profile_evidence_revision,
+      wrenchContractHash: row.wrench_contract_hash,
+      routeRefSha256: row.route_ref_sha256,
+      contextRefSha256: row.context_ref_sha256,
+      exactDataRevisionSha256: row.exact_data_revision_sha256,
+      latestMessageRevisionSha256: row.latest_message_revision_sha256,
+      turnDigest: row.turn_digest_sha256,
+      partCount: row.part_count,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      state: row.state,
+      receipt
+    });
+  }
   recordStudyPacket(receipt) {
     if (receipt.exampleIds === undefined !== (receipt.evidence === undefined)) {
       throw new CliError("invalid-data", "Study packet example IDs and evidence manifest must be recorded together");
@@ -6466,6 +6808,7 @@ class LocalStore {
       messageEquivalences: count("message_equivalences"),
       reactionEquivalences: count("reaction_equivalences"),
       profiles: count("profiles"),
+      handoffs: count("agent_message_handoffs"),
       addressBookContacts: count("addressbook_contacts"),
       enrichedLabels: count("conversation_contact_labels")
     };
@@ -8357,6 +8700,7 @@ Usage:
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
+  messagelikeme [--data-dir PATH] routes list CONTACT_ID --output FILE [--private] [--json]
   messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
@@ -8369,6 +8713,11 @@ Usage:
   messagelikeme [--data-dir PATH] profile show CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
   messagelikeme [--data-dir PATH] context CONTACT_ID [--json]
+  messagelikeme [--data-dir PATH] handoff prepare CONTACT_ID --request FILE
+                    --wrench-context FILE --draft FILE --output FILE [--json]
+  messagelikeme [--data-dir PATH] handoff verify FILE [--json]
+  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+  messagelikeme [--data-dir PATH] handoffs show HANDOFF_ID [--json]
   messagelikeme skill path [--json]
   messagelikeme skill install [--target codex|claude|agents] [--scope user|project]
                     [--project PATH] [--force] [--json]
@@ -8381,7 +8730,7 @@ message-sending surface.
 `;
 async function exists2(path) {
   try {
-    await lstat4(path);
+    await lstat5(path);
     return true;
   } catch (error) {
     if (error.code === "ENOENT")
@@ -8549,6 +8898,16 @@ function translateXArchiveError(error) {
     throw new CliError("not-found", "The selected private X archive does not exist", { cause: error });
   }
   throw new CliError("invalid-data", "The selected private X archive could not be validated safely", { cause: error });
+}
+function translateAgenticContractError(error, label) {
+  if (error instanceof CliError)
+    throw error;
+  if (error instanceof AgenticMessagingV1ContractError) {
+    throw new CliError("invalid-data", `${label} does not satisfy its versioned private contract`, {
+      cause: error
+    });
+  }
+  throw new CliError("invalid-data", `${label} could not be validated safely`, { cause: error });
 }
 async function runCommand(argv, io) {
   const parsed = parseArguments(argv);
@@ -8812,6 +9171,41 @@ async function runCommand(argv, io) {
     }
     return;
   }
+  if (command === "routes" && subcommand === "list" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "output"], ["json", "private"]);
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    const context = await existingStore(parsed);
+    try {
+      const routes = context.store.routeCandidates(identifier, parsed.flags.has("private"));
+      if (routes === null)
+        throw new CliError("not-found", `Unknown contact ${identifier}`);
+      const eligible = routes.candidates.filter(({ actionability }) => actionability.state === "wrench-binding-eligible");
+      const selection = eligible.length === 0 ? Object.freeze({ state: "unavailable", eligibleCandidateId: null }) : eligible.length === 1 ? Object.freeze({ state: "single-exact-candidate", eligibleCandidateId: eligible[0].id }) : Object.freeze({ state: "ambiguous", eligibleCandidateId: null });
+      const result = {
+        schemaVersion: 1,
+        format: "message-like-me.source-conversation-routes",
+        contactId: routes.contactId,
+        selection,
+        candidates: routes.candidates
+      };
+      const bytes = prettyJson(result);
+      await atomicWritePrivate(output, bytes);
+      const receipt = {
+        schemaVersion: 1,
+        format: "message-like-me.source-conversation-routes-receipt",
+        contactIdSha256: sha256(routes.contactId),
+        routesSha256: sha256(bytes),
+        candidates: routes.candidates.length,
+        eligibleCandidates: eligible.length,
+        selectionState: selection.state,
+        privateCoordinatesIncluded: parsed.flags.has("private")
+      };
+      emit(io, json, receipt, `Wrote ${routes.candidates.length} exact source-conversation routes to a private file`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
   if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
@@ -9020,6 +9414,148 @@ async function runCommand(argv, io) {
         profile: context.store.profile(contactId)
       };
       emit(io, json, result, `Drafting context for ${contactId}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "handoff" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir",
+      "request",
+      "wrench-context",
+      "draft",
+      "output"
+    ], ["json"]);
+    const requestPath = absolutePrivatePath(parsed.options.get("request"), "--request");
+    const wrenchContextPath = absolutePrivatePath(parsed.options.get("wrench-context"), "--wrench-context");
+    const draftPath = absolutePrivatePath(parsed.options.get("draft"), "--draft");
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    if (new Set([requestPath, wrenchContextPath, draftPath, output]).size !== 4) {
+      throw new CliError("usage", "Handoff request, Wrench context, draft, and output paths must be different");
+    }
+    let request;
+    let wrenchContext;
+    let draft;
+    try {
+      request = parseAgentMessageHandoffRequestV1(await readStablePrivateJson(requestPath, "Private handoff request file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes));
+      wrenchContext = parseWrenchMessagingContextBindingV1(await readStablePrivateJson(wrenchContextPath, "Private Wrench context file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes));
+      draft = parseAgentMessageDraftV1(await readStablePrivateJson(draftPath, "Private draft file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes));
+    } catch (error) {
+      translateAgenticContractError(error, "Private handoff input");
+    }
+    const createdAt = canonicalNow(io);
+    if (wrenchContext.validatedAt > createdAt || wrenchContext.expiresAt <= createdAt) {
+      throw new CliError("conflict", "The private Wrench context is not current; collect a fresh exact context");
+    }
+    const context = await existingStore(parsed);
+    let published = false;
+    try {
+      const preparation = context.store.handoffPreparation(identifier, request.routeCandidateId);
+      const expiresAt = new Date(Math.min(Date.parse(createdAt) + AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds, Date.parse(wrenchContext.expiresAt))).toISOString();
+      const handoff = createAgentMessageHandoffV1({
+        createdAt,
+        expiresAt,
+        contact: {
+          contactId: preparation.contactId,
+          routeCandidateId: preparation.candidate.id,
+          sourceId: preparation.candidate.sourceId,
+          conversationId: preparation.candidate.conversationId
+        },
+        evidence: {
+          corpusRevision: preparation.corpusRevision,
+          sourceRevision: preparation.candidate.sourceRevision,
+          profileState: preparation.profileState,
+          profileEvidenceRevision: preparation.profileEvidenceRevision
+        },
+        wrenchContext,
+        draft
+      });
+      await atomicWritePrivate(output, prettyJson(handoff));
+      published = true;
+      const audit = context.store.recordPreparedHandoff(handoff);
+      emit(io, json, audit, `Prepared private handoff ${audit.handoffId} with ${audit.partCount} message parts`);
+    } catch (error) {
+      if (published)
+        await unlink2(output).catch(() => {
+          return;
+        });
+      if (error instanceof AgenticMessagingV1ContractError) {
+        translateAgenticContractError(error, "Private handoff");
+      }
+      throw error;
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "handoff" && subcommand === "verify" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json"]);
+    const input = absolutePrivatePath(identifier, "Handoff path");
+    let handoff;
+    try {
+      handoff = parseAgentMessageHandoffV1(await readStablePrivateJson(input, "Private handoff file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes));
+    } catch (error) {
+      translateAgenticContractError(error, "Private handoff file");
+    }
+    const result = {
+      valid: true,
+      handoffId: handoff.handoffId,
+      handoffSha256: handoff.integrity.canonicalSha256,
+      contactIdSha256: sha256(handoff.contact.contactId),
+      routeCandidateIdSha256: sha256(handoff.contact.routeCandidateId),
+      sourceIdSha256: sha256(handoff.contact.sourceId),
+      conversationIdSha256: sha256(handoff.contact.conversationId),
+      corpusRevision: handoff.evidence.corpusRevision,
+      sourceRevision: handoff.evidence.sourceRevision,
+      profileState: handoff.evidence.profileState,
+      profileEvidenceRevision: handoff.evidence.profileEvidenceRevision,
+      wrenchContractHash: handoff.wrench.contractHash,
+      routeRefSha256: handoff.wrench.routeRefSha256,
+      contextRefSha256: handoff.wrench.contextRefSha256,
+      exactDataRevisionSha256: handoff.wrench.exactDataRevision,
+      latestMessageRevisionSha256: handoff.wrench.latestMessageRevision,
+      turnDigest: wrenchMessagingTurnDigestV1(handoff),
+      partCount: handoff.turn.bubbles.length,
+      createdAt: handoff.createdAt,
+      expiresAt: handoff.expiresAt,
+      expired: handoff.expiresAt <= canonicalNow(io)
+    };
+    emit(io, json, result, `Verified private handoff ${handoff.handoffId}`);
+    return;
+  }
+  if (command === "handoff" && subcommand === "record" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "wrench-receipt"], ["json"]);
+    const receiptPath = absolutePrivatePath(parsed.options.get("wrench-receipt"), "--wrench-receipt");
+    let receipt;
+    try {
+      receipt = await readStablePrivateJson(receiptPath, "Private Wrench receipt file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes);
+    } catch (error) {
+      translateAgenticContractError(error, "Private Wrench receipt file");
+    }
+    const context = await existingStore(parsed);
+    try {
+      let audit;
+      try {
+        audit = context.store.recordHandoffReceipt(identifier, receipt);
+      } catch (error) {
+        if (error instanceof AgenticMessagingV1ContractError) {
+          translateAgenticContractError(error, "Private Wrench receipt file");
+        }
+        throw error;
+      }
+      emit(io, json, audit, `Recorded body-free Wrench audit for ${audit.handoffId}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+  if (command === "handoffs" && subcommand === "show" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json"]);
+    const context = await existingStore(parsed);
+    try {
+      const audit = context.store.handoffAudit(identifier);
+      emit(io, json, audit, `${audit.state} handoff audit ${audit.handoffId}`);
     } finally {
       context.store.close();
     }

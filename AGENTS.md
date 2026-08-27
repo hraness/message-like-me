@@ -52,8 +52,9 @@
   Reject symlinks and foreign-owned sensitive files.
 - Derive stable local identifiers with the per-install HMAC key. Ordinary
   aggregate views omit bodies, handles, contact names, and group titles. Only
-  `study prepare` may write a bounded body-bearing artifact outside the private
-  database, and it writes mode `0600` to an explicit path.
+  `study prepare`, `evaluate prepare`, and `handoff prepare` may write bounded
+  body-bearing artifacts outside the private database, and they write mode
+  `0600` to explicit paths.
 - Count only outgoing user-authored messages as style evidence. Incoming
   messages supply response context. Preserve body provenance, explicit reply
   targets, and tapbacks as distinct data.
@@ -67,9 +68,10 @@
 - Keep CLI commands namespaced as `ingest imessage|x-archive|contacts|bundle`,
   `sources list|show`,
   `contacts list|show|resolve`,
-  `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`, plus
-  `init`, `context`, `skill`, and `doctor`. Machine-readable commands support
-  stable JSON stdout; diagnostics use stderr and typed exit codes.
+  `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`,
+  `routes list`, `handoff prepare|verify|record`, `handoffs show`, plus `init`,
+  `context`, `skill`, and `doctor`. Machine-readable commands support stable
+  JSON stdout; diagnostics use stderr and typed exit codes.
 - Parse every foreign value from `unknown`. Bound paths, source bytes, message
   counts, text bytes, lists, study examples, and profile fields before work
   escapes the boundary. Keep canonical timestamps and deterministic ordering.

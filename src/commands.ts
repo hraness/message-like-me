@@ -1,6 +1,16 @@
-import { lstat } from "node:fs/promises";
+import { lstat, unlink } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { integerOption, parseArguments, rejectUnused, type ParsedArguments } from "./args.ts";
+import {
+  AGENTIC_MESSAGING_V1_LIMITS,
+  AgenticMessagingV1ContractError,
+  createAgentMessageHandoffV1,
+  parseAgentMessageDraftV1,
+  parseAgentMessageHandoffRequestV1,
+  parseAgentMessageHandoffV1,
+  parseWrenchMessagingContextBindingV1,
+  wrenchMessagingTurnDigestV1,
+} from "./agentic-messaging-v1.ts";
 import { prettyJson, sha256 } from "./canonical-json.ts";
 import { readMessageBundle } from "./bundle.ts";
 import { DEFAULT_CONTACTS_DIRECTORY, readMacOSContacts } from "./contacts.ts";
@@ -20,6 +30,7 @@ import {
   type DataPaths,
 } from "./paths.ts";
 import { readStyleProfile } from "./profile.ts";
+import { readStablePrivateJson } from "./private-json.ts";
 import { bundledSkillPath, installSkill, type SkillScope, type SkillTarget } from "./skill-install.ts";
 import { LocalStore } from "./store.ts";
 import type { ContactMetrics } from "./types.ts";
@@ -45,6 +56,7 @@ Usage:
   messagelikeme [--data-dir PATH] contacts list [--min-outgoing N] [--limit N] [--private] [--json]
   messagelikeme [--data-dir PATH] contacts show CONTACT_ID [--private] [--json]
   messagelikeme [--data-dir PATH] contacts resolve QUERY --private [--limit N] [--json]
+  messagelikeme [--data-dir PATH] routes list CONTACT_ID --output FILE [--private] [--json]
   messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
@@ -57,6 +69,11 @@ Usage:
   messagelikeme [--data-dir PATH] profile show CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
   messagelikeme [--data-dir PATH] context CONTACT_ID [--json]
+  messagelikeme [--data-dir PATH] handoff prepare CONTACT_ID --request FILE
+                    --wrench-context FILE --draft FILE --output FILE [--json]
+  messagelikeme [--data-dir PATH] handoff verify FILE [--json]
+  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+  messagelikeme [--data-dir PATH] handoffs show HANDOFF_ID [--json]
   messagelikeme skill path [--json]
   messagelikeme skill install [--target codex|claude|agents] [--scope user|project]
                     [--project PATH] [--force] [--json]
@@ -288,6 +305,16 @@ function translateXArchiveError(error: unknown): never {
     "The selected private X archive could not be validated safely",
     { cause: error },
   );
+}
+
+function translateAgenticContractError(error: unknown, label: string): never {
+  if (error instanceof CliError) throw error;
+  if (error instanceof AgenticMessagingV1ContractError) {
+    throw new CliError("invalid-data", `${label} does not satisfy its versioned private contract`, {
+      cause: error,
+    });
+  }
+  throw new CliError("invalid-data", `${label} could not be validated safely`, { cause: error });
 }
 
 export async function runCommand(argv: readonly string[], io: CommandIo): Promise<void> {
@@ -599,6 +626,46 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
     return;
   }
 
+  if (command === "routes" && subcommand === "list" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "output"], ["json", "private"]);
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    const context = await existingStore(parsed);
+    try {
+      const routes = context.store.routeCandidates(identifier, parsed.flags.has("private"));
+      if (routes === null) throw new CliError("not-found", `Unknown contact ${identifier}`);
+      const eligible = routes.candidates.filter(({ actionability }) =>
+        actionability.state === "wrench-binding-eligible");
+      const selection = eligible.length === 0
+        ? Object.freeze({ state: "unavailable" as const, eligibleCandidateId: null })
+        : eligible.length === 1
+          ? Object.freeze({ state: "single-exact-candidate" as const, eligibleCandidateId: eligible[0]!.id })
+          : Object.freeze({ state: "ambiguous" as const, eligibleCandidateId: null });
+      const result = {
+        schemaVersion: 1,
+        format: "message-like-me.source-conversation-routes",
+        contactId: routes.contactId,
+        selection,
+        candidates: routes.candidates,
+      };
+      const bytes = prettyJson(result);
+      await atomicWritePrivate(output, bytes);
+      const receipt = {
+        schemaVersion: 1,
+        format: "message-like-me.source-conversation-routes-receipt",
+        contactIdSha256: sha256(routes.contactId),
+        routesSha256: sha256(bytes),
+        candidates: routes.candidates.length,
+        eligibleCandidates: eligible.length,
+        selectionState: selection.state,
+        privateCoordinatesIncluded: parsed.flags.has("private"),
+      };
+      emit(io, json, receipt, `Wrote ${routes.candidates.length} exact source-conversation routes to a private file`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
   if (command === "inspect" && subcommand === "tempo" && identifier !== undefined) {
     rejectUnused(parsed, ["data-dir", "session-gap", "burst-gap"], ["json"]);
     const context = await existingStore(parsed);
@@ -816,6 +883,168 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         profile: context.store.profile(contactId),
       };
       emit(io, json, result, `Drafting context for ${contactId}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "handoff" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir", "request", "wrench-context", "draft", "output",
+    ], ["json"]);
+    const requestPath = absolutePrivatePath(parsed.options.get("request"), "--request");
+    const wrenchContextPath = absolutePrivatePath(parsed.options.get("wrench-context"), "--wrench-context");
+    const draftPath = absolutePrivatePath(parsed.options.get("draft"), "--draft");
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    if (new Set([requestPath, wrenchContextPath, draftPath, output]).size !== 4) {
+      throw new CliError("usage", "Handoff request, Wrench context, draft, and output paths must be different");
+    }
+    let request;
+    let wrenchContext;
+    let draft;
+    try {
+      request = parseAgentMessageHandoffRequestV1(await readStablePrivateJson(
+        requestPath,
+        "Private handoff request file",
+        AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes,
+      ));
+      wrenchContext = parseWrenchMessagingContextBindingV1(await readStablePrivateJson(
+        wrenchContextPath,
+        "Private Wrench context file",
+        AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes,
+      ));
+      draft = parseAgentMessageDraftV1(await readStablePrivateJson(
+        draftPath,
+        "Private draft file",
+        AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes,
+      ));
+    } catch (error) {
+      translateAgenticContractError(error, "Private handoff input");
+    }
+    const createdAt = canonicalNow(io);
+    if (wrenchContext.validatedAt > createdAt || wrenchContext.expiresAt <= createdAt) {
+      throw new CliError("conflict", "The private Wrench context is not current; collect a fresh exact context");
+    }
+    const context = await existingStore(parsed);
+    let published = false;
+    try {
+      const preparation = context.store.handoffPreparation(identifier, request.routeCandidateId);
+      const expiresAt = new Date(Math.min(
+        Date.parse(createdAt) + AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds,
+        Date.parse(wrenchContext.expiresAt),
+      )).toISOString();
+      const handoff = createAgentMessageHandoffV1({
+        createdAt,
+        expiresAt,
+        contact: {
+          contactId: preparation.contactId,
+          routeCandidateId: preparation.candidate.id,
+          sourceId: preparation.candidate.sourceId,
+          conversationId: preparation.candidate.conversationId,
+        },
+        evidence: {
+          corpusRevision: preparation.corpusRevision,
+          sourceRevision: preparation.candidate.sourceRevision,
+          profileState: preparation.profileState,
+          profileEvidenceRevision: preparation.profileEvidenceRevision,
+        },
+        wrenchContext,
+        draft,
+      });
+      await atomicWritePrivate(output, prettyJson(handoff));
+      published = true;
+      const audit = context.store.recordPreparedHandoff(handoff);
+      emit(io, json, audit, `Prepared private handoff ${audit.handoffId} with ${audit.partCount} message parts`);
+    } catch (error) {
+      if (published) await unlink(output).catch(() => undefined);
+      if (error instanceof AgenticMessagingV1ContractError) {
+        translateAgenticContractError(error, "Private handoff");
+      }
+      throw error;
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "handoff" && subcommand === "verify" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json"]);
+    const input = absolutePrivatePath(identifier, "Handoff path");
+    let handoff;
+    try {
+      handoff = parseAgentMessageHandoffV1(await readStablePrivateJson(
+        input,
+        "Private handoff file",
+        AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes,
+      ));
+    } catch (error) {
+      translateAgenticContractError(error, "Private handoff file");
+    }
+    const result = {
+      valid: true,
+      handoffId: handoff.handoffId,
+      handoffSha256: handoff.integrity.canonicalSha256,
+      contactIdSha256: sha256(handoff.contact.contactId),
+      routeCandidateIdSha256: sha256(handoff.contact.routeCandidateId),
+      sourceIdSha256: sha256(handoff.contact.sourceId),
+      conversationIdSha256: sha256(handoff.contact.conversationId),
+      corpusRevision: handoff.evidence.corpusRevision,
+      sourceRevision: handoff.evidence.sourceRevision,
+      profileState: handoff.evidence.profileState,
+      profileEvidenceRevision: handoff.evidence.profileEvidenceRevision,
+      wrenchContractHash: handoff.wrench.contractHash,
+      routeRefSha256: handoff.wrench.routeRefSha256,
+      contextRefSha256: handoff.wrench.contextRefSha256,
+      exactDataRevisionSha256: handoff.wrench.exactDataRevision,
+      latestMessageRevisionSha256: handoff.wrench.latestMessageRevision,
+      turnDigest: wrenchMessagingTurnDigestV1(handoff),
+      partCount: handoff.turn.bubbles.length,
+      createdAt: handoff.createdAt,
+      expiresAt: handoff.expiresAt,
+      expired: handoff.expiresAt <= canonicalNow(io),
+    };
+    emit(io, json, result, `Verified private handoff ${handoff.handoffId}`);
+    return;
+  }
+
+  if (command === "handoff" && subcommand === "record" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir", "wrench-receipt"], ["json"]);
+    const receiptPath = absolutePrivatePath(parsed.options.get("wrench-receipt"), "--wrench-receipt");
+    let receipt: unknown;
+    try {
+      receipt = await readStablePrivateJson(
+        receiptPath,
+        "Private Wrench receipt file",
+        AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes,
+      );
+    } catch (error) {
+      translateAgenticContractError(error, "Private Wrench receipt file");
+    }
+    const context = await existingStore(parsed);
+    try {
+      let audit;
+      try {
+        audit = context.store.recordHandoffReceipt(identifier, receipt);
+      } catch (error) {
+        if (error instanceof AgenticMessagingV1ContractError) {
+          translateAgenticContractError(error, "Private Wrench receipt file");
+        }
+        throw error;
+      }
+      emit(io, json, audit, `Recorded body-free Wrench audit for ${audit.handoffId}`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
+  if (command === "handoffs" && subcommand === "show" && identifier !== undefined) {
+    rejectUnused(parsed, ["data-dir"], ["json"]);
+    const context = await existingStore(parsed);
+    try {
+      const audit = context.store.handoffAudit(identifier);
+      emit(io, json, audit, `${audit.state} handoff audit ${audit.handoffId}`);
     } finally {
       context.store.close();
     }

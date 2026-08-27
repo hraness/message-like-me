@@ -38,6 +38,10 @@
     "./message-bundle-v1": {
       "types": "./dist/message-bundle-v1.d.ts",
       "import": "./dist/message-bundle-v1.js"
+    },
+    "./agentic-messaging-v1": {
+      "types": "./dist/agentic-messaging-v1.d.ts",
+      "import": "./dist/agentic-messaging-v1.js"
     }
   },
   "files": [

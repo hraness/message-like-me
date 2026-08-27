@@ -10,6 +10,13 @@ import {
 } from "node:fs";
 import { canonicalJson, sha256 } from "./canonical-json.ts";
 import {
+  agentMessageRouteCandidateId,
+  parseAgentMessageHandoffV1,
+  parseWrenchMessagingReceiptBindingV1,
+  wrenchMessagingTurnDigestV1,
+  type AgentMessageRouteCandidateV1,
+} from "./agentic-messaging-v1.ts";
+import {
   contactHandleMatchId,
   normalizeContactHandle,
   normalizeContactLabelQuery,
@@ -33,7 +40,7 @@ import type {
 type Binding = string | number | bigint | Uint8Array | null;
 type Row = Record<string, unknown>;
 
-const STORE_SCHEMA_VERSION = 4;
+const STORE_SCHEMA_VERSION = 5;
 const PERSON_SCOPE_PREFIX = "person_";
 export const IMESSAGE_SOURCE_ID = "source_imessage_local";
 
@@ -226,6 +233,53 @@ const SCHEMA = `
     applied_at TEXT NOT NULL
   ) STRICT;
   CREATE INDEX IF NOT EXISTS profiles_scope ON profiles(scope_id, applied_at);
+  CREATE TABLE IF NOT EXISTS agent_message_handoffs (
+    handoff_id TEXT PRIMARY KEY,
+    handoff_sha256 TEXT NOT NULL CHECK (length(handoff_sha256)=64),
+    contact_id_sha256 TEXT NOT NULL CHECK (length(contact_id_sha256)=64),
+    route_candidate_id_sha256 TEXT NOT NULL CHECK (length(route_candidate_id_sha256)=64),
+    source_id_sha256 TEXT NOT NULL CHECK (length(source_id_sha256)=64),
+    conversation_id_sha256 TEXT NOT NULL CHECK (length(conversation_id_sha256)=64),
+    corpus_revision TEXT NOT NULL CHECK (length(corpus_revision)=64),
+    source_revision TEXT NOT NULL CHECK (length(source_revision)=64),
+    profile_state TEXT NOT NULL CHECK (profile_state IN ('current','missing','stale')),
+    profile_evidence_revision TEXT,
+    wrench_contract_hash TEXT NOT NULL CHECK (length(wrench_contract_hash)=64),
+    route_ref_sha256 TEXT NOT NULL CHECK (length(route_ref_sha256)=64),
+    context_ref_sha256 TEXT NOT NULL CHECK (length(context_ref_sha256)=64),
+    exact_data_revision_sha256 TEXT NOT NULL CHECK (length(exact_data_revision_sha256)=64),
+    latest_message_revision_sha256 TEXT NOT NULL CHECK (length(latest_message_revision_sha256)=64),
+    turn_digest_sha256 TEXT NOT NULL CHECK (length(turn_digest_sha256)=64),
+    part_count INTEGER NOT NULL CHECK (part_count BETWEEN 1 AND 8),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('prepared','recorded')),
+    receipt_sha256 TEXT CHECK (receipt_sha256 IS NULL OR length(receipt_sha256)=64),
+    receipt_contract_hash TEXT CHECK (receipt_contract_hash IS NULL OR length(receipt_contract_hash)=64),
+    preview_digest_sha256 TEXT CHECK (preview_digest_sha256 IS NULL OR length(preview_digest_sha256)=64),
+    run_id_sha256 TEXT CHECK (run_id_sha256 IS NULL OR length(run_id_sha256)=64),
+    receipt_state TEXT CHECK (receipt_state IN ('submitted','failed','partial','indeterminate')),
+    proven_part_count INTEGER,
+    recorded_at TEXT,
+    CHECK (
+      (state='prepared' AND receipt_sha256 IS NULL AND receipt_contract_hash IS NULL
+        AND preview_digest_sha256 IS NULL AND run_id_sha256 IS NULL AND receipt_state IS NULL
+        AND proven_part_count IS NULL AND recorded_at IS NULL)
+      OR
+      (state='recorded' AND receipt_sha256 IS NOT NULL AND receipt_contract_hash IS NOT NULL
+        AND preview_digest_sha256 IS NOT NULL AND run_id_sha256 IS NOT NULL
+        AND receipt_state IS NOT NULL AND proven_part_count IS NOT NULL AND recorded_at IS NOT NULL)
+    ),
+    CHECK (
+      state='prepared'
+      OR (receipt_state='submitted' AND proven_part_count=part_count)
+      OR (receipt_state='failed' AND proven_part_count=0)
+      OR (receipt_state='partial' AND proven_part_count BETWEEN 1 AND part_count-1)
+      OR (receipt_state='indeterminate' AND proven_part_count BETWEEN 0 AND part_count-1)
+    )
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS agent_message_handoffs_contact
+    ON agent_message_handoffs(contact_id_sha256,created_at,handoff_id);
   CREATE TABLE IF NOT EXISTS addressbook_contacts (
     id TEXT PRIMARY KEY,
     private_label TEXT,
@@ -842,6 +896,82 @@ function analysisScope(database: Database, contactId: string): AnalysisScope | n
     addressBookContactId: null,
     conversationIds,
   });
+}
+
+function routeCandidatesForScope(
+  database: Database,
+  scope: AnalysisScope,
+  privateDetails: boolean,
+): readonly AgentMessageRouteCandidateV1[] {
+  const placeholders = idPlaceholders(scope.conversationIds);
+  const rows = all<{
+    conversation_id: string;
+    service: string | null;
+    is_group: number;
+    source_id: string;
+    source_kind: "bundle" | "imessage" | "x-archive";
+    provider: string;
+    network: string | null;
+    account_id: string | null;
+    source_external_id: string;
+    source_revision: string;
+    conversation_external_id: string;
+  }>(database, `
+    SELECT conversation.id AS conversation_id,conversation.service,conversation.is_group,
+      source.id AS source_id,coalesce(source.kind_v4,source.kind) AS source_kind,
+      source.provider,source.network,source.account_id,
+      source.external_id AS source_external_id,source.revision AS source_revision,
+      ownership.external_id AS conversation_external_id
+    FROM conversations conversation
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+    JOIN corpus_sources source ON source.id=ownership.source_id
+    WHERE conversation.id IN (${placeholders})
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
+    ORDER BY source.provider,source.network,source.id,conversation.id
+  `, ...scope.conversationIds);
+  if (rows.length > 10_000) throw new CliError("invalid-data", "Contact has too many source conversations");
+  return Object.freeze(rows.map((row) => {
+    const archive = row.source_kind === "x-archive";
+    const group = row.is_group === 1;
+    return Object.freeze({
+      schemaVersion: 1,
+      format: "message-like-me.source-conversation-route" as const,
+      id: agentMessageRouteCandidateId(row.source_id, row.conversation_id),
+      contactId: scope.id,
+      sourceId: row.source_id,
+      conversationId: row.conversation_id,
+      sourceKind: row.source_kind,
+      provider: row.provider,
+      network: row.network,
+      service: row.service,
+      group,
+      sourceRevision: row.source_revision,
+      actionability: Object.freeze(archive
+        ? { state: "evidence-only" as const, reason: "archive-source" as const }
+        // Handoff v1 is intentionally direct-conversation only. Wrench can
+        // independently bind exact provider groups; this local evidence
+        // candidate cannot authorize one through the v1 Message Like Me seam.
+        : group
+          ? { state: "evidence-only" as const, reason: "group-conversation" as const }
+          : {
+            state: "wrench-binding-eligible" as const,
+            reason: "requires-exact-wrench-binding" as const,
+          }),
+      privateBinding: privateDetails
+        ? Object.freeze({
+          sourceAccountId: row.account_id,
+          sourceExternalId: row.source_external_id,
+          conversationExternalId: row.conversation_external_id,
+        })
+        : null,
+    });
+  }));
 }
 
 function messageRowsForScope(
@@ -3646,6 +3776,291 @@ export class LocalStore {
     });
   }
 
+  routeCandidates(contactId: string, privateDetails = false): Readonly<{
+    contactId: string;
+    candidates: readonly AgentMessageRouteCandidateV1[];
+  }> | null {
+    if (contactId.length < 1 || contactId.length > 256) {
+      throw new CliError("usage", "Invalid contact ID");
+    }
+    return readTransaction(this.#database, () => {
+      const scope = analysisScope(this.#database, contactId);
+      if (scope === null) return null;
+      return Object.freeze({
+        contactId: scope.id,
+        candidates: routeCandidatesForScope(this.#database, scope, privateDetails),
+      });
+    });
+  }
+
+  handoffPreparation(contactId: string, routeCandidateId: string): Readonly<{
+    contactId: string;
+    candidate: AgentMessageRouteCandidateV1;
+    corpusRevision: string;
+    profileState: "current" | "missing" | "stale";
+    profileEvidenceRevision: string | null;
+  }> {
+    if (routeCandidateId.length < 1 || routeCandidateId.length > 256) {
+      throw new CliError("usage", "Invalid source-conversation route ID");
+    }
+    return readTransaction(this.#database, () => {
+      const scope = analysisScope(this.#database, contactId);
+      if (scope === null) throw new CliError("not-found", `Unknown contact ${contactId}`);
+      const candidate = routeCandidatesForScope(this.#database, scope, false)
+        .find(({ id }) => id === routeCandidateId);
+      if (candidate === undefined) {
+        throw new CliError("not-found", "The selected source-conversation route does not belong to this contact");
+      }
+      if (candidate.actionability.state !== "wrench-binding-eligible") {
+        throw new CliError(
+          "conflict",
+          `The selected source-conversation route is evidence-only (${candidate.actionability.reason})`,
+        );
+      }
+      const corpusRevision = scalarText(this.#database, "corpus_revision");
+      if (corpusRevision === null) throw new CliError("invalid-data", "Stored conversations have no corpus revision");
+      const storedProfile = this.profile(scope.id);
+      return Object.freeze({
+        contactId: scope.id,
+        candidate,
+        corpusRevision,
+        profileState: storedProfile?.state ?? "missing",
+        profileEvidenceRevision: storedProfile?.profile.schemaVersion === 2
+          ? storedProfile.profile.evidence.evidenceRevision
+          : null,
+      });
+    });
+  }
+
+  recordPreparedHandoff(value: unknown): ReturnType<LocalStore["handoffAudit"]> {
+    const handoff = parseAgentMessageHandoffV1(value);
+    transaction(this.#database, () => {
+      const scope = analysisScope(this.#database, handoff.contact.contactId);
+      if (scope === null || scope.id !== handoff.contact.contactId) {
+        throw new CliError("conflict", "Handoff contact scope is no longer current");
+      }
+      const candidate = routeCandidatesForScope(this.#database, scope, false)
+        .find(({ id }) => id === handoff.contact.routeCandidateId);
+      if (
+        candidate === undefined
+        || candidate.sourceId !== handoff.contact.sourceId
+        || candidate.conversationId !== handoff.contact.conversationId
+        || candidate.actionability.state !== "wrench-binding-eligible"
+      ) throw new CliError("conflict", "Handoff source-conversation route is no longer actionable");
+      const corpusRevision = scalarText(this.#database, "corpus_revision");
+      if (
+        corpusRevision !== handoff.evidence.corpusRevision
+        || candidate.sourceRevision !== handoff.evidence.sourceRevision
+      ) throw new CliError("conflict", "Message evidence changed while the handoff was prepared");
+      const storedProfile = this.profile(scope.id);
+      const currentProfileState = storedProfile?.state ?? "missing";
+      const currentProfileEvidenceRevision = storedProfile?.profile.schemaVersion === 2
+        ? storedProfile.profile.evidence.evidenceRevision
+        : null;
+      if (
+        currentProfileState !== handoff.evidence.profileState
+        || currentProfileEvidenceRevision !== handoff.evidence.profileEvidenceRevision
+      ) throw new CliError("conflict", "Style profile evidence changed while the handoff was prepared");
+      this.#database.query(`
+        INSERT INTO agent_message_handoffs(
+          handoff_id,handoff_sha256,contact_id_sha256,route_candidate_id_sha256,
+          source_id_sha256,conversation_id_sha256,
+          corpus_revision,source_revision,profile_state,profile_evidence_revision,
+          wrench_contract_hash,route_ref_sha256,context_ref_sha256,
+          exact_data_revision_sha256,latest_message_revision_sha256,
+          turn_digest_sha256,part_count,created_at,expires_at,state
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'prepared')
+        ON CONFLICT(handoff_id) DO NOTHING
+      `).run(
+        handoff.handoffId,
+        handoff.integrity.canonicalSha256,
+        sha256(handoff.contact.contactId),
+        sha256(handoff.contact.routeCandidateId),
+        sha256(handoff.contact.sourceId),
+        sha256(handoff.contact.conversationId),
+        handoff.evidence.corpusRevision,
+        handoff.evidence.sourceRevision,
+        handoff.evidence.profileState,
+        handoff.evidence.profileEvidenceRevision,
+        handoff.wrench.contractHash,
+        handoff.wrench.routeRefSha256,
+        handoff.wrench.contextRefSha256,
+        handoff.wrench.exactDataRevision,
+        handoff.wrench.latestMessageRevision,
+        wrenchMessagingTurnDigestV1(handoff),
+        handoff.turn.bubbles.length,
+        handoff.createdAt,
+        handoff.expiresAt,
+      );
+      const stored = get<{ handoff_sha256: string }>(this.#database, `
+        SELECT handoff_sha256 FROM agent_message_handoffs WHERE handoff_id=?
+      `, handoff.handoffId);
+      if (stored?.handoff_sha256 !== handoff.integrity.canonicalSha256) {
+        throw new CliError("conflict", "Handoff ID is already bound to different evidence");
+      }
+    });
+    return this.handoffAudit(handoff.handoffId);
+  }
+
+  recordHandoffReceipt(
+    handoffId: string,
+    value: unknown,
+  ): ReturnType<LocalStore["handoffAudit"]> {
+    if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
+      throw new CliError("usage", "Invalid handoff ID");
+    }
+    const receipt = parseWrenchMessagingReceiptBindingV1(value);
+    transaction(this.#database, () => {
+      const stored = get<{
+        handoff_sha256: string;
+        route_ref_sha256: string;
+        context_ref_sha256: string;
+        turn_digest_sha256: string;
+        part_count: number;
+        created_at: string;
+        state: "prepared" | "recorded";
+        receipt_sha256: string | null;
+      }>(this.#database, `
+        SELECT handoff_sha256,route_ref_sha256,context_ref_sha256,turn_digest_sha256,
+          part_count,created_at,state,receipt_sha256
+        FROM agent_message_handoffs WHERE handoff_id=?
+      `, handoffId);
+      if (stored === null) throw new CliError("not-found", `Unknown handoff ${handoffId}`);
+      if (
+        receipt.handoffSha256 !== stored.handoff_sha256
+        || receipt.routeRefSha256 !== stored.route_ref_sha256
+        || receipt.contextRefSha256 !== stored.context_ref_sha256
+        || receipt.turnDigest !== stored.turn_digest_sha256
+        || receipt.partCount !== stored.part_count
+        || receipt.recordedAt < stored.created_at
+      ) throw new CliError("conflict", "Wrench receipt does not bind the recorded handoff");
+      if (stored.state === "recorded") {
+        if (stored.receipt_sha256 === receipt.receiptSha256) return;
+        throw new CliError("conflict", "Handoff already has a different Wrench receipt");
+      }
+      this.#database.query(`
+        UPDATE agent_message_handoffs SET
+          state='recorded',receipt_sha256=?,receipt_contract_hash=?,preview_digest_sha256=?,
+          run_id_sha256=?,receipt_state=?,proven_part_count=?,recorded_at=?
+        WHERE handoff_id=? AND state='prepared'
+      `).run(
+        receipt.receiptSha256,
+        receipt.contractHash,
+        receipt.previewDigest,
+        sha256(receipt.runId),
+        receipt.state,
+        receipt.provenPartCount,
+        receipt.recordedAt,
+        handoffId,
+      );
+    });
+    return this.handoffAudit(handoffId);
+  }
+
+  handoffAudit(handoffId: string): Readonly<{
+    schemaVersion: 1;
+    format: "message-like-me.agent-message-handoff-audit";
+    handoffId: string;
+    handoffSha256: string;
+    contactIdSha256: string;
+    routeCandidateIdSha256: string;
+    sourceIdSha256: string;
+    conversationIdSha256: string;
+    corpusRevision: string;
+    sourceRevision: string;
+    profileState: "current" | "missing" | "stale";
+    profileEvidenceRevision: string | null;
+    wrenchContractHash: string;
+    routeRefSha256: string;
+    contextRefSha256: string;
+    exactDataRevisionSha256: string;
+    latestMessageRevisionSha256: string;
+    turnDigest: string;
+    partCount: number;
+    createdAt: string;
+    expiresAt: string;
+    state: "prepared" | "recorded";
+    receipt: Readonly<{
+      contractHash: string;
+      receiptSha256: string;
+      previewDigest: string;
+      runIdSha256: string;
+      state: "submitted" | "failed" | "partial" | "indeterminate";
+      provenPartCount: number;
+      recordedAt: string;
+    }> | null;
+  }> {
+    if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
+      throw new CliError("usage", "Invalid handoff ID");
+    }
+    const row = get<{
+      handoff_id: string;
+      handoff_sha256: string;
+      contact_id_sha256: string;
+      route_candidate_id_sha256: string;
+      source_id_sha256: string;
+      conversation_id_sha256: string;
+      corpus_revision: string;
+      source_revision: string;
+      profile_state: "current" | "missing" | "stale";
+      profile_evidence_revision: string | null;
+      wrench_contract_hash: string;
+      route_ref_sha256: string;
+      context_ref_sha256: string;
+      exact_data_revision_sha256: string;
+      latest_message_revision_sha256: string;
+      turn_digest_sha256: string;
+      part_count: number;
+      created_at: string;
+      expires_at: string;
+      state: "prepared" | "recorded";
+      receipt_sha256: string | null;
+      receipt_contract_hash: string | null;
+      preview_digest_sha256: string | null;
+      run_id_sha256: string | null;
+      receipt_state: "submitted" | "failed" | "partial" | "indeterminate" | null;
+      proven_part_count: number | null;
+      recorded_at: string | null;
+    }>(this.#database, `SELECT * FROM agent_message_handoffs WHERE handoff_id=?`, handoffId);
+    if (row === null) throw new CliError("not-found", `Unknown handoff ${handoffId}`);
+    const receipt = row.state === "recorded"
+      ? Object.freeze({
+        contractHash: row.receipt_contract_hash!,
+        receiptSha256: row.receipt_sha256!,
+        previewDigest: row.preview_digest_sha256!,
+        runIdSha256: row.run_id_sha256!,
+        state: row.receipt_state!,
+        provenPartCount: row.proven_part_count!,
+        recordedAt: row.recorded_at!,
+      })
+      : null;
+    return Object.freeze({
+      schemaVersion: 1,
+      format: "message-like-me.agent-message-handoff-audit" as const,
+      handoffId: row.handoff_id,
+      handoffSha256: row.handoff_sha256,
+      contactIdSha256: row.contact_id_sha256,
+      routeCandidateIdSha256: row.route_candidate_id_sha256,
+      sourceIdSha256: row.source_id_sha256,
+      conversationIdSha256: row.conversation_id_sha256,
+      corpusRevision: row.corpus_revision,
+      sourceRevision: row.source_revision,
+      profileState: row.profile_state,
+      profileEvidenceRevision: row.profile_evidence_revision,
+      wrenchContractHash: row.wrench_contract_hash,
+      routeRefSha256: row.route_ref_sha256,
+      contextRefSha256: row.context_ref_sha256,
+      exactDataRevisionSha256: row.exact_data_revision_sha256,
+      latestMessageRevisionSha256: row.latest_message_revision_sha256,
+      turnDigest: row.turn_digest_sha256,
+      partCount: row.part_count,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      state: row.state,
+      receipt,
+    });
+  }
+
   recordStudyPacket(receipt: Readonly<{
     sha256: string;
     contactId: string;
@@ -3885,12 +4300,13 @@ export class LocalStore {
     messageEquivalences: number;
     reactionEquivalences: number;
     profiles: number;
+    handoffs: number;
     addressBookContacts: number;
     enrichedLabels: number;
   }> {
     const quick = get<{ quick_check: string }>(this.#database, "PRAGMA quick_check")?.quick_check ?? "unknown";
     const foreignKeys = all<Row>(this.#database, "PRAGMA foreign_key_check").length;
-    const count = (table: "corpus_sources" | "conversations" | "messages" | "profiles" | "addressbook_contacts" | "conversation_contact_labels" | "conversation_equivalences" | "message_equivalences" | "reaction_equivalences") =>
+    const count = (table: "corpus_sources" | "conversations" | "messages" | "profiles" | "agent_message_handoffs" | "addressbook_contacts" | "conversation_contact_labels" | "conversation_equivalences" | "message_equivalences" | "reaction_equivalences") =>
       get<{ value: number }>(this.#database, `SELECT count(*) AS value FROM ${table}`)?.value ?? 0;
     const activeMessages = get<{ value: number }>(this.#database, `
       SELECT count(*) AS value FROM messages message
@@ -3924,6 +4340,7 @@ export class LocalStore {
       messageEquivalences: count("message_equivalences"),
       reactionEquivalences: count("reaction_equivalences"),
       profiles: count("profiles"),
+      handoffs: count("agent_message_handoffs"),
       addressBookContacts: count("addressbook_contacts"),
       enrichedLabels: count("conversation_contact_labels"),
     };

@@ -15,9 +15,13 @@ const VALUE_OPTIONS = new Set([
   "prompt-output",
   "project",
   "reference-output",
+  "request",
   "scope",
   "session-gap",
   "target",
+  "draft",
+  "wrench-context",
+  "wrench-receipt",
 ]);
 const FLAG_OPTIONS = new Set(["force", "help", "json", "private", "version"]);
 

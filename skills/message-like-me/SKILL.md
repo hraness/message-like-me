@@ -149,8 +149,10 @@ held-out cutoff matters. `--after` is inclusive and `--before` is exclusive.
 Record any non-default `--session-gap` or `--burst-gap`, because changing those
 parameters changes the operational meaning of turns, sessions, and latency.
 
-Study and evaluation packets are the only CLI exports that contain message
-bodies. Retain the study command's JSON receipt and copy its `packetSha256`
+Study packets, evaluation packets, and explicit private handoffs are the only
+CLI exports that contain message bodies. A handoff is for bounded coordination
+with Wrench and is not evidence that anything was sent. Retain the study
+command's JSON receipt and copy its `packetSha256`
 into the finished profile; the packet does not contain its own digest. Analyze
 it according to
 [analysis.md](references/analysis.md), write one schema-version-two profile

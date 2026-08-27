@@ -1,7 +1,7 @@
 // @bun
 import {
   MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY
-} from "./cli-r2t9f324.js";
+} from "./cli-qqafdvz9.js";
 
 // src/types.ts
 var CORPUS_SCHEMA_VERSION = 2;

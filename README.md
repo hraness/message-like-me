@@ -255,6 +255,79 @@ Resolution is normalized for case and Unicode representation, but it does not
 perform prefix, substring, phonetic, or fuzzy matching. It returns only direct
 person scopes and labels, never handles or message bodies.
 
+## Prepare an exact private agent handoff
+
+Message Like Me can bind an ordered unsent draft to one exact local
+source-conversation candidate and one current opaque Wrench context. It still
+does not invoke Wrench, authenticate, launch a provider command, access a
+network, or send a message.
+
+Start with the redacted candidate inventory:
+
+```sh
+messagelikeme routes list <contact-id> \
+  --output /absolute/private/routes.json --json
+```
+
+A contact or person scope is never itself a destination. Each candidate names
+one pseudonymous source and conversation inside that mode-`0600` output.
+Ordinary stdout reports only its digest, counts, and selection state.
+`--private` additionally reveals only
+the exact account, source, and conversation coordinates already observed in
+that imported source. It never emits names, handles, participants, or a locator
+derived from them.
+
+An X archive candidate is always `evidence-only` with reason
+`archive-source`. Handoff v1 also keeps group candidates evidence-only as an
+explicit direct-conversation product limit. This does not claim that Wrench or
+a provider cannot address an exact group. It prevents Message Like Me from
+authorizing one through this first handoff contract. Several eligible direct
+candidates produce an `ambiguous` selection state; no route is chosen from a
+name, title, participant list, or merged person scope.
+
+After Wrench has written its exact current context and the agent has written an
+ordered one-to-eight-bubble draft, prepare one private handoff:
+
+```sh
+messagelikeme handoff prepare <contact-id> \
+  --request /absolute/private/handoff-request.json \
+  --wrench-context /absolute/private/wrench-context.json \
+  --draft /absolute/private/draft.json \
+  --output /absolute/private/handoff.json \
+  --json
+```
+
+The request contains the exact selected source-conversation candidate from the
+private route inventory. The request, context, and draft must be owner-only,
+singly linked physical files. The context must carry the pinned
+`wrench.messaging-context-binding.v1` contract identity,
+an unexpired opaque route and context reference, and exact SHA-256 data and
+latest-message revisions. The output is a mode-`0600` file whose canonical
+digest binds those values, the selected source revision, corpus and profile
+evidence, bubble order, text, and optional reply references. Raw opaque Wrench
+references and draft bodies appear only in the explicit private inputs and
+handoff file.
+
+Verification and audit commands emit hashes, counts, timestamps, and
+pseudonymous IDs without bodies or raw Wrench references:
+
+```sh
+messagelikeme handoff verify /absolute/private/handoff.json --json
+messagelikeme handoff record <handoff-id> \
+  --wrench-receipt /absolute/private/wrench-receipt.json --json
+messagelikeme handoffs show <handoff-id> --json
+```
+
+Recording requires Wrench's pinned body-free receipt binding. It carries the
+handoff, route-reference, context-reference, exact turn, and private preview
+digests, plus the proven prefix and a canonical receipt digest. It contains no
+raw route or context reference. Message Like Me stores only those hashes,
+counts, timestamps, states, and pseudonymous run and handoff IDs. It never
+inserts a sent message into the corpus. A later independent source ingestion
+must observe that message before it can affect
+style, tempo, reply, or interaction evidence. The pure contract is exported as
+`@hraness/message-like-me/agentic-messaging-v1` for checked local consumers.
+
 ## Build a style profile
 
 Aggregate metrics cannot explain why a short burst works in one context or why
@@ -269,8 +342,9 @@ messagelikeme study prepare <contact-id> \
   --json
 ```
 
-`study prepare` and `evaluate prepare` are the only commands that write bounded
-message bodies outside the private database. Their outputs are mode `0600`.
+`study prepare`, `evaluate prepare`, and `handoff prepare` are the only commands
+that write bounded message bodies outside the private database. Their outputs
+are mode `0600`.
 A study packet contains incoming context and outgoing responses selected across
 different response shapes; it is not a full transcript export. By default,
 each body is capped at 4 KiB, each example keeps at most 12 text messages per
