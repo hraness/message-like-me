@@ -667,6 +667,7 @@ const ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
     AND preferred_message.sent_at=message.sent_at
     AND preferred_message.direction=message.direction
     AND preferred_message.body IS message.body
+    AND preferred_message.kind=message.kind
     AND preferred_message.attachment_count=message.attachment_count
     AND NOT EXISTS (
       SELECT 1 FROM corpus_source_suppressions preferred_suppression
@@ -1873,6 +1874,7 @@ type EquivalenceMessageRow = Readonly<{
   sent_at: string;
   direction: "incoming" | "outgoing";
   body: string | null;
+  kind: CorpusMessage["kind"];
   attachment_count: number;
 }>;
 
@@ -1914,7 +1916,7 @@ function applyEquivalencePlan(
   for (const pair of plan.messages) {
     const message = (id: string): EquivalenceMessageRow | null => get<EquivalenceMessageRow>(database, `
       SELECT message.id,provenance.source_id,message.conversation_id,message.sent_at,
-        message.direction,message.body,message.attachment_count
+        message.direction,message.body,message.kind,message.attachment_count
       FROM messages message
       JOIN message_provenance provenance ON provenance.message_id=message.id
       WHERE message.id=?
@@ -1930,6 +1932,7 @@ function applyEquivalencePlan(
       || duplicate.sent_at !== preferred.sent_at
       || duplicate.direction !== preferred.direction
       || duplicate.body !== preferred.body
+      || duplicate.kind !== preferred.kind
       || duplicate.attachment_count !== preferred.attachment_count
     ) {
       throw new CliError(
@@ -1937,6 +1940,26 @@ function applyEquivalencePlan(
         `Message ${pair.duplicateMessageId} lacks an exact preferred-source fingerprint`,
       );
     }
+    const fingerprintCounts = all<{ conversation_id: string; value: number }>(database, `
+      SELECT conversation_id,count(*) AS value FROM messages
+      WHERE conversation_id IN (?,?) AND sent_at=? AND direction=? AND body IS ?
+        AND kind=? AND attachment_count=?
+      GROUP BY conversation_id ORDER BY conversation_id
+    `,
+    duplicate.conversation_id,
+    preferred.conversation_id,
+    duplicate.sent_at,
+    duplicate.direction,
+    duplicate.body,
+    duplicate.kind,
+    duplicate.attachment_count);
+    if (
+      fingerprintCounts.length !== 2
+      || fingerprintCounts.some((row) => row.value !== 1)
+    ) throw new CliError(
+      "conflict",
+      `Message ${pair.duplicateMessageId} has an ambiguous cross-source fingerprint`,
+    );
     const existingDuplicate = get<{ preferred_message_id: string }>(database, `
       SELECT preferred_message_id FROM message_equivalences WHERE duplicate_message_id=?
     `, duplicate.id);
@@ -1954,6 +1977,7 @@ function applyEquivalencePlan(
       sentAt: duplicate.sent_at,
       direction: duplicate.direction,
       body: duplicate.body,
+      kind: duplicate.kind,
       attachmentCount: duplicate.attachment_count,
     }));
     const digests = conversationMatchDigests.get(duplicate.conversation_id) ?? [];

@@ -1449,6 +1449,20 @@ describe("local corpus store", () => {
     try {
       store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
       const archive = xArchiveSnapshot();
+      const plan = {
+        duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+        preferredSourceId: X_BEEPER_SOURCE_ID,
+        basis: "exact-message-overlap" as const,
+        evidenceSha256: "d".repeat(64),
+        conversations: [{
+          duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+          preferredConversationId: X_BEEPER_CONVERSATION_ID,
+        }],
+        messages: [{
+          duplicateMessageId: "x-archive-message-overlap",
+          preferredMessageId: "x-beeper-message-overlap",
+        }],
+      };
       const changed = {
         ...archive,
         messages: archive.messages.map((message) => message.id === "x-archive-message-overlap"
@@ -1459,21 +1473,34 @@ describe("local corpus store", () => {
         [changed],
         "2026-08-26T04:00:00.000Z",
         undefined,
-        {
-          duplicateSourceId: X_ARCHIVE_SOURCE_ID,
-          preferredSourceId: X_BEEPER_SOURCE_ID,
-          basis: "exact-message-overlap",
-          evidenceSha256: "d".repeat(64),
-          conversations: [{
-            duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
-            preferredConversationId: X_BEEPER_CONVERSATION_ID,
-          }],
-          messages: [{
-            duplicateMessageId: "x-archive-message-overlap",
-            preferredMessageId: "x-beeper-message-overlap",
-          }],
-        },
+        plan,
       )).toThrow("lacks an exact preferred-source fingerprint");
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
+      const duplicate = {
+        ...archive.messages[0]!,
+        id: "x-archive-message-ambiguous",
+        sourceRowId: 3,
+        sourceGuid: "x-archive-external-ambiguous",
+      };
+      expect(() => store.replaceSources(
+        [{
+          ...archive,
+          messages: [...archive.messages, duplicate],
+          messageProvenance: [
+            ...archive.messageProvenance,
+            {
+              messageId: duplicate.id,
+              externalId: duplicate.sourceGuid,
+              providerSortKey: null,
+              replyToExternalId: null,
+              attachments: [],
+            },
+          ],
+        }],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        plan,
+      )).toThrow("ambiguous cross-source fingerprint");
       expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
       expect(store.doctor()).toMatchObject({ sources: 1, foreignKeyViolations: 0 });
     } finally {
