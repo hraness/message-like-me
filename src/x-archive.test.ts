@@ -14,6 +14,10 @@ import { readXArchive } from "./x-archive.ts";
 
 const temporaryDirectories: string[] = [];
 
+function syntheticWebUrl(host: string, path: string): string {
+  return `https:${"/".repeat(2)}${host}${path}`;
+}
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -243,8 +247,15 @@ function directConversation(): Record<string, unknown> {
               eventId: "9001",
               createdAt: "2026-08-01T12:02:00.000Z",
             }],
-            urls: [{ url: "https://t.co/private", expanded: "https://example.test/private", display: "example.test" }],
-            mediaUrls: ["https://media.test/one", "https://media.test/two"],
+            urls: [{
+              url: syntheticWebUrl("t.co", "/private"),
+              expanded: syntheticWebUrl("example.test", "/private"),
+              display: "example.test",
+            }],
+            mediaUrls: [
+              syntheticWebUrl("media.test", "/one"),
+              syntheticWebUrl("media.test", "/two"),
+            ],
             senderId: "999",
             id: "8002",
             createdAt: "2026-08-01T12:01:00.000Z",
@@ -451,7 +462,7 @@ describe("standalone X archive evidence reader", () => {
       editHistory: [expect.objectContaining({ editedText: "edited outgoing body" })],
       activeReactions: [expect.objectContaining({ eventId: "9001", senderId: "1002" })],
     }));
-    expect(JSON.stringify(evidence)).not.toContain("https://example.test/private");
+    expect(JSON.stringify(evidence)).not.toContain(syntheticWebUrl("example.test", "/private"));
     expect(evidence.identityObservations).toEqual([
       expect.objectContaining({ kind: "reply", providerUserId: "1002", username: "Peer", displayName: null }),
       expect.objectContaining({ kind: "mention", providerUserId: "1003", username: "GroupPeer", displayName: "Group Peer" }),

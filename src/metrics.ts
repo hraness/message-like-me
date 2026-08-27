@@ -338,6 +338,7 @@ function responseTags(
   incomingQuestions: number,
   outgoingCharacters: number,
   explicitReplyCount: number,
+  replyUnavailableCount: number,
 ): readonly string[] {
   const tags = new Set<string>();
   tags.add(outgoing.length === 1 ? "single-message-response" : "multi-message-response");
@@ -349,6 +350,7 @@ function responseTags(
     || bodies(incoming).some(containsMultiItemBody)
   ) tags.add("multi-item-context");
   if (explicitReplyCount > 0) tags.add("explicit-reply");
+  if (replyUnavailableCount > 0) tags.add("reply-unavailable");
   if (latencySeconds <= 60) tags.add("fast-response");
   else if (latencySeconds >= 60 * 60) tags.add("delayed-response");
   if (outgoingCharacters <= 40) tags.add("short-response");
@@ -380,7 +382,10 @@ function responsesFor(
       const outgoingCharacters = outgoingBodies.reduce((total, body) => total + characterCount(body), 0);
       const incomingQuestions = incomingBodies.reduce((total, body) => total + questionCount(body), 0);
       const explicitReplyCount = outgoing.messages.filter(({ message }) =>
-        message.replyToSourceGuid !== null).length;
+        message.replyState === "explicit").length;
+      const replyEligibleCount = outgoing.messages.filter(({ message }) =>
+        message.replyState !== "unavailable").length;
+      const replyUnavailableCount = outgoing.messages.length - replyEligibleCount;
       const lastIncoming = incoming.messages.at(-1)!;
       const firstOutgoing = outgoing.messages[0]!;
       const latencySeconds = round(secondsBetween(lastIncoming, firstOutgoing), 3);
@@ -398,6 +403,8 @@ function responsesFor(
         incomingQuestions,
         latencySeconds,
         explicitReplyCount,
+        replyEligibleCount,
+        replyUnavailableCount,
         tags: responseTags(
           incoming.messages,
           outgoing.messages,
@@ -405,6 +412,7 @@ function responsesFor(
           incomingQuestions,
           outgoingCharacters,
           explicitReplyCount,
+          replyUnavailableCount,
         ),
       }));
     }
@@ -487,7 +495,9 @@ function tempoMetrics(messages: readonly OrderedMessage[], responses: readonly R
   const outgoingText = messages.filter(({ message }) =>
     message.retractedAt === null
       && message.direction === "outgoing" && message.kind === "text" && message.body !== null);
-  const explicitReplies = outgoingText.filter(({ message }) => message.replyToSourceGuid !== null).length;
+  const replyEligible = outgoingText.filter(({ message }) => message.replyState !== "unavailable");
+  const explicitReplies = replyEligible.filter(({ message }) => message.replyState === "explicit").length;
+  const replyUnavailable = outgoingText.length - replyEligible.length;
   return Object.freeze({
     responseEpisodes: responses.length,
     responseLatencySeconds: Object.freeze({
@@ -504,7 +514,9 @@ function tempoMetrics(messages: readonly OrderedMessage[], responses: readonly R
       multiRatio: ratio(bundles.filter((value) => value > 1).length, bundles.length),
     }),
     explicitReplyMessages: explicitReplies,
-    explicitReplyRatio: ratio(explicitReplies, outgoingText.length),
+    explicitReplyEligibleMessages: replyEligible.length,
+    explicitReplyUnavailableMessages: replyUnavailable,
+    explicitReplyRatio: replyEligible.length === 0 ? null : ratio(explicitReplies, replyEligible.length),
     multiIncomingEpisodes: responses.filter((response) => response.incomingCount > 1).length,
     multiQuestionEpisodes: responses.filter((response) => response.incomingQuestions > 1).length,
   });
@@ -713,7 +725,9 @@ function studyMessages(
       sourceBodyBytes,
       emittedBodyBytes,
       bodyTruncated: emittedBodyBytes < sourceBodyBytes,
-      explicitReply: message.replyToSourceGuid !== null,
+      explicitReply: message.replyState === "unavailable"
+        ? null
+        : message.replyState === "explicit",
     });
   }));
   const eligibleRows = [...incomingText, ...outgoingText];
@@ -760,7 +774,9 @@ function responseSignature(response: ResponseEpisode): string {
     response.incomingCount > 1 ? "multi-in" : "single-in",
     response.outgoingCount > 1 ? "multi-out" : "single-out",
     response.incomingQuestions > 1 ? "multi-q" : response.incomingQuestions === 1 ? "one-q" : "no-q",
-    response.explicitReplyCount > 0 ? "reply" : "no-reply",
+    response.explicitReplyCount > 0
+      ? "reply"
+      : response.replyUnavailableCount > 0 ? "reply-unknown" : "no-reply",
     latency,
     length,
   ].join(":");
@@ -925,6 +941,8 @@ function aggregateStudyMetrics(metrics: ContactMetrics): StudyAggregateMetrics {
         multiRatio: metrics.tempo.outgoingMessagesPerResponse.multiRatio,
       }),
       explicitReplyMessages: metrics.tempo.explicitReplyMessages,
+      explicitReplyEligibleMessages: metrics.tempo.explicitReplyEligibleMessages,
+      explicitReplyUnavailableMessages: metrics.tempo.explicitReplyUnavailableMessages,
       explicitReplyRatio: metrics.tempo.explicitReplyRatio,
       multiIncomingEpisodes: metrics.tempo.multiIncomingEpisodes,
       multiQuestionEpisodes: metrics.tempo.multiQuestionEpisodes,
@@ -1154,7 +1172,9 @@ export function buildEvaluationPackets(
         bubbles: outgoing.length,
         characters: outgoing.reduce((total, message) => total + characterCount(message.body), 0),
         words: outgoing.reduce((total, message) => total + wordCount(message.body), 0),
-        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply).length,
+        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply === true).length,
+        explicitReplyEligibleMessages: outgoing.filter(({ explicitReply }) => explicitReply !== null).length,
+        explicitReplyUnavailableMessages: outgoing.filter(({ explicitReply }) => explicitReply === null).length,
       }),
     });
   }));

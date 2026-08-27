@@ -116,11 +116,13 @@ messagelikeme ingest x-archive \
 ```
 
 `--overlap-source` is not a fuzzy merge switch. Reconciliation proceeds only
-when the account identity and overlapping message evidence match exactly. Both
-source provenances remain inspectable, ambiguity or contradiction fails closed,
-and exact messages appear once in analysis. Reimporting the same or a later
-archive preserves that deduplication; archive absence does not delete retained
-history.
+for one-to-one direct conversations whose account identity, peer handle, and
+overlapping message evidence match exactly. Both source provenances remain
+inspectable, ambiguity or contradiction fails closed, and exact messages appear
+once in analysis. Group DMs remain separate because the legacy archive does not
+supply enough cross-provider sender proof for safe equivalence. Reimporting the
+same or a later archive preserves proven deduplication; archive absence does not
+delete retained history.
 
 To study accounts connected through Beeper, install or update to a compatible
 [Wrench release](https://github.com/hraness/wrench/releases), then ask it to

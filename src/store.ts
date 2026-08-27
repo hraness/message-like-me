@@ -1718,10 +1718,18 @@ function validateSourceSnapshot(snapshot: SourceCorpusSnapshot): void {
   if (messageIds.size !== snapshot.messages.length) {
     throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats message IDs`);
   }
+  const messageRows = new Set<string>();
   for (const message of snapshot.messages) {
     if (!conversationIds.has(message.conversationId)) {
       throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
     }
+    const rowCoordinate = `${message.conversationId}\0${message.sourceRowId}`;
+    if (
+      !Number.isSafeInteger(message.sourceRowId)
+      || message.sourceRowId < 1
+      || messageRows.has(rowCoordinate)
+    ) throw new CliError("invalid-data", `Message ${message.id} has an invalid source row coordinate`);
+    messageRows.add(rowCoordinate);
     if (
       (message.replyState === "explicit") !== (message.replyToSourceGuid !== null)
       || (
@@ -2013,13 +2021,17 @@ function applyEquivalencePlan(
       || duplicate.source_id !== plan.duplicateSourceId
       || preferred.source_id !== plan.preferredSourceId
       || duplicate.is_group !== preferred.is_group
+      || duplicate.is_group !== 0
       || digests.length < 1
       || (
         duplicate.contact_id !== null
         && preferred.contact_id !== null
         && duplicate.contact_id !== preferred.contact_id
       )
-    ) throw new CliError("conflict", "Conversation equivalence lacks exact message overlap");
+    ) throw new CliError(
+      "conflict",
+      "Conversation equivalence requires exact direct-peer identity and message overlap",
+    );
     const existingDuplicate = get<{ preferred_conversation_id: string }>(database, `
       SELECT preferred_conversation_id FROM conversation_equivalences
       WHERE duplicate_conversation_id=?
@@ -2366,6 +2378,11 @@ export class LocalStore {
     ingestedAt: string,
     hmacKey?: string | Uint8Array,
     equivalencePlan?: CrossSourceEquivalencePlan,
+    progress?: (event: Readonly<{
+      phase: "conversations" | "messages" | "reactions";
+      completed: number;
+      total: number;
+    }>) => void,
   ): Readonly<{
     corpusRevision: string;
     sources: readonly Readonly<{
@@ -2600,6 +2617,7 @@ export class LocalStore {
         const conversationProvenance = new Map(
           snapshot.conversationProvenance.map((value) => [value.conversationId, value]),
         );
+        let completedConversations = 0;
         for (const conversation of snapshot.conversations) {
           const owner = get<{ source_id: string }>(this.#database, `
             SELECT source_id FROM conversation_sources WHERE conversation_id=?
@@ -2624,25 +2642,29 @@ export class LocalStore {
             provenance.externalId,
             canonicalJson(provenance.metadata ?? {}),
           );
-          setSuppression.run(
-            snapshot.source.id,
-            "conversation",
-            conversation.id,
-            provenance.externalId,
-            ingestedAt,
-            "reappeared",
-            0,
-          );
           clearExternalSuppression.run(
             ingestedAt,
             snapshot.source.id,
             "conversation",
             provenance.externalId,
           );
+          completedConversations += 1;
+          if (
+            progress !== undefined
+            && (
+              completedConversations === snapshot.conversations.length
+              || completedConversations % 10_000 === 0
+            )
+          ) progress({
+            phase: "conversations",
+            completed: completedConversations,
+            total: snapshot.conversations.length,
+          });
         }
         const messageProvenance = new Map(
           snapshot.messageProvenance.map((value) => [value.messageId, value]),
         );
+        let completedMessages = 0;
         for (const message of snapshot.messages) {
           const owner = get<{ source_id: string; source_row_id: number }>(this.#database, `
             SELECT provenance.source_id,message.source_row_id
@@ -2653,7 +2675,7 @@ export class LocalStore {
           if (owner !== null && owner.source_id !== snapshot.source.id) {
             throw new CliError("conflict", `Message ${message.id} belongs to another source`);
           }
-          const preferredRowId = authoritative ? message.sourceRowId : null;
+          const preferredRowId = authoritative || existing === null ? message.sourceRowId : null;
           const preferredCollision = preferredRowId === null ? null : get<{ id: string }>(
             this.#database,
             "SELECT id FROM messages WHERE conversation_id=? AND source_row_id=?",
@@ -2696,15 +2718,6 @@ export class LocalStore {
               metadata: provenance.metadata ?? {},
             }),
           );
-          setSuppression.run(
-            snapshot.source.id,
-            message.kind === "reaction" ? "reaction" : "message",
-            message.id,
-            provenance.externalId,
-            ingestedAt,
-            "reappeared",
-            0,
-          );
           clearExternalSuppression.run(
             ingestedAt,
             snapshot.source.id,
@@ -2712,15 +2725,6 @@ export class LocalStore {
             provenance.externalId,
           );
           if (message.kind === "reaction") {
-            setSuppression.run(
-              snapshot.source.id,
-              "reaction-timeline",
-              message.id,
-              provenance.externalId,
-              ingestedAt,
-              "reappeared",
-              0,
-            );
             clearExternalSuppression.run(
               ingestedAt,
               snapshot.source.id,
@@ -2728,8 +2732,22 @@ export class LocalStore {
               provenance.externalId,
             );
           }
+          completedMessages += 1;
+          if (
+            progress !== undefined
+            && (
+              completedMessages === snapshot.messages.length
+              || completedMessages % 10_000 === 0
+            )
+          ) progress({
+            phase: "messages",
+            completed: completedMessages,
+            total: snapshot.messages.length,
+          });
         }
-        for (const reaction of snapshot.reactionFacts ?? []) {
+        const reactions = snapshot.reactionFacts ?? [];
+        let completedReactions = 0;
+        for (const reaction of reactions) {
           const existingReaction = get<{ source_id: string; external_id: string }>(this.#database, `
             SELECT source_id,external_id FROM corpus_reaction_facts WHERE id=?
           `, reaction.id);
@@ -2761,15 +2779,6 @@ export class LocalStore {
             reaction.state,
           );
           if (reaction.state === "active") {
-            setSuppression.run(
-              snapshot.source.id,
-              "reaction",
-              reaction.id,
-              reaction.externalId,
-              ingestedAt,
-              "reappeared",
-              0,
-            );
             clearExternalSuppression.run(
               ingestedAt,
               snapshot.source.id,
@@ -2783,6 +2792,18 @@ export class LocalStore {
               reaction.externalId,
             );
           }
+          completedReactions += 1;
+          if (
+            progress !== undefined
+            && (
+              completedReactions === reactions.length
+              || completedReactions % 10_000 === 0
+            )
+          ) progress({
+            phase: "reactions",
+            completed: completedReactions,
+            total: reactions.length,
+          });
         }
         this.#database.query(`
           UPDATE corpus_reaction_facts AS reaction

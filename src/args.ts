@@ -11,6 +11,7 @@ const VALUE_OPTIONS = new Set([
   "limit",
   "min-outgoing",
   "output",
+  "overlap-source",
   "prompt-output",
   "project",
   "reference-output",

@@ -75,12 +75,14 @@ logs, issues, packages, and ordinary agent context.
 
 The normalized source retains exact archive and account provenance. If the
 caller supplies `--overlap-source`, the named source must be a compatible
-Beeper X source for the same exact account, and shared messages must supply
-exact reconciliation evidence. Missing, conflicting, or ambiguous evidence
-fails closed before partial state is accepted. Reconciliation retains both
-provenances while one exact message contributes once to analysis. Reimporting
-the same or a later archive preserves the deduplication; omission from a later
-archive is not a deletion signal.
+Beeper X source for the same exact account. Only one-to-one direct conversations
+with an exact peer handle and exact shared-message evidence can reconcile.
+Group DMs remain separate because direction alone cannot prove which incoming
+participant authored a message across providers. Missing, conflicting, or
+ambiguous evidence fails closed before partial state is accepted. Reconciliation
+retains both provenances while one proven exact message contributes once to
+analysis. Reimporting the same or a later archive preserves the deduplication;
+omission from a later archive is not a deletion signal.
 
 X archive direct messages do not reveal whether an explicit reply link was
 used. The importer records reply observability as unavailable rather than

@@ -77,9 +77,10 @@ archive provenance. This source covers archive direct messages, not X Chat.
 If the same X account is already represented by a Beeper source, inspect the
 redacted source inventory and pass `--overlap-source <source-id>` only when the
 user intends to reconcile those sources. The option is not permission to guess
-an account match: the CLI must prove exact account and message overlap or fail
-closed. Keep both provenances and treat the resulting exact-message dedupe as a
-source fact, not an identity inference.
+an account match: the CLI must prove the exact account, one-to-one direct peer,
+and message overlap or fail closed. Group DMs remain separate. Keep both
+provenances and treat the resulting exact-message dedupe as a source fact, not
+an identity inference.
 
 When the user supplies a finished Wrench/Beeper Message Like Me bundle, ingest
 only its normalized absolute directory path:

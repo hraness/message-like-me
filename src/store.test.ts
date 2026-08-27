@@ -1530,6 +1530,46 @@ describe("local corpus store", () => {
     }
   });
 
+  test("rejects group equivalence even when direction, time, and body collide", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-group-equivalence-reject-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    try {
+      const asGroup = (snapshot: SourceCorpusSnapshot): SourceCorpusSnapshot => ({
+        ...snapshot,
+        conversations: snapshot.conversations.map((conversation) => ({
+          ...conversation,
+          participantCount: 2,
+          participantIds: [...conversation.participantIds, `${conversation.id}-second-peer`],
+          group: true,
+        })),
+      });
+      store.replaceSources([asGroup(xBeeperSnapshot())], "2026-08-21T00:01:00.000Z");
+      expect(() => store.replaceSources(
+        [asGroup(xArchiveSnapshot())],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        {
+          duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+          preferredSourceId: X_BEEPER_SOURCE_ID,
+          basis: "exact-message-overlap",
+          evidenceSha256: "d".repeat(64),
+          conversations: [{
+            duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+            preferredConversationId: X_BEEPER_CONVERSATION_ID,
+          }],
+          messages: [{
+            duplicateMessageId: "x-archive-message-overlap",
+            preferredMessageId: "x-beeper-message-overlap",
+          }],
+        },
+      )).toThrow("requires exact direct-peer identity");
+      expect(store.source(X_ARCHIVE_SOURCE_ID)).toBeNull();
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("converges provider order across bounded backfill, omission, and replay", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-provider-order-"));
     const incremental = LocalStore.open(join(root, "incremental.sqlite3"));

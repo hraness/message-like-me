@@ -9,7 +9,7 @@ import {
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION
-} from "./cli-hb4vzkdq.js";
+} from "./cli-ptsw1tr2.js";
 import {
   LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
   LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
@@ -25,7 +25,7 @@ import {
 
 // src/commands.ts
 import { lstat as lstat4 } from "fs/promises";
-import { isAbsolute as isAbsolute5, resolve as resolve6 } from "path";
+import { isAbsolute as isAbsolute6, resolve as resolve7 } from "path";
 
 // src/errors.ts
 var EXIT_CODES = {
@@ -67,6 +67,7 @@ var VALUE_OPTIONS = new Set([
   "limit",
   "min-outgoing",
   "output",
+  "overlap-source",
   "prompt-output",
   "project",
   "reference-output",
@@ -1229,6 +1230,7 @@ function normalizeBundle(manifest, manifestSha256, records, key) {
         bodySource: body === null ? "unavailable" : "text",
         kind: body !== null || message.bodyTruncated === true ? "text" : message.attachments.length > 0 ? "attachment" : "unknown",
         replyToSourceGuid: message.replyTo?.providerId ?? null,
+        replyState: message.replyTo === null ? "none" : "explicit",
         editedAt: message.edit?.editedAt ?? null,
         retractedAt: message.deletion?.observedAt ?? null,
         service: account.network,
@@ -1291,6 +1293,7 @@ function normalizeBundle(manifest, manifestSha256, records, key) {
         bodySource: "unavailable",
         kind: "reaction",
         replyToSourceGuid: reaction.messageProviderId,
+        replyState: "explicit",
         editedAt: null,
         retractedAt: null,
         service: account.network,
@@ -2226,6 +2229,7 @@ function readIMessageDatabase(path, options) {
           bodySource: body.bodySource,
           kind,
           replyToSourceGuid: (row.threadOriginatorGuid || row.replyToGuid) ?? null,
+          replyState: row.threadOriginatorGuid || row.replyToGuid ? "explicit" : "none",
           editedAt: appleTimestamp(row.editedDateText),
           retractedAt,
           service: row.service === "" ? null : row.service,
@@ -2455,7 +2459,7 @@ function containsMultiItemBody(value) {
     return true;
   return /(?:^|\n)\s*(?:[-*\u2022]|[0-9]{1,2}[.)])\s+/u.test(value) || (value.match(/;/gu)?.length ?? 0) >= 2;
 }
-function responseTags(incoming, outgoing, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount) {
+function responseTags(incoming, outgoing, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount, replyUnavailableCount) {
   const tags = new Set;
   tags.add(outgoing.length === 1 ? "single-message-response" : "multi-message-response");
   if (incoming.length > 1)
@@ -2466,6 +2470,8 @@ function responseTags(incoming, outgoing, latencySeconds, incomingQuestions, out
     tags.add("multi-item-context");
   if (explicitReplyCount > 0)
     tags.add("explicit-reply");
+  if (replyUnavailableCount > 0)
+    tags.add("reply-unavailable");
   if (latencySeconds <= 60)
     tags.add("fast-response");
   else if (latencySeconds >= 60 * 60)
@@ -2498,7 +2504,9 @@ function responsesFor(bursts, corpusRevision, contactId) {
       const incomingCharacters = incomingBodies.reduce((total, body) => total + characterCount(body), 0);
       const outgoingCharacters = outgoingBodies.reduce((total, body) => total + characterCount(body), 0);
       const incomingQuestions = incomingBodies.reduce((total, body) => total + questionCount(body), 0);
-      const explicitReplyCount = outgoing.messages.filter(({ message }) => message.replyToSourceGuid !== null).length;
+      const explicitReplyCount = outgoing.messages.filter(({ message }) => message.replyState === "explicit").length;
+      const replyEligibleCount = outgoing.messages.filter(({ message }) => message.replyState !== "unavailable").length;
+      const replyUnavailableCount = outgoing.messages.length - replyEligibleCount;
       const lastIncoming = incoming.messages.at(-1);
       const firstOutgoing = outgoing.messages[0];
       const latencySeconds = round(secondsBetween(lastIncoming, firstOutgoing), 3);
@@ -2516,7 +2524,9 @@ function responsesFor(bursts, corpusRevision, contactId) {
         incomingQuestions,
         latencySeconds,
         explicitReplyCount,
-        tags: responseTags(incoming.messages, outgoing.messages, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount)
+        replyEligibleCount,
+        replyUnavailableCount,
+        tags: responseTags(incoming.messages, outgoing.messages, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount, replyUnavailableCount)
       }));
     }
   }
@@ -2574,7 +2584,9 @@ function tempoMetrics(messages, responses) {
   const latencies = responses.map((response) => response.latencySeconds);
   const bundles = responses.map((response) => response.outgoingCount);
   const outgoingText = messages.filter(({ message }) => message.retractedAt === null && message.direction === "outgoing" && message.kind === "text" && message.body !== null);
-  const explicitReplies = outgoingText.filter(({ message }) => message.replyToSourceGuid !== null).length;
+  const replyEligible = outgoingText.filter(({ message }) => message.replyState !== "unavailable");
+  const explicitReplies = replyEligible.filter(({ message }) => message.replyState === "explicit").length;
+  const replyUnavailable = outgoingText.length - replyEligible.length;
   return Object.freeze({
     responseEpisodes: responses.length,
     responseLatencySeconds: Object.freeze({
@@ -2591,7 +2603,9 @@ function tempoMetrics(messages, responses) {
       multiRatio: ratio(bundles.filter((value) => value > 1).length, bundles.length)
     }),
     explicitReplyMessages: explicitReplies,
-    explicitReplyRatio: ratio(explicitReplies, outgoingText.length),
+    explicitReplyEligibleMessages: replyEligible.length,
+    explicitReplyUnavailableMessages: replyUnavailable,
+    explicitReplyRatio: replyEligible.length === 0 ? null : ratio(explicitReplies, replyEligible.length),
     multiIncomingEpisodes: responses.filter((response) => response.incomingCount > 1).length,
     multiQuestionEpisodes: responses.filter((response) => response.incomingQuestions > 1).length
   });
@@ -2738,7 +2752,7 @@ function studyMessages(response, byId, maximumTextBytes, maximumMessagesPerDirec
       sourceBodyBytes,
       emittedBodyBytes,
       bodyTruncated: emittedBodyBytes < sourceBodyBytes,
-      explicitReply: message.replyToSourceGuid !== null
+      explicitReply: message.replyState === "unavailable" ? null : message.replyState === "explicit"
     });
   }));
   const eligibleRows = [...incomingText, ...outgoingText];
@@ -2772,7 +2786,7 @@ function responseSignature(response) {
     response.incomingCount > 1 ? "multi-in" : "single-in",
     response.outgoingCount > 1 ? "multi-out" : "single-out",
     response.incomingQuestions > 1 ? "multi-q" : response.incomingQuestions === 1 ? "one-q" : "no-q",
-    response.explicitReplyCount > 0 ? "reply" : "no-reply",
+    response.explicitReplyCount > 0 ? "reply" : response.replyUnavailableCount > 0 ? "reply-unknown" : "no-reply",
     latency,
     length
   ].join(":");
@@ -2900,6 +2914,8 @@ function aggregateStudyMetrics(metrics) {
         multiRatio: metrics.tempo.outgoingMessagesPerResponse.multiRatio
       }),
       explicitReplyMessages: metrics.tempo.explicitReplyMessages,
+      explicitReplyEligibleMessages: metrics.tempo.explicitReplyEligibleMessages,
+      explicitReplyUnavailableMessages: metrics.tempo.explicitReplyUnavailableMessages,
       explicitReplyRatio: metrics.tempo.explicitReplyRatio,
       multiIncomingEpisodes: metrics.tempo.multiIncomingEpisodes,
       multiQuestionEpisodes: metrics.tempo.multiQuestionEpisodes
@@ -3051,7 +3067,9 @@ function buildEvaluationPackets(messages, metrics, options) {
         bubbles: outgoing.length,
         characters: outgoing.reduce((total, message) => total + characterCount(message.body), 0),
         words: outgoing.reduce((total, message) => total + wordCount(message.body), 0),
-        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply).length
+        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply === true).length,
+        explicitReplyEligibleMessages: outgoing.filter(({ explicitReply }) => explicitReply !== null).length,
+        explicitReplyUnavailableMessages: outgoing.filter(({ explicitReply }) => explicitReply === null).length
       })
     });
   }));
@@ -3759,7 +3777,7 @@ import {
   lstatSync as lstatSync3,
   openSync
 } from "fs";
-var STORE_SCHEMA_VERSION = 3;
+var STORE_SCHEMA_VERSION = 4;
 var PERSON_SCOPE_PREFIX = "person_";
 var IMESSAGE_SOURCE_ID = "source_imessage_local";
 var SCHEMA = `
@@ -3770,7 +3788,8 @@ var SCHEMA = `
   ) STRICT;
   CREATE TABLE IF NOT EXISTS corpus_sources (
     id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle', 'x-archive')),
+    kind_v4 TEXT CHECK (kind_v4 IN ('imessage', 'bundle', 'x-archive')),
     provider TEXT NOT NULL,
     network TEXT,
     account_id TEXT,
@@ -3815,6 +3834,7 @@ var SCHEMA = `
     body_source TEXT NOT NULL CHECK (body_source IN ('text', 'attributed-body', 'unavailable')),
     kind TEXT NOT NULL CHECK (kind IN ('text', 'attachment', 'reaction', 'system', 'unknown')),
     reply_to_source_guid TEXT,
+    reply_state TEXT NOT NULL CHECK (reply_state IN ('explicit','none','unavailable')),
     edited_at TEXT,
     retracted_at TEXT,
     service TEXT,
@@ -3872,6 +3892,60 @@ var SCHEMA = `
     suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
     PRIMARY KEY (source_id, kind, local_id)
   ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_equivalences (
+    duplicate_conversation_id TEXT PRIMARY KEY
+      REFERENCES conversations(id) ON DELETE CASCADE,
+    preferred_conversation_id TEXT NOT NULL
+      REFERENCES conversations(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    CHECK (duplicate_conversation_id <> preferred_conversation_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_equivalences_preferred
+    ON conversation_equivalences(preferred_conversation_id,duplicate_conversation_id);
+  CREATE TABLE IF NOT EXISTS message_equivalences (
+    duplicate_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    preferred_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    UNIQUE (preferred_message_id),
+    CHECK (duplicate_message_id <> preferred_message_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_equivalences_sources
+    ON message_equivalences(duplicate_source_id,preferred_source_id);
+  CREATE TABLE IF NOT EXISTS reaction_equivalences (
+    duplicate_reaction_id TEXT PRIMARY KEY
+      REFERENCES corpus_reaction_facts(id) ON DELETE CASCADE,
+    preferred_reaction_id TEXT NOT NULL
+      REFERENCES corpus_reaction_facts(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    UNIQUE (preferred_reaction_id),
+    CHECK (duplicate_reaction_id <> preferred_reaction_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS reaction_equivalences_sources
+    ON reaction_equivalences(duplicate_source_id,preferred_source_id);
   CREATE TABLE IF NOT EXISTS study_packets (
     sha256 TEXT PRIMARY KEY,
     contact_id TEXT NOT NULL,
@@ -3931,7 +4005,8 @@ var SCHEMA = `
 var SOURCE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS corpus_sources (
     id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle')),
+    kind TEXT NOT NULL CHECK (kind IN ('imessage', 'bundle', 'x-archive')),
+    kind_v4 TEXT CHECK (kind_v4 IN ('imessage', 'bundle', 'x-archive')),
     provider TEXT NOT NULL,
     network TEXT,
     account_id TEXT,
@@ -4003,6 +4078,60 @@ var SOURCE_SCHEMA = `
     suppressed INTEGER NOT NULL CHECK (suppressed IN (0,1)),
     PRIMARY KEY (source_id, kind, local_id)
   ) WITHOUT ROWID, STRICT;
+  CREATE TABLE IF NOT EXISTS conversation_equivalences (
+    duplicate_conversation_id TEXT PRIMARY KEY
+      REFERENCES conversations(id) ON DELETE CASCADE,
+    preferred_conversation_id TEXT NOT NULL
+      REFERENCES conversations(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    CHECK (duplicate_conversation_id <> preferred_conversation_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS conversation_equivalences_preferred
+    ON conversation_equivalences(preferred_conversation_id,duplicate_conversation_id);
+  CREATE TABLE IF NOT EXISTS message_equivalences (
+    duplicate_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    preferred_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    UNIQUE (preferred_message_id),
+    CHECK (duplicate_message_id <> preferred_message_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS message_equivalences_sources
+    ON message_equivalences(duplicate_source_id,preferred_source_id);
+  CREATE TABLE IF NOT EXISTS reaction_equivalences (
+    duplicate_reaction_id TEXT PRIMARY KEY
+      REFERENCES corpus_reaction_facts(id) ON DELETE CASCADE,
+    preferred_reaction_id TEXT NOT NULL
+      REFERENCES corpus_reaction_facts(id) ON DELETE RESTRICT,
+    duplicate_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE CASCADE,
+    preferred_source_id TEXT NOT NULL
+      REFERENCES corpus_sources(id) ON DELETE RESTRICT,
+    basis TEXT NOT NULL CHECK (basis='exact-message-overlap'),
+    plan_evidence_sha256 TEXT NOT NULL,
+    match_sha256 TEXT NOT NULL,
+    established_at TEXT NOT NULL,
+    UNIQUE (preferred_reaction_id),
+    CHECK (duplicate_reaction_id <> preferred_reaction_id),
+    CHECK (duplicate_source_id <> preferred_source_id)
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS reaction_equivalences_sources
+    ON reaction_equivalences(duplicate_source_id,preferred_source_id);
 `;
 var CONTACT_SCOPE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS conversation_contact_scopes (
@@ -4196,6 +4325,85 @@ function evidenceWindow(value, label) {
 function personScopeId(addressBookContactId) {
   return `${PERSON_SCOPE_PREFIX}${addressBookContactId}`;
 }
+var ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
+  SELECT 1 FROM message_equivalences equivalence
+  JOIN message_provenance preferred_provenance
+    ON preferred_provenance.message_id=equivalence.preferred_message_id
+  JOIN messages preferred_message
+    ON preferred_message.id=equivalence.preferred_message_id
+  WHERE equivalence.duplicate_message_id=message.id
+    AND preferred_message.sent_at=message.sent_at
+    AND preferred_message.direction=message.direction
+    AND preferred_message.body IS message.body
+    AND preferred_message.kind=message.kind
+    AND preferred_message.attachment_count=message.attachment_count
+    AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions preferred_suppression
+      WHERE preferred_suppression.source_id=preferred_provenance.source_id
+        AND preferred_suppression.local_id=equivalence.preferred_message_id
+        AND preferred_suppression.kind IN ('message','reaction','reaction-timeline')
+        AND preferred_suppression.suppressed=1
+    )
+)`;
+var ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
+  SELECT 1 FROM reaction_equivalences equivalence
+  JOIN corpus_reaction_facts preferred_reaction
+    ON preferred_reaction.id=equivalence.preferred_reaction_id
+  WHERE equivalence.duplicate_reaction_id=reaction.id
+    AND preferred_reaction.state='active'
+    AND preferred_reaction.body=reaction.body
+    AND preferred_reaction.direction IS reaction.direction
+    AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions preferred_suppression
+      WHERE preferred_suppression.source_id=preferred_reaction.source_id
+        AND preferred_suppression.kind='reaction'
+        AND preferred_suppression.local_id=preferred_reaction.id
+        AND preferred_suppression.suppressed=1
+    )
+)`;
+function canonicalConversationId(database, conversationId) {
+  return get(database, `
+    SELECT preferred_conversation_id FROM conversation_equivalences
+    WHERE duplicate_conversation_id=?
+  `, conversationId)?.preferred_conversation_id ?? conversationId;
+}
+function equivalentConversationIds(database, conversationId) {
+  const canonicalId = canonicalConversationId(database, conversationId);
+  const rows = all(database, `
+    SELECT ? AS id
+    UNION ALL
+    SELECT duplicate_conversation_id AS id FROM conversation_equivalences
+    WHERE preferred_conversation_id=?
+    ORDER BY id
+  `, canonicalId, canonicalId);
+  if (rows.length > 1e4) {
+    throw new CliError("invalid-data", `Conversation equivalence group ${canonicalId} is oversized`);
+  }
+  return Object.freeze(rows.map((row) => row.id));
+}
+function idPlaceholders(ids) {
+  if (ids.length < 1 || ids.length > 1e4) {
+    throw new CliError("internal", "Analysis scope has an invalid conversation count");
+  }
+  return ids.map(() => "?").join(",");
+}
+function activeConversationIds(database, ids) {
+  const placeholders = idPlaceholders(ids);
+  return Object.freeze(all(database, `
+    SELECT conversation.id
+    FROM conversations conversation
+    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+    WHERE conversation.id IN (${placeholders})
+      AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
+    ORDER BY conversation.id
+  `, ...ids).map((row) => row.id));
+}
 function tableExists(database, name) {
   return get(database, "SELECT 1 AS value FROM sqlite_master WHERE type='table' AND name=?", name) !== null;
 }
@@ -4210,24 +4418,24 @@ function personScope(database, addressBookContactId) {
     SELECT association.conversation_id
     FROM conversation_contact_scopes association
     JOIN conversations conversation ON conversation.id=association.conversation_id
-    JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
     WHERE association.contact_id=? AND conversation.is_group=0
-      AND NOT EXISTS (
-        SELECT 1 FROM corpus_source_suppressions suppression
-        WHERE suppression.source_id=ownership.source_id
-          AND suppression.kind='conversation'
-          AND suppression.local_id=conversation.id
-          AND suppression.suppressed=1
-      )
     ORDER BY association.conversation_id
   `, addressBookContactId);
-  if (rows.length === 0)
+  const expanded = new Set;
+  for (const row of rows) {
+    for (const id of equivalentConversationIds(database, row.conversation_id))
+      expanded.add(id);
+  }
+  if (expanded.size === 0)
+    return null;
+  const conversationIds = activeConversationIds(database, [...expanded]);
+  if (conversationIds.length === 0)
     return null;
   return Object.freeze({
     id: personScopeId(addressBookContactId),
     kind: "person",
     addressBookContactId,
-    conversationIds: Object.freeze(rows.map((row) => row.conversation_id))
+    conversationIds
   });
 }
 function analysisScope(database, contactId) {
@@ -4237,27 +4445,28 @@ function analysisScope(database, contactId) {
       return personScope(database, addressBookContactId);
     }
   }
-  const conversation = get(database, `SELECT conversation.id FROM conversations conversation
-      JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
-      WHERE conversation.id=? AND NOT EXISTS (
-        SELECT 1 FROM corpus_source_suppressions suppression
-        WHERE suppression.source_id=ownership.source_id
-          AND suppression.kind='conversation'
-          AND suppression.local_id=conversation.id
-          AND suppression.suppressed=1
-      )`, contactId);
+  const conversation = get(database, "SELECT id FROM conversations WHERE id=?", contactId);
   if (conversation === null)
     return null;
-  const matched = get(database, `
-    SELECT contact_id FROM conversation_contact_scopes WHERE conversation_id=?
-  `, contactId);
-  if (matched !== null)
-    return personScope(database, matched.contact_id);
+  const canonicalId = canonicalConversationId(database, contactId);
+  const conversationIds = activeConversationIds(database, equivalentConversationIds(database, canonicalId));
+  if (conversationIds.length === 0)
+    return null;
+  const placeholders = idPlaceholders(conversationIds);
+  const matches = all(database, `
+    SELECT DISTINCT contact_id FROM conversation_contact_scopes
+    WHERE conversation_id IN (${placeholders}) ORDER BY contact_id
+  `, ...conversationIds);
+  if (matches.length > 1) {
+    throw new CliError("invalid-data", `Equivalent conversation ${canonicalId} spans multiple contacts`);
+  }
+  if (matches[0] !== undefined)
+    return personScope(database, matches[0].contact_id);
   return Object.freeze({
-    id: contactId,
+    id: canonicalId,
     kind: "conversation",
     addressBookContactId: null,
-    conversationIds: Object.freeze([contactId])
+    conversationIds
   });
 }
 function messageRowsForScope(database, scope, exactConversationId, window = UNBOUNDED_EVIDENCE_WINDOW) {
@@ -4273,34 +4482,15 @@ function messageRowsForScope(database, scope, exactConversationId, window = UNBO
             AND suppression.local_id=message.id
             AND suppression.kind IN ('message','reaction','reaction-timeline')
             AND suppression.suppressed=1
-        )
+        ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
       ORDER BY message.sent_at,message.source_row_id,message.id
     `, exactConversationId, window.after, window.after, window.before, window.before);
   }
-  if (scope.kind === "person") {
-    return all(database, `
-      SELECT message.*
-      FROM messages message
-      JOIN message_provenance provenance ON provenance.message_id=message.id
-      JOIN conversation_contact_scopes association
-        ON association.conversation_id=message.conversation_id
-      WHERE association.contact_id=?
-        AND (? IS NULL OR message.sent_at>=?)
-        AND (? IS NULL OR message.sent_at<?)
-        AND NOT EXISTS (
-          SELECT 1 FROM corpus_source_suppressions suppression
-          WHERE suppression.source_id=provenance.source_id
-            AND suppression.local_id=message.id
-            AND suppression.kind IN ('message','reaction','reaction-timeline')
-            AND suppression.suppressed=1
-        )
-      ORDER BY message.sent_at,message.source_row_id,message.id
-    `, scope.addressBookContactId, window.after, window.after, window.before, window.before);
-  }
+  const placeholders = idPlaceholders(scope.conversationIds);
   return all(database, `
     SELECT message.* FROM messages message
     JOIN message_provenance provenance ON provenance.message_id=message.id
-    WHERE message.conversation_id=?
+    WHERE message.conversation_id IN (${placeholders})
       AND (? IS NULL OR message.sent_at>=?) AND (? IS NULL OR message.sent_at<?)
       AND NOT EXISTS (
         SELECT 1 FROM corpus_source_suppressions suppression
@@ -4308,9 +4498,9 @@ function messageRowsForScope(database, scope, exactConversationId, window = UNBO
           AND suppression.local_id=message.id
           AND suppression.kind IN ('message','reaction','reaction-timeline')
           AND suppression.suppressed=1
-      )
+      ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
     ORDER BY message.sent_at,message.source_row_id,message.id
-  `, scope.conversationIds[0], window.after, window.after, window.before, window.before);
+  `, ...scope.conversationIds, window.after, window.after, window.before, window.before);
 }
 function corpusMessage(row) {
   return {
@@ -4324,6 +4514,7 @@ function corpusMessage(row) {
     bodySource: row.body_source,
     kind: row.kind,
     replyToSourceGuid: row.reply_to_source_guid,
+    replyState: row.reply_state,
     editedAt: row.edited_at,
     retractedAt: row.retracted_at,
     service: row.service,
@@ -4341,13 +4532,11 @@ function reactionFactsForScope(database, scope, window = UNBOUNDED_EVIDENCE_WIND
       AND suppression.local_id=reaction.id
       AND suppression.suppressed=1
   )`;
-  const rows = scope.kind === "person" ? all(database, `${select}
-      JOIN conversation_contact_scopes association
-        ON association.conversation_id=reaction.conversation_id
-      WHERE association.contact_id=? AND reaction.state='active' AND ${suppression}
-      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.addressBookContactId) : all(database, `${select}
-      WHERE reaction.conversation_id=? AND reaction.state='active' AND ${suppression}
-      ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, scope.conversationIds[0]);
+  const placeholders = idPlaceholders(scope.conversationIds);
+  const rows = all(database, `${select}
+    WHERE reaction.conversation_id IN (${placeholders}) AND reaction.state='active'
+      AND ${suppression} AND ${ACTIVE_REACTION_EQUIVALENCE_EXCLUSION}
+    ORDER BY reaction.reacted_at IS NULL,reaction.reacted_at,reaction.id`, ...scope.conversationIds);
   return rows.filter((row) => row.reacted_at === null ? window.after === null && window.before === null : (window.after === null || row.reacted_at >= window.after) && (window.before === null || row.reacted_at < window.before)).map((row) => ({
     id: row.id,
     externalId: row.external_id,
@@ -4396,27 +4585,17 @@ function scopeMessageCounts(database, scope) {
     max(message.sent_at) AS last_message_at,count(message.id) AS message_count,
     coalesce(sum(CASE WHEN message.direction='incoming' THEN 1 ELSE 0 END),0) AS incoming_count,
     coalesce(sum(CASE WHEN message.direction='outgoing' THEN 1 ELSE 0 END),0) AS outgoing_count`;
-  const row = scope.kind === "person" ? get(database, `${select}
-      FROM messages message
-      JOIN message_provenance provenance ON provenance.message_id=message.id
-      JOIN conversation_contact_scopes association
-        ON association.conversation_id=message.conversation_id
-      WHERE association.contact_id=? AND NOT EXISTS (
-        SELECT 1 FROM corpus_source_suppressions suppression
-        WHERE suppression.source_id=provenance.source_id
-          AND suppression.local_id=message.id
-          AND suppression.kind IN ('message','reaction','reaction-timeline')
-          AND suppression.suppressed=1
-      )`, scope.addressBookContactId) : get(database, `${select}
-      FROM messages message
-      JOIN message_provenance provenance ON provenance.message_id=message.id
-      WHERE message.conversation_id=? AND NOT EXISTS (
-        SELECT 1 FROM corpus_source_suppressions suppression
-        WHERE suppression.source_id=provenance.source_id
-          AND suppression.local_id=message.id
-          AND suppression.kind IN ('message','reaction','reaction-timeline')
-          AND suppression.suppressed=1
-      )`, scope.conversationIds[0]);
+  const placeholders = idPlaceholders(scope.conversationIds);
+  const row = get(database, `${select}
+    FROM messages message
+    JOIN message_provenance provenance ON provenance.message_id=message.id
+    WHERE message.conversation_id IN (${placeholders}) AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions suppression
+      WHERE suppression.source_id=provenance.source_id
+        AND suppression.local_id=message.id
+        AND suppression.kind IN ('message','reaction','reaction-timeline')
+        AND suppression.suppressed=1
+    ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}`, ...scope.conversationIds);
   return {
     firstMessageAt: row?.first_message_at ?? null,
     lastMessageAt: row?.last_message_at ?? null,
@@ -4430,6 +4609,16 @@ function addColumn(database, table, definition) {
   if (name !== undefined && !tableColumns3(database, table).has(name)) {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
   }
+}
+function migrateStoreV4Columns(database) {
+  addColumn(database, "messages", "reply_state TEXT NOT NULL DEFAULT 'none' CHECK (reply_state IN ('explicit','none','unavailable'))");
+  database.exec(`
+    UPDATE messages SET reply_state=CASE
+      WHEN reply_to_source_guid IS NULL THEN 'none' ELSE 'explicit' END
+    WHERE reply_state<>'unavailable'
+  `);
+  addColumn(database, "corpus_sources", "kind_v4 TEXT CHECK (kind_v4 IN ('imessage','bundle','x-archive'))");
+  database.exec("UPDATE corpus_sources SET kind_v4=kind WHERE kind_v4 IS NULL");
 }
 function backfillLegacyEvidence(database) {
   const currentCorpusRevision = scalarText(database, "corpus_revision");
@@ -4472,10 +4661,10 @@ function backfillLegacySource(database) {
   const ingestedAt = scalarText(database, "ingested_at") ?? "1970-01-01T00:00:00.000Z";
   database.query(`
     INSERT INTO corpus_sources(
-      id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+      id,kind,kind_v4,provider,network,account_id,external_id,input_revision,revision,generated_at,
       producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `).run(IMESSAGE_SOURCE_ID, "imessage", "apple", null, null, "local-imessage", revision, revision, null, canonicalJson({ id: "message-like-me", version: "legacy" }), canonicalJson({ history: "complete-current-local", observedFrom: null, observedTo: null }), null, identity, warnings, ingestedAt);
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(IMESSAGE_SOURCE_ID, "imessage", "imessage", "apple", null, null, "local-imessage", revision, revision, null, canonicalJson({ id: "message-like-me", version: "legacy" }), canonicalJson({ history: "complete-current-local", observedFrom: null, observedTo: null }), null, identity, warnings, ingestedAt);
   database.exec(`
     INSERT INTO conversation_sources(conversation_id,source_id,external_id,metadata_json)
     SELECT id,'${IMESSAGE_SOURCE_ID}',source_key,'{}' FROM conversations;
@@ -4511,6 +4700,7 @@ function initializeStoreSchema(database) {
   }
   database.exec(SOURCE_SCHEMA);
   transaction(database, () => {
+    migrateStoreV4Columns(database);
     database.exec(CONTACT_SCOPE_SCHEMA);
     database.exec(`
       INSERT OR IGNORE INTO conversation_contact_scopes(
@@ -4602,6 +4792,19 @@ function rebuildConversationLabels(database, hmacKey3) {
     insertLabel.run(conversation.id, contact.id, contact.private_label, contact.normalized_label, contact.label_basis, contact.contacts_revision);
     enriched += 1;
   }
+  const conflicting = get(database, `
+    SELECT equivalence.preferred_conversation_id
+    FROM conversation_equivalences equivalence
+    JOIN conversation_contact_scopes duplicate_scope
+      ON duplicate_scope.conversation_id=equivalence.duplicate_conversation_id
+    JOIN conversation_contact_scopes preferred_scope
+      ON preferred_scope.conversation_id=equivalence.preferred_conversation_id
+    WHERE duplicate_scope.contact_id<>preferred_scope.contact_id
+    ORDER BY equivalence.preferred_conversation_id LIMIT 1
+  `);
+  if (conflicting !== null) {
+    throw new CliError("conflict", `Equivalent conversation ${conflicting.preferred_conversation_id} resolves to multiple contacts`);
+  }
   return {
     directConversations: conversations.length,
     eligibleConversations,
@@ -4664,7 +4867,8 @@ function hardenDatabaseFiles(path) {
   }
 }
 function globalCorpusRevision(database) {
-  const sources = all(database, "SELECT id,kind,input_revision,revision FROM corpus_sources ORDER BY id");
+  const sources = all(database, `SELECT id,coalesce(kind_v4,kind) AS kind,input_revision,revision
+    FROM corpus_sources ORDER BY id`);
   if (sources.length === 0)
     return null;
   if (sources.length === 1 && sources[0].id === IMESSAGE_SOURCE_ID && sources[0].kind === "imessage")
@@ -4682,7 +4886,7 @@ function sourceStateRevision(database, sourceId) {
     hash.update(`${kind.length}:${kind}${encoded.length}:`, "utf8").update(encoded, "utf8");
   };
   const source = get(database, `
-    SELECT kind,provider,network,account_id,external_id,producer_json,
+    SELECT coalesce(kind_v4,kind) AS kind,provider,network,account_id,external_id,producer_json,
       coverage_json,warnings_json
     FROM corpus_sources WHERE id=?
   `, sourceId);
@@ -4703,7 +4907,8 @@ function sourceStateRevision(database, sourceId) {
   for (const row of database.query(`
     SELECT message.id,message.source_row_id,message.source_guid,message.conversation_id,
       message.sent_at,message.direction,message.body,message.body_source,message.kind,
-      message.reply_to_source_guid,message.edited_at,message.retracted_at,message.service,
+      message.reply_to_source_guid,message.reply_state,
+      message.edited_at,message.retracted_at,message.service,
       message.attachment_count,provenance.external_id,
       provenance.reply_to_external_id,provenance.attachments_json
     FROM message_provenance provenance
@@ -4722,6 +4927,28 @@ function sourceStateRevision(database, sourceId) {
     WHERE source_id=? AND suppressed=1 ORDER BY kind,local_id
   `).iterate(sourceId))
     append("suppression", row);
+  for (const row of database.query(`
+    SELECT duplicate_conversation_id,preferred_conversation_id,basis,
+      plan_evidence_sha256,match_sha256
+    FROM conversation_equivalences WHERE duplicate_source_id=?
+    ORDER BY duplicate_conversation_id
+  `).iterate(sourceId))
+    append("conversation-equivalence", row);
+  for (const row of database.query(`
+    SELECT duplicate_message_id,preferred_message_id,basis,
+      plan_evidence_sha256,match_sha256
+    FROM message_equivalences WHERE duplicate_source_id=?
+    ORDER BY duplicate_message_id
+  `).iterate(sourceId))
+    append("message-equivalence", row);
+  for (const row of database.query(`
+    SELECT duplicate_reaction_id,preferred_reaction_id,duplicate_source_id,
+      preferred_source_id,basis,plan_evidence_sha256,match_sha256
+    FROM reaction_equivalences
+    WHERE duplicate_source_id=? OR preferred_source_id=?
+    ORDER BY duplicate_reaction_id
+  `).iterate(sourceId, sourceId))
+    append("reaction-equivalence", row);
   return hash.digest("hex");
 }
 function compareCodeUnits2(left, right) {
@@ -4784,11 +5011,11 @@ function setCorpusRevision(database) {
   return revision;
 }
 function validSourceDescriptor(source) {
-  if (source.id !== IMESSAGE_SOURCE_ID && !/^source_[a-f0-9]{64}$/u.test(source.id) || source.kind !== "imessage" && source.kind !== "bundle" || source.provider.length < 1 || Buffer.byteLength(source.provider, "utf8") > 256 || !/^[a-f0-9]{64}$/u.test(source.revision) || source.externalId.length < 1 || Buffer.byteLength(source.externalId, "utf8") > 4096 || source.warnings.length > 130)
+  if (source.id !== IMESSAGE_SOURCE_ID && !/^source_[a-f0-9]{64}$/u.test(source.id) || source.kind !== "imessage" && source.kind !== "bundle" && source.kind !== "x-archive" || source.provider.length < 1 || Buffer.byteLength(source.provider, "utf8") > 256 || !/^[a-f0-9]{64}$/u.test(source.revision) || source.externalId.length < 1 || Buffer.byteLength(source.externalId, "utf8") > 4096 || source.warnings.length > 130)
     throw new CliError("invalid-data", `Corpus source ${source.id} is invalid`);
   canonicalTimestampOrNull(source.generatedAt, `Corpus source ${source.id} generatedAt`);
-  if (source.kind === "bundle" && source.generatedAt === null) {
-    throw new CliError("invalid-data", `Bundle source ${source.id} requires generatedAt`);
+  if (source.kind !== "imessage" && source.generatedAt === null) {
+    throw new CliError("invalid-data", `${source.kind} source ${source.id} requires generatedAt`);
   }
   canonicalTimestampOrNull(source.coverage.observedFrom, `Corpus source ${source.id} observedFrom`);
   canonicalTimestampOrNull(source.coverage.observedTo, `Corpus source ${source.id} observedTo`);
@@ -4830,10 +5057,17 @@ function validateSourceSnapshot(snapshot) {
   if (messageIds.size !== snapshot.messages.length) {
     throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} repeats message IDs`);
   }
+  const messageRows2 = new Set;
   for (const message of snapshot.messages) {
     if (!conversationIds.has(message.conversationId)) {
       throw new CliError("invalid-data", `Message ${message.id} references an unknown conversation`);
     }
+    const rowCoordinate = `${message.conversationId}\x00${message.sourceRowId}`;
+    if (!Number.isSafeInteger(message.sourceRowId) || message.sourceRowId < 1 || messageRows2.has(rowCoordinate))
+      throw new CliError("invalid-data", `Message ${message.id} has an invalid source row coordinate`);
+    messageRows2.add(rowCoordinate);
+    if (message.replyState === "explicit" !== (message.replyToSourceGuid !== null) || message.replyState !== "explicit" && message.replyState !== "none" && message.replyState !== "unavailable")
+      throw new CliError("invalid-data", `Message ${message.id} has inconsistent reply observability`);
   }
   const messageProvenance = new Map(snapshot.messageProvenance.map((value) => [value.messageId, value]));
   if (messageProvenance.size !== snapshot.messageProvenance.length || [...messageIds].some((id) => !messageProvenance.has(id)))
@@ -4881,6 +5115,200 @@ function validateSourceSnapshot(snapshot) {
       throw new CliError("invalid-data", `Corpus source ${snapshot.source.id} has an invalid deletion`);
     canonicalTimestampOrNull(deletion.deletedAt, `Corpus source ${snapshot.source.id} deletion time`);
   }
+}
+function validateEquivalencePlan(plan, replacedSourceIds) {
+  if (plan.basis !== "exact-message-overlap" || plan.duplicateSourceId === plan.preferredSourceId || !/^source_[a-f0-9]{64}$/u.test(plan.duplicateSourceId) || !/^source_[a-f0-9]{64}$/u.test(plan.preferredSourceId) || !/^[a-f0-9]{64}$/u.test(plan.evidenceSha256) || !replacedSourceIds.has(plan.duplicateSourceId) || plan.conversations.length < 1 || plan.conversations.length > 1e5 || plan.messages.length < 1 || plan.messages.length > 2000000 || (plan.reactions?.length ?? 0) > 2000000)
+    throw new CliError("invalid-data", "Cross-source equivalence plan is invalid or unbounded");
+  const coordinates = (values, duplicateKey, preferredKey, label) => {
+    const duplicates = new Set;
+    const preferred = new Set;
+    for (const value of values) {
+      const duplicateId = value[duplicateKey];
+      const preferredId = value[preferredKey];
+      if (duplicateId === undefined || preferredId === undefined || duplicateId.length < 1 || preferredId.length < 1 || Buffer.byteLength(duplicateId, "utf8") > 4096 || Buffer.byteLength(preferredId, "utf8") > 4096 || duplicateId === preferredId || duplicates.has(duplicateId) || preferred.has(preferredId))
+        throw new CliError("invalid-data", `Cross-source equivalence repeats ${label} coordinates`);
+      duplicates.add(duplicateId);
+      preferred.add(preferredId);
+    }
+    if ([...duplicates].some((id) => preferred.has(id))) {
+      throw new CliError("invalid-data", `Cross-source ${label} equivalence contains a chain`);
+    }
+  };
+  coordinates(plan.conversations, "duplicateConversationId", "preferredConversationId", "conversation");
+  coordinates(plan.messages, "duplicateMessageId", "preferredMessageId", "message");
+  coordinates(plan.reactions ?? [], "duplicateReactionId", "preferredReactionId", "reaction");
+}
+function applyEquivalencePlan(database, plan, establishedAt) {
+  const duplicateSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`, plan.duplicateSourceId);
+  const preferredSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`, plan.preferredSourceId);
+  if (duplicateSource?.kind !== "x-archive" || preferredSource?.kind !== "bundle" || duplicateSource.network !== "x" || preferredSource.network !== "x") {
+    throw new CliError("conflict", "Cross-source equivalence requires an X archive and an existing Beeper X source");
+  }
+  const conversationPairs = new Map(plan.conversations.map((pair) => [pair.duplicateConversationId, pair.preferredConversationId]));
+  const conversationMatchDigests = new Map;
+  const matchedMessages = [];
+  for (const pair of plan.messages) {
+    const message = (id) => get(database, `
+      SELECT message.id,provenance.source_id,message.conversation_id,message.sent_at,
+        message.direction,message.body,message.kind,message.attachment_count
+      FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      WHERE message.id=?
+    `, id);
+    const duplicate = message(pair.duplicateMessageId);
+    const preferred = message(pair.preferredMessageId);
+    if (duplicate === null || preferred === null || duplicate.source_id !== plan.duplicateSourceId || preferred.source_id !== plan.preferredSourceId || conversationPairs.get(duplicate.conversation_id) !== preferred.conversation_id || duplicate.sent_at !== preferred.sent_at || duplicate.direction !== preferred.direction || duplicate.body !== preferred.body || duplicate.kind !== preferred.kind || duplicate.attachment_count !== preferred.attachment_count) {
+      throw new CliError("conflict", `Message ${pair.duplicateMessageId} lacks an exact preferred-source fingerprint`);
+    }
+    const fingerprintCounts = all(database, `
+      SELECT conversation_id,count(*) AS value FROM messages
+      WHERE conversation_id IN (?,?) AND sent_at=? AND direction=? AND body IS ?
+        AND kind=? AND attachment_count=?
+      GROUP BY conversation_id ORDER BY conversation_id
+    `, duplicate.conversation_id, preferred.conversation_id, duplicate.sent_at, duplicate.direction, duplicate.body, duplicate.kind, duplicate.attachment_count);
+    if (fingerprintCounts.length !== 2 || fingerprintCounts.some((row) => row.value !== 1))
+      throw new CliError("conflict", `Message ${pair.duplicateMessageId} has an ambiguous cross-source fingerprint`);
+    const existingDuplicate = get(database, `
+      SELECT preferred_message_id FROM message_equivalences WHERE duplicate_message_id=?
+    `, duplicate.id);
+    const existingPreferred = get(database, `
+      SELECT duplicate_message_id FROM message_equivalences WHERE preferred_message_id=?
+    `, preferred.id);
+    if (existingDuplicate !== null && existingDuplicate.preferred_message_id !== preferred.id || existingPreferred !== null && existingPreferred.duplicate_message_id !== duplicate.id)
+      throw new CliError("conflict", "A message already has a different equivalence coordinate");
+    const matchSha256 = sha256(canonicalJson({
+      schemaVersion: 1,
+      duplicateMessageId: duplicate.id,
+      preferredMessageId: preferred.id,
+      sentAt: duplicate.sent_at,
+      direction: duplicate.direction,
+      body: duplicate.body,
+      kind: duplicate.kind,
+      attachmentCount: duplicate.attachment_count
+    }));
+    const digests = conversationMatchDigests.get(duplicate.conversation_id) ?? [];
+    digests.push(matchSha256);
+    conversationMatchDigests.set(duplicate.conversation_id, digests);
+    matchedMessages.push(Object.freeze({ duplicate, preferred, matchSha256 }));
+  }
+  const matchedConversations = [];
+  for (const pair of plan.conversations) {
+    const rows = all(database, `
+      SELECT conversation.id,ownership.source_id,conversation.is_group,association.contact_id
+      FROM conversations conversation
+      JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
+      LEFT JOIN conversation_contact_scopes association
+        ON association.conversation_id=conversation.id
+      WHERE conversation.id IN (?,?) ORDER BY conversation.id
+    `, pair.duplicateConversationId, pair.preferredConversationId);
+    const duplicate = rows.find((row) => row.id === pair.duplicateConversationId);
+    const preferred = rows.find((row) => row.id === pair.preferredConversationId);
+    const digests = conversationMatchDigests.get(pair.duplicateConversationId) ?? [];
+    if (duplicate === undefined || preferred === undefined || duplicate.source_id !== plan.duplicateSourceId || preferred.source_id !== plan.preferredSourceId || duplicate.is_group !== preferred.is_group || duplicate.is_group !== 0 || digests.length < 1 || duplicate.contact_id !== null && preferred.contact_id !== null && duplicate.contact_id !== preferred.contact_id)
+      throw new CliError("conflict", "Conversation equivalence requires exact direct-peer identity and message overlap");
+    const existingDuplicate = get(database, `
+      SELECT preferred_conversation_id FROM conversation_equivalences
+      WHERE duplicate_conversation_id=?
+    `, duplicate.id);
+    const isExistingPreferred = get(database, `
+      SELECT 1 AS value FROM conversation_equivalences WHERE duplicate_conversation_id=?
+    `, preferred.id);
+    const isExistingDuplicate = get(database, `
+      SELECT 1 AS value FROM conversation_equivalences WHERE preferred_conversation_id=?
+    `, duplicate.id);
+    if (existingDuplicate !== null && existingDuplicate.preferred_conversation_id !== preferred.id || isExistingPreferred !== null || isExistingDuplicate !== null)
+      throw new CliError("conflict", "Conversation equivalence would form a chain");
+    matchedConversations.push(Object.freeze({
+      duplicateId: duplicate.id,
+      preferredId: preferred.id,
+      matchSha256: sha256(canonicalJson({
+        schemaVersion: 1,
+        duplicateConversationId: duplicate.id,
+        preferredConversationId: preferred.id,
+        messageMatches: digests.sort()
+      }))
+    }));
+  }
+  const matchedReactions = [];
+  for (const pair of plan.reactions ?? []) {
+    const rows = all(database, `SELECT id,source_id,target_external_id,direction,body,state
+      FROM corpus_reaction_facts WHERE id IN (?,?) ORDER BY id`, pair.duplicateReactionId, pair.preferredReactionId);
+    const duplicate = rows.find((row) => row.id === pair.duplicateReactionId);
+    const preferred = rows.find((row) => row.id === pair.preferredReactionId);
+    if (duplicate === undefined || preferred === undefined || new Set([duplicate.source_id, preferred.source_id]).size !== 2 || ![duplicate.source_id, preferred.source_id].includes(plan.duplicateSourceId) || ![duplicate.source_id, preferred.source_id].includes(plan.preferredSourceId) || duplicate.direction !== preferred.direction || duplicate.body !== preferred.body || duplicate.state !== "active" || preferred.state !== "active")
+      throw new CliError("conflict", "Reaction equivalence lacks exact cross-source evidence");
+    const duplicateTarget = get(database, `
+      SELECT message_id FROM message_provenance WHERE source_id=? AND external_id=?
+    `, duplicate.source_id, duplicate.target_external_id)?.message_id;
+    const preferredTarget = get(database, `
+      SELECT message_id FROM message_provenance WHERE source_id=? AND external_id=?
+    `, preferred.source_id, preferred.target_external_id)?.message_id;
+    const targetEquivalent = duplicateTarget !== undefined && preferredTarget !== undefined && (matchedMessages.some(({ duplicate: messageDuplicate, preferred: messagePreferred }) => messageDuplicate.id === duplicateTarget && messagePreferred.id === preferredTarget || messageDuplicate.id === preferredTarget && messagePreferred.id === duplicateTarget) || get(database, `SELECT 1 AS value FROM message_equivalences
+          WHERE (duplicate_message_id=? AND preferred_message_id=?)
+             OR (duplicate_message_id=? AND preferred_message_id=?)`, duplicateTarget, preferredTarget, preferredTarget, duplicateTarget) !== null);
+    if (!targetEquivalent) {
+      throw new CliError("conflict", "Reaction equivalence targets non-equivalent messages");
+    }
+    const duplicateMatches = get(database, `
+      SELECT count(*) AS value FROM corpus_reaction_facts
+      WHERE source_id=? AND target_external_id=? AND direction IS ? AND body=? AND state='active'
+    `, duplicate.source_id, duplicate.target_external_id, duplicate.direction, duplicate.body)?.value ?? 0;
+    const preferredMatches = get(database, `
+      SELECT count(*) AS value FROM corpus_reaction_facts
+      WHERE source_id=? AND target_external_id=? AND direction IS ? AND body=? AND state='active'
+    `, preferred.source_id, preferred.target_external_id, preferred.direction, preferred.body)?.value ?? 0;
+    if (duplicateMatches !== 1 || preferredMatches !== 1) {
+      throw new CliError("conflict", "Reaction equivalence has ambiguous actor evidence");
+    }
+    matchedReactions.push(Object.freeze({
+      duplicateId: duplicate.id,
+      preferredId: preferred.id,
+      duplicateSourceId: duplicate.source_id,
+      preferredSourceId: preferred.source_id,
+      matchSha256: sha256(canonicalJson({
+        schemaVersion: 1,
+        duplicateReactionId: duplicate.id,
+        preferredReactionId: preferred.id,
+        duplicateTarget,
+        preferredTarget,
+        direction: duplicate.direction,
+        body: duplicate.body
+      }))
+    }));
+  }
+  const upsertConversation = database.query(`
+    INSERT INTO conversation_equivalences(
+      duplicate_conversation_id,preferred_conversation_id,duplicate_source_id,
+      preferred_source_id,basis,plan_evidence_sha256,match_sha256,established_at
+    ) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(duplicate_conversation_id) DO UPDATE SET
+      plan_evidence_sha256=excluded.plan_evidence_sha256,
+      match_sha256=excluded.match_sha256,established_at=excluded.established_at
+  `);
+  for (const value of matchedConversations)
+    upsertConversation.run(value.duplicateId, value.preferredId, plan.duplicateSourceId, plan.preferredSourceId, plan.basis, plan.evidenceSha256, value.matchSha256, establishedAt);
+  const upsertMessage = database.query(`
+    INSERT INTO message_equivalences(
+      duplicate_message_id,preferred_message_id,duplicate_source_id,
+      preferred_source_id,basis,plan_evidence_sha256,match_sha256,established_at
+    ) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(duplicate_message_id) DO UPDATE SET
+      plan_evidence_sha256=excluded.plan_evidence_sha256,
+      match_sha256=excluded.match_sha256,established_at=excluded.established_at
+  `);
+  for (const value of matchedMessages)
+    upsertMessage.run(value.duplicate.id, value.preferred.id, plan.duplicateSourceId, plan.preferredSourceId, plan.basis, plan.evidenceSha256, value.matchSha256, establishedAt);
+  const upsertReaction = database.query(`
+    INSERT INTO reaction_equivalences(
+      duplicate_reaction_id,preferred_reaction_id,duplicate_source_id,
+      preferred_source_id,basis,plan_evidence_sha256,match_sha256,established_at
+    ) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(duplicate_reaction_id) DO UPDATE SET
+      plan_evidence_sha256=excluded.plan_evidence_sha256,
+      match_sha256=excluded.match_sha256,established_at=excluded.established_at
+  `);
+  for (const value of matchedReactions)
+    upsertReaction.run(value.duplicateId, value.preferredId, value.duplicateSourceId, value.preferredSourceId, plan.basis, plan.evidenceSha256, value.matchSha256, establishedAt);
 }
 
 class LocalStore {
@@ -5021,7 +5449,7 @@ class LocalStore {
       privateLabel: row.private_label
     }));
   }
-  replaceSources(snapshots, ingestedAt, hmacKey3) {
+  replaceSources(snapshots, ingestedAt, hmacKey3, equivalencePlan, progress) {
     canonicalTimestampOrNull(ingestedAt, "Source ingest time");
     if (snapshots.length < 1) {
       throw new CliError("invalid-data", "A source replacement must contain at least one source");
@@ -5034,14 +5462,17 @@ class LocalStore {
       sourceIds.add(snapshot.source.id);
       validateSourceSnapshot(snapshot);
     }
+    if (equivalencePlan !== undefined)
+      validateEquivalencePlan(equivalencePlan, sourceIds);
     return transaction(this.#database, () => {
       const upsertSource = this.#database.query(`
         INSERT INTO corpus_sources(
-          id,kind,provider,network,account_id,external_id,input_revision,revision,generated_at,
+          id,kind,kind_v4,provider,network,account_id,external_id,input_revision,revision,generated_at,
           producer_json,coverage_json,manifest_sha256,identity_json,warnings_json,ingested_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
-          kind=excluded.kind,provider=excluded.provider,network=excluded.network,
+          kind=excluded.kind,kind_v4=excluded.kind_v4,
+          provider=excluded.provider,network=excluded.network,
           account_id=excluded.account_id,external_id=excluded.external_id,
           input_revision=excluded.input_revision,generated_at=excluded.generated_at,
           producer_json=excluded.producer_json,coverage_json=excluded.coverage_json,
@@ -5080,14 +5511,15 @@ class LocalStore {
       const upsertMessage = this.#database.query(`
         INSERT INTO messages(
           id,source_row_id,source_guid,conversation_id,sent_at,direction,
-          body,body_source,kind,reply_to_source_guid,edited_at,retracted_at,
+          body,body_source,kind,reply_to_source_guid,reply_state,edited_at,retracted_at,
           service,attachment_count
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
           source_guid=excluded.source_guid,conversation_id=excluded.conversation_id,
           sent_at=excluded.sent_at,direction=excluded.direction,body=excluded.body,
           body_source=excluded.body_source,kind=excluded.kind,
-          reply_to_source_guid=excluded.reply_to_source_guid,edited_at=excluded.edited_at,
+          reply_to_source_guid=excluded.reply_to_source_guid,reply_state=excluded.reply_state,
+          edited_at=excluded.edited_at,
           retracted_at=excluded.retracted_at,service=excluded.service,
           attachment_count=excluded.attachment_count
       `);
@@ -5131,20 +5563,21 @@ class LocalStore {
       let changedAny = false;
       for (const snapshot of snapshots) {
         const existing = get(this.#database, `
-          SELECT kind,network,input_revision,revision,generated_at,manifest_sha256
+          SELECT coalesce(kind_v4,kind) AS kind,network,input_revision,revision,
+            generated_at,manifest_sha256
           FROM corpus_sources WHERE id=?
         `, snapshot.source.id);
         if (existing !== null && existing.kind !== snapshot.source.kind) {
           throw new CliError("conflict", `Source ${snapshot.source.id} changed kind`);
         }
-        if (existing !== null && snapshot.source.kind === "bundle") {
+        if (existing !== null && snapshot.source.kind !== "imessage") {
           if (existing.generated_at === null || snapshot.source.generatedAt < existing.generated_at) {
             throw new CliError("conflict", `Source ${snapshot.source.id} snapshot is older than stored state`);
           }
           if (snapshot.source.generatedAt === existing.generated_at && (snapshot.source.revision !== existing.input_revision || snapshot.source.manifestSha256 !== existing.manifest_sha256))
             throw new CliError("conflict", `Source ${snapshot.source.id} reuses generatedAt for different input`);
         }
-        const authoritative = snapshot.source.kind === "imessage" || snapshot.source.coverage.history === "complete-current-local";
+        const authoritative = snapshot.source.kind === "imessage" || snapshot.source.kind === "bundle" && snapshot.source.coverage.history === "complete-current-local";
         if (authoritative) {
           for (const row of this.#database.query(`
             SELECT conversation_id,external_id FROM conversation_sources WHERE source_id=?
@@ -5165,12 +5598,13 @@ class LocalStore {
             setSuppression.run(snapshot.source.id, row.kind === "reaction" ? "reaction" : "message", row.message_id, row.external_id, ingestedAt, "authoritative-absence", 1);
           }
         }
-        upsertSource.run(snapshot.source.id, snapshot.source.kind, snapshot.source.provider, snapshot.source.network, snapshot.source.accountId, snapshot.source.externalId, snapshot.source.revision, existing?.revision ?? snapshot.source.revision, snapshot.source.generatedAt, canonicalJson(snapshot.source.producer), canonicalJson(snapshot.source.coverage), snapshot.source.manifestSha256, canonicalJson(snapshot.source.identity), canonicalJson(snapshot.source.warnings), ingestedAt);
+        upsertSource.run(snapshot.source.id, snapshot.source.kind === "x-archive" ? "bundle" : snapshot.source.kind, snapshot.source.kind, snapshot.source.provider, snapshot.source.network, snapshot.source.accountId, snapshot.source.externalId, snapshot.source.revision, existing?.revision ?? snapshot.source.revision, snapshot.source.generatedAt, canonicalJson(snapshot.source.producer), canonicalJson(snapshot.source.coverage), snapshot.source.manifestSha256, canonicalJson(snapshot.source.identity), canonicalJson(snapshot.source.warnings), ingestedAt);
         if (existing !== null && existing.network !== snapshot.source.network) {
           relabelSourceConversations.run(snapshot.source.network, snapshot.source.id);
           relabelSourceMessages.run(snapshot.source.network, snapshot.source.id);
         }
         const conversationProvenance = new Map(snapshot.conversationProvenance.map((value) => [value.conversationId, value]));
+        let completedConversations = 0;
         for (const conversation of snapshot.conversations) {
           const owner = get(this.#database, `
             SELECT source_id FROM conversation_sources WHERE conversation_id=?
@@ -5181,10 +5615,17 @@ class LocalStore {
           upsertConversation.run(conversation.id, conversation.sourceKey, conversation.privateLabel, conversation.service, conversation.participantCount, canonicalJson(conversation.participantIds), canonicalJson(conversation.privateParticipants), conversation.group ? 1 : 0);
           const provenance = conversationProvenance.get(conversation.id);
           upsertConversationSource.run(conversation.id, snapshot.source.id, provenance.externalId, canonicalJson(provenance.metadata ?? {}));
-          setSuppression.run(snapshot.source.id, "conversation", conversation.id, provenance.externalId, ingestedAt, "reappeared", 0);
           clearExternalSuppression.run(ingestedAt, snapshot.source.id, "conversation", provenance.externalId);
+          completedConversations += 1;
+          if (progress !== undefined && (completedConversations === snapshot.conversations.length || completedConversations % 1e4 === 0))
+            progress({
+              phase: "conversations",
+              completed: completedConversations,
+              total: snapshot.conversations.length
+            });
         }
         const messageProvenance = new Map(snapshot.messageProvenance.map((value) => [value.messageId, value]));
+        let completedMessages = 0;
         for (const message of snapshot.messages) {
           const owner = get(this.#database, `
             SELECT provenance.source_id,message.source_row_id
@@ -5195,25 +5636,32 @@ class LocalStore {
           if (owner !== null && owner.source_id !== snapshot.source.id) {
             throw new CliError("conflict", `Message ${message.id} belongs to another source`);
           }
-          const preferredRowId = authoritative ? message.sourceRowId : null;
+          const preferredRowId = authoritative || existing === null ? message.sourceRowId : null;
           const preferredCollision = preferredRowId === null ? null : get(this.#database, "SELECT id FROM messages WHERE conversation_id=? AND source_row_id=?", message.conversationId, preferredRowId);
           const sourceRowId = owner?.source_row_id ?? (preferredRowId !== null && preferredCollision === null ? preferredRowId : (get(this.#database, `
                 SELECT max(source_row_id) AS value FROM messages WHERE conversation_id=?
               `, message.conversationId)?.value ?? 0) + 1);
-          upsertMessage.run(message.id, sourceRowId, message.sourceGuid, message.conversationId, message.sentAt, message.direction, message.body, message.bodySource, message.kind, message.replyToSourceGuid, message.editedAt, message.retractedAt, message.service, message.attachmentCount);
+          upsertMessage.run(message.id, sourceRowId, message.sourceGuid, message.conversationId, message.sentAt, message.direction, message.body, message.bodySource, message.kind, message.replyToSourceGuid, message.replyState, message.editedAt, message.retractedAt, message.service, message.attachmentCount);
           const provenance = messageProvenance.get(message.id);
           upsertMessageProvenance.run(message.id, snapshot.source.id, provenance.externalId, provenance.replyToExternalId, canonicalJson(provenance.attachments), canonicalJson({
             providerSortKey: provenance.providerSortKey,
             metadata: provenance.metadata ?? {}
           }));
-          setSuppression.run(snapshot.source.id, message.kind === "reaction" ? "reaction" : "message", message.id, provenance.externalId, ingestedAt, "reappeared", 0);
           clearExternalSuppression.run(ingestedAt, snapshot.source.id, message.kind === "reaction" ? "reaction" : "message", provenance.externalId);
           if (message.kind === "reaction") {
-            setSuppression.run(snapshot.source.id, "reaction-timeline", message.id, provenance.externalId, ingestedAt, "reappeared", 0);
             clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction-timeline", provenance.externalId);
           }
+          completedMessages += 1;
+          if (progress !== undefined && (completedMessages === snapshot.messages.length || completedMessages % 1e4 === 0))
+            progress({
+              phase: "messages",
+              completed: completedMessages,
+              total: snapshot.messages.length
+            });
         }
-        for (const reaction of snapshot.reactionFacts ?? []) {
+        const reactions = snapshot.reactionFacts ?? [];
+        let completedReactions = 0;
+        for (const reaction of reactions) {
           const existingReaction = get(this.#database, `
             SELECT source_id,external_id FROM corpus_reaction_facts WHERE id=?
           `, reaction.id);
@@ -5225,10 +5673,16 @@ class LocalStore {
              WHERE provenance.source_id=? AND provenance.external_id=?`, snapshot.source.id, reaction.targetExternalId)?.conversation_id ?? null;
           upsertReactionFact.run(reaction.id, snapshot.source.id, reaction.externalId, reaction.targetExternalId, conversationId, reaction.direction, reaction.body, reaction.reactedAt, reaction.state);
           if (reaction.state === "active") {
-            setSuppression.run(snapshot.source.id, "reaction", reaction.id, reaction.externalId, ingestedAt, "reappeared", 0);
             clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction", reaction.externalId);
             clearExternalSuppression.run(ingestedAt, snapshot.source.id, "reaction-timeline", reaction.externalId);
           }
+          completedReactions += 1;
+          if (progress !== undefined && (completedReactions === reactions.length || completedReactions % 1e4 === 0))
+            progress({
+              phase: "reactions",
+              completed: completedReactions,
+              total: reactions.length
+            });
         }
         this.#database.query(`
           UPDATE corpus_reaction_facts AS reaction
@@ -5314,6 +5768,15 @@ class LocalStore {
         if (snapshot.source.kind === "bundle") {
           rerankBundleMessages(this.#database, snapshot.source.id);
         }
+        if (equivalencePlan?.duplicateSourceId === snapshot.source.id) {
+          applyEquivalencePlan(this.#database, equivalencePlan, ingestedAt);
+          const preferredRevision = get(this.#database, `
+            SELECT revision FROM corpus_sources WHERE id=?
+          `, equivalencePlan.preferredSourceId)?.revision;
+          const preferredStateRevision = sourceStateRevision(this.#database, equivalencePlan.preferredSourceId);
+          this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(preferredStateRevision, equivalencePlan.preferredSourceId);
+          changedAny ||= preferredRevision !== preferredStateRevision;
+        }
         const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
         this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(stateRevision, snapshot.source.id);
         const changed = existing?.revision !== stateRevision;
@@ -5330,7 +5793,7 @@ class LocalStore {
                 AND suppression.local_id=message.id
                 AND suppression.kind IN ('message','reaction','reaction-timeline')
                 AND suppression.suppressed=1
-            )
+            ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
           WHERE ownership.source_id=?
             AND NOT EXISTS (
               SELECT 1 FROM corpus_source_suppressions suppression
@@ -5417,10 +5880,13 @@ class LocalStore {
   }
   listSources(privateDetails = false) {
     const rows = all(this.#database, `
-      SELECT source.*,
+      SELECT source.id,coalesce(source.kind_v4,source.kind) AS kind,
+        source.provider,source.network,source.account_id,source.external_id,
+        source.input_revision,source.revision,source.generated_at,source.coverage_json,
+        source.manifest_sha256,source.identity_json,source.warnings_json,source.ingested_at,
         count(distinct ownership.conversation_id) AS conversations,
         count(message.id) AS messages,
-        CASE source.kind WHEN 'bundle' THEN
+        CASE WHEN coalesce(source.kind_v4,source.kind) IN ('bundle','x-archive') THEN
           (SELECT count(*) FROM corpus_reaction_facts reaction
             WHERE reaction.source_id=source.id AND reaction.state='active'
               AND NOT EXISTS (
@@ -5433,7 +5899,7 @@ class LocalStore {
                 WHERE suppression.source_id=source.id AND suppression.kind='conversation'
                   AND suppression.local_id=reaction.conversation_id
                   AND suppression.suppressed=1
-              ))
+              ) AND ${ACTIVE_REACTION_EQUIVALENCE_EXCLUSION})
           ELSE
           (SELECT count(*) FROM messages reaction_message
             JOIN message_provenance reaction_provenance
@@ -5453,7 +5919,7 @@ class LocalStore {
                   AND suppression.suppressed=1
               ))
         END AS reactions,
-        CASE source.kind WHEN 'bundle' THEN
+        CASE WHEN coalesce(source.kind_v4,source.kind) IN ('bundle','x-archive') THEN
           (SELECT count(*) FROM corpus_reaction_facts reaction
             WHERE reaction.source_id=source.id AND reaction.state='active'
               AND reaction.reacted_at IS NULL
@@ -5467,7 +5933,7 @@ class LocalStore {
                 WHERE suppression.source_id=source.id AND suppression.kind='conversation'
                   AND suppression.local_id=reaction.conversation_id
                   AND suppression.suppressed=1
-              ))
+              ) AND ${ACTIVE_REACTION_EQUIVALENCE_EXCLUSION})
           ELSE 0
         END AS undated_reactions
       FROM corpus_sources source
@@ -5486,7 +5952,7 @@ class LocalStore {
             AND suppression.kind IN ('message','reaction','reaction-timeline')
             AND suppression.local_id=message.id
             AND suppression.suppressed=1
-        )
+        ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
       GROUP BY source.id
       ORDER BY source.provider,source.network,source.id
     `);
@@ -5525,45 +5991,172 @@ class LocalStore {
     }
     return this.listSources(privateDetails).find(({ id }) => id === sourceId) ?? null;
   }
+  sourceOverlapEvidence(sourceId, maximumRecords = 250000) {
+    if (!/^source_[a-f0-9]{64}$/u.test(sourceId) || !Number.isSafeInteger(maximumRecords) || maximumRecords < 1 || maximumRecords > 500000)
+      throw new CliError("usage", "Overlap evidence requires a valid source and bounded record limit");
+    const source = get(this.#database, `
+      SELECT id,coalesce(kind_v4,kind) AS kind,provider,network,account_id,external_id,identity_json
+      FROM corpus_sources WHERE id=?
+    `, sourceId);
+    if (source === null)
+      throw new CliError("not-found", `Unknown source ${sourceId}`);
+    const counts = get(this.#database, `
+      SELECT
+        (SELECT count(*) FROM conversation_sources WHERE source_id=?) AS conversations,
+        (SELECT count(*) FROM message_provenance WHERE source_id=?) AS messages,
+        (SELECT count(*) FROM corpus_reaction_facts WHERE source_id=? AND state='active') AS reactions,
+        (SELECT count(*) FROM corpus_source_records
+          WHERE source_id=? AND kind IN ('account','participant')) AS auxiliary_records
+    `, sourceId, sourceId, sourceId, sourceId);
+    if (counts.conversations + counts.messages + counts.reactions + counts.auxiliary_records > maximumRecords)
+      throw new CliError("conflict", `Source ${sourceId} exceeds the ${maximumRecords}-record overlap evidence bound`);
+    const conversations = all(this.#database, `
+      SELECT conversation.id,ownership.external_id,conversation.private_label,
+        conversation.service,conversation.participant_ids_json,
+        conversation.private_participants_json,conversation.is_group,ownership.metadata_json
+      FROM conversation_sources ownership
+      JOIN conversations conversation ON conversation.id=ownership.conversation_id
+      WHERE ownership.source_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=conversation.id
+          AND suppression.suppressed=1
+      )
+      ORDER BY ownership.external_id,conversation.id
+    `, sourceId).map((row) => Object.freeze({
+      id: row.id,
+      externalId: row.external_id,
+      privateLabel: row.private_label,
+      service: row.service,
+      participantIds: Object.freeze(stringArray(row.participant_ids_json, `Conversation ${row.id} participant IDs`)),
+      privateParticipants: Object.freeze(stringArray(row.private_participants_json, `Conversation ${row.id} private participants`)),
+      group: row.is_group === 1,
+      metadata: parsedJson(row.metadata_json, `Conversation ${row.id} metadata`)
+    }));
+    const messages = all(this.#database, `
+      SELECT message.id,provenance.external_id,message.conversation_id,message.sent_at,
+        message.direction,message.body,message.kind,provenance.reply_to_external_id,
+        message.reply_state,message.attachment_count,provenance.attachments_json,
+        provenance.metadata_json
+      FROM message_provenance provenance
+      JOIN messages message ON message.id=provenance.message_id
+      WHERE provenance.source_id=? AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      )
+      ORDER BY message.sent_at,message.source_row_id,message.id
+    `, sourceId).map((row) => Object.freeze({
+      id: row.id,
+      externalId: row.external_id,
+      conversationId: row.conversation_id,
+      sentAt: row.sent_at,
+      direction: row.direction,
+      body: row.body,
+      kind: row.kind,
+      replyToExternalId: row.reply_to_external_id,
+      replyState: row.reply_state,
+      attachmentCount: row.attachment_count,
+      attachments: parsedJson(row.attachments_json, `Message ${row.id} attachments`),
+      metadata: parsedJson(row.metadata_json, `Message ${row.id} metadata`)
+    }));
+    const reactions = all(this.#database, `
+      SELECT reaction.id,reaction.external_id,reaction.target_external_id,
+        reaction.conversation_id,reaction.direction,reaction.body,reaction.reacted_at
+      FROM corpus_reaction_facts reaction
+      WHERE reaction.source_id=? AND reaction.state='active' AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=reaction.source_id
+          AND suppression.kind='reaction'
+          AND suppression.local_id=reaction.id
+          AND suppression.suppressed=1
+      ) ORDER BY reaction.external_id,reaction.id
+    `, sourceId).map((row) => Object.freeze({
+      id: row.id,
+      externalId: row.external_id,
+      targetExternalId: row.target_external_id,
+      conversationId: row.conversation_id,
+      direction: row.direction,
+      body: row.body,
+      reactedAt: row.reacted_at
+    }));
+    const auxiliaryRecords = all(this.#database, `
+      SELECT kind,external_id,record_json FROM corpus_source_records
+      WHERE source_id=? AND kind IN ('account','participant')
+      ORDER BY kind,external_id
+    `, sourceId).map((row) => Object.freeze({
+      kind: row.kind,
+      externalId: row.external_id,
+      record: parsedJson(row.record_json, `Source ${sourceId} ${row.kind} record`)
+    }));
+    return Object.freeze({
+      source: Object.freeze({
+        id: source.id,
+        kind: source.kind,
+        provider: source.provider,
+        network: source.network,
+        accountId: source.account_id,
+        externalId: source.external_id,
+        identity: parsedJson(source.identity_json, `Source ${source.id} identity`)
+      }),
+      conversations: Object.freeze(conversations),
+      messages: Object.freeze(messages),
+      reactions: Object.freeze(reactions),
+      auxiliaryRecords: Object.freeze(auxiliaryRecords)
+    });
+  }
   listContacts(options) {
     if (this.corpusRevision() === null)
       return [];
     const rows = all(this.#database, `
-      WITH scope_conversations AS (
-        SELECT '${PERSON_SCOPE_PREFIX}' || association.contact_id AS id,
-          coalesce(label.private_label,conversation.private_label) AS private_label,
-          'person' AS scope_kind,0 AS is_group,1 AS participant_count,
-          conversation.id AS conversation_id
-        FROM conversation_contact_scopes association
-        JOIN conversations conversation ON conversation.id=association.conversation_id
-        JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
-        LEFT JOIN conversation_contact_labels label
-          ON label.conversation_id=association.conversation_id
-        WHERE conversation.is_group=0 AND NOT EXISTS (
-          SELECT 1 FROM corpus_source_suppressions suppression
-          WHERE suppression.source_id=ownership.source_id
-            AND suppression.kind='conversation'
-            AND suppression.local_id=conversation.id
-            AND suppression.suppressed=1
-        )
-        UNION ALL
-        SELECT conversation.id,conversation.private_label,'conversation',conversation.is_group,
-          conversation.participant_count,conversation.id
+      WITH conversation_members AS (
+        SELECT conversation.id AS conversation_id,
+          coalesce(equivalence.preferred_conversation_id,conversation.id) AS root_id,
+          conversation.private_label,conversation.is_group,conversation.participant_count
         FROM conversations conversation
         JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
-        LEFT JOIN conversation_contact_scopes association
-          ON association.conversation_id=conversation.id
-        WHERE association.conversation_id IS NULL AND NOT EXISTS (
+        LEFT JOIN conversation_equivalences equivalence
+          ON equivalence.duplicate_conversation_id=conversation.id
+        WHERE NOT EXISTS (
           SELECT 1 FROM corpus_source_suppressions suppression
           WHERE suppression.source_id=ownership.source_id
             AND suppression.kind='conversation'
             AND suppression.local_id=conversation.id
             AND suppression.suppressed=1
         )
+      ), group_contacts AS (
+        SELECT member.root_id,
+          CASE WHEN count(distinct association.contact_id)=1
+            THEN min(association.contact_id) ELSE NULL END AS contact_id
+        FROM conversation_members member
+        LEFT JOIN conversation_contact_scopes association
+          ON association.conversation_id=member.conversation_id
+        GROUP BY member.root_id
+      ), scope_conversations AS (
+        SELECT CASE WHEN group_contact.contact_id IS NULL THEN member.root_id
+            ELSE '${PERSON_SCOPE_PREFIX}' || group_contact.contact_id END AS id,
+          coalesce(root_label.private_label,root.private_label,
+            member_label.private_label,member.private_label) AS private_label,
+          CASE WHEN group_contact.contact_id IS NULL THEN 'conversation' ELSE 'person' END
+            AS scope_kind,
+          CASE WHEN group_contact.contact_id IS NULL THEN member.is_group ELSE 0 END AS is_group,
+          CASE WHEN group_contact.contact_id IS NULL THEN member.participant_count ELSE 1 END
+            AS participant_count,
+          member.root_id,member.conversation_id
+        FROM conversation_members member
+        JOIN group_contacts group_contact ON group_contact.root_id=member.root_id
+        JOIN conversations root ON root.id=member.root_id
+        LEFT JOIN conversation_contact_labels root_label
+          ON root_label.conversation_id=member.root_id
+        LEFT JOIN conversation_contact_labels member_label
+          ON member_label.conversation_id=member.conversation_id
       )
       SELECT scope.id,min(scope.private_label) AS private_label,
         max(scope.scope_kind) AS scope_kind,
-        count(distinct scope.conversation_id) AS conversation_count,
+        count(distinct scope.root_id) AS conversation_count,
         max(scope.is_group) AS is_group,max(scope.participant_count) AS participant_count,
         min(message.sent_at) AS first_message_at,max(message.sent_at) AS last_message_at,
         count(message.id) AS message_count,
@@ -5578,7 +6171,7 @@ class LocalStore {
           AND suppression.local_id=message.id
           AND suppression.kind IN ('message','reaction','reaction-timeline')
           AND suppression.suppressed=1
-      )
+      ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
       GROUP BY scope.id
       HAVING outgoing_count >= ?
       ORDER BY outgoing_count DESC,last_message_at DESC,scope.id
@@ -5624,19 +6217,8 @@ class LocalStore {
     const scope = analysisScope(this.#database, contactId);
     if (scope === null)
       return null;
-    const rows = scope.kind === "person" ? all(this.#database, `
-        SELECT conversation.id,conversation.source_key,
-          coalesce(label.private_label,conversation.private_label) AS private_label,
-          conversation.service,conversation.participant_count,
-          conversation.participant_ids_json,conversation.private_participants_json,
-          conversation.is_group
-        FROM conversations conversation
-        JOIN conversation_contact_scopes association
-          ON association.conversation_id=conversation.id
-        LEFT JOIN conversation_contact_labels label
-          ON label.conversation_id=conversation.id
-        WHERE association.contact_id=? ORDER BY conversation.id
-      `, scope.addressBookContactId) : all(this.#database, `
+    const placeholders = idPlaceholders(scope.conversationIds);
+    const rows = all(this.#database, `
       SELECT conversation.id,conversation.source_key,
         coalesce(contact_label.private_label,conversation.private_label) AS private_label,
         conversation.service,conversation.participant_count,conversation.participant_ids_json,
@@ -5644,8 +6226,9 @@ class LocalStore {
       FROM conversations conversation
       LEFT JOIN conversation_contact_labels contact_label
         ON contact_label.conversation_id = conversation.id
-      WHERE conversation.id = ?
-    `, scope.conversationIds[0]);
+      WHERE conversation.id IN (${placeholders})
+      ORDER BY CASE WHEN conversation.id=? THEN 0 ELSE 1 END,conversation.id
+    `, ...scope.conversationIds, scope.kind === "conversation" ? scope.id : "");
     const first = rows[0];
     if (first === undefined)
       return null;
@@ -5655,10 +6238,10 @@ class LocalStore {
     const counts = scopeMessageCounts(this.#database, scope);
     return {
       id: scope.id,
-      sourceKey: scope.kind === "person" ? scope.id : first.source_key,
+      sourceKey: scope.kind === "person" || scope.conversationIds.length > 1 ? scope.id : first.source_key,
       privateLabel: privateLabels ? first.private_label : null,
       scopeKind: scope.kind,
-      conversationCount: scope.conversationIds.length,
+      conversationCount: new Set(scope.conversationIds.map((id) => canonicalConversationId(this.#database, id))).size,
       service: services.length === 1 ? services[0] : null,
       services: Object.freeze(services.sort((left, right) => left < right ? -1 : left > right ? 1 : 0)),
       participantCount: scope.kind === "person" ? 1 : first.participant_count,
@@ -5824,6 +6407,24 @@ class LocalStore {
     const quick = get(this.#database, "PRAGMA quick_check")?.quick_check ?? "unknown";
     const foreignKeys = all(this.#database, "PRAGMA foreign_key_check").length;
     const count = (table) => get(this.#database, `SELECT count(*) AS value FROM ${table}`)?.value ?? 0;
+    const activeMessages = get(this.#database, `
+      SELECT count(*) AS value FROM messages message
+      JOIN message_provenance provenance ON provenance.message_id=message.id
+      JOIN conversation_sources ownership ON ownership.conversation_id=message.conversation_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=provenance.source_id
+          AND suppression.local_id=message.id
+          AND suppression.kind IN ('message','reaction','reaction-timeline')
+          AND suppression.suppressed=1
+      ) AND NOT EXISTS (
+        SELECT 1 FROM corpus_source_suppressions suppression
+        WHERE suppression.source_id=ownership.source_id
+          AND suppression.kind='conversation'
+          AND suppression.local_id=message.conversation_id
+          AND suppression.suppressed=1
+      ) AND ${ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION}
+    `)?.value ?? 0;
     return {
       storeSchemaVersion: userVersion(this.#database),
       quickCheck: quick,
@@ -5833,6 +6434,10 @@ class LocalStore {
       sources: count("corpus_sources"),
       conversations: count("conversations"),
       messages: count("messages"),
+      activeMessages,
+      conversationEquivalences: count("conversation_equivalences"),
+      messageEquivalences: count("message_equivalences"),
+      reactionEquivalences: count("reaction_equivalences"),
       profiles: count("profiles"),
       addressBookContacts: count("addressbook_contacts"),
       enrichedLabels: count("conversation_contact_labels")
@@ -5841,7 +6446,1872 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.4.0";
+var MESSAGE_LIKE_ME_VERSION = "0.5.0";
+
+// src/x-archive.ts
+import { createHash as createHash5 } from "crypto";
+import {
+  closeSync as closeSync2,
+  constants,
+  fstatSync as fstatSync2,
+  lstatSync as lstatSync4,
+  openSync as openSync2,
+  readSync as readSync2,
+  realpathSync as realpathSync3
+} from "fs";
+import { isAbsolute as isAbsolute5, resolve as resolve6 } from "path";
+
+// src/x-archive-zip.ts
+import { readSync } from "fs";
+import { inflateRawSync } from "zlib";
+var EOCD = 101010256;
+var ZIP64_EOCD = 101075792;
+var ZIP64_LOCATOR = 117853008;
+var CENTRAL = 33639248;
+var LOCAL = 67324752;
+var DESCRIPTOR = 134695760;
+var ZIP64_EXTRA = 1;
+var STORED = 0;
+var DEFLATE = 8;
+var DESCRIPTOR_FLAG = 8;
+var UTF8_FLAG = 2048;
+var ENCRYPTED_FLAG = 1;
+var STRONG_ENCRYPTION_FLAG = 64;
+var MASKED_HEADER_FLAG = 8192;
+var DEFLATE_OPTION_FLAGS = 6;
+var UNIX_HOST = 3;
+var MACOS_HOST = 19;
+var UNIX_TYPE_MASK = 61440;
+var UNIX_REGULAR = 32768;
+var UNIX_DIRECTORY = 16384;
+var DOS_DIRECTORY = 16;
+var U16_MAX = 65535;
+var U32_MAX = 4294967295;
+var MAX_X_ZIP_ARCHIVE_BYTES = 16 * 1024 * 1024 * 1024;
+var MAX_X_ZIP_MEMBER_BYTES = 256 * 1024 * 1024;
+var MAX_COMPRESSED_MEMBER_BYTES = 64 * 1024 * 1024;
+var MAX_ENTRIES = 1e5;
+var MAX_CENTRAL_BYTES = 64 * 1024 * 1024;
+var MAX_TOTAL_SELECTED_BYTES = 768 * 1024 * 1024;
+var MAX_TOTAL_DECLARED_BYTES = 64 * 1024 * 1024 * 1024;
+var MAX_NAME_BYTES = 4 * 1024;
+var MAX_RATIO = 200;
+var SELECTED = /^(?:[^/]+\/)?data\/(?:manifest|account|direct-message(?:-group)?-headers|direct-messages(?:-group)?[^/]*|tweets|deleted-tweets|community-tweet)\.js$/u;
+var CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0;index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0;bit < 8; bit += 1) {
+      value = (value & 1) === 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+function updateCrc32(state, bytes) {
+  let value = state;
+  for (const byte of bytes)
+    value = CRC32_TABLE[(value ^ byte) & 255] ^ value >>> 8;
+  return value;
+}
+function checkedEnd(offset, length, label) {
+  const value = offset + length;
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || !Number.isSafeInteger(value) || value < offset)
+    throw new Error(`X ZIP ${label} has invalid bounds`);
+  return value;
+}
+function readExact(descriptor, offset, length, label) {
+  checkedEnd(offset, length, label);
+  const bytes = Buffer.allocUnsafe(length);
+  let position = 0;
+  while (position < length) {
+    const count = readSync(descriptor, bytes, position, length - position, offset + position);
+    if (count < 1)
+      throw new Error(`X ZIP ${label} is truncated`);
+    position += count;
+  }
+  return bytes;
+}
+function u64(bytes, offset, label) {
+  if (offset < 0 || bytes.length - offset < 8)
+    throw new Error(`X ZIP ${label} is truncated`);
+  const value = bytes.readBigUInt64LE(offset);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`X ZIP ${label} exceeds JavaScript's exact integer range`);
+  }
+  return Number(value);
+}
+function fieldValue(legacy, resolved, sentinel, label) {
+  if (legacy !== sentinel && legacy !== resolved) {
+    throw new Error(`X ZIP legacy ${label} contradicts ZIP64 metadata`);
+  }
+}
+function directoryFromEocd(descriptor, archiveSize) {
+  const tailLength = Math.min(archiveSize, 22 + U16_MAX + 20);
+  const tailOffset = archiveSize - tailLength;
+  const tail = readExact(descriptor, tailOffset, tailLength, "end records");
+  const candidates = [];
+  for (let offset2 = tail.length - 22;offset2 >= 0; offset2 -= 1) {
+    if (tail.readUInt32LE(offset2) === EOCD && tailOffset + offset2 + 22 + tail.readUInt16LE(offset2 + 20) === archiveSize)
+      candidates.push(tailOffset + offset2);
+  }
+  if (candidates.length !== 1) {
+    throw new Error(candidates.length === 0 ? "X ZIP end-of-central-directory record is missing" : "X ZIP end-of-central-directory record is ambiguous");
+  }
+  const eocdOffset = candidates[0];
+  const eocd = readExact(descriptor, eocdOffset, archiveSize - eocdOffset, "end-of-central-directory record");
+  if (eocd.length !== 22 || eocd.readUInt16LE(20) !== 0) {
+    throw new Error("X ZIP archive comments are not supported");
+  }
+  const legacyDisk = eocd.readUInt16LE(4);
+  const legacyCentralDisk = eocd.readUInt16LE(6);
+  const legacyOnDisk = eocd.readUInt16LE(8);
+  const legacyCount = eocd.readUInt16LE(10);
+  const legacySize = eocd.readUInt32LE(12);
+  const legacyOffset = eocd.readUInt32LE(16);
+  const locatorOffset = eocdOffset - 20;
+  const hasZip64 = locatorOffset >= 0 && readExact(descriptor, locatorOffset, 4, "ZIP64 locator signature").readUInt32LE(0) === ZIP64_LOCATOR;
+  if (!hasZip64) {
+    if ([legacyDisk, legacyCentralDisk, legacyOnDisk, legacyCount].includes(U16_MAX) || [legacySize, legacyOffset].includes(U32_MAX))
+      throw new Error("X ZIP archive is missing required ZIP64 end metadata");
+    if (legacyDisk !== 0 || legacyCentralDisk !== 0 || legacyOnDisk !== legacyCount) {
+      throw new Error("X ZIP multi-disk archives are not supported");
+    }
+    if (legacyCount < 1 || legacyCount > MAX_ENTRIES || legacySize > MAX_CENTRAL_BYTES) {
+      throw new Error("X ZIP central directory exceeds its bounds");
+    }
+    const end2 = checkedEnd(legacyOffset, legacySize, "central directory");
+    if (end2 !== eocdOffset)
+      throw new Error("X ZIP central directory has invalid bounds");
+    return { count: legacyCount, offset: legacyOffset, end: end2 };
+  }
+  const locator = readExact(descriptor, locatorOffset, 20, "ZIP64 locator");
+  if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) !== 1) {
+    throw new Error("X ZIP multi-disk archives are not supported");
+  }
+  const zip64Offset = u64(locator, 8, "ZIP64 end record offset");
+  const zip64 = readExact(descriptor, zip64Offset, 56, "ZIP64 end record");
+  if (zip64.readUInt32LE(0) !== ZIP64_EOCD || u64(zip64, 4, "ZIP64 end record size") !== 44) {
+    throw new Error("X ZIP64 end record has an unsupported shape");
+  }
+  if (zip64Offset + zip64.length !== locatorOffset || zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0)
+    throw new Error("X ZIP64 end record has invalid bounds or disk ownership");
+  const onDisk = u64(zip64, 24, "ZIP64 entries on disk");
+  const count = u64(zip64, 32, "ZIP64 entry count");
+  const size = u64(zip64, 40, "ZIP64 central directory size");
+  const offset = u64(zip64, 48, "ZIP64 central directory offset");
+  if (onDisk !== count)
+    throw new Error("X ZIP multi-disk archives are not supported");
+  if (count < 1 || count > MAX_ENTRIES || size > MAX_CENTRAL_BYTES) {
+    throw new Error("X ZIP central directory exceeds its bounds");
+  }
+  const end = checkedEnd(offset, size, "ZIP64 central directory");
+  if (end !== zip64Offset)
+    throw new Error("X ZIP64 central directory has invalid bounds");
+  fieldValue(legacyDisk, 0, U16_MAX, "disk number");
+  fieldValue(legacyCentralDisk, 0, U16_MAX, "central disk number");
+  fieldValue(legacyOnDisk, onDisk, U16_MAX, "entries-on-disk count");
+  fieldValue(legacyCount, count, U16_MAX, "entry count");
+  fieldValue(legacySize, size, U32_MAX, "central directory size");
+  fieldValue(legacyOffset, offset, U32_MAX, "central directory offset");
+  return { count, offset, end };
+}
+function extraFields(bytes, label) {
+  const fields = new Map;
+  let position = 0;
+  while (position < bytes.length) {
+    if (bytes.length - position < 4)
+      throw new Error(`X ZIP ${label} contains a truncated extra field`);
+    const id = bytes.readUInt16LE(position);
+    const length = bytes.readUInt16LE(position + 2);
+    const next = checkedEnd(position + 4, length, `${label} extra field`);
+    if (next > bytes.length)
+      throw new Error(`X ZIP ${label} contains a truncated extra field`);
+    if (fields.has(id))
+      throw new Error(`X ZIP ${label} contains duplicate extra field ${id}`);
+    fields.set(id, bytes.subarray(position + 4, next));
+    position = next;
+  }
+  return fields;
+}
+function decodeName(nameBytes, flags, selected) {
+  if (nameBytes.length < 1 || nameBytes.length > MAX_NAME_BYTES) {
+    throw new Error("X ZIP member name exceeds its bounds");
+  }
+  let decoded;
+  if ((flags & UTF8_FLAG) !== 0) {
+    try {
+      decoded = new TextDecoder("utf-8", { fatal: true }).decode(nameBytes);
+    } catch (error) {
+      throw new Error("X ZIP member name is not valid UTF-8", { cause: error });
+    }
+  } else {
+    if (nameBytes.some((byte) => byte > 127)) {
+      throw new Error("X ZIP non-UTF-8 member names must be ASCII");
+    }
+    decoded = nameBytes.toString("ascii");
+  }
+  if (decoded.normalize("NFC") !== decoded)
+    throw new Error("X ZIP member name is not NFC-normalized");
+  if (/^[A-Za-z]:\//u.test(decoded) || decoded.startsWith("/")) {
+    throw new Error("X ZIP member has an absolute name");
+  }
+  if (decoded.includes("\\"))
+    throw new Error("X ZIP member name contains a backslash");
+  if (/[\u0000-\u001F\u007F-\u009F]/u.test(decoded)) {
+    throw new Error("X ZIP member name contains a control character");
+  }
+  const directory = decoded.endsWith("/");
+  const path = directory ? decoded.slice(0, -1) : decoded;
+  const parts = path.split("/");
+  if (parts.some((part) => part === "." || part === "..") || selected && parts.some((part) => part === "")) {
+    throw new Error("X ZIP selected member has an unsafe path component");
+  }
+  return { name: decoded, directory };
+}
+function validateFlags(flags, method) {
+  if ((flags & (ENCRYPTED_FLAG | STRONG_ENCRYPTION_FLAG)) !== 0) {
+    throw new Error("X ZIP encrypted members are not supported");
+  }
+  if ((flags & MASKED_HEADER_FLAG) !== 0) {
+    throw new Error("X ZIP members with masked local headers are not supported");
+  }
+  const allowed = UTF8_FLAG | DESCRIPTOR_FLAG | (method === DEFLATE ? DEFLATE_OPTION_FLAGS : 0);
+  if ((flags & ~allowed) !== 0)
+    throw new Error("X ZIP member uses unsupported general-purpose flags");
+}
+function validateType(entry) {
+  const host = entry.versionMadeBy >>> 8;
+  const unixType = host === UNIX_HOST || host === MACOS_HOST ? entry.externalAttributes >>> 16 & UNIX_TYPE_MASK : 0;
+  if (entry.directory) {
+    if (entry.crc32 !== 0 || entry.uncompressedSize !== 0 || entry.method === STORED && entry.compressedSize !== 0)
+      throw new Error("X ZIP directory member must expand to empty data");
+    if (unixType !== 0 && unixType !== UNIX_DIRECTORY) {
+      throw new Error("X ZIP member is a symlink or another non-regular file");
+    }
+  } else if ((entry.externalAttributes & DOS_DIRECTORY) !== 0 || unixType !== 0 && unixType !== UNIX_REGULAR)
+    throw new Error("X ZIP member is not a regular file");
+}
+function logicalName(name) {
+  if (name.startsWith("data/"))
+    return name;
+  const components = name.split("/");
+  return components.length === 3 && components[1] === "data" ? components.slice(1).join("/") : null;
+}
+function centralEntries(descriptor, directory, archiveSize) {
+  const bytes = readExact(descriptor, directory.offset, directory.end - directory.offset, "central directory");
+  const entries = [];
+  const names = new Set;
+  let declared = 0;
+  let selectedTotal = 0;
+  let position = 0;
+  for (let index = 0;index < directory.count; index += 1) {
+    if (bytes.length - position < 46 || bytes.readUInt32LE(position) !== CENTRAL) {
+      throw new Error("X ZIP central directory entry is invalid or truncated");
+    }
+    const versionMadeBy = bytes.readUInt16LE(position + 4);
+    const versionNeeded = bytes.readUInt16LE(position + 6);
+    const flags = bytes.readUInt16LE(position + 8);
+    const method = bytes.readUInt16LE(position + 10);
+    const modifiedTime = bytes.readUInt16LE(position + 12);
+    const modifiedDate = bytes.readUInt16LE(position + 14);
+    const checksum = bytes.readUInt32LE(position + 16);
+    const compressedLegacy = bytes.readUInt32LE(position + 20);
+    const uncompressedLegacy = bytes.readUInt32LE(position + 24);
+    const nameLength = bytes.readUInt16LE(position + 28);
+    const extraLength = bytes.readUInt16LE(position + 30);
+    const commentLength = bytes.readUInt16LE(position + 32);
+    const diskLegacy = bytes.readUInt16LE(position + 34);
+    const externalAttributes = bytes.readUInt32LE(position + 38);
+    const offsetLegacy = bytes.readUInt32LE(position + 42);
+    const next = checkedEnd(position + 46, nameLength + extraLength + commentLength, "central directory entry");
+    if (next > bytes.length)
+      throw new Error("X ZIP central directory entry is truncated");
+    const nameBytes = Buffer.from(bytes.subarray(position + 46, position + 46 + nameLength));
+    const extraStart = position + 46 + nameLength;
+    const fields = extraFields(bytes.subarray(extraStart, extraStart + extraLength), `central directory entry ${index + 1}`);
+    const zip64 = fields.get(ZIP64_EXTRA) ?? null;
+    let zip64Position = 0;
+    const nextZip64 = (label) => {
+      if (zip64 === null)
+        throw new Error(`X ZIP ${label} is missing ZIP64 metadata`);
+      const value = u64(zip64, zip64Position, label);
+      zip64Position += 8;
+      return value;
+    };
+    const uncompressedSize = uncompressedLegacy === U32_MAX ? nextZip64("uncompressed size") : uncompressedLegacy;
+    const compressedSize = compressedLegacy === U32_MAX ? nextZip64("compressed size") : compressedLegacy;
+    const localHeaderOffset = offsetLegacy === U32_MAX ? nextZip64("local header offset") : offsetLegacy;
+    let disk = diskLegacy;
+    if (diskLegacy === U16_MAX) {
+      if (zip64 === null || zip64.length - zip64Position < 4) {
+        throw new Error("X ZIP disk number is missing ZIP64 metadata");
+      }
+      disk = zip64.readUInt32LE(zip64Position);
+      zip64Position += 4;
+    }
+    if (zip64 === null && zip64Position !== 0 || zip64 !== null && zip64Position !== zip64.length) {
+      throw new Error("X ZIP central directory contains ambiguous ZIP64 metadata");
+    }
+    if (disk !== 0)
+      throw new Error("X ZIP multi-disk archives are not supported");
+    validateFlags(flags, method);
+    if (method !== STORED && method !== DEFLATE) {
+      throw new Error(`X ZIP compression method ${method} is unsupported`);
+    }
+    const provisional = decodeName(nameBytes, flags, false);
+    const selected = !provisional.directory && SELECTED.test(provisional.name);
+    const decoded = selected ? decodeName(nameBytes, flags, true) : provisional;
+    const entry = {
+      name: decoded.name,
+      nameBytes,
+      directory: decoded.directory,
+      selected,
+      versionMadeBy,
+      versionNeeded,
+      flags,
+      method,
+      modifiedTime,
+      modifiedDate,
+      crc32: checksum,
+      compressedSize,
+      uncompressedSize,
+      externalAttributes,
+      localHeaderOffset
+    };
+    if (names.has(entry.name))
+      throw new Error("X ZIP archive contains duplicate member names");
+    names.add(entry.name);
+    if (![compressedSize, uncompressedSize, localHeaderOffset].every((value) => Number.isSafeInteger(value) && value >= 0))
+      throw new Error("X ZIP member has an invalid size or offset");
+    if (compressedSize > archiveSize || localHeaderOffset >= directory.offset) {
+      throw new Error("X ZIP member exceeds archive bounds");
+    }
+    if (method === STORED && compressedSize !== uncompressedSize) {
+      throw new Error("X ZIP stored member has inconsistent sizes");
+    }
+    if (selected && (compressedSize < 1 || uncompressedSize < 1 || compressedSize > MAX_COMPRESSED_MEMBER_BYTES || uncompressedSize > MAX_X_ZIP_MEMBER_BYTES))
+      throw new Error("selected X ZIP member exceeds its size bounds");
+    if (selected && uncompressedSize > compressedSize * MAX_RATIO) {
+      throw new Error("selected X ZIP member exceeds its compression-ratio limit");
+    }
+    declared += uncompressedSize;
+    if (!Number.isSafeInteger(declared) || declared > MAX_TOTAL_DECLARED_BYTES) {
+      throw new Error("X ZIP archive exceeds its declared uncompressed-size limit");
+    }
+    if (selected) {
+      selectedTotal += uncompressedSize;
+      if (!Number.isSafeInteger(selectedTotal) || selectedTotal > MAX_TOTAL_SELECTED_BYTES) {
+        throw new Error("selected X ZIP members exceed their total size limit");
+      }
+    }
+    validateType(entry);
+    entries.push(entry);
+    position = next;
+  }
+  if (position !== bytes.length)
+    throw new Error("X ZIP central directory contains unindexed data");
+  return entries;
+}
+function localSizes(compressed, uncompressed, fields, label) {
+  const zip64 = fields.get(ZIP64_EXTRA) ?? null;
+  if (compressed !== U32_MAX && uncompressed !== U32_MAX) {
+    if (zip64 !== null)
+      throw new Error(`X ZIP ${label} contains redundant ZIP64 size metadata`);
+    return { compressed, uncompressed, zip64: false };
+  }
+  if (zip64 === null)
+    throw new Error(`X ZIP ${label} is missing ZIP64 size metadata`);
+  let position = 0;
+  let resolvedUncompressed = uncompressed;
+  let resolvedCompressed = compressed;
+  if (uncompressed === U32_MAX) {
+    resolvedUncompressed = u64(zip64, position, `${label} uncompressed size`);
+    position += 8;
+  }
+  if (compressed === U32_MAX) {
+    resolvedCompressed = u64(zip64, position, `${label} compressed size`);
+    position += 8;
+  }
+  if (position !== zip64.length)
+    throw new Error(`X ZIP ${label} contains ambiguous ZIP64 size metadata`);
+  return { compressed: resolvedCompressed, uncompressed: resolvedUncompressed, zip64: true };
+}
+function validateDescriptor(bytes, entry) {
+  let position = 0;
+  if (bytes.length === 16 || bytes.length === 24) {
+    if (bytes.readUInt32LE(0) !== DESCRIPTOR)
+      throw new Error("X ZIP data descriptor signature is invalid");
+    position = 4;
+  } else if (bytes.length !== 12 && bytes.length !== 20) {
+    throw new Error("X ZIP data descriptor has an invalid length");
+  }
+  if (bytes.readUInt32LE(position) !== entry.crc32) {
+    throw new Error("X ZIP data descriptor checksum disagrees with the central directory");
+  }
+  position += 4;
+  const zip64 = bytes.length - position === 16;
+  const compressed = zip64 ? u64(bytes, position, "descriptor compressed size") : bytes.readUInt32LE(position);
+  position += zip64 ? 8 : 4;
+  const uncompressed = zip64 ? u64(bytes, position, "descriptor uncompressed size") : bytes.readUInt32LE(position);
+  if (compressed !== entry.compressedSize || uncompressed !== entry.uncompressedSize) {
+    throw new Error("X ZIP data descriptor sizes disagree with the central directory");
+  }
+}
+function localRanges(descriptor, entries, centralOffset) {
+  const ordered = [...entries].sort((left, right) => left.localHeaderOffset - right.localHeaderOffset);
+  const ranges = new Map;
+  let expected = 0;
+  for (const [index, entry] of ordered.entries()) {
+    const label = `local member ${index + 1}`;
+    const offset = entry.localHeaderOffset;
+    if (offset !== expected) {
+      throw new Error(offset < expected ? "X ZIP local member ranges overlap" : "X ZIP archive contains unindexed local data");
+    }
+    const header = readExact(descriptor, offset, 30, `${label} header`);
+    if (header.readUInt32LE(0) !== LOCAL)
+      throw new Error("X ZIP local header signature is invalid");
+    const version = header.readUInt16LE(4);
+    const flags = header.readUInt16LE(6);
+    const method = header.readUInt16LE(8);
+    const modifiedTime = header.readUInt16LE(10);
+    const modifiedDate = header.readUInt16LE(12);
+    const checksum = header.readUInt32LE(14);
+    const compressedLegacy = header.readUInt32LE(18);
+    const uncompressedLegacy = header.readUInt32LE(22);
+    const nameLength = header.readUInt16LE(26);
+    const extraLength = header.readUInt16LE(28);
+    if (version !== entry.versionNeeded || flags !== entry.flags || method !== entry.method || modifiedTime !== entry.modifiedTime || modifiedDate !== entry.modifiedDate)
+      throw new Error("X ZIP local header disagrees with the central directory");
+    const variable = readExact(descriptor, offset + 30, nameLength + extraLength, `${label} fields`);
+    if (!variable.subarray(0, nameLength).equals(entry.nameBytes)) {
+      throw new Error("X ZIP local member name disagrees with the central directory");
+    }
+    const fields = extraFields(variable.subarray(nameLength), `${label} header`);
+    const sizes = localSizes(compressedLegacy, uncompressedLegacy, fields, `${label} header`);
+    if ((flags & DESCRIPTOR_FLAG) === 0) {
+      if (checksum !== entry.crc32 || sizes.compressed !== entry.compressedSize || sizes.uncompressed !== entry.uncompressedSize)
+        throw new Error("X ZIP local sizes or checksum disagree with the central directory");
+    } else if (checksum !== 0 && checksum !== entry.crc32 || sizes.compressed !== 0 && sizes.compressed !== entry.compressedSize || sizes.uncompressed !== 0 && sizes.uncompressed !== entry.uncompressedSize)
+      throw new Error("X ZIP local descriptor placeholders disagree with the central directory");
+    const dataOffset = checkedEnd(offset + 30, nameLength + extraLength, "local member data offset");
+    const dataEnd = checkedEnd(dataOffset, entry.compressedSize, "local member compressed data");
+    const next = index + 1 < ordered.length ? ordered[index + 1].localHeaderOffset : centralOffset;
+    if (dataEnd > next)
+      throw new Error("X ZIP local member ranges overlap");
+    if ((flags & DESCRIPTOR_FLAG) === 0) {
+      if (dataEnd !== next)
+        throw new Error("X ZIP archive contains unindexed local data");
+    } else {
+      const descriptorLength = next - dataEnd;
+      const allowedLengths = sizes.zip64 ? [20, 24] : [12, 16];
+      if (!allowedLengths.includes(descriptorLength)) {
+        throw new Error("X ZIP data descriptor has an invalid width");
+      }
+      validateDescriptor(readExact(descriptor, dataEnd, descriptorLength, `${label} descriptor`), entry);
+    }
+    ranges.set(offset, { dataOffset, dataEnd });
+    expected = next;
+  }
+  if (expected !== centralOffset)
+    throw new Error("X ZIP archive contains unindexed local data");
+  return ranges;
+}
+function readSelected(descriptor, entry, range) {
+  const compressed = readExact(descriptor, range.dataOffset, range.dataEnd - range.dataOffset, `selected member ${entry.name}`);
+  let output;
+  try {
+    output = entry.method === STORED ? Buffer.from(compressed) : inflateRawSync(compressed, {
+      maxOutputLength: Math.min(MAX_X_ZIP_MEMBER_BYTES + 1, entry.uncompressedSize + 1)
+    });
+  } catch (error) {
+    throw new Error(`selected X ZIP member is invalid: ${entry.name}`, { cause: error });
+  }
+  if (output.length !== entry.uncompressedSize) {
+    throw new Error("selected X ZIP member has an incorrect output size");
+  }
+  if ((updateCrc32(4294967295, output) ^ 4294967295) >>> 0 !== entry.crc32) {
+    throw new Error("selected X ZIP member failed its CRC-32 check");
+  }
+  const logical = logicalName(entry.name);
+  if (logical === null)
+    throw new Error("X ZIP selected member has an unsupported root");
+  return { memberName: entry.name, logicalName: logical, bytes: output };
+}
+function extractXArchiveFile(descriptor, archiveSize) {
+  if (!Number.isSafeInteger(descriptor) || descriptor < 0)
+    throw new Error("X ZIP descriptor is invalid");
+  if (!Number.isSafeInteger(archiveSize) || archiveSize < 1 || archiveSize > MAX_X_ZIP_ARCHIVE_BYTES) {
+    throw new Error("X archive size is invalid");
+  }
+  const directory = directoryFromEocd(descriptor, archiveSize);
+  const entries = centralEntries(descriptor, directory, archiveSize);
+  const ranges = localRanges(descriptor, entries, directory.offset);
+  const selected = new Map;
+  for (const entry of entries) {
+    if (!entry.selected)
+      continue;
+    const range = ranges.get(entry.localHeaderOffset);
+    if (range === undefined)
+      throw new Error("X ZIP selected member has no validated local range");
+    const member = readSelected(descriptor, entry, range);
+    if (selected.has(member.logicalName)) {
+      throw new Error("X ZIP archive contains a duplicate selected member");
+    }
+    selected.set(member.logicalName, member);
+  }
+  const manifest = selected.get("data/manifest.js");
+  const account = selected.get("data/account.js");
+  const directMessages = selected.get("data/direct-messages.js") ?? null;
+  const groupDirectMessages = selected.get("data/direct-messages-group.js") ?? null;
+  if (manifest === undefined || account === undefined) {
+    throw new Error("X archive must contain data/manifest.js and data/account.js");
+  }
+  if (directMessages === null && groupDirectMessages === null) {
+    throw new Error("X archive must contain at least one direct-message member");
+  }
+  const allowed = new Set([
+    "data/manifest.js",
+    "data/account.js",
+    "data/direct-messages.js",
+    "data/direct-messages-group.js",
+    "data/direct-message-headers.js",
+    "data/direct-message-group-headers.js",
+    "data/tweets.js",
+    "data/deleted-tweets.js",
+    "data/community-tweet.js"
+  ]);
+  const unsupported = [...selected.keys()].find((name) => !allowed.has(name));
+  if (unsupported !== undefined) {
+    throw new Error(`X archive contains an unsupported additional direct-message part: ${unsupported}`);
+  }
+  return {
+    manifest,
+    account,
+    directMessages,
+    groupDirectMessages,
+    directMessageHeaders: selected.get("data/direct-message-headers.js") ?? null,
+    groupDirectMessageHeaders: selected.get("data/direct-message-group-headers.js") ?? null,
+    identityMetadata: [
+      selected.get("data/tweets.js"),
+      selected.get("data/deleted-tweets.js"),
+      selected.get("data/community-tweet.js")
+    ].filter((member) => member !== undefined)
+  };
+}
+
+// src/x-archive.ts
+var MAX_CONVERSATIONS = 500000;
+var MAX_EVENTS = 2000000;
+var MAX_EVENT_PARTICIPANTS = 512;
+var MAX_TWEETS = 2000000;
+var MAX_TWEET_MENTIONS = 1e5;
+var MAX_TEXT_BYTES = 1024 * 1024;
+var MAX_URLS = 100;
+var MAX_MEDIA = 100;
+var MAX_REACTIONS = 1000;
+var MAX_EDITS = 100;
+var PROVIDER_ID = /^[1-9][0-9]{0,39}$/u;
+var OPAQUE_PROVIDER_ID = /^-?[0-9]{1,40}$/u;
+var HANDLE = /^[A-Za-z0-9_]{1,15}$/u;
+function sha2563(value) {
+  return createHash5("sha256").update(value).digest("hex");
+}
+function plain(value, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value;
+}
+function exactKeys2(value, allowed, label) {
+  const reviewed = new Set(allowed);
+  const unexpected = Object.keys(value).find((key) => !reviewed.has(key));
+  if (unexpected !== undefined)
+    throw new Error(`${label} contains unreviewed property ${unexpected}`);
+}
+function dense(value, label, maximum) {
+  if (!Array.isArray(value))
+    throw new Error(`${label} must be an array`);
+  if (value.length > maximum)
+    throw new Error(`${label} exceeds its item limit`);
+  for (let index = 0;index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index))
+      throw new Error(`${label} must not be sparse`);
+  }
+  return value;
+}
+function text2(value, label, maximum = MAX_TEXT_BYTES, required = false) {
+  if (value === undefined || value === null || value === "") {
+    if (required)
+      throw new Error(`${label} is required`);
+    return null;
+  }
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > maximum || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u.test(value))
+    throw new Error(`${label} is invalid`);
+  return value;
+}
+function providerId(value, label) {
+  if (typeof value !== "string" || !PROVIDER_ID.test(value)) {
+    throw new Error(`${label} must be an exact X user ID string`);
+  }
+  return value;
+}
+function optionalProviderId(value, label) {
+  if (value === undefined || value === null || value === "")
+    return null;
+  return providerId(value, label);
+}
+function optionalOpaqueProviderId(value, label) {
+  if (value === undefined || value === null || value === "")
+    return null;
+  if (typeof value !== "string" || !OPAQUE_PROVIDER_ID.test(value)) {
+    throw new Error(`${label} is not a reviewed X user ID string`);
+  }
+  return value;
+}
+function username(value, label) {
+  const parsed = text2(value, label, 64, true);
+  if (!HANDLE.test(parsed))
+    throw new Error(`${label} is not an exact X username`);
+  return parsed;
+}
+function timestamp(value, label) {
+  const parsed = text2(value, label, 128, true);
+  const milliseconds = Date.parse(parsed);
+  if (!Number.isFinite(milliseconds))
+    throw new Error(`${label} is not a timestamp`);
+  return new Date(milliseconds).toISOString();
+}
+function countString(value, label, maximum) {
+  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    throw new Error(`${label} must be an exact decimal count string`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > maximum) {
+    throw new Error(`${label} exceeds its count bound`);
+  }
+  return parsed;
+}
+function assignment(member, prefix) {
+  if (member.bytes.byteLength > MAX_X_ZIP_MEMBER_BYTES) {
+    throw new Error(`X archive member exceeds its limit: ${member.logicalName}`);
+  }
+  let source;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(member.bytes);
+  } catch (error) {
+    throw new Error(`X archive member is not UTF-8: ${member.logicalName}`, { cause: error });
+  }
+  if (!source.startsWith(prefix)) {
+    throw new Error(`X archive member has an unexpected assignment: ${member.logicalName}`);
+  }
+  let payload = source.slice(prefix.length).trim();
+  if (payload.endsWith(";"))
+    payload = payload.slice(0, -1).trimEnd();
+  try {
+    return JSON.parse(payload);
+  } catch (error) {
+    throw new Error(`X archive member contains invalid assignment JSON: ${member.logicalName}`, { cause: error });
+  }
+}
+function ytdAssignment(member, binding) {
+  return assignment(member, `window.YTD.${binding}.part0 = `);
+}
+function manifestFile(dataTypes, key, expectedFileName, expectedGlobalName, maximum, required, media) {
+  const raw = dataTypes[key];
+  if (raw === undefined) {
+    if (required)
+      throw new Error(`X manifest is missing dataTypes.${key}`);
+    return null;
+  }
+  const declaration = plain(raw, `X manifest dataTypes.${key}`);
+  exactKeys2(declaration, media ? ["mediaDirectory", "files"] : ["files"], `X manifest dataTypes.${key}`);
+  if (media)
+    text2(declaration.mediaDirectory, `X manifest dataTypes.${key}.mediaDirectory`, 1024, true);
+  const files = dense(declaration.files, `X manifest dataTypes.${key}.files`, 2);
+  if (files.length !== 1) {
+    throw new Error(`X manifest dataTypes.${key} declares unsupported additional parts`);
+  }
+  const file = plain(files[0], `X manifest dataTypes.${key}.files[0]`);
+  exactKeys2(file, ["fileName", "globalName", "count"], `X manifest dataTypes.${key}.files[0]`);
+  const fileName = text2(file.fileName, `X manifest dataTypes.${key}.files[0].fileName`, 1024, true);
+  const globalName = text2(file.globalName, `X manifest dataTypes.${key}.files[0].globalName`, 1024, true);
+  if (fileName !== expectedFileName || globalName !== expectedGlobalName) {
+    throw new Error(`X manifest dataTypes.${key} declares an unsupported part`);
+  }
+  return {
+    fileName,
+    globalName,
+    count: countString(file.count, `X manifest dataTypes.${key}.files[0].count`, maximum)
+  };
+}
+function parseManifest2(member) {
+  const root = plain(assignment(member, "window.__THAR_CONFIG = "), "X manifest");
+  exactKeys2(root, ["userInfo", "archiveInfo", "readmeInfo", "dataTypes"], "X manifest");
+  const userInfo = plain(root.userInfo, "X manifest userInfo");
+  exactKeys2(userInfo, ["accountId", "userName", "displayName"], "X manifest userInfo");
+  const accountId = providerId(userInfo.accountId, "X manifest userInfo.accountId");
+  const handle = username(userInfo.userName, "X manifest userInfo.userName");
+  const displayName = text2(userInfo.displayName, "X manifest userInfo.displayName", 1024, true);
+  const archiveInfo = plain(root.archiveInfo, "X manifest archiveInfo");
+  exactKeys2(archiveInfo, ["sizeBytes", "generationDate", "isPartialArchive", "maxPartSizeBytes"], "X manifest archiveInfo");
+  const declaredSizeBytes = countString(archiveInfo.sizeBytes, "X manifest archiveInfo.sizeBytes", MAX_X_ZIP_ARCHIVE_BYTES * 4);
+  countString(archiveInfo.maxPartSizeBytes, "X manifest archiveInfo.maxPartSizeBytes", MAX_X_ZIP_ARCHIVE_BYTES * 16);
+  const generationDate = timestamp(archiveInfo.generationDate, "X manifest archiveInfo.generationDate");
+  if (typeof archiveInfo.isPartialArchive !== "boolean") {
+    throw new Error("X manifest archiveInfo.isPartialArchive must be a boolean");
+  }
+  const readmeInfo = plain(root.readmeInfo, "X manifest readmeInfo");
+  exactKeys2(readmeInfo, ["fileName", "directory", "name"], "X manifest readmeInfo");
+  for (const key of ["fileName", "directory", "name"]) {
+    text2(readmeInfo[key], `X manifest readmeInfo.${key}`, 1024, true);
+  }
+  const dataTypes = plain(root.dataTypes, "X manifest dataTypes");
+  const account = manifestFile(dataTypes, "account", "data/account.js", "YTD.account.part0", 1, true, false);
+  if (account.count !== 1)
+    throw new Error("X manifest must declare exactly one account record");
+  const directMessages = manifestFile(dataTypes, "directMessages", "data/direct-messages.js", "YTD.direct_messages.part0", MAX_CONVERSATIONS, false, true);
+  const groupDirectMessages = manifestFile(dataTypes, "directMessagesGroup", "data/direct-messages-group.js", "YTD.direct_messages_group.part0", MAX_CONVERSATIONS, false, true);
+  if (directMessages === null && groupDirectMessages === null) {
+    throw new Error("X manifest must declare at least one direct-message member");
+  }
+  return {
+    generationDate,
+    isPartialArchive: archiveInfo.isPartialArchive,
+    declaredSizeBytes,
+    userInfo: { accountId, username: handle, displayName },
+    declarations: {
+      account,
+      directMessages,
+      groupDirectMessages,
+      directMessageHeaders: manifestFile(dataTypes, "directMessageHeaders", "data/direct-message-headers.js", "YTD.direct_message_headers.part0", MAX_CONVERSATIONS, false, false),
+      groupDirectMessageHeaders: manifestFile(dataTypes, "directMessageGroupHeaders", "data/direct-message-group-headers.js", "YTD.direct_message_group_headers.part0", MAX_CONVERSATIONS, false, false)
+    }
+  };
+}
+function parseAccount(member) {
+  const values = dense(ytdAssignment(member, "account"), `${member.logicalName} root`, 1);
+  if (values.length !== 1)
+    throw new Error("X archive must contain exactly one account record");
+  const wrapper = plain(values[0], `${member.logicalName}[0]`);
+  exactKeys2(wrapper, ["account"], `${member.logicalName}[0]`);
+  const account = plain(wrapper.account, `${member.logicalName}[0].account`);
+  exactKeys2(account, ["email", "createdVia", "username", "accountId", "createdAt", "accountDisplayName"], `${member.logicalName}[0].account`);
+  return {
+    providerUserId: providerId(account.accountId, `${member.logicalName}.accountId`),
+    username: username(account.username, `${member.logicalName}.username`),
+    displayName: text2(account.accountDisplayName, `${member.logicalName}.accountDisplayName`, 1024),
+    email: text2(account.email, `${member.logicalName}.email`, 8192),
+    createdAt: account.createdAt === undefined || account.createdAt === null || account.createdAt === "" ? null : timestamp(account.createdAt, `${member.logicalName}.createdAt`),
+    createdVia: text2(account.createdVia, `${member.logicalName}.createdVia`, 1024)
+  };
+}
+function idArray(value, label) {
+  const ids = dense(value, label, MAX_EVENT_PARTICIPANTS).map((item, index) => providerId(item, `${label}[${index}]`));
+  if (new Set(ids).size !== ids.length)
+    throw new Error(`${label} repeats an X user ID`);
+  return ids.sort();
+}
+function parseEdits(value, label) {
+  if (value === undefined)
+    return [];
+  const edits = dense(value, label, MAX_EDITS).map((item, index) => {
+    const editLabel = `${label}[${index}]`;
+    const edit = plain(item, editLabel);
+    exactKeys2(edit, ["createdAtSec", "editedText"], editLabel);
+    const seconds = text2(edit.createdAtSec, `${editLabel}.createdAtSec`, 16, true);
+    const parsed = Number(seconds);
+    if (!/^[0-9]{1,16}$/u.test(seconds) || !Number.isSafeInteger(parsed) || parsed > 253402300799)
+      throw new Error(`${editLabel}.createdAtSec is invalid`);
+    return {
+      createdAtSec: seconds,
+      createdAt: new Date(parsed * 1000).toISOString(),
+      editedText: text2(edit.editedText, `${editLabel}.editedText`, MAX_TEXT_BYTES, true)
+    };
+  });
+  return edits.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.editedText.localeCompare(right.editedText));
+}
+function countedUrls(value, label) {
+  if (value === undefined)
+    return 0;
+  const urls = dense(value, label, MAX_URLS);
+  for (const [index, value2] of urls.entries()) {
+    const url = plain(value2, `${label}[${index}]`);
+    exactKeys2(url, ["url", "expanded", "display"], `${label}[${index}]`);
+    for (const key of Object.keys(url))
+      text2(url[key], `${label}[${index}].${key}`, 8192, true);
+  }
+  return urls.length;
+}
+function countedMedia(value, label) {
+  if (value === undefined)
+    return 0;
+  const media = dense(value, label, MAX_MEDIA);
+  for (const [index, item] of media.entries())
+    text2(item, `${label}[${index}]`, 8192, true);
+  return media.length;
+}
+function parseReactions(value, label, seenReactionIds) {
+  if (value === undefined)
+    return [];
+  const reactions = dense(value, label, MAX_REACTIONS).map((item, index) => {
+    const reactionLabel = `${label}[${index}]`;
+    const reaction = plain(item, reactionLabel);
+    exactKeys2(reaction, ["senderId", "reactionKey", "eventId", "createdAt"], reactionLabel);
+    const eventId = providerId(reaction.eventId, `${reactionLabel}.eventId`);
+    if (seenReactionIds.has(eventId))
+      throw new Error(`${reactionLabel} repeats an X reaction event ID`);
+    seenReactionIds.add(eventId);
+    return {
+      eventId,
+      senderId: providerId(reaction.senderId, `${reactionLabel}.senderId`),
+      reactionKey: text2(reaction.reactionKey, `${reactionLabel}.reactionKey`, 128, true),
+      createdAt: timestamp(reaction.createdAt, `${reactionLabel}.createdAt`)
+    };
+  });
+  return reactions.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.eventId.localeCompare(right.eventId));
+}
+function parseMessageCreate(value, label, seenMessageIds, seenReactionIds) {
+  const message = plain(value, label);
+  exactKeys2(message, ["recipientId", "text", "reactions", "urls", "mediaUrls", "senderId", "id", "createdAt", "editHistory"], label);
+  const id = providerId(message.id, `${label}.id`);
+  if (seenMessageIds.has(id))
+    throw new Error(`${label} repeats an X message ID`);
+  seenMessageIds.add(id);
+  return {
+    kind: "message-create",
+    id,
+    senderId: providerId(message.senderId, `${label}.senderId`),
+    recipientId: optionalProviderId(message.recipientId, `${label}.recipientId`),
+    createdAt: timestamp(message.createdAt, `${label}.createdAt`),
+    text: text2(message.text, `${label}.text`),
+    urlCount: countedUrls(message.urls, `${label}.urls`),
+    mediaCount: countedMedia(message.mediaUrls, `${label}.mediaUrls`),
+    editHistory: parseEdits(message.editHistory, `${label}.editHistory`),
+    activeReactions: parseReactions(message.reactions, `${label}.reactions`, seenReactionIds),
+    replyToMessageId: null
+  };
+}
+function parseMembershipEvent(value, label, sourceKind) {
+  const event = plain(value, label);
+  const allowed = sourceKind === "participantsLeave" ? ["userIds", "createdAt"] : ["initiatingUserId", "participantsSnapshot", "userIds", "createdAt"];
+  exactKeys2(event, allowed, label);
+  const participantSnapshotIds = event.participantsSnapshot === undefined ? [] : idArray(event.participantsSnapshot, `${label}.participantsSnapshot`);
+  const userIds = event.userIds === undefined ? [] : idArray(event.userIds, `${label}.userIds`);
+  if (sourceKind === "participantsLeave" && event.userIds === undefined) {
+    throw new Error(`${label}.userIds is required`);
+  }
+  if (sourceKind !== "participantsLeave" && participantSnapshotIds.length === 0 && userIds.length === 0) {
+    throw new Error(`${label} has no participant inventory`);
+  }
+  return {
+    kind: sourceKind === "joinConversation" ? "join-conversation" : sourceKind === "participantsJoin" ? "participants-join" : "participants-leave",
+    initiatingUserId: optionalProviderId(event.initiatingUserId, `${label}.initiatingUserId`),
+    participantSnapshotIds,
+    userIds,
+    createdAt: timestamp(event.createdAt, `${label}.createdAt`)
+  };
+}
+function parseNameUpdate(value, label) {
+  const event = plain(value, label);
+  exactKeys2(event, ["initiatingUserId", "name", "createdAt"], label);
+  return {
+    kind: "conversation-name-update",
+    initiatingUserId: optionalProviderId(event.initiatingUserId, `${label}.initiatingUserId`),
+    name: text2(event.name, `${label}.name`, 1024, true),
+    createdAt: timestamp(event.createdAt, `${label}.createdAt`)
+  };
+}
+function eventSortKey(event) {
+  if (event.kind === "message-create")
+    return `0\x00${event.id}`;
+  if (event.kind === "conversation-name-update")
+    return `4\x00${event.initiatingUserId ?? ""}\x00${event.name}`;
+  return `${event.kind === "join-conversation" ? "1" : event.kind === "participants-join" ? "2" : "3"}\x00${event.initiatingUserId ?? ""}\x00${event.userIds.join("\x00")}`;
+}
+function headerSignature(message) {
+  return JSON.stringify([message.id, message.senderId, message.recipientId, message.createdAt]);
+}
+function eventHeaderSignature(event) {
+  if (event.kind === "message-create")
+    return `message\x00${headerSignature(event)}`;
+  if (event.kind === "conversation-name-update") {
+    return JSON.stringify([event.kind, event.initiatingUserId, event.name, event.createdAt]);
+  }
+  return JSON.stringify([
+    event.kind,
+    event.initiatingUserId,
+    event.participantSnapshotIds,
+    event.userIds,
+    event.createdAt
+  ]);
+}
+function parseConversations(member, selfId, group, seenConversationIds, seenMessageIds, seenReactionIds) {
+  const binding = group ? "direct_messages_group" : "direct_messages";
+  const values = dense(ytdAssignment(member, binding), `${member.logicalName} root`, MAX_CONVERSATIONS);
+  const combined = new Map;
+  let totalEvents = 0;
+  for (const [recordIndex, value] of values.entries()) {
+    const label = `${member.logicalName}[${recordIndex}]`;
+    const wrapper = plain(value, label);
+    exactKeys2(wrapper, ["dmConversation"], label);
+    const conversation = plain(wrapper.dmConversation, `${label}.dmConversation`);
+    exactKeys2(conversation, ["conversationId", "messages"], `${label}.dmConversation`);
+    const conversationId = text2(conversation.conversationId, `${label}.dmConversation.conversationId`, 256, true);
+    if (!/^[0-9]+(?:-[0-9]+)?$/u.test(conversationId)) {
+      throw new Error(`${label}.dmConversation.conversationId is invalid`);
+    }
+    let state = combined.get(conversationId);
+    if (state === undefined) {
+      if (seenConversationIds.has(conversationId)) {
+        throw new Error(`${label} repeats an X conversation across direct and group members`);
+      }
+      seenConversationIds.add(conversationId);
+      state = { participants: new Set([selfId]), events: [] };
+      combined.set(conversationId, state);
+    }
+    const participants = state.participants;
+    const directIds = group ? null : conversationId.split("-").map((id, index) => providerId(id, `${label}.conversationId[${index}]`));
+    if (directIds !== null) {
+      if (directIds.length !== 2 || !directIds.includes(selfId)) {
+        throw new Error(`${label}.conversationId is not bound to the archive account`);
+      }
+      for (const id of directIds)
+        participants.add(id);
+      if (participants.size !== 2)
+        throw new Error(`${label}.conversationId does not identify a direct-message peer`);
+    }
+    for (const [eventIndex, item] of dense(conversation.messages, `${label}.dmConversation.messages`, MAX_EVENTS).entries()) {
+      totalEvents += 1;
+      if (totalEvents > MAX_EVENTS)
+        throw new Error(`${member.logicalName} exceeds its event limit`);
+      const eventLabel = `${label}.dmConversation.messages[${eventIndex}]`;
+      const event = plain(item, eventLabel);
+      const keys = Object.keys(event);
+      if (keys.length !== 1)
+        throw new Error(`${eventLabel} must contain exactly one event`);
+      const sourceKind = keys[0];
+      let parsed;
+      if (sourceKind === "messageCreate") {
+        parsed = parseMessageCreate(event.messageCreate, `${eventLabel}.messageCreate`, seenMessageIds, seenReactionIds);
+        participants.add(parsed.senderId);
+        if (parsed.recipientId !== null)
+          participants.add(parsed.recipientId);
+        for (const reaction of parsed.activeReactions)
+          participants.add(reaction.senderId);
+      } else if (sourceKind === "joinConversation" || sourceKind === "participantsJoin" || sourceKind === "participantsLeave") {
+        parsed = parseMembershipEvent(event[sourceKind], `${eventLabel}.${sourceKind}`, sourceKind);
+        if (parsed.initiatingUserId !== null)
+          participants.add(parsed.initiatingUserId);
+        for (const id of [...parsed.participantSnapshotIds, ...parsed.userIds])
+          participants.add(id);
+      } else if (sourceKind === "conversationNameUpdate") {
+        parsed = parseNameUpdate(event.conversationNameUpdate, `${eventLabel}.conversationNameUpdate`);
+        if (parsed.initiatingUserId !== null)
+          participants.add(parsed.initiatingUserId);
+      } else {
+        throw new Error(`${eventLabel} contains unreviewed event ${sourceKind}`);
+      }
+      if (directIds !== null && [...participants].some((id) => !directIds.includes(id))) {
+        throw new Error(`${eventLabel} names a user outside its direct conversation`);
+      }
+      state.events.push(parsed);
+    }
+  }
+  const signatures = new Map;
+  const conversations = [...combined.entries()].map(([conversationId, state]) => {
+    const orderedEvents = state.events.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || eventSortKey(left).localeCompare(eventSortKey(right)));
+    signatures.set(conversationId, orderedEvents.filter((event) => event.kind === "message-create").map(eventHeaderSignature).sort());
+    return {
+      conversationId,
+      kind: group ? "group" : "direct",
+      participantIds: [...state.participants].sort(),
+      events: orderedEvents
+    };
+  });
+  return {
+    recordCount: values.length,
+    conversations: conversations.sort((left, right) => left.conversationId.localeCompare(right.conversationId)),
+    headerSignatures: signatures
+  };
+}
+function parseHeaders(member, group) {
+  const binding = group ? "direct_message_group_headers" : "direct_message_headers";
+  const values = dense(ytdAssignment(member, binding), `${member.logicalName} root`, MAX_CONVERSATIONS);
+  const result = new Map;
+  let total = 0;
+  for (const [recordIndex, value] of values.entries()) {
+    const label = `${member.logicalName}[${recordIndex}]`;
+    const wrapper = plain(value, label);
+    exactKeys2(wrapper, ["dmConversation"], label);
+    const conversation = plain(wrapper.dmConversation, `${label}.dmConversation`);
+    exactKeys2(conversation, ["conversationId", "messages"], `${label}.dmConversation`);
+    const id = text2(conversation.conversationId, `${label}.conversationId`, 256, true);
+    if (!/^[0-9]+(?:-[0-9]+)?$/u.test(id))
+      throw new Error(`${label}.conversationId is invalid`);
+    const signatures = [...result.get(id) ?? []];
+    for (const [eventIndex, item] of dense(conversation.messages, `${label}.messages`, MAX_EVENTS).entries()) {
+      total += 1;
+      if (total > MAX_EVENTS)
+        throw new Error(`${member.logicalName} exceeds its event limit`);
+      const eventLabel = `${label}.messages[${eventIndex}]`;
+      const event = plain(item, eventLabel);
+      const keys = Object.keys(event);
+      if (keys.length !== 1)
+        throw new Error(`${eventLabel} must contain exactly one event`);
+      const sourceKind = keys[0];
+      let parsed;
+      if (sourceKind === "messageCreate") {
+        const message = plain(event.messageCreate, `${eventLabel}.messageCreate`);
+        exactKeys2(message, group ? ["id", "senderId", "createdAt"] : ["id", "senderId", "recipientId", "createdAt"], `${eventLabel}.messageCreate`);
+        parsed = {
+          kind: "message-create",
+          id: providerId(message.id, `${eventLabel}.messageCreate.id`),
+          senderId: providerId(message.senderId, `${eventLabel}.messageCreate.senderId`),
+          recipientId: optionalProviderId(message.recipientId, `${eventLabel}.messageCreate.recipientId`),
+          createdAt: timestamp(message.createdAt, `${eventLabel}.messageCreate.createdAt`),
+          text: null,
+          urlCount: 0,
+          mediaCount: 0,
+          editHistory: [],
+          activeReactions: [],
+          replyToMessageId: null
+        };
+      } else if (sourceKind === "joinConversation" || sourceKind === "participantsJoin" || sourceKind === "participantsLeave") {
+        parsed = parseMembershipEvent(event[sourceKind], `${eventLabel}.${sourceKind}`, sourceKind);
+      } else if (sourceKind === "conversationNameUpdate") {
+        parsed = parseNameUpdate(event.conversationNameUpdate, `${eventLabel}.conversationNameUpdate`);
+      } else {
+        throw new Error(`${eventLabel} contains unreviewed event ${sourceKind}`);
+      }
+      if (parsed.kind === "message-create")
+        signatures.push(eventHeaderSignature(parsed));
+    }
+    result.set(id, signatures.sort());
+  }
+  return { recordCount: values.length, signatures: result };
+}
+function assertHeaderParity(body, header, label) {
+  if (body.size !== header.size)
+    throw new Error(`${label} conversation count disagrees with its DM body`);
+  for (const [conversationId, bodyMessages] of body) {
+    const headerMessages = header.get(conversationId);
+    if (headerMessages === undefined) {
+      throw new Error(`${label} omits body conversation ${conversationId}`);
+    }
+    if (bodyMessages.length !== headerMessages.length) {
+      throw new Error(`${label} disagrees with its DM body for conversation ${conversationId}: ${headerMessages.length} header events versus ${bodyMessages.length} body events`);
+    }
+    if (bodyMessages.some((value, index) => value !== headerMessages[index])) {
+      throw new Error(`${label} disagrees with its DM body event coordinates for conversation ${conversationId}`);
+    }
+  }
+}
+var REVIEWED_TWEET_KEYS = [
+  "community_id",
+  "community_id_str",
+  "contributors",
+  "coordinates",
+  "created_at",
+  "deleted_at",
+  "display_text_range",
+  "edit_info",
+  "entities",
+  "extended_entities",
+  "extended_tweet",
+  "favorite_count",
+  "favorited",
+  "filter_level",
+  "full_text",
+  "geo",
+  "id",
+  "id_str",
+  "in_reply_to_screen_name",
+  "in_reply_to_status_id",
+  "in_reply_to_status_id_str",
+  "in_reply_to_user_id",
+  "in_reply_to_user_id_str",
+  "is_quote_status",
+  "lang",
+  "matching_rules",
+  "place",
+  "possibly_sensitive",
+  "possibly_sensitive_appealable",
+  "quoted_status",
+  "quoted_status_id",
+  "quoted_status_id_str",
+  "quoted_status_permalink",
+  "retweet_count",
+  "retweeted",
+  "retweeted_status",
+  "scopes",
+  "source",
+  "text",
+  "truncated",
+  "withheld_copyright",
+  "withheld_in_countries",
+  "withheld_scope"
+];
+var REVIEWED_ENTITY_KEYS = ["hashtags", "media", "symbols", "timestamps", "urls", "user_mentions"];
+var REVIEWED_MENTION_KEYS = ["id", "id_str", "indices", "name", "screen_name"];
+function tweetBinding(member) {
+  if (member.logicalName === "data/tweets.js")
+    return { binding: "tweets", source: member.logicalName };
+  if (member.logicalName === "data/deleted-tweets.js")
+    return { binding: "deleted_tweets", source: member.logicalName };
+  if (member.logicalName === "data/community-tweet.js")
+    return { binding: "community_tweet", source: member.logicalName };
+  throw new Error(`X archive identity member is not allowlisted: ${member.logicalName}`);
+}
+function parseIdentityObservations(member) {
+  const source = tweetBinding(member);
+  const values = dense(ytdAssignment(member, source.binding), `${member.logicalName} root`, MAX_TWEETS);
+  const observations = [];
+  let mentionTotal = 0;
+  for (const [recordIndex, value] of values.entries()) {
+    const label = `${member.logicalName}[${recordIndex}]`;
+    const wrapper = plain(value, label);
+    exactKeys2(wrapper, ["tweet"], label);
+    const tweet = plain(wrapper.tweet, `${label}.tweet`);
+    exactKeys2(tweet, REVIEWED_TWEET_KEYS, `${label}.tweet`);
+    const observedAt = timestamp(tweet.created_at, `${label}.tweet.created_at`);
+    let identityRecord = 0;
+    const replyId = optionalOpaqueProviderId(tweet.in_reply_to_user_id, `${label}.tweet.in_reply_to_user_id`);
+    const replyIdString = optionalOpaqueProviderId(tweet.in_reply_to_user_id_str, `${label}.tweet.in_reply_to_user_id_str`);
+    if (replyId !== null && replyIdString !== null && replyId !== replyIdString) {
+      throw new Error(`${label}.tweet reply user IDs disagree`);
+    }
+    const rawReplyHandle = text2(tweet.in_reply_to_screen_name, `${label}.tweet.in_reply_to_screen_name`, 64);
+    const replyHandle = rawReplyHandle === null ? null : username(rawReplyHandle, `${label}.tweet.in_reply_to_screen_name`);
+    const effectiveReplyId = replyIdString ?? replyId;
+    if (effectiveReplyId !== null && replyHandle !== null && PROVIDER_ID.test(effectiveReplyId)) {
+      identityRecord += 1;
+      observations.push({
+        kind: "reply",
+        providerUserId: effectiveReplyId,
+        username: replyHandle,
+        displayName: null,
+        observedAt,
+        sourceMember: source.source,
+        sourceRecord: recordIndex + 1,
+        identityRecord
+      });
+    }
+    if (tweet.entities === undefined || tweet.entities === null)
+      continue;
+    const entities = plain(tweet.entities, `${label}.tweet.entities`);
+    exactKeys2(entities, REVIEWED_ENTITY_KEYS, `${label}.tweet.entities`);
+    if (entities.user_mentions === undefined || entities.user_mentions === null)
+      continue;
+    const mentions = dense(entities.user_mentions, `${label}.tweet.entities.user_mentions`, MAX_TWEET_MENTIONS);
+    mentionTotal += mentions.length;
+    if (mentionTotal > MAX_TWEET_MENTIONS)
+      throw new Error(`${member.logicalName} exceeds its mention limit`);
+    for (const [mentionIndex, value2] of mentions.entries()) {
+      const mentionLabel = `${label}.tweet.entities.user_mentions[${mentionIndex}]`;
+      const mention = plain(value2, mentionLabel);
+      exactKeys2(mention, REVIEWED_MENTION_KEYS, mentionLabel);
+      const id = optionalOpaqueProviderId(mention.id, `${mentionLabel}.id`);
+      const idString = optionalOpaqueProviderId(mention.id_str, `${mentionLabel}.id_str`);
+      if (id === null || idString === null) {
+        throw new Error(`${mentionLabel} must contain both X user ID coordinates`);
+      }
+      if (id !== idString)
+        throw new Error(`${mentionLabel} X user IDs disagree`);
+      if (!PROVIDER_ID.test(idString))
+        continue;
+      identityRecord += 1;
+      observations.push({
+        kind: "mention",
+        providerUserId: idString,
+        username: username(mention.screen_name, `${mentionLabel}.screen_name`),
+        displayName: text2(mention.name, `${mentionLabel}.name`, 1024),
+        observedAt,
+        sourceMember: source.source,
+        sourceRecord: recordIndex + 1,
+        identityRecord
+      });
+    }
+  }
+  return observations;
+}
+function memberParity(declaration, member, label) {
+  if (declaration === null !== (member === null)) {
+    throw new Error(`X manifest and ZIP inventory disagree for ${label}`);
+  }
+}
+function parseXArchiveMembers(members) {
+  const manifest = parseManifest2(members.manifest);
+  const account = parseAccount(members.account);
+  if (manifest.userInfo.accountId !== account.providerUserId || manifest.userInfo.username !== account.username || manifest.userInfo.displayName !== account.displayName)
+    throw new Error("X manifest userInfo disagrees with data/account.js");
+  memberParity(manifest.declarations.directMessages, members.directMessages, "direct messages");
+  memberParity(manifest.declarations.groupDirectMessages, members.groupDirectMessages, "group direct messages");
+  memberParity(manifest.declarations.directMessageHeaders, members.directMessageHeaders, "direct-message headers");
+  memberParity(manifest.declarations.groupDirectMessageHeaders, members.groupDirectMessageHeaders, "group direct-message headers");
+  const seenConversationIds = new Set;
+  const seenMessageIds = new Set;
+  const seenReactionIds = new Set;
+  const conversations = [];
+  let direct = null;
+  let group = null;
+  if (members.directMessages !== null) {
+    direct = parseConversations(members.directMessages, account.providerUserId, false, seenConversationIds, seenMessageIds, seenReactionIds);
+    if (direct.recordCount !== manifest.declarations.directMessages.count) {
+      throw new Error("X manifest directMessages count disagrees with its member");
+    }
+    conversations.push(...direct.conversations);
+  }
+  if (members.groupDirectMessages !== null) {
+    group = parseConversations(members.groupDirectMessages, account.providerUserId, true, seenConversationIds, seenMessageIds, seenReactionIds);
+    if (group.recordCount !== manifest.declarations.groupDirectMessages.count) {
+      throw new Error("X manifest directMessagesGroup count disagrees with its member");
+    }
+    conversations.push(...group.conversations);
+  }
+  if (members.directMessageHeaders !== null) {
+    const headers = parseHeaders(members.directMessageHeaders, false);
+    if (headers.recordCount !== manifest.declarations.directMessageHeaders.count) {
+      throw new Error("X manifest directMessageHeaders count disagrees with its member");
+    }
+    if (direct === null)
+      throw new Error("X direct-message headers have no DM body");
+    assertHeaderParity(direct.headerSignatures, headers.signatures, "X direct-message headers");
+  }
+  if (members.groupDirectMessageHeaders !== null) {
+    const headers = parseHeaders(members.groupDirectMessageHeaders, true);
+    if (headers.recordCount !== manifest.declarations.groupDirectMessageHeaders.count) {
+      throw new Error("X manifest directMessageGroupHeaders count disagrees with its member");
+    }
+    if (group === null)
+      throw new Error("X group direct-message headers have no DM body");
+    assertHeaderParity(group.headerSignatures, headers.signatures, "X group direct-message headers");
+  }
+  const identityObservations = members.identityMetadata.flatMap(parseIdentityObservations).sort((left, right) => left.observedAt.localeCompare(right.observedAt) || left.providerUserId.localeCompare(right.providerUserId) || left.kind.localeCompare(right.kind) || left.username.localeCompare(right.username) || (left.displayName ?? "").localeCompare(right.displayName ?? "") || left.sourceMember.localeCompare(right.sourceMember) || left.sourceRecord - right.sourceRecord || left.identityRecord - right.identityRecord);
+  return {
+    format: "message-like-me.x-archive-evidence",
+    version: 1,
+    manifest: {
+      manifestSha256: sha2563(members.manifest.bytes),
+      declaredSizeBytes: manifest.declaredSizeBytes,
+      generationDate: manifest.generationDate,
+      isPartialArchive: manifest.isPartialArchive
+    },
+    account,
+    conversations: conversations.sort((left, right) => left.conversationId.localeCompare(right.conversationId)),
+    identityObservations
+  };
+}
+function sha256Descriptor(descriptor, size) {
+  const digest3 = createHash5("sha256");
+  const buffer = Buffer.allocUnsafe(8 * 1024 * 1024);
+  let position = 0;
+  while (position < size) {
+    const count = readSync2(descriptor, buffer, 0, Math.min(buffer.length, size - position), position);
+    if (count < 1)
+      throw new Error("X archive changed while being hashed");
+    digest3.update(buffer.subarray(0, count));
+    position += count;
+  }
+  return digest3.digest("hex");
+}
+function sameStat(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs && left.mode === right.mode && left.uid === right.uid && left.nlink === right.nlink;
+}
+async function readXArchive(path) {
+  if (typeof path !== "string" || path.length < 1 || path.includes("\x00") || !isAbsolute5(path) || resolve6(path) !== path)
+    throw new Error("X archive path must be a normalized absolute path");
+  let physical;
+  try {
+    physical = realpathSync3(path);
+  } catch (error) {
+    throw new Error("X archive path cannot be resolved", { cause: error });
+  }
+  if (physical !== path)
+    throw new Error("X archive path must not traverse a symbolic link");
+  const pathBefore = lstatSync4(path, { bigint: true });
+  const descriptor = openSync2(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const before = fstatSync2(descriptor, { bigint: true });
+    const uid = typeof process.getuid === "function" ? BigInt(process.getuid()) : null;
+    if (!before.isFile() || before.nlink !== 1n || uid !== null && before.uid !== uid || (before.mode & 0o077n) !== 0n || pathBefore.dev !== before.dev || pathBefore.ino !== before.ino)
+      throw new Error("X archive must be one private current-user-owned physical file");
+    if (before.size < 1n || before.size > BigInt(MAX_X_ZIP_ARCHIVE_BYTES)) {
+      throw new Error("X archive size is invalid");
+    }
+    const size = Number(before.size);
+    const digest3 = sha256Descriptor(descriptor, size);
+    const members = extractXArchiveFile(descriptor, size);
+    const parsed = parseXArchiveMembers(members);
+    const after = fstatSync2(descriptor, { bigint: true });
+    const pathAfter = lstatSync4(path, { bigint: true });
+    if (!sameStat(before, after) || pathAfter.dev !== after.dev || pathAfter.ino !== after.ino || realpathSync3(path) !== path)
+      throw new Error("X archive changed while being read");
+    const mtimeNs = before.mtimeNs.toString();
+    return {
+      format: parsed.format,
+      version: parsed.version,
+      archive: {
+        sha256: digest3,
+        manifestSha256: parsed.manifest.manifestSha256,
+        sizeBytes: size,
+        declaredSizeBytes: parsed.manifest.declaredSizeBytes,
+        mtimeNs,
+        mtime: new Date(Number(before.mtimeNs / 1000000n)).toISOString(),
+        generationDate: parsed.manifest.generationDate,
+        isPartialArchive: parsed.manifest.isPartialArchive
+      },
+      account: parsed.account,
+      conversations: parsed.conversations,
+      identityObservations: parsed.identityObservations
+    };
+  } finally {
+    closeSync2(descriptor);
+  }
+}
+
+// src/x-source.ts
+import { createHmac as createHmac4 } from "crypto";
+var MAX_RETAINED_IDENTITY_LABELS = 64;
+function keyBytes2(value) {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 16 || bytes.byteLength > 1024) {
+    throw new CliError("invalid-data", "X archive HMAC key must contain 16 through 1024 bytes");
+  }
+  return Uint8Array.from(bytes);
+}
+function hmac4(key, namespace, value) {
+  return createHmac4("sha256", key).update(`message-like-me\x00${namespace}\x00`, "utf8").update(value, "utf8").digest("hex");
+}
+function compareCodeUnits3(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function messageEvents(conversation) {
+  return conversation.events.filter((event) => event.kind === "message-create");
+}
+function latestGroupName(conversation) {
+  const updates = conversation.events.filter((event) => event.kind === "conversation-name-update");
+  return updates.at(-1)?.name ?? null;
+}
+function observationsByParticipant(observations) {
+  const grouped = new Map;
+  for (const observation of observations) {
+    const values = grouped.get(observation.providerUserId) ?? [];
+    values.push(observation);
+    grouped.set(observation.providerUserId, values);
+  }
+  return new Map([...grouped].map(([id, values]) => {
+    const unique = new Map;
+    for (const value of values) {
+      unique.set(`${value.username.toLowerCase()}\x00${value.displayName ?? ""}`, value);
+    }
+    const ordered = [...unique.values()].sort((left, right) => compareCodeUnits3(left.observedAt, right.observedAt) || compareCodeUnits3(left.username, right.username) || compareCodeUnits3(left.displayName ?? "", right.displayName ?? ""));
+    return [id, Object.freeze(ordered.slice(-MAX_RETAINED_IDENTITY_LABELS))];
+  }));
+}
+function latestParticipantLabel(observations, participantId) {
+  const latest = observations.get(participantId)?.at(-1);
+  return latest?.displayName ?? latest?.username ?? null;
+}
+function attachmentProvenance2(key, namespace, message) {
+  return Object.freeze(Array.from({ length: message.mediaCount }, (_, index) => Object.freeze({
+    id: `attachment_${hmac4(key, "attachment", `${namespace}\x00${message.id}\x00${index + 1}`)}`,
+    kind: "x-media-reference",
+    mimeType: null,
+    fileName: null,
+    bytes: null
+  })));
+}
+function currentBody(message) {
+  const edit = message.editHistory.at(-1);
+  return Object.freeze({
+    body: edit?.editedText ?? message.text,
+    editedAt: edit?.createdAt ?? null
+  });
+}
+function normalizeXArchive(evidence, hmacKey3) {
+  const key = keyBytes2(hmacKey3);
+  const namespace = `x\x00${evidence.account.providerUserId}`;
+  const sourceId = `source_${hmac4(key, "source", namespace)}`;
+  const observations = observationsByParticipant(evidence.identityObservations);
+  const allParticipantIds = new Set([evidence.account.providerUserId]);
+  for (const conversation of evidence.conversations) {
+    for (const participantId of conversation.participantIds)
+      allParticipantIds.add(participantId);
+  }
+  const conversationIds = new Map(evidence.conversations.map((conversation) => [
+    conversation.conversationId,
+    `conversation_${hmac4(key, "conversation", `${namespace}\x00${conversation.conversationId}`)}`
+  ]));
+  const participantIds = new Map([...allParticipantIds].map((participantId) => [
+    participantId,
+    `participant_${hmac4(key, "participant", `${namespace}\x00${participantId}`)}`
+  ]));
+  const conversations = [];
+  const conversationProvenance = [];
+  const messages = [];
+  const messageProvenance = [];
+  const reactionFacts = [];
+  const timeline = [];
+  for (const conversation of evidence.conversations) {
+    const peers = conversation.participantIds.filter((id) => id !== evidence.account.providerUserId);
+    const directPeer = conversation.kind === "direct" && peers.length === 1 ? peers[0] : null;
+    const localConversationId = conversationIds.get(conversation.conversationId);
+    conversations.push(Object.freeze({
+      id: localConversationId,
+      sourceKey: conversation.conversationId,
+      privateLabel: directPeer === null ? latestGroupName(conversation) : latestParticipantLabel(observations, directPeer),
+      service: "x",
+      participantCount: peers.length,
+      participantIds: Object.freeze(peers.map((id) => participantIds.get(id)).sort(compareCodeUnits3)),
+      privateParticipants: Object.freeze([]),
+      group: conversation.kind === "group"
+    }));
+    conversationProvenance.push(Object.freeze({
+      conversationId: localConversationId,
+      externalId: conversation.conversationId,
+      metadata: Object.freeze({
+        kind: conversation.kind,
+        participantProviderIds: conversation.participantIds,
+        nonMessageEvents: conversation.events.filter((event) => event.kind !== "message-create")
+      })
+    }));
+    for (const [rowIndex, event] of messageEvents(conversation).entries()) {
+      const localMessageId = `message_${hmac4(key, "message", `${namespace}\x00${event.id}`)}`;
+      const current = currentBody(event);
+      const attachments = attachmentProvenance2(key, namespace, event);
+      const direction = event.senderId === evidence.account.providerUserId ? "outgoing" : "incoming";
+      messages.push(Object.freeze({
+        id: localMessageId,
+        sourceRowId: rowIndex + 1,
+        sourceGuid: event.id,
+        conversationId: localConversationId,
+        sentAt: event.createdAt,
+        direction,
+        body: current.body,
+        bodySource: current.body === null ? "unavailable" : "text",
+        kind: current.body !== null ? "text" : event.mediaCount > 0 ? "attachment" : "unknown",
+        replyToSourceGuid: null,
+        replyState: "unavailable",
+        editedAt: current.editedAt,
+        retractedAt: null,
+        service: "x",
+        attachmentCount: event.mediaCount
+      }));
+      messageProvenance.push(Object.freeze({
+        messageId: localMessageId,
+        externalId: event.id,
+        providerSortKey: null,
+        replyToExternalId: null,
+        attachments,
+        metadata: Object.freeze({
+          senderProviderId: event.senderId,
+          recipientProviderId: event.recipientId,
+          urlCount: event.urlCount,
+          mediaCount: event.mediaCount,
+          editHistory: event.editHistory,
+          replyCapability: "unavailable"
+        })
+      }));
+      timeline.push(event.createdAt);
+      for (const reaction of event.activeReactions) {
+        const reactionId = `reaction_${hmac4(key, "reaction", `${namespace}\x00${reaction.eventId}`)}`;
+        reactionFacts.push(Object.freeze({
+          id: reactionId,
+          externalId: reaction.eventId,
+          targetExternalId: event.id,
+          conversationId: localConversationId,
+          direction: reaction.senderId === evidence.account.providerUserId ? "outgoing" : "incoming",
+          body: reaction.reactionKey,
+          reactedAt: reaction.createdAt,
+          state: "active"
+        }));
+        timeline.push(reaction.createdAt);
+      }
+    }
+  }
+  const auxiliaryRecords = [{
+    kind: "account",
+    id: evidence.account.providerUserId,
+    record: Object.freeze({
+      providerUserId: evidence.account.providerUserId,
+      username: evidence.account.username,
+      displayName: evidence.account.displayName,
+      email: evidence.account.email,
+      createdAt: evidence.account.createdAt,
+      createdVia: evidence.account.createdVia,
+      network: "x",
+      isSelf: true
+    })
+  }];
+  for (const participantId of [...allParticipantIds].sort(compareCodeUnits3)) {
+    if (participantId === evidence.account.providerUserId)
+      continue;
+    auxiliaryRecords.push(Object.freeze({
+      kind: "participant",
+      id: participantId,
+      record: Object.freeze({
+        providerUserId: participantId,
+        network: "x",
+        isSelf: false,
+        historicalLabels: observations.get(participantId) ?? Object.freeze([])
+      })
+    }));
+  }
+  const warnings = [
+    "legacy-x-direct-message-export",
+    "encrypted-x-chat-not-included",
+    "reply-links-unavailable",
+    "media-metadata-only",
+    ...evidence.archive.isPartialArchive ? ["partial-official-archive"] : [],
+    ...evidence.identityObservations.length > 0 ? ["historical-identity-labels"] : []
+  ].sort(compareCodeUnits3);
+  const bounds = timeline.sort(compareCodeUnits3);
+  return Object.freeze({
+    source: Object.freeze({
+      id: sourceId,
+      kind: "x-archive",
+      provider: "x",
+      network: "x",
+      accountId: evidence.account.providerUserId,
+      externalId: evidence.account.providerUserId,
+      revision: evidence.archive.sha256,
+      generatedAt: evidence.archive.generationDate,
+      producer: Object.freeze({ id: "x-official-archive", version: "1" }),
+      coverage: Object.freeze({
+        history: evidence.archive.isPartialArchive ? "unknown" : "bounded",
+        observedFrom: bounds[0] ?? null,
+        observedTo: bounds.at(-1) ?? null,
+        kind: evidence.archive.isPartialArchive ? "partial-official-archive" : "complete-produced-official-archive",
+        reason: evidence.archive.isPartialArchive ? "producer-declared-partial" : "legacy-dm-export"
+      }),
+      manifestSha256: evidence.archive.manifestSha256,
+      identity: Object.freeze({
+        account: evidence.account,
+        archiveSha256: evidence.archive.sha256,
+        replyCapability: "unavailable"
+      }),
+      warnings: Object.freeze(warnings)
+    }),
+    conversations: Object.freeze(conversations),
+    conversationProvenance: Object.freeze(conversationProvenance),
+    messages: Object.freeze(messages),
+    messageProvenance: Object.freeze(messageProvenance),
+    reactionFacts: Object.freeze(reactionFacts),
+    auxiliaryRecords: Object.freeze(auxiliaryRecords),
+    deletions: Object.freeze([])
+  });
+}
+function record(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function exactXHandle(value) {
+  return typeof value === "string" && /^@?[A-Za-z0-9_]{1,15}$/u.test(value) ? value.replace(/^@/u, "").toLowerCase() : null;
+}
+function exactBeeperAccount(evidence) {
+  if (evidence.source.kind !== "bundle" || evidence.source.provider !== "beeper" || evidence.source.network !== "x")
+    throw new CliError("conflict", "The overlap source must be an existing Beeper X source");
+  const identity = record(evidence.source.identity);
+  const account = record(identity?.account);
+  const handle = exactXHandle(account?.handle);
+  const selfParticipantId = account?.selfParticipantId;
+  if (handle === null || typeof selfParticipantId !== "string" || selfParticipantId.length < 1) {
+    throw new CliError("conflict", "The Beeper X source has no exact self handle and participant identity for account proof");
+  }
+  return Object.freeze({ handle, selfParticipantId });
+}
+function xArchiveMatchesBeeperSource(archive, value) {
+  const source = record(value);
+  if (source?.kind !== "bundle" || source.provider !== "beeper" || source.network !== "x")
+    return false;
+  const identity = record(source.identity);
+  const account = record(identity?.account);
+  return exactXHandle(account?.handle) === archive.account.username.toLowerCase();
+}
+function exactStringArray(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 1e4)
+    return null;
+  const values = [];
+  for (let index = 0;index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index))
+      return null;
+    const item = value[index];
+    if (typeof item !== "string" || item.length < 1 || item.length > 1024)
+      return null;
+    values.push(item);
+  }
+  return new Set(values).size === values.length ? Object.freeze(values) : null;
+}
+function archiveDirectIdentityProofs(archive, snapshot) {
+  const observedHandles = new Map;
+  for (const observation of archive.identityObservations) {
+    const handle = exactXHandle(observation.username);
+    if (handle === null)
+      continue;
+    const values = observedHandles.get(observation.providerUserId) ?? new Set;
+    values.add(handle);
+    observedHandles.set(observation.providerUserId, values);
+  }
+  const uniqueHandleByParticipant = new Map;
+  for (const [participantId, handles] of observedHandles) {
+    if (handles.size === 1)
+      uniqueHandleByParticipant.set(participantId, [...handles][0]);
+  }
+  const archiveConversations = new Map(archive.conversations.map((conversation) => [
+    conversation.conversationId,
+    conversation
+  ]));
+  const normalizedConversations = new Map(snapshot.conversations.map((conversation) => [
+    conversation.id,
+    conversation
+  ]));
+  const proofs = new Map;
+  for (const provenance of snapshot.conversationProvenance) {
+    const normalized = normalizedConversations.get(provenance.conversationId);
+    const conversation = archiveConversations.get(provenance.externalId);
+    if (normalized?.group !== false || conversation?.kind !== "direct")
+      continue;
+    const peers = conversation.participantIds.filter((id) => id !== archive.account.providerUserId);
+    if (peers.length !== 1)
+      continue;
+    const peerActorId = peers[0];
+    const peerHandle = uniqueHandleByParticipant.get(peerActorId);
+    if (peerHandle === undefined)
+      continue;
+    proofs.set(provenance.conversationId, Object.freeze({
+      peerHandle,
+      selfActorId: archive.account.providerUserId,
+      peerActorId
+    }));
+  }
+  return proofs;
+}
+function preferredDirectIdentityProofs(evidence, account) {
+  const participants = new Map;
+  const ambiguousIds = new Set;
+  for (const auxiliary of evidence.auxiliaryRecords) {
+    if (auxiliary.kind !== "participant")
+      continue;
+    const participant = record(auxiliary.record);
+    const id = participant?.id;
+    const handle = exactXHandle(participant?.handle);
+    const isSelf = participant?.isSelf;
+    if (typeof id !== "string" || id.length < 1 || handle === null || typeof isSelf !== "boolean" || participant?.network !== "x")
+      continue;
+    if (participants.has(id))
+      ambiguousIds.add(id);
+    participants.set(id, Object.freeze({ handle, isSelf }));
+  }
+  for (const id of ambiguousIds)
+    participants.delete(id);
+  const proofs = new Map;
+  for (const conversation of evidence.conversations) {
+    const metadata = record(conversation.metadata);
+    const participantIds = exactStringArray(metadata?.participantIds);
+    if (conversation.group || metadata?.type !== "direct" || metadata.participantsComplete !== true || participantIds?.length !== 2 || !participantIds.includes(account.selfParticipantId))
+      continue;
+    const self = participants.get(account.selfParticipantId);
+    const peerActorId = participantIds.find((id) => id !== account.selfParticipantId);
+    const peer = participants.get(peerActorId);
+    if (self?.isSelf !== true || self.handle !== account.handle || peer?.isSelf !== false)
+      continue;
+    proofs.set(conversation.id, Object.freeze({
+      peerHandle: peer.handle,
+      selfActorId: account.selfParticipantId,
+      peerActorId
+    }));
+  }
+  return proofs;
+}
+function messageFingerprint(message, proof, senderActorId) {
+  const actorHandle = senderActorId === proof.selfActorId && message.direction === "outgoing" ? "self" : senderActorId === proof.peerActorId && message.direction === "incoming" ? proof.peerHandle : null;
+  if (actorHandle === null)
+    return null;
+  return sha256(canonicalJson({
+    schemaVersion: 2,
+    conversationKind: "direct",
+    peerHandle: proof.peerHandle,
+    actorHandle,
+    sentAt: message.sentAt,
+    direction: message.direction,
+    body: message.body,
+    kind: message.kind,
+    attachmentCount: message.attachmentCount
+  }));
+}
+function messageFingerprints(messages, proofs, senderActorId) {
+  const fingerprints = new Map;
+  for (const message of messages) {
+    if (message.kind === "reaction")
+      continue;
+    const proof = proofs.get(message.conversationId);
+    const sender = senderActorId(message);
+    if (proof === undefined || sender === null)
+      continue;
+    const fingerprint = messageFingerprint(message, proof, sender);
+    if (fingerprint !== null)
+      fingerprints.set(message.id, fingerprint);
+  }
+  return fingerprints;
+}
+function groupedBy(values, key) {
+  const grouped = new Map;
+  for (const value of values) {
+    const coordinate = key(value);
+    const rows = grouped.get(coordinate) ?? [];
+    rows.push(value);
+    grouped.set(coordinate, rows);
+  }
+  return grouped;
+}
+function planXArchiveEquivalence(archive, snapshot, preferred) {
+  if (snapshot.source.kind !== "x-archive" || snapshot.source.network !== "x") {
+    throw new CliError("internal", "X overlap planning requires an X archive snapshot");
+  }
+  const preferredAccount = exactBeeperAccount(preferred);
+  if (archive.account.username.toLowerCase() !== preferredAccount.handle) {
+    throw new CliError("conflict", "The X archive and Beeper source belong to different exact handles");
+  }
+  const duplicateProofs = archiveDirectIdentityProofs(archive, snapshot);
+  const preferredProofs = preferredDirectIdentityProofs(preferred, preferredAccount);
+  const archiveProvenanceByMessage = new Map(snapshot.messageProvenance.map((value) => [
+    value.messageId,
+    value
+  ]));
+  const duplicateFingerprints = messageFingerprints(snapshot.messages, duplicateProofs, (message) => {
+    const metadata = record(archiveProvenanceByMessage.get(message.id)?.metadata);
+    return typeof metadata?.senderProviderId === "string" ? metadata.senderProviderId : null;
+  });
+  const preferredFingerprints = messageFingerprints(preferred.messages, preferredProofs, (message) => {
+    const metadata = record(message.metadata);
+    return typeof metadata?.senderParticipantId === "string" ? metadata.senderParticipantId : null;
+  });
+  const duplicateByFingerprint = groupedBy(snapshot.messages.filter((message) => duplicateFingerprints.has(message.id)), (message) => duplicateFingerprints.get(message.id));
+  const preferredByFingerprint = groupedBy(preferred.messages.filter((message) => preferredFingerprints.has(message.id)), (message) => preferredFingerprints.get(message.id));
+  const preferredConversationCandidates = new Map;
+  for (const [fingerprint, duplicates] of duplicateByFingerprint) {
+    const candidates = preferredByFingerprint.get(fingerprint) ?? [];
+    if (duplicates.length !== 1 || candidates.length !== 1)
+      continue;
+    const values = preferredConversationCandidates.get(duplicates[0].conversationId) ?? new Set;
+    values.add(candidates[0].conversationId);
+    preferredConversationCandidates.set(duplicates[0].conversationId, values);
+  }
+  const conversationPairs = [];
+  const usedPreferredConversations = new Set;
+  for (const [duplicateConversationId, candidates] of [...preferredConversationCandidates].sort(([left], [right]) => compareCodeUnits3(left, right))) {
+    if (candidates.size > 1) {
+      throw new CliError("conflict", "Exact X message evidence maps one archive conversation to multiple Beeper conversations");
+    }
+    const preferredConversationId = [...candidates][0];
+    if (preferredConversationId === undefined)
+      continue;
+    if (usedPreferredConversations.has(preferredConversationId)) {
+      throw new CliError("conflict", "Exact X message evidence maps multiple archive conversations to one Beeper conversation");
+    }
+    usedPreferredConversations.add(preferredConversationId);
+    conversationPairs.push({ duplicateConversationId, preferredConversationId });
+  }
+  const preferredConversationByDuplicate = new Map(conversationPairs.map((pair) => [
+    pair.duplicateConversationId,
+    pair.preferredConversationId
+  ]));
+  const duplicateMessagesByConversation = groupedBy(snapshot.messages, ({ conversationId }) => conversationId);
+  const preferredMessagesByConversation = groupedBy(preferred.messages, ({ conversationId }) => conversationId);
+  const messagePairs = [];
+  for (const pair of conversationPairs) {
+    const duplicates = groupedBy((duplicateMessagesByConversation.get(pair.duplicateConversationId) ?? []).filter((message) => duplicateFingerprints.has(message.id)), (message) => duplicateFingerprints.get(message.id));
+    const candidates = groupedBy((preferredMessagesByConversation.get(pair.preferredConversationId) ?? []).filter((message) => preferredFingerprints.has(message.id)), (message) => preferredFingerprints.get(message.id));
+    for (const [fingerprint, duplicateRows] of duplicates) {
+      const preferredRows = candidates.get(fingerprint) ?? [];
+      if (duplicateRows.length === 1 && preferredRows.length === 1) {
+        messagePairs.push({
+          duplicateMessageId: duplicateRows[0].id,
+          preferredMessageId: preferredRows[0].id
+        });
+      }
+    }
+  }
+  const duplicateMessageById = new Map(snapshot.messages.map((message) => [message.id, message]));
+  const coveredConversations = new Set(messagePairs.map(({ duplicateMessageId }) => duplicateMessageById.get(duplicateMessageId).conversationId));
+  const filteredConversationPairs = conversationPairs.filter(({ duplicateConversationId }) => coveredConversations.has(duplicateConversationId));
+  if (filteredConversationPairs.length === 0 || messagePairs.length === 0) {
+    throw new CliError("conflict", "The X archive has no unambiguous exact message overlap with this Beeper source");
+  }
+  const duplicateExternalToLocal = new Map(snapshot.messageProvenance.map((value) => [
+    value.externalId,
+    value.messageId
+  ]));
+  const preferredExternalToLocal = new Map(preferred.messages.map((value) => [
+    value.externalId,
+    value.id
+  ]));
+  const preferredMessageByDuplicate = new Map(messagePairs.map((pair) => [
+    pair.duplicateMessageId,
+    pair.preferredMessageId
+  ]));
+  const archiveReactionCoordinates = snapshot.reactionFacts?.flatMap((reaction) => {
+    const duplicateTarget = duplicateExternalToLocal.get(reaction.targetExternalId);
+    const preferredTarget = duplicateTarget === undefined ? undefined : preferredMessageByDuplicate.get(duplicateTarget);
+    return preferredTarget === undefined ? [] : [{ reaction, preferredTarget }];
+  }) ?? [];
+  const preferredReactionCoordinates = preferred.reactions.flatMap((reaction) => {
+    const preferredTarget = preferredExternalToLocal.get(reaction.targetExternalId);
+    return preferredTarget === undefined ? [] : [{ reaction, preferredTarget }];
+  });
+  const reactionKey = (value) => canonicalJson([
+    value.preferredTarget,
+    value.reaction.direction,
+    value.reaction.body
+  ]);
+  const archiveReactions = groupedBy(archiveReactionCoordinates, reactionKey);
+  const preferredReactions = groupedBy(preferredReactionCoordinates, reactionKey);
+  const reactionPairs = [];
+  for (const [coordinate, archiveRows] of archiveReactions) {
+    const preferredRows = preferredReactions.get(coordinate) ?? [];
+    if (archiveRows.length !== 1 || preferredRows.length !== 1)
+      continue;
+    const archiveReaction = archiveRows[0].reaction;
+    const preferredReaction = preferredRows[0].reaction;
+    const preferArchive = archiveReaction.reactedAt !== null && preferredReaction.reactedAt === null;
+    reactionPairs.push(preferArchive ? { duplicateReactionId: preferredReaction.id, preferredReactionId: archiveReaction.id } : { duplicateReactionId: archiveReaction.id, preferredReactionId: preferredReaction.id });
+  }
+  const sortedConversations = filteredConversationPairs.sort((left, right) => compareCodeUnits3(left.duplicateConversationId, right.duplicateConversationId));
+  const sortedMessages = messagePairs.filter(({ duplicateMessageId }) => {
+    const conversationId = duplicateMessageById.get(duplicateMessageId).conversationId;
+    return preferredConversationByDuplicate.has(conversationId) && coveredConversations.has(conversationId);
+  }).sort((left, right) => compareCodeUnits3(left.duplicateMessageId, right.duplicateMessageId));
+  const sortedReactions = reactionPairs.sort((left, right) => compareCodeUnits3(left.duplicateReactionId, right.duplicateReactionId));
+  const evidenceSha256 = sha256(canonicalJson({
+    schemaVersion: 2,
+    archiveSha256: archive.archive.sha256,
+    archiveSourceId: snapshot.source.id,
+    preferredSourceId: preferred.source.id,
+    accountProofSha256: sha256(archive.account.username.toLowerCase()),
+    directPeerProofs: sortedConversations.map((pair) => ({
+      duplicateConversationId: pair.duplicateConversationId,
+      preferredConversationId: pair.preferredConversationId,
+      peerHandleSha256: sha256(duplicateProofs.get(pair.duplicateConversationId).peerHandle)
+    })),
+    messageFingerprints: sortedMessages.map((pair) => ({
+      duplicateMessageId: pair.duplicateMessageId,
+      preferredMessageId: pair.preferredMessageId,
+      fingerprint: duplicateFingerprints.get(pair.duplicateMessageId)
+    })),
+    conversations: sortedConversations,
+    messages: sortedMessages,
+    reactions: sortedReactions
+  }));
+  return Object.freeze({
+    duplicateSourceId: snapshot.source.id,
+    preferredSourceId: preferred.source.id,
+    basis: "exact-message-overlap",
+    evidenceSha256,
+    conversations: Object.freeze(sortedConversations.map((value) => Object.freeze(value))),
+    messages: Object.freeze(sortedMessages.map((value) => Object.freeze(value))),
+    reactions: Object.freeze(sortedReactions.map((value) => Object.freeze(value)))
+  });
+}
 
 // src/commands.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -5850,6 +8320,8 @@ Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
   messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
+  messagelikeme [--data-dir PATH] ingest x-archive --input ABS_PATH
+                    [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
   messagelikeme [--data-dir PATH] sources list [--private] [--json]
   messagelikeme [--data-dir PATH] sources show SOURCE_ID [--private] [--json]
@@ -5873,9 +8345,10 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads caller-owned macOS Messages, optional Contacts data, and
-strict private local message bundles, then stores private analysis locally. It
-has no network, account, AI-provider, or message-sending surface.
+Message Like Me reads caller-owned macOS Messages, official X archives,
+optional Contacts data, and strict private local message bundles, then stores
+private analysis locally. It has no network, account, AI-provider, or
+message-sending surface.
 `;
 async function exists2(path) {
   try {
@@ -6001,9 +8474,9 @@ function compactMetrics(metrics) {
 function absolutePrivatePath(value, label) {
   if (value === undefined)
     throw new CliError("usage", `${label} is required`);
-  if (!isAbsolute5(value))
+  if (!isAbsolute6(value))
     throw new CliError("unsafe-path", `${label} must be an absolute private path`);
-  return resolve6(value);
+  return resolve7(value);
 }
 function translateIMessageError(error) {
   const code = error.code;
@@ -6037,6 +8510,18 @@ function translateBundleError(error) {
     throw new CliError("not-found", "The selected private bundle does not exist", { cause: error });
   }
   throw new CliError("invalid-data", "The selected private message bundle could not be read safely", { cause: error });
+}
+function translateXArchiveError(error) {
+  if (error instanceof CliError)
+    throw error;
+  const code = error.code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError("permission", "The selected private X archive is not readable", { cause: error });
+  }
+  if (code === "ENOENT") {
+    throw new CliError("not-found", "The selected private X archive does not exist", { cause: error });
+  }
+  throw new CliError("invalid-data", error instanceof Error ? error.message : "The selected private X archive could not be read safely", { cause: error });
 }
 async function runCommand(argv, io) {
   const parsed = parseArguments(argv);
@@ -6120,6 +8605,84 @@ async function runCommand(argv, io) {
       emit(io, json, result, `Ingested ${result.messages} active messages across ${result.conversations} conversations from ${result.sources.length} sources`);
     } finally {
       context.store.close();
+    }
+    return;
+  }
+  if (command === "ingest" && subcommand === "x-archive" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir", "input", "overlap-source"], ["json"]);
+    const input = absolutePrivatePath(parsed.options.get("input"), "--input");
+    const paths = await initializeDataPaths(globalDataPaths(parsed));
+    const key = await loadOrCreateInstallKey(paths.installKey);
+    io.stderr(`Validating one private X archive locally; no data is uploaded.
+`);
+    let archive;
+    try {
+      archive = await readXArchive(input);
+    } catch (error) {
+      translateXArchiveError(error);
+    }
+    const snapshot = normalizeXArchive(archive, key);
+    io.stderr(`Validated ${snapshot.messages.length} messages across ${snapshot.conversations.length} ${snapshot.conversations.length === 1 ? "conversation" : "conversations"}.
+`);
+    const store = LocalStore.open(paths.database);
+    try {
+      const overlapSourceId = parsed.options.get("overlap-source");
+      const beeperXSources = store.listSources().filter((source2) => source2.kind === "bundle" && source2.provider === "beeper" && source2.network === "x");
+      const matchingBeeperSources = beeperXSources.filter((source2) => {
+        const privateSource = store.source(source2.id, true);
+        return privateSource !== null && xArchiveMatchesBeeperSource(archive, privateSource);
+      });
+      if (overlapSourceId === undefined && matchingBeeperSources.length > 0) {
+        const ids = matchingBeeperSources.map(({ id }) => id).join(", ");
+        throw new CliError("conflict", `A Beeper X source for this exact account already exists; inspect sources and rerun with --overlap-source ${ids}`);
+      }
+      const equivalence = overlapSourceId === undefined ? undefined : planXArchiveEquivalence(archive, snapshot, store.sourceOverlapEvidence(overlapSourceId));
+      if (equivalence !== undefined) {
+        io.stderr(`Proved ${equivalence.messages.length} exact message overlaps with the named Beeper source; they will be reconciled atomically.
+`);
+      }
+      io.stderr(`Updating the private local Message Like Me store atomically.
+`);
+      const stored = store.replaceSources([snapshot], canonicalNow(io), key, equivalence, ({ phase, completed, total }) => {
+        io.stderr(`Processed ${completed} of ${total} ${phase} inside the pending transaction.
+`);
+      });
+      const source = stored.sources[0];
+      const outgoingMessages = snapshot.messages.filter(({ direction }) => direction === "outgoing").length;
+      const result = {
+        archive: {
+          sha256: archive.archive.sha256,
+          manifestSha256: archive.archive.manifestSha256,
+          sizeBytes: archive.archive.sizeBytes,
+          generatedAt: archive.archive.generationDate,
+          partial: archive.archive.isPartialArchive
+        },
+        corpusRevision: stored.corpusRevision,
+        source,
+        imported: {
+          conversations: snapshot.conversations.length,
+          messages: snapshot.messages.length,
+          incomingMessages: snapshot.messages.length - outgoingMessages,
+          outgoingMessages,
+          reactions: snapshot.reactionFacts?.length ?? 0,
+          replyStateUnavailableMessages: snapshot.messages.length
+        },
+        active: {
+          conversations: source.conversations,
+          messages: source.messages
+        },
+        reconciliation: equivalence === undefined ? null : {
+          preferredSourceId: equivalence.preferredSourceId,
+          conversations: equivalence.conversations.length,
+          messages: equivalence.messages.length,
+          reactions: equivalence.reactions?.length ?? 0,
+          basis: equivalence.basis
+        },
+        warnings: snapshot.source.warnings
+      };
+      emit(io, json, result, `Ingested ${result.imported.messages} X archive messages across ${result.imported.conversations} conversations${result.reconciliation === null ? "" : `; reconciled ${result.reconciliation.messages} exact Beeper duplicates`}`);
+    } finally {
+      store.close();
     }
     return;
   }
@@ -6502,8 +9065,8 @@ ${HELP}`);
 
 // src/io.ts
 var processIo = {
-  stdout: (text2) => process.stdout.write(text2),
-  stderr: (text2) => process.stderr.write(text2),
+  stdout: (text3) => process.stdout.write(text3),
+  stderr: (text3) => process.stderr.write(text3),
   now: () => new Date
 };
 

@@ -566,6 +566,7 @@ function normalizeBundle(
           ? "text"
           : message.attachments.length > 0 ? "attachment" : "unknown",
         replyToSourceGuid: message.replyTo?.providerId ?? null,
+        replyState: message.replyTo === null ? "none" : "explicit",
         editedAt: message.edit?.editedAt ?? null,
         retractedAt: message.deletion?.observedAt ?? null,
         service: account.network,
@@ -644,6 +645,7 @@ function normalizeBundle(
         bodySource: "unavailable",
         kind: "reaction",
         replyToSourceGuid: reaction.messageProviderId,
+        replyState: "explicit",
         editedAt: null,
         retractedAt: null,
         service: account.network,

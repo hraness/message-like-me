@@ -1019,6 +1019,7 @@ export function readIMessageDatabase(
           bodySource: body.bodySource,
           kind,
           replyToSourceGuid: (row.threadOriginatorGuid || row.replyToGuid) ?? null,
+          replyState: row.threadOriginatorGuid || row.replyToGuid ? "explicit" : "none",
           editedAt: appleTimestamp(row.editedDateText),
           retractedAt,
           service: row.service === "" ? null : row.service,

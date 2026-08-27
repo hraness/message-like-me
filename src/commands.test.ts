@@ -9,12 +9,13 @@ import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.
 import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
 import { writeSyntheticMessageBundle } from "./test-bundle-fixture.ts";
+import { writeSyntheticXArchive } from "./test-x-archive-fixture.ts";
 import type { CorpusSnapshot, StudyPacket } from "./types.ts";
 
 function corpus(): CorpusSnapshot {
   const contactId = "contact_0123456789abcdef";
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     source: {
       physicalPath: "/synthetic/messages.sqlite3",
       device: "1",
@@ -38,31 +39,31 @@ function corpus(): CorpusSnapshot {
       {
         id: "incoming_1", sourceRowId: 1, sourceGuid: "private-guid-1", conversationId: contactId,
         sentAt: "2026-08-21T10:00:00.000Z", direction: "incoming", body: "Can we use the synthetic plan?",
-        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        bodySource: "text", kind: "text", replyToSourceGuid: null, replyState: "none", editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
       {
         id: "outgoing_1", sourceRowId: 2, sourceGuid: "private-guid-2", conversationId: contactId,
         sentAt: "2026-08-21T10:01:00.000Z", direction: "outgoing", body: "yes",
-        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        bodySource: "text", kind: "text", replyToSourceGuid: null, replyState: "none", editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
       {
         id: "outgoing_2", sourceRowId: 3, sourceGuid: "private-guid-3", conversationId: contactId,
         sentAt: "2026-08-21T10:01:20.000Z", direction: "outgoing", body: "that works",
-        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        bodySource: "text", kind: "text", replyToSourceGuid: null, replyState: "none", editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
       {
         id: "incoming_2", sourceRowId: 4, sourceGuid: "private-guid-4", conversationId: contactId,
         sentAt: "2026-08-21T11:00:00.000Z", direction: "incoming", body: "What about the later check?",
-        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        bodySource: "text", kind: "text", replyToSourceGuid: null, replyState: "none", editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
       {
         id: "outgoing_3", sourceRowId: 5, sourceGuid: "private-guid-5", conversationId: contactId,
         sentAt: "2026-08-21T11:01:00.000Z", direction: "outgoing", body: "later answer",
-        bodySource: "text", kind: "text", replyToSourceGuid: null, editedAt: null,
+        bodySource: "text", kind: "text", replyToSourceGuid: null, replyState: "none", editedAt: null,
         retractedAt: null, service: "iMessage", attachmentCount: 0,
       },
     ],
@@ -109,6 +110,57 @@ async function createContactsFixture(root: string): Promise<string> {
 }
 
 describe("messagelikeme CLI", () => {
+  test("ingests an official X archive with an aggregate-only receipt", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-x-"));
+    const capture = ioCapture();
+    try {
+      const archivePath = await writeSyntheticXArchive(root);
+      const state = join(root, "state");
+      expect(await main([
+        "--data-dir", state, "ingest", "x-archive", "--input", archivePath, "--json",
+      ], capture.io)).toBe(0);
+      expect(capture.stderr()).toContain("Validating one private X archive locally");
+      expect(capture.stderr()).toContain("Validated 2 messages across 1 conversation");
+      expect(capture.stderr()).toContain("Updating the private local Message Like Me store atomically");
+      expect(capture.stderr()).toContain("Processed 1 of 1 conversations inside the pending transaction");
+      expect(capture.stderr()).toContain("Processed 2 of 2 messages inside the pending transaction");
+      const output = capture.stdout();
+      const receipt = JSON.parse(output) as {
+        source: { id: string };
+        imported: { conversations: number; messages: number; outgoingMessages: number };
+        reconciliation: null;
+      };
+      expect(receipt.imported).toMatchObject({
+        conversations: 1,
+        messages: 2,
+        outgoingMessages: 1,
+        replyStateUnavailableMessages: 2,
+      });
+      expect(receipt.reconciliation).toBeNull();
+      expect(receipt.source.id).toMatch(/^source_[a-f0-9]{64}$/u);
+      expect(output).not.toContain(archivePath);
+      expect(output).not.toContain("Archive Owner");
+      expect(output).not.toContain("owner@example.test");
+      expect(output).not.toContain("private incoming body");
+      expect(output).not.toContain("private outgoing body");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "sources", "show", receipt.source.id, "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        kind: "x-archive",
+        provider: "x",
+        network: "x",
+        conversations: 1,
+        messages: 2,
+      });
+      expect(capture.stdout()).not.toContain("Owner");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("ingests a strict local bundle and exposes redacted source health", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-bundle-"));
     const capture = ioCapture();

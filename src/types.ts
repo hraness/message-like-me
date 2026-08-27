@@ -1,16 +1,17 @@
 import { MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY } from "./message-bundle-v1-identity.ts";
 
-export const CORPUS_SCHEMA_VERSION = 1 as const;
-export const METRICS_SCHEMA_VERSION = 2 as const;
+export const CORPUS_SCHEMA_VERSION = 2 as const;
+export const METRICS_SCHEMA_VERSION = 3 as const;
 export const PROFILE_SCHEMA_VERSION = 2 as const;
 export const LEGACY_PROFILE_SCHEMA_VERSION = 1 as const;
-export const STUDY_PACKET_SCHEMA_VERSION = 2 as const;
-export const EVALUATION_PACKET_SCHEMA_VERSION = 1 as const;
+export const STUDY_PACKET_SCHEMA_VERSION = 3 as const;
+export const EVALUATION_PACKET_SCHEMA_VERSION = 2 as const;
 export const CONTACTS_SCHEMA_VERSION = 1 as const;
 export const MESSAGE_BUNDLE_SCHEMA_VERSION = MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY;
 
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
+export type ReplyState = "explicit" | "none" | "unavailable";
 export type MessageKind =
   | "text"
   | "attachment"
@@ -50,6 +51,8 @@ export type CorpusMessage = Readonly<{
   bodySource: BodySource;
   kind: MessageKind;
   replyToSourceGuid: string | null;
+  /** Whether this source observed an explicit reply, observed no reply, or cannot report reply links. */
+  replyState: ReplyState;
   editedAt: string | null;
   retractedAt: string | null;
   service: string | null;
@@ -64,7 +67,7 @@ export type CorpusSnapshot = Readonly<{
   warnings: readonly string[];
 }>;
 
-export type CorpusSourceKind = "imessage" | "bundle";
+export type CorpusSourceKind = "imessage" | "bundle" | "x-archive";
 
 export type CorpusSourceCoverage = Readonly<{
   history: "complete-current-local" | "bounded" | "unknown";
@@ -232,6 +235,8 @@ export type ResponseEpisode = Readonly<{
   incomingQuestions: number;
   latencySeconds: number;
   explicitReplyCount: number;
+  replyEligibleCount: number;
+  replyUnavailableCount: number;
   tags: readonly string[];
 }>;
 
@@ -252,7 +257,9 @@ export type TempoMetrics = Readonly<{
   responseLatencySeconds: Readonly<{ median: number | null; p25: number | null; p75: number | null; p90: number | null }>;
   outgoingMessagesPerResponse: Readonly<{ mean: number; median: number; p90: number; singleRatio: number; multiRatio: number }>;
   explicitReplyMessages: number;
-  explicitReplyRatio: number;
+  explicitReplyEligibleMessages: number;
+  explicitReplyUnavailableMessages: number;
+  explicitReplyRatio: number | null;
   multiIncomingEpisodes: number;
   multiQuestionEpisodes: number;
 }>;
@@ -295,7 +302,8 @@ export type StudyMessage = Readonly<{
   sourceBodyBytes: number;
   emittedBodyBytes: number;
   bodyTruncated: boolean;
-  explicitReply: boolean;
+  /** Null means the source cannot report whether this message used an explicit reply link. */
+  explicitReply: boolean | null;
 }>;
 
 export type StudyAggregateMetrics = Readonly<{
@@ -396,6 +404,8 @@ export type EvaluationReferenceCase = Readonly<{
     characters: number;
     words: number;
     explicitReplyMessages: number;
+    explicitReplyEligibleMessages: number;
+    explicitReplyUnavailableMessages: number;
   }>;
 }>;
 

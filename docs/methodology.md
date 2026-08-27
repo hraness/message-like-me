@@ -58,10 +58,13 @@ snapshot cannot resurrect or overwrite newer state.
 An X archive normally has its own source namespace and retains its exact ZIP
 and account provenance. The caller may name an existing Beeper X source as an
 overlap only when both sources describe the same exact account. Reconciliation
-then requires exact shared-message evidence, retains both provenances, and lets
-one exact message contribute once. Missing or contradictory evidence fails
-closed. This identity survives later reingests, so the same message does not
-return as a duplicate. Archive absence does not suppress retained history.
+is limited to one-to-one direct conversations and requires an exact peer handle
+plus exact shared-message evidence. It retains both provenances and lets one
+proven exact message contribute once. Group DMs remain separate because the
+legacy archive cannot establish cross-provider sender identity strongly enough.
+Missing or contradictory evidence fails closed. Proven equivalence survives
+later reingests, so the same message does not return as a duplicate. Archive
+absence does not suppress retained history.
 
 The analysis uses several operational units:
 
