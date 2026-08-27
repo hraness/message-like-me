@@ -4349,10 +4349,39 @@ var ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
   SELECT 1 FROM reaction_equivalences equivalence
   JOIN corpus_reaction_facts preferred_reaction
     ON preferred_reaction.id=equivalence.preferred_reaction_id
+  JOIN message_provenance duplicate_target
+    ON duplicate_target.source_id=reaction.source_id
+      AND duplicate_target.external_id=reaction.target_external_id
+  JOIN message_provenance preferred_target
+    ON preferred_target.source_id=preferred_reaction.source_id
+      AND preferred_target.external_id=preferred_reaction.target_external_id
+  JOIN message_equivalences target_equivalence
+    ON (target_equivalence.duplicate_message_id=duplicate_target.message_id
+        AND target_equivalence.preferred_message_id=preferred_target.message_id)
+      OR (target_equivalence.duplicate_message_id=preferred_target.message_id
+        AND target_equivalence.preferred_message_id=duplicate_target.message_id)
+  JOIN messages target_duplicate_message
+    ON target_duplicate_message.id=target_equivalence.duplicate_message_id
+  JOIN messages target_preferred_message
+    ON target_preferred_message.id=target_equivalence.preferred_message_id
+  JOIN message_provenance target_preferred_provenance
+    ON target_preferred_provenance.message_id=target_equivalence.preferred_message_id
   WHERE equivalence.duplicate_reaction_id=reaction.id
     AND preferred_reaction.state='active'
     AND preferred_reaction.body=reaction.body
     AND preferred_reaction.direction IS reaction.direction
+    AND target_preferred_message.sent_at=target_duplicate_message.sent_at
+    AND target_preferred_message.direction=target_duplicate_message.direction
+    AND target_preferred_message.body IS target_duplicate_message.body
+    AND target_preferred_message.kind=target_duplicate_message.kind
+    AND target_preferred_message.attachment_count=target_duplicate_message.attachment_count
+    AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions target_suppression
+      WHERE target_suppression.source_id=target_preferred_provenance.source_id
+        AND target_suppression.local_id=target_equivalence.preferred_message_id
+        AND target_suppression.kind IN ('message','reaction','reaction-timeline')
+        AND target_suppression.suppressed=1
+    )
     AND NOT EXISTS (
       SELECT 1 FROM corpus_source_suppressions preferred_suppression
       WHERE preferred_suppression.source_id=preferred_reaction.source_id
@@ -8124,6 +8153,8 @@ function preferredDirectIdentityProofs(evidence, account) {
   return proofs;
 }
 function messageFingerprint(message, proof, senderActorId) {
+  if (message.body === null)
+    return null;
   const actorHandle = senderActorId === proof.selfActorId && message.direction === "outgoing" ? "self" : senderActorId === proof.peerActorId && message.direction === "incoming" ? proof.peerHandle : null;
   if (actorHandle === null)
     return null;

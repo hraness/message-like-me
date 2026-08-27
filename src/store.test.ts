@@ -1443,6 +1443,53 @@ describe("local corpus store", () => {
     }
   });
 
+  test("reactivates a reaction when a later source moves its target away from the proven message", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-reaction-rebind-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    try {
+      store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      store.replaceSources(
+        [xArchiveSnapshot()],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        {
+          duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+          preferredSourceId: X_BEEPER_SOURCE_ID,
+          basis: "exact-message-overlap",
+          evidenceSha256: "d".repeat(64),
+          conversations: [{
+            duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+            preferredConversationId: X_BEEPER_CONVERSATION_ID,
+          }],
+          messages: [{
+            duplicateMessageId: "x-archive-message-overlap",
+            preferredMessageId: "x-beeper-message-overlap",
+          }],
+          reactions: [{
+            duplicateReactionId: "x-beeper-reaction",
+            preferredReactionId: "x-archive-reaction",
+          }],
+        },
+      );
+      expect(store.contactCorpus(X_BEEPER_CONVERSATION_ID)?.reactions.map(({ id }) => id))
+        .toEqual(["x-archive-reaction"]);
+
+      const retargeted = xBeeperSnapshot(true);
+      store.replaceSources([{
+        ...retargeted,
+        reactionFacts: retargeted.reactionFacts!.map((reaction) => ({
+          ...reaction,
+          targetExternalId: "x-beeper-external-later",
+        })),
+      }], "2026-08-21T01:01:00.000Z");
+      expect(store.contactCorpus(X_BEEPER_CONVERSATION_ID)?.reactions.map(({ id }) => id).sort())
+        .toEqual(["x-archive-reaction", "x-beeper-reaction"]);
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects conversation equivalence without exact message overlap atomically", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-reject-"));
     const store = LocalStore.open(join(root, "store.sqlite3"));
