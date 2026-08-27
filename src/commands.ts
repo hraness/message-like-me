@@ -24,6 +24,12 @@ import { bundledSkillPath, installSkill, type SkillScope, type SkillTarget } fro
 import { LocalStore } from "./store.ts";
 import type { ContactMetrics } from "./types.ts";
 import { MESSAGE_LIKE_ME_VERSION } from "./version.ts";
+import { readXArchive } from "./x-archive.ts";
+import {
+  normalizeXArchive,
+  planXArchiveEquivalence,
+  xArchiveMatchesBeeperSource,
+} from "./x-source.ts";
 
 export const HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 
@@ -31,6 +37,8 @@ Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
   messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
+  messagelikeme [--data-dir PATH] ingest x-archive --input ABS_PATH
+                    [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
   messagelikeme [--data-dir PATH] sources list [--private] [--json]
   messagelikeme [--data-dir PATH] sources show SOURCE_ID [--private] [--json]
@@ -54,9 +62,10 @@ Usage:
                     [--project PATH] [--force] [--json]
   messagelikeme [--data-dir PATH] doctor [--json]
 
-Message Like Me reads caller-owned macOS Messages, optional Contacts data, and
-strict private local message bundles, then stores private analysis locally. It
-has no network, account, AI-provider, or message-sending surface.
+Message Like Me reads caller-owned macOS Messages, official X archives,
+optional Contacts data, and strict private local message bundles, then stores
+private analysis locally. It has no network, account, AI-provider, or
+message-sending surface.
 `;
 
 async function exists(path: string): Promise<boolean> {
@@ -213,7 +222,7 @@ function absolutePrivatePath(value: string | undefined, label: string): string {
 
 function translateIMessageError(error: unknown): never {
   const code = (error as NodeJS.ErrnoException).code;
-  if (code === "EACCES" || code === "EPERM") {
+  if (code === "EACCES" || code === "EPERM" || code === "permission") {
     throw new CliError(
       "permission",
       "Messages data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.",
@@ -260,6 +269,23 @@ function translateBundleError(error: unknown): never {
   throw new CliError(
     "invalid-data",
     "The selected private message bundle could not be read safely",
+    { cause: error },
+  );
+}
+
+function translateXArchiveError(error: unknown): never {
+  const code = error instanceof CliError
+    ? error.kind
+    : (error as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || code === "EPERM") {
+    throw new CliError("permission", "The selected private X archive is not readable", { cause: error });
+  }
+  if (code === "ENOENT" || code === "not-found") {
+    throw new CliError("not-found", "The selected private X archive does not exist", { cause: error });
+  }
+  throw new CliError(
+    "invalid-data",
+    "The selected private X archive could not be validated safely",
     { cause: error },
   );
 }
@@ -351,6 +377,111 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
       );
     } finally {
       context.store.close();
+    }
+    return;
+  }
+
+  if (command === "ingest" && subcommand === "x-archive" && identifier === undefined) {
+    rejectUnused(parsed, ["data-dir", "input", "overlap-source"], ["json"]);
+    const input = absolutePrivatePath(parsed.options.get("input"), "--input");
+    const paths = await initializeDataPaths(globalDataPaths(parsed));
+    const key = await loadOrCreateInstallKey(paths.installKey);
+    io.stderr("Validating one private X archive locally; no data is uploaded.\n");
+    let archive;
+    try {
+      archive = await readXArchive(input);
+    } catch (error) {
+      translateXArchiveError(error);
+    }
+    const snapshot = normalizeXArchive(archive, key);
+    io.stderr(
+      `Validated ${snapshot.messages.length} messages across ${snapshot.conversations.length} ${
+        snapshot.conversations.length === 1 ? "conversation" : "conversations"
+      }.\n`,
+    );
+    const store = LocalStore.open(paths.database);
+    try {
+      const overlapSourceId = parsed.options.get("overlap-source");
+      const beeperXSources = store.listSources().filter((source) =>
+        source.kind === "bundle" && source.provider === "beeper" && source.network === "x");
+      const matchingBeeperSources = beeperXSources.filter((source) => {
+        const privateSource = store.source(source.id, true);
+        return privateSource !== null && xArchiveMatchesBeeperSource(archive, privateSource);
+      });
+      if (overlapSourceId === undefined && matchingBeeperSources.length > 0) {
+        const ids = matchingBeeperSources.map(({ id }) => id).join(", ");
+        throw new CliError(
+          "conflict",
+          `A Beeper X source for this exact account already exists; inspect sources and rerun with --overlap-source ${ids}`,
+        );
+      }
+      const equivalence = overlapSourceId === undefined
+        ? undefined
+        : planXArchiveEquivalence(
+          archive,
+          snapshot,
+          store.sourceOverlapEvidence(overlapSourceId),
+        );
+      if (equivalence !== undefined) {
+        io.stderr(
+          `Proved ${equivalence.messages.length} exact message overlaps with the named Beeper source; they will be reconciled atomically.\n`,
+        );
+      }
+      io.stderr("Updating the private local Message Like Me store atomically.\n");
+      const stored = store.replaceSources(
+        [snapshot],
+        canonicalNow(io),
+        key,
+        equivalence,
+        ({ phase, completed, total }) => {
+          io.stderr(`Processed ${completed} of ${total} ${phase} inside the pending transaction.\n`);
+        },
+      );
+      const source = stored.sources[0]!;
+      const outgoingMessages = snapshot.messages.filter(({ direction }) => direction === "outgoing").length;
+      const result = {
+        archive: {
+          sha256: archive.archive.sha256,
+          manifestSha256: archive.archive.manifestSha256,
+          sizeBytes: archive.archive.sizeBytes,
+          generatedAt: archive.archive.generationDate,
+          partial: archive.archive.isPartialArchive,
+        },
+        corpusRevision: stored.corpusRevision,
+        source,
+        imported: {
+          conversations: snapshot.conversations.length,
+          messages: snapshot.messages.length,
+          incomingMessages: snapshot.messages.length - outgoingMessages,
+          outgoingMessages,
+          reactions: snapshot.reactionFacts?.length ?? 0,
+          replyStateUnavailableMessages: snapshot.messages.length,
+        },
+        active: {
+          conversations: source.conversations,
+          messages: source.messages,
+        },
+        reconciliation: equivalence === undefined ? null : {
+          preferredSourceId: equivalence.preferredSourceId,
+          conversations: equivalence.conversations.length,
+          messages: equivalence.messages.length,
+          reactions: equivalence.reactions?.length ?? 0,
+          basis: equivalence.basis,
+        },
+        warnings: snapshot.source.warnings,
+      };
+      emit(
+        io,
+        json,
+        result,
+        `Ingested ${result.imported.messages} X archive messages across ${result.imported.conversations} conversations${
+          result.reconciliation === null
+            ? ""
+            : `; reconciled ${result.reconciliation.messages} exact Beeper duplicates`
+        }`,
+      );
+    } finally {
+      store.close();
     }
     return;
   }

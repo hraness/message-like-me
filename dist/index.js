@@ -8,7 +8,7 @@ import {
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION
-} from "./cli-hb4vzkdq.js";
+} from "./cli-ptsw1tr2.js";
 import {
   canonicalJson,
   sha256

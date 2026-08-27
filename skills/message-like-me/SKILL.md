@@ -63,6 +63,25 @@ database with `messagelikeme ingest imessage --json`; pass `--database` only
 when the user names a different source. The ingest is read-only. It stores a
 private normalized corpus and aggregate metrics without changing `chat.db`.
 
+When the user supplies their own X data archive ZIP, ingest only its normalized
+absolute path:
+
+```sh
+messagelikeme ingest x-archive --input <absolute-private-zip> --json
+```
+
+Do not extract the ZIP, open its JavaScript or message entries in agent context,
+call X, or fetch media. The CLI owns strict offline parsing and preserves exact
+archive provenance. This source covers archive direct messages, not X Chat.
+
+If the same X account is already represented by a Beeper source, inspect the
+redacted source inventory and pass `--overlap-source <source-id>` only when the
+user intends to reconcile those sources. The option is not permission to guess
+an account match: the CLI must prove the exact account, one-to-one direct peer,
+and message overlap or fail closed. Group DMs remain separate. Keep both
+provenances and treat the resulting exact-message dedupe as a source fact, not
+an identity inference.
+
 When the user supplies a finished Wrench/Beeper Message Like Me bundle, ingest
 only its normalized absolute directory path:
 
@@ -77,6 +96,12 @@ capture; Message Like Me owns strict verification, normalization, and local
 analysis. Use `sources show <source-id> --json` for redacted completeness and
 health. Add `--private` only when the user's task requires provider account
 metadata.
+
+Inspect source coverage before comparing channels. X archive reply links are
+unobservable: their messages remain valid prose, ordering, tempo, and response
+shape evidence, but they do not enter explicit-reply ratios and do not prove the
+user avoided replies. Future archive reingests retain exact-message dedupe;
+absence from a later archive is not deletion evidence.
 
 When the user wants AddressBook names attached to direct conversations, run
 `messagelikeme ingest contacts --json`. Pass `--addressbook` only for an

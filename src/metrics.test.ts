@@ -20,6 +20,7 @@ function message(
   options: Readonly<{
     kind?: MessageKind;
     replyTo?: string | null;
+    replyState?: CorpusMessage["replyState"];
     attachments?: number;
     retractedAt?: string | null;
     conversationId?: string;
@@ -36,6 +37,7 @@ function message(
     bodySource: body === null ? "unavailable" : "text",
     kind: options.kind ?? (body === null ? "unknown" : "text"),
     replyToSourceGuid: options.replyTo ?? null,
+    replyState: options.replyState ?? (options.replyTo === undefined || options.replyTo === null ? "none" : "explicit"),
     editedAt: null,
     retractedAt: options.retractedAt ?? null,
     service: "iMessage",
@@ -404,6 +406,30 @@ describe("analyzeContact", () => {
       outgoingReactionRatio: 0,
     });
   });
+
+  test("keeps unavailable reply metadata out of reply-use denominators", () => {
+    const messages = [
+      message("reply-unknown-in", 1, "2024-05-02T00:00:00.000Z", "incoming", "question"),
+      message("reply-unknown-out", 2, "2024-05-02T00:00:10.000Z", "outgoing", "answer", {
+        replyState: "unavailable",
+      }),
+    ] as const;
+
+    const metrics = analyzeContact(messages, CORPUS_REVISION, CONTACT_ID);
+
+    expect(metrics.responses[0]).toMatchObject({
+      explicitReplyCount: 0,
+      replyEligibleCount: 0,
+      replyUnavailableCount: 1,
+      tags: expect.arrayContaining(["reply-unavailable"]),
+    });
+    expect(metrics.tempo).toMatchObject({
+      explicitReplyMessages: 0,
+      explicitReplyEligibleMessages: 0,
+      explicitReplyUnavailableMessages: 1,
+      explicitReplyRatio: null,
+    });
+  });
 });
 
 describe("messagesInTimeWindow", () => {
@@ -445,7 +471,7 @@ describe("messagesInTimeWindow", () => {
 });
 
 describe("buildStudyPacket", () => {
-  test("emits v2 evidence provenance without replacing the global corpus revision", () => {
+  test("emits v3 evidence provenance without replacing the global corpus revision", () => {
     const evidenceRevision = "b".repeat(64);
     const after = "2024-02-01T00:10:00.000Z";
     const before = "2024-02-01T12:00:00.000Z";
@@ -460,7 +486,7 @@ describe("buildStudyPacket", () => {
     });
 
     expect(packet).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       corpusRevision: CORPUS_REVISION,
       evidenceRevision,
       contactId: CONTACT_ID,
@@ -708,7 +734,7 @@ describe("buildEvaluationPackets", () => {
     expect(fromUnfilteredInputs.reference.cases.flatMap(({ outgoing }) => outgoing)
       .every(({ id }) => sentAtById.get(id)! >= after && sentAtById.get(id)! < before)).toBe(true);
     expect(packets.prompt).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: options.generatedAt,
       corpusRevision: CORPUS_REVISION,
       evidenceRevision,
@@ -758,8 +784,22 @@ describe("buildEvaluationPackets", () => {
     expect(JSON.stringify(packets.reference)).not.toContain("Bring anything?");
     expect(JSON.stringify(packets.reference)).not.toContain("Can you send the full version?");
     expect(packets.reference.cases.map(({ shape }) => shape)).toEqual([
-      { bubbles: 1, characters: 4, words: 1, explicitReplyMessages: 0 },
-      { bubbles: 2, characters: 311, words: 3, explicitReplyMessages: 0 },
+      {
+        bubbles: 1,
+        characters: 4,
+        words: 1,
+        explicitReplyMessages: 0,
+        explicitReplyEligibleMessages: 1,
+        explicitReplyUnavailableMessages: 0,
+      },
+      {
+        bubbles: 2,
+        characters: 311,
+        words: 3,
+        explicitReplyMessages: 0,
+        explicitReplyEligibleMessages: 2,
+        explicitReplyUnavailableMessages: 0,
+      },
     ]);
   });
 

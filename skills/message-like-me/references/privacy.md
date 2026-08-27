@@ -7,8 +7,8 @@ sensitive local data.
 ## Data boundary
 
 - Use the `messagelikeme` CLI for ingestion and inspection. Do not open, copy,
-  transform, or query the live Messages or AddressBook databases or a private
-  message bundle through an improvised script.
+  transform, or query the live Messages or AddressBook databases, an X data
+  archive, or a private message bundle through an improvised script.
 - Keep the original `chat.db` and AddressBook stores authoritative. Ingestion
   is read-only and must not change Messages, Contacts, attachments, or database
   sidecars.
@@ -16,6 +16,10 @@ sensitive local data.
   their state through `messagelikeme sources list|show`; do not parse their
   manifest or NDJSON records in agent context. The bundle must not contain a
   provider credential, but it still contains private message and account data.
+- Treat a caller-owned X data archive ZIP as private source evidence. Pass only
+  its explicit absolute path to `ingest x-archive`; do not extract it, evaluate
+  archive JavaScript, fetch linked media, or open its message entries in agent
+  context. The CLI operates offline and X Chat is not covered.
 - Do not send message data to a model API, hosted service, analytics system,
   remote MCP server, or network endpoint. The agent already executing this
   skill performs the semantic work directly in its current context.

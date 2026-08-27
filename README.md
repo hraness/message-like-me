@@ -5,10 +5,10 @@ drafting messages that sound like you.**
 
 Message Like Me turns private local messaging history into deterministic
 conversation metrics, bounded study packets, and reusable style profiles. It
-reads native iMessage history and strict local source bundles, including
-multi-account Beeper exports produced through Wrench. Its Agent Skill teaches
-Codex, Claude, and other coding agents how to interpret those local artifacts
-and draft unsent replies in your voice.
+reads native iMessage history, caller-owned X data archives, and strict local
+source bundles, including multi-account Beeper exports produced through
+Wrench. Its Agent Skill teaches Codex, Claude, and other coding agents how to
+interpret those local artifacts and draft unsent replies in your voice.
 
 The CLI does not call an AI service, authenticate with a product account, send
 messages, or operate Messages. The agent already running the skill supplies the
@@ -25,7 +25,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.4.0
+bun add --global github:hraness/message-like-me#v0.5.0
 messagelikeme skill install
 ```
 
@@ -80,6 +80,49 @@ Ingestion validates the source schema and ownership, makes a stable private
 copy of the database and its transactional sidecars, and opens only that copy
 with SQLite. It does not change Messages, `chat.db`, or its sidecars. macOS may
 require permission for the terminal or agent host to read Messages data.
+
+Import direct messages from a caller-owned X data archive ZIP:
+
+```sh
+messagelikeme ingest x-archive \
+  --input /absolute/private/path/x-data-archive.zip \
+  --json
+```
+
+The importer requires a normalized absolute path to an owner-only physical ZIP
+and reads only the supported archive entries. It does not extract the archive,
+evaluate its JavaScript wrappers, access X or another network, or download
+linked media. It stores exact archive and account provenance with the normalized
+source so a later audit can identify which local export supplied the evidence.
+The supported source is the archive's direct-message history. X Chat history is
+not included. Bounded reply and mention identity metadata from selected tweet
+entries may help associate provider user IDs with X handles or display names;
+tweet bodies never become messaging-style evidence.
+
+X data archives do not expose whether a direct message used an explicit reply
+link. Those messages still contribute body, direction, ordering, tempo, and
+response-shape evidence, but reply observability is marked unavailable. They do
+not enter the explicit-reply ratio and are not treated as observed non-replies.
+
+When the same X account is already present through a Beeper bundle, first find
+that source in the redacted inventory, then name it explicitly:
+
+```sh
+messagelikeme sources list --json
+messagelikeme ingest x-archive \
+  --input /absolute/private/path/x-data-archive.zip \
+  --overlap-source <beeper-x-source-id> \
+  --json
+```
+
+`--overlap-source` is not a fuzzy merge switch. Reconciliation proceeds only
+for one-to-one direct conversations whose account identity, peer handle, and
+overlapping message evidence match exactly. Both source provenances remain
+inspectable, ambiguity or contradiction fails closed, and exact messages appear
+once in analysis. Group DMs remain separate because the legacy archive does not
+supply enough cross-provider sender proof for safe equivalence. Reimporting the
+same or a later archive preserves proven deduplication; archive absence does not
+delete retained history.
 
 To study accounts connected through Beeper, install or update to a compatible
 [Wrench release](https://github.com/hraness/wrench/releases), then ask it to
@@ -156,14 +199,14 @@ messagelikeme ingest contacts \
 Contacts ingest may run before or after any message source. It reads only
 bounded name, email, and phone fields from a stable private copy. Exact
 normalized email or E.164 phone handles can join several one-to-one threads
-for the same AddressBook person into one analysis scope. A bundle conversation
-is eligible only when the producer positively marks its direct participant
-roster complete. Existing conversation IDs remain aliases for that person
-scope. Shared handles remain ambiguous, local phone numbers never gain a
-guessed country code, unmatched threads stay separate, and groups are never
-collapsed to one person. Contact labels have their own revision, so a rename
-does not stale a messaging-style profile. `messagelikeme doctor` reports local
-aggregate state without asking for an account or credential.
+for the same AddressBook person into one analysis scope. An imported
+conversation is eligible only when its source positively establishes a
+complete direct participant roster. Existing conversation IDs remain aliases
+for that person scope. Shared handles remain ambiguous, local phone numbers
+never gain a guessed country code, unmatched threads stay separate, and groups
+are never collapsed to one person. Contact labels have their own revision, so
+a rename does not stale a messaging-style profile. `messagelikeme doctor`
+reports local aggregate state without asking for an account or credential.
 
 ## Inspect behavior without exposing prose
 
@@ -191,6 +234,12 @@ private; ordinary metrics and drafting context expose only fixed-size counts,
 direction, datedness, and the outgoing reaction ratio. Session and burst gaps
 are configurable seconds and are recorded with each result. They are
 segmentation choices, not universal facts about conversation.
+
+Explicit-reply metrics also report how many outgoing text messages were
+eligible for reply measurement and how many came from a source where reply
+links were unavailable. The ratio uses only eligible messages. Do not compare
+an X archive's unavailable reply metadata with an observed no-reply decision
+from iMessage or a compatible bundle.
 
 Pass `--private` to `contacts list` or `contacts show` only when you need to
 resolve a pseudonymous contact to its local private label or participants.
@@ -308,6 +357,8 @@ Run `messagelikeme --help` for the checked grammar. The public surfaces are:
 ```text
 messagelikeme init [--json]
 messagelikeme ingest imessage [--database PATH] [--json]
+messagelikeme ingest x-archive --input ABS_PATH
+  [--overlap-source SOURCE_ID] [--json]
 messagelikeme ingest contacts [--addressbook PATH] [--json]
 messagelikeme ingest bundle --input ABS_PATH [--json]
 messagelikeme sources list [--private] [--json]
@@ -339,6 +390,9 @@ Place global `--data-dir PATH` before the command.
 
 - The original `chat.db` and AddressBook databases remain authoritative.
   SQLite opens only stable private copies, never the source files or sidecars.
+- X data archives remain private caller-owned inputs. Import reads supported
+  entries directly from the ZIP without extraction, evaluation, network access,
+  or media download, and retains exact archive provenance.
 - Source bundles remain private caller-owned inputs. Import verifies their
   fixed inventory, canonical bytes, digests, bounds, and owner-only modes.
 - The normalized corpus, profiles, and installation key stay in a private local
@@ -389,8 +443,8 @@ That subpath owns the exact readonly wire types, compatibility constants,
 safety bounds, digest helpers, and pure strict parsers. Importing it performs no
 filesystem or network work.
 
-The library does not start the CLI, inspect Messages or Contacts, connect to a
-network, or send a draft merely because it is imported.
+The library does not start the CLI, inspect Messages, Contacts, or an X archive,
+connect to a network, or send a draft merely because it is imported.
 
 ## Development
 
@@ -399,9 +453,10 @@ bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
-Tests use synthetic Messages and AddressBook databases plus synthetic source
-bundles and conversations. Never add a real message, handle, group title,
-attachment, contact record, private path, or derived profile to a fixture.
+Tests use synthetic Messages and AddressBook databases, synthetic X archive
+ZIPs, and synthetic source bundles and conversations. Never add a real message,
+handle, group title, attachment, contact record, private path, or derived
+profile to a fixture.
 
 The canonical repository is
 [`hraness/message-like-me`](https://github.com/hraness/message-like-me).
