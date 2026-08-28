@@ -83,12 +83,17 @@ describe('supported source presentation', () => {
     expect(sitemap).toContain("absoluteUrl('/sources')");
     expect(llms).toContain("absoluteUrl('/sources')");
     expect(readme).toContain('## Supported sources');
-    const wrenchReleaseUrl =
-      `https://github.com/hraness/wrench/releases/tag/v${BEEPER_COMPATIBILITY.producerVersion}`;
+    const wrenchPackageUrl =
+      `https://www.npmjs.com/package/@hraness/wrench/v/${BEEPER_COMPATIBILITY.producerVersion}`;
     const beeperCliReleaseUrl =
       'https://github.com/beeper/cli/releases/tag/v' +
       BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '%2E');
-    expect(readme).toContain(`](${wrenchReleaseUrl})`);
+    for (const copy of [readme, bundleContract]) {
+      expect(copy).toContain(`](${wrenchPackageUrl})`);
+      expect(copy).toContain(
+        `bun add --global @hraness/wrench@${BEEPER_COMPATIBILITY.producerVersion}`,
+      );
+    }
     expect(readme).toContain(`](${beeperCliReleaseUrl})`);
     const providerCliPattern = new RegExp(
       `Beeper CLI[^\\n]{0,80}${BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '\\.')}`,

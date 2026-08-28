@@ -7,10 +7,12 @@ the bundle, while `messagelikeme ingest bundle` verifies and normalizes it. The
 importer never receives provider credentials, starts Wrench, invokes a Beeper
 operation, or sends a message.
 
-The currently verified producer is the local Beeper export in
-[Wrench v0.16.0](https://github.com/hraness/wrench/releases/tag/v0.16.0):
+The currently verified producer is the local Beeper export in the
+[`@hraness/wrench@0.16.0`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.0)
+npm package:
 
 ```sh
+bun add --global @hraness/wrench@0.16.0
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output <normalized-absolute-new-directory> \

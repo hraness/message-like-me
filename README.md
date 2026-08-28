@@ -135,10 +135,12 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[Wrench v0.16.0 release](https://github.com/hraness/wrench/releases/tag/v0.16.0),
-then use Wrench to create a new private Message Like Me bundle:
+[`@hraness/wrench@0.16.0`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.0)
+package from npm, then use Wrench to create a new private Message Like Me
+bundle:
 
 ```sh
+bun add --global @hraness/wrench@0.16.0
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output /absolute/private/path/beeper-bundle \
