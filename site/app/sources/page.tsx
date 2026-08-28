@@ -166,7 +166,7 @@ export default function SourcesPage() {
           </p>
         </section>
       </main>
-      <SiteFooter />
+      <SiteFooter path="/sources" />
     </>
   );
 }

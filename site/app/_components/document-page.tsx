@@ -1,4 +1,9 @@
-import { absoluteUrl, serializeJsonLd, SITE_NAME } from '../_lib/site';
+import {
+  absoluteUrl,
+  type CanonicalPagePath,
+  serializeJsonLd,
+  SITE_NAME,
+} from '../_lib/site';
 import { SiteFooter, SiteHeader } from './site-chrome';
 
 export function DocumentPage({
@@ -12,7 +17,7 @@ export function DocumentPage({
   eyebrow: string;
   title: string;
   summary: string;
-  path: string;
+  path: CanonicalPagePath;
   html: string;
   sourceUrl: string;
 }) {
@@ -54,7 +59,7 @@ export function DocumentPage({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </main>
-      <SiteFooter />
+      <SiteFooter path={path} />
     </>
   );
 }

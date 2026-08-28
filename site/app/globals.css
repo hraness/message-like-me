@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+@import '@hraness/ui/tokens.css';
+@import '@hraness/ui/stylex.css';
 
 :root {
   --paper: #f4f0e8;
@@ -380,6 +382,39 @@ h2 { font-size: clamp(42px, 5.2vw, 76px); line-height: 0.98; }
 footer {
   margin: 0 auto;
   max-width: 1440px;
+}
+
+nav.message-like-me-ask-ai {
+  --ui-border: var(--line);
+  --ui-foreground: var(--ink);
+  --ui-muted: var(--paper-deep);
+  --ui-muted-foreground: var(--muted);
+  --ui-primary: var(--ink);
+  --ui-ring: var(--ink);
+
+  border-top: 1px solid var(--line);
+  font-size: inherit;
+  font-weight: inherit;
+  gap: var(--space-2);
+  margin: 0 auto;
+  max-width: 1440px;
+  padding: 34px clamp(22px, 4vw, 64px);
+}
+
+nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"] {
+  color: var(--ui-muted-foreground);
+  text-decoration: none;
+}
+
+nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"]:hover,
+nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"]:focus-visible {
+  color: var(--ui-foreground);
+  text-decoration: none;
+}
+
+nav.message-like-me-ask-ai + footer {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .process-section {

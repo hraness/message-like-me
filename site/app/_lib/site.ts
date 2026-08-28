@@ -8,7 +8,19 @@ export const GITHUB_URL = 'https://github.com/hraness/message-like-me';
 export const SOFTWARE_VERSION = '0.7.0';
 export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;
 
-export function absoluteUrl(path = '/'): string {
+export const CANONICAL_PAGE_PATHS = [
+  '/',
+  '/about',
+  '/sources',
+  '/docs',
+  '/methodology',
+  '/research',
+] as const;
+
+export type CanonicalPagePath = (typeof CANONICAL_PAGE_PATHS)[number];
+export type SitePath = `/${string}`;
+
+export function absoluteUrl(path: SitePath = '/'): string {
   return new URL(path, `${SITE_ORIGIN}/`).toString();
 }
 
@@ -23,7 +35,7 @@ export function pageMetadata({
 }: {
   title: string;
   description: string;
-  path: string;
+  path: CanonicalPagePath;
 }): Metadata {
   const url = absoluteUrl(path);
   const resolvedTitle = path === '/' ? { absolute: title } : title;

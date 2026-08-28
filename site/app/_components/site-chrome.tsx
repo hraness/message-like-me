@@ -1,6 +1,11 @@
+import { AskAiAboutThis } from '@hraness/ui';
 import Link from 'next/link';
 
-import { GITHUB_URL } from '../_lib/site';
+import {
+  absoluteUrl,
+  type CanonicalPagePath,
+  GITHUB_URL,
+} from '../_lib/site';
 
 export function SiteHeader() {
   return (
@@ -22,17 +27,25 @@ export function SiteHeader() {
   );
 }
 
-export function SiteFooter() {
+export function SiteFooter({ path }: Readonly<{ path?: CanonicalPagePath }>) {
   return (
-    <footer>
-      <Link className="wordmark" href="/">message <span>like me</span></Link>
-      <p>Open source · MIT · local first</p>
-      <nav aria-label="Footer navigation">
-        <Link href="/about">About</Link>
-        <Link href="/sources">Sources</Link>
-        <Link href="/docs">Docs</Link>
-        <a href={GITHUB_URL}>GitHub ↗</a>
-      </nav>
-    </footer>
+    <>
+      {path === undefined ? null : (
+        <AskAiAboutThis
+          className="message-like-me-ask-ai"
+          url={absoluteUrl(path)}
+        />
+      )}
+      <footer>
+        <Link className="wordmark" href="/">message <span>like me</span></Link>
+        <p>Open source · MIT · local first</p>
+        <nav aria-label="Footer navigation">
+          <Link href="/about">About</Link>
+          <Link href="/sources">Sources</Link>
+          <Link href="/docs">Docs</Link>
+          <a href={GITHUB_URL}>GitHub ↗</a>
+        </nav>
+      </footer>
+    </>
   );
 }

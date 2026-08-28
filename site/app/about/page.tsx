@@ -79,7 +79,7 @@ export default function AboutPage() {
           <Link href="/research">Review the research →</Link>
         </nav>
       </main>
-      <SiteFooter />
+      <SiteFooter path="/about" />
     </>
   );
 }
