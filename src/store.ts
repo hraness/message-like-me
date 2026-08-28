@@ -519,6 +519,17 @@ function parsedJson(value: string, label: string): unknown {
   }
 }
 
+function sourceMessageMetadata(value: string, label: string): unknown {
+  const stored = parsedJson(value, label);
+  if (stored === null || typeof stored !== "object" || Array.isArray(stored)) return stored;
+  const record = stored as Record<string, unknown>;
+  if (
+    Object.hasOwn(record, "metadata")
+    && (Object.hasOwn(record, "providerSortKey") || Object.hasOwn(record, "sortKey"))
+  ) return record.metadata;
+  return stored;
+}
+
 function studyExampleIds(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.length > 50) {
     throw new CliError("invalid-data", `${label} must contain at most 50 IDs`);
@@ -3505,7 +3516,7 @@ export class LocalStore {
       replyState: row.reply_state,
       attachmentCount: row.attachment_count,
       attachments: parsedJson(row.attachments_json, `Message ${row.id} attachments`),
-      metadata: parsedJson(row.metadata_json, `Message ${row.id} metadata`),
+      metadata: sourceMessageMetadata(row.metadata_json, `Message ${row.id} metadata`),
     }));
     const reactions = all<{
       id: string;

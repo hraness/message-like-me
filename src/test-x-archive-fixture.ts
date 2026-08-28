@@ -66,7 +66,11 @@ function assignment(binding: string, value: unknown): string {
 
 export async function writeSyntheticXArchive(
   parent: string,
-  options: Readonly<{ mismatchedDirectHeader?: boolean }> = {},
+  options: Readonly<{
+    includeIdentityMetadata?: boolean;
+    laterOutgoingMessage?: boolean;
+    mismatchedDirectHeader?: boolean;
+  }> = {},
 ): Promise<string> {
   const path = join(parent, "synthetic-x-archive.zip");
   const dataTypes: Record<string, unknown> = {
@@ -95,7 +99,9 @@ export async function writeSyntheticXArchive(
     userInfo: { accountId: "999", userName: "Owner", displayName: "Archive Owner" },
     archiveInfo: {
       sizeBytes: "12345",
-      generationDate: "2026-08-26T03:02:10.221Z",
+      generationDate: options.laterOutgoingMessage === true
+        ? "2026-08-27T03:02:10.221Z"
+        : "2026-08-26T03:02:10.221Z",
       isPartialArchive: false,
       maxPartSizeBytes: "53687091200",
     },
@@ -110,36 +116,60 @@ export async function writeSyntheticXArchive(
     createdAt: "2010-01-01T00:00:00.000Z",
     accountDisplayName: "Archive Owner",
   } }]);
+  const messages: Array<Record<string, unknown>> = [
+    { messageCreate: {
+      recipientId: "999",
+      text: "private incoming body",
+      reactions: [],
+      urls: [],
+      mediaUrls: [],
+      senderId: "1002",
+      id: "8001",
+      createdAt: "2026-08-01T12:00:00.000Z",
+    } },
+    { messageCreate: {
+      recipientId: "1002",
+      text: "private outgoing body",
+      reactions: [],
+      urls: [],
+      mediaUrls: [],
+      senderId: "999",
+      id: "8002",
+      createdAt: "2026-08-01T12:01:00.000Z",
+    } },
+  ];
+  if (options.laterOutgoingMessage === true) {
+    messages.push({ messageCreate: {
+      recipientId: "1002",
+      text: "private later outgoing body",
+      reactions: [],
+      urls: [],
+      mediaUrls: [],
+      senderId: "999",
+      id: "8003",
+      createdAt: "2026-08-01T12:02:00.000Z",
+    } });
+  }
   const directMessages = assignment("direct_messages", [{ dmConversation: {
     conversationId: "999-1002",
-    messages: [
-      { messageCreate: {
-        recipientId: "999",
-        text: "private incoming body",
-        reactions: [],
-        urls: [],
-        mediaUrls: [],
-        senderId: "1002",
-        id: "8001",
-        createdAt: "2026-08-01T12:00:00.000Z",
-      } },
-      { messageCreate: {
-        recipientId: "1002",
-        text: "private outgoing body",
-        reactions: [],
-        urls: [],
-        mediaUrls: [],
-        senderId: "999",
-        id: "8002",
-        createdAt: "2026-08-01T12:01:00.000Z",
-      } },
-    ],
+    messages,
   } }]);
   const entries = [
     { name: "data/manifest.js", value: manifest },
     { name: "data/account.js", value: account },
     { name: "data/direct-messages.js", value: directMessages },
   ];
+  if (options.includeIdentityMetadata === true) {
+    entries.push({
+      name: "data/tweets.js",
+      value: assignment("tweets", [{ tweet: {
+        created_at: "2026-07-01T00:00:00.000Z",
+        in_reply_to_user_id: "1002",
+        in_reply_to_user_id_str: "1002",
+        in_reply_to_screen_name: "Peer",
+      } }]),
+    });
+  }
   if (options.mismatchedDirectHeader === true) {
     entries.push({
       name: "data/direct-message-headers.js",

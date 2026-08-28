@@ -4332,6 +4332,15 @@ function parsedJson(value, label) {
     throw new CliError("invalid-data", `${label} is malformed JSON`, { cause: error });
   }
 }
+function sourceMessageMetadata(value, label) {
+  const stored = parsedJson(value, label);
+  if (stored === null || typeof stored !== "object" || Array.isArray(stored))
+    return stored;
+  const record = stored;
+  if (Object.hasOwn(record, "metadata") && (Object.hasOwn(record, "providerSortKey") || Object.hasOwn(record, "sortKey")))
+    return record.metadata;
+  return stored;
+}
 function studyExampleIds(value, label) {
   if (!Array.isArray(value) || value.length > 50) {
     throw new CliError("invalid-data", `${label} must contain at most 50 IDs`);
@@ -6291,7 +6300,7 @@ class LocalStore {
       replyState: row.reply_state,
       attachmentCount: row.attachment_count,
       attachments: parsedJson(row.attachments_json, `Message ${row.id} attachments`),
-      metadata: parsedJson(row.metadata_json, `Message ${row.id} metadata`)
+      metadata: sourceMessageMetadata(row.metadata_json, `Message ${row.id} metadata`)
     }));
     const reactions = all(this.#database, `
       SELECT reaction.id,reaction.external_id,reaction.target_external_id,

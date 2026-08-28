@@ -15,7 +15,11 @@ import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
 import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
-import { writeSyntheticMessageBundle } from "./test-bundle-fixture.ts";
+import {
+  syntheticBundleRecords,
+  type SyntheticBundleRecords,
+  writeSyntheticMessageBundle,
+} from "./test-bundle-fixture.ts";
 import { writeSyntheticXArchive } from "./test-x-archive-fixture.ts";
 import type { CorpusSnapshot, StudyPacket } from "./types.ts";
 
@@ -87,6 +91,55 @@ function ioCapture() {
     now: () => new Date("2026-08-21T12:00:00.000Z"),
   };
   return { io, stdout: () => stdout, stderr: () => stderr, clear: () => { stdout = ""; stderr = ""; } };
+}
+
+function syntheticXOverlapBundleRecords(): SyntheticBundleRecords {
+  const base = syntheticBundleRecords();
+  const network = (record: Record<string, unknown>): Record<string, unknown> => ({
+    ...record,
+    network: "x",
+  });
+  return {
+    account: [{
+      ...network(base.account[0]!),
+      displayName: "Synthetic X Account",
+      handle: "Owner",
+    }],
+    participant: [
+      {
+        ...network(base.participant[0]!),
+        displayName: "Synthetic X Self",
+        handle: "Owner",
+      },
+      {
+        ...network(base.participant[1]!),
+        displayName: "Synthetic X Peer",
+        handle: "Peer",
+      },
+    ],
+    conversation: [{
+      ...network(base.conversation[0]!),
+      title: "Synthetic X Direct",
+      startedAt: "2026-08-01T12:00:00.000Z",
+      lastMessageAt: "2026-08-01T12:01:00.000Z",
+    }],
+    message: [
+      {
+        ...network(base.message[0]!),
+        sentAt: "2026-08-01T12:00:00.000Z",
+        body: "private incoming body",
+      },
+      {
+        ...network(base.message[1]!),
+        sentAt: "2026-08-01T12:01:00.000Z",
+        body: "private outgoing body",
+        replyTo: null,
+        attachments: [],
+      },
+    ],
+    reaction: [],
+    tombstone: [],
+  };
 }
 
 async function createContactsFixture(root: string): Promise<string> {
@@ -474,6 +527,98 @@ describe("messagelikeme CLI", () => {
       });
       expect(packet.examples).toHaveLength(1);
       expect(JSON.stringify(packet)).toContain("private outgoing body");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("replays exact X archive overlap idempotently and retains a later archive append", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-x-overlap-replay-"));
+    const capture = ioCapture();
+    try {
+      const state = join(root, "state");
+      const bundlePath = await writeSyntheticMessageBundle(
+        root,
+        syntheticXOverlapBundleRecords(),
+        { directoryName: "synthetic-x-beeper-bundle" },
+      );
+      expect(await main([
+        "--data-dir", state, "ingest", "bundle", "--input", bundlePath, "--json",
+      ], capture.io)).toBe(0);
+      const beeperSourceId = (JSON.parse(capture.stdout()) as {
+        sources: Array<{ id: string }>;
+      }).sources[0]!.id;
+
+      const archivePath = await writeSyntheticXArchive(root, { includeIdentityMetadata: true });
+      const ingest = async (): Promise<Readonly<{
+        active: { conversations: number; messages: number };
+        corpusRevision: string;
+        imported: { conversations: number; messages: number };
+        reconciliation: { conversations: number; messages: number };
+        source: { changed: boolean; id: string };
+      }>> => {
+        capture.clear();
+        expect(await main([
+          "--data-dir", state,
+          "ingest", "x-archive",
+          "--input", archivePath,
+          "--overlap-source", beeperSourceId,
+          "--json",
+        ], capture.io)).toBe(0);
+        for (const privateValue of [
+          archivePath,
+          bundlePath,
+          "private incoming body",
+          "private outgoing body",
+          "private later outgoing body",
+        ]) {
+          expect(capture.stdout()).not.toContain(privateValue);
+          expect(capture.stderr()).not.toContain(privateValue);
+        }
+        return JSON.parse(capture.stdout());
+      };
+
+      const first = await ingest();
+      expect(first).toMatchObject({
+        active: { conversations: 1, messages: 0 },
+        imported: { conversations: 1, messages: 2 },
+        reconciliation: { conversations: 1, messages: 2 },
+        source: { changed: true },
+      });
+
+      const replay = await ingest();
+      expect(replay).toMatchObject({
+        active: first.active,
+        imported: first.imported,
+        reconciliation: first.reconciliation,
+        source: { changed: false, id: first.source.id },
+      });
+      expect(replay.corpusRevision).toBe(first.corpusRevision);
+
+      await writeSyntheticXArchive(root, {
+        includeIdentityMetadata: true,
+        laterOutgoingMessage: true,
+      });
+      const later = await ingest();
+      expect(later).toMatchObject({
+        active: { conversations: 1, messages: 1 },
+        imported: { conversations: 1, messages: 3 },
+        reconciliation: { conversations: 1, messages: 2 },
+        source: { changed: true, id: first.source.id },
+      });
+      expect(later.corpusRevision).not.toBe(first.corpusRevision);
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "doctor", "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        activeMessages: 3,
+        conversationEquivalences: 1,
+        foreignKeyViolations: 0,
+        messageEquivalences: 2,
+        quickCheck: "ok",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
