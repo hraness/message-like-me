@@ -26,7 +26,7 @@ historical style.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.15.0 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
+| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Install
@@ -35,7 +35,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.5.1
+bun add --global github:hraness/message-like-me#v0.6.0
 messagelikeme skill install
 ```
 
@@ -135,10 +135,12 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[Wrench v0.15.0 release](https://github.com/hraness/wrench/releases/tag/v0.15.0),
-then use Wrench to create a new private Message Like Me bundle:
+[`@hraness/wrench@0.16.1`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.1)
+package from npm, then use Wrench to create a new private Message Like Me
+bundle:
 
 ```sh
+bun add --global @hraness/wrench@0.16.1
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output /absolute/private/path/beeper-bundle \
@@ -147,7 +149,7 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench v0.15.0 calls the
+path to a directory that does not already exist. Wrench v0.16.1 calls the
 pinned [official Beeper CLI 0.6.2 release](https://github.com/beeper/cli/releases/tag/v0%2E6%2E2)
 directly. It enumerates
 the connected account realm, invokes `export --no-attachments` once per
@@ -181,7 +183,7 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.15.0 is the currently verified
+source-transform version `1.1.0`. Wrench v0.16.1 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
 not by an open-ended Wrench package range.
 
@@ -268,6 +270,83 @@ Resolution is normalized for case and Unicode representation, but it does not
 perform prefix, substring, phonetic, or fuzzy matching. It returns only direct
 person scopes and labels, never handles or message bodies.
 
+## Prepare an exact private agent handoff
+
+Message Like Me can bind an ordered unsent draft to one exact local
+source-conversation candidate and one current opaque Wrench context. It still
+does not invoke Wrench, authenticate, launch a provider command, access a
+network, or send a message.
+
+Start with the redacted candidate inventory:
+
+```sh
+messagelikeme routes list <contact-id> \
+  --output /absolute/private/routes.json --json
+```
+
+A contact or person scope is never itself a destination. Each candidate names
+one pseudonymous source and conversation inside that mode-`0600` output.
+Ordinary stdout reports only its digest, counts, and selection state.
+`--private` additionally reveals only
+the exact account, source, and tagged conversation coordinate already observed
+in that imported source: `beeperConversation` for a Beeper bundle or
+`imessageChat` for Messages. It never emits names, handles, participants, or a
+locator derived from them. Wrench rejects a coordinate whose tag does not match
+the selected provider adapter.
+
+An X archive candidate is always `evidence-only` with reason
+`archive-source`. Handoff v1 also keeps group candidates evidence-only as an
+explicit direct-conversation product limit. This does not claim that Wrench or
+a provider cannot address an exact group. It prevents Message Like Me from
+authorizing one through this first handoff contract. Several eligible direct
+candidates produce an `ambiguous` selection state; no route is chosen from a
+name, title, participant list, or merged person scope.
+
+After Wrench has written its exact current context and the agent has written an
+ordered one-to-eight-bubble draft, prepare one private handoff:
+
+```sh
+messagelikeme handoff prepare <contact-id> \
+  --request /absolute/private/handoff-request.json \
+  --wrench-context /absolute/private/wrench-context.json \
+  --draft /absolute/private/draft.json \
+  --output /absolute/private/handoff.json \
+  --json
+```
+
+The request contains the exact selected source-conversation candidate from the
+private route inventory. The request, context, and draft must be owner-only,
+singly linked physical files. The context must carry the pinned
+`wrench.messaging-context-binding.v1` contract identity,
+an unexpired opaque route and context reference, and exact SHA-256 data and
+latest-message revisions. The output is a mode-`0600` file whose canonical
+digest binds those values, the selected source revision, corpus and profile
+evidence, bubble order, text, and optional reply references. Raw opaque Wrench
+references and draft bodies appear only in the explicit private inputs and
+handoff file.
+
+Verification and audit commands emit hashes, counts, timestamps, and
+pseudonymous IDs without bodies or raw Wrench references:
+
+```sh
+messagelikeme handoff verify /absolute/private/handoff.json --json
+messagelikeme handoff record <handoff-id> \
+  --wrench-receipt /absolute/private/wrench-receipt.json --json
+messagelikeme handoffs show <handoff-id> --json
+```
+
+Recording requires Wrench's pinned body-free receipt binding. It carries the
+provider-neutral client-intent digest, set to this exact Message Like Me
+handoff digest, along with route-reference, context-reference, exact-turn, and
+private-preview digests. It also carries the proven prefix and a canonical
+receipt digest. It contains no raw route or context reference. Message Like Me
+stores only those hashes, counts, timestamps, states, and pseudonymous run and
+handoff IDs. It never
+inserts a sent message into the corpus. A later independent source ingestion
+must observe that message before it can affect
+style, tempo, reply, or interaction evidence. The pure contract is exported as
+`@hraness/message-like-me/agentic-messaging-v1` for checked local consumers.
+
 ## Build a style profile
 
 Aggregate metrics cannot explain why a short burst works in one context or why
@@ -282,8 +361,9 @@ messagelikeme study prepare <contact-id> \
   --json
 ```
 
-`study prepare` and `evaluate prepare` are the only commands that write bounded
-message bodies outside the private database. Their outputs are mode `0600`.
+`study prepare`, `evaluate prepare`, and `handoff prepare` are the only commands
+that write bounded message bodies outside the private database. Their outputs
+are mode `0600`.
 A study packet contains incoming context and outgoing responses selected across
 different response shapes; it is not a full transcript export. By default,
 each body is capped at 4 KiB, each example keeps at most 12 text messages per
@@ -379,6 +459,7 @@ messagelikeme sources show SOURCE_ID [--private] [--json]
 messagelikeme contacts list [--min-outgoing N] [--limit N] [--private] [--json]
 messagelikeme contacts show CONTACT_ID [--private] [--json]
 messagelikeme contacts resolve QUERY --private [--limit N] [--json]
+messagelikeme routes list CONTACT_ID --output FILE [--private] [--json]
 messagelikeme inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
 messagelikeme inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
 messagelikeme study prepare CONTACT_ID --output FILE [--limit N]
@@ -391,6 +472,11 @@ messagelikeme profile apply FILE [--json]
 messagelikeme profile show CONTACT_ID [--json]
 messagelikeme profile export CONTACT_ID --output FILE [--json]
 messagelikeme context CONTACT_ID [--json]
+messagelikeme handoff prepare CONTACT_ID --request FILE
+  --wrench-context FILE --draft FILE --output FILE [--json]
+messagelikeme handoff verify FILE [--json]
+messagelikeme handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+messagelikeme handoffs show HANDOFF_ID [--json]
 messagelikeme skill path [--json]
 messagelikeme skill install [--target codex|claude|agents]
   [--scope user|project] [--project PATH] [--force] [--json]
@@ -413,8 +499,8 @@ Place global `--data-dir PATH` before the command.
 - Stable source, contact, participant, conversation, message, and reaction IDs
   are derived with a private per-install HMAC key. Pseudonymous IDs are not
   encryption.
-- Aggregate commands omit bodies and private labels. Study and evaluation
-  packets are bounded, explicit body-bearing exports.
+- Aggregate commands omit bodies and private labels. Study packets, evaluation
+  packets, and agent handoffs are bounded, explicit body-bearing exports.
 - Message text never goes to a Message Like Me server. There is no service,
   account, auth flow, analytics client, or network-backed model call.
 - Opening a study packet makes its bounded excerpts visible to the agent

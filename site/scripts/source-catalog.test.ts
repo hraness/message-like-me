@@ -38,7 +38,7 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.15.0',
+      producerVersion: '0.16.1',
       providerCliVersion: '0.6.2',
       bundleSchemaVersion: '1',
       sourceId: 'beeper-local',
@@ -72,23 +72,28 @@ describe('supported source presentation', () => {
     expect(sourcesPage).toContain('Beeper via Wrench');
     expect(sourcesPage).toMatch(/Message Like\s+Me invokes none of them/u);
     expect(renderedSourcesPage).toContain('Beeper CLI v0.6.2 and publishes');
-    expect(renderedSourcesPage).toContain('Current support in v0.5.1');
+    expect(renderedSourcesPage).toContain('Current support in v0.6.0');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.5.1/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.6.0/docs/local-message-bundle-v1.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
     expect(llms).toContain("absoluteUrl('/sources')");
     expect(readme).toContain('## Supported sources');
-    const wrenchReleaseUrl =
-      `https://github.com/hraness/wrench/releases/tag/v${BEEPER_COMPATIBILITY.producerVersion}`;
+    const wrenchPackageUrl =
+      `https://www.npmjs.com/package/@hraness/wrench/v/${BEEPER_COMPATIBILITY.producerVersion}`;
     const beeperCliReleaseUrl =
       'https://github.com/beeper/cli/releases/tag/v' +
       BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '%2E');
-    expect(readme).toContain(`](${wrenchReleaseUrl})`);
+    for (const copy of [readme, bundleContract]) {
+      expect(copy).toContain(`](${wrenchPackageUrl})`);
+      expect(copy).toContain(
+        `bun add --global @hraness/wrench@${BEEPER_COMPATIBILITY.producerVersion}`,
+      );
+    }
     expect(readme).toContain(`](${beeperCliReleaseUrl})`);
     const providerCliPattern = new RegExp(
       `Beeper CLI[^\\n]{0,80}${BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '\\.')}`,

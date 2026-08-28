@@ -1,14 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./cli.ts";
+import {
+  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+} from "./agentic-messaging-v1.ts";
+import { canonicalJson, sha256 } from "./canonical-json.ts";
 import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
 import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
-import { writeSyntheticMessageBundle } from "./test-bundle-fixture.ts";
+import {
+  syntheticBundleRecords,
+  type SyntheticBundleRecords,
+  writeSyntheticMessageBundle,
+} from "./test-bundle-fixture.ts";
 import { writeSyntheticXArchive } from "./test-x-archive-fixture.ts";
 import type { CorpusSnapshot, StudyPacket } from "./types.ts";
 
@@ -82,6 +93,55 @@ function ioCapture() {
   return { io, stdout: () => stdout, stderr: () => stderr, clear: () => { stdout = ""; stderr = ""; } };
 }
 
+function syntheticXOverlapBundleRecords(): SyntheticBundleRecords {
+  const base = syntheticBundleRecords();
+  const network = (record: Record<string, unknown>): Record<string, unknown> => ({
+    ...record,
+    network: "x",
+  });
+  return {
+    account: [{
+      ...network(base.account[0]!),
+      displayName: "Synthetic X Account",
+      handle: "Owner",
+    }],
+    participant: [
+      {
+        ...network(base.participant[0]!),
+        displayName: "Synthetic X Self",
+        handle: "Owner",
+      },
+      {
+        ...network(base.participant[1]!),
+        displayName: "Synthetic X Peer",
+        handle: "Peer",
+      },
+    ],
+    conversation: [{
+      ...network(base.conversation[0]!),
+      title: "Synthetic X Direct",
+      startedAt: "2026-08-01T12:00:00.000Z",
+      lastMessageAt: "2026-08-01T12:01:00.000Z",
+    }],
+    message: [
+      {
+        ...network(base.message[0]!),
+        sentAt: "2026-08-01T12:00:00.000Z",
+        body: "private incoming body",
+      },
+      {
+        ...network(base.message[1]!),
+        sentAt: "2026-08-01T12:01:00.000Z",
+        body: "private outgoing body",
+        replyTo: null,
+        attachments: [],
+      },
+    ],
+    reaction: [],
+    tombstone: [],
+  };
+}
+
 async function createContactsFixture(root: string): Promise<string> {
   const directory = join(root, "AddressBook", "Sources", "CLI-STORE");
   await mkdir(directory, { recursive: true });
@@ -110,6 +170,258 @@ async function createContactsFixture(root: string): Promise<string> {
 }
 
 describe("messagelikeme CLI", () => {
+  test("prepares, verifies, and records a private body-bearing handoff with a body-free audit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-handoff-"));
+    const capture = ioCapture();
+    const state = join(root, "state");
+    const contextPath = join(root, "wrench-context.json");
+    const routesPath = join(root, "routes.json");
+    const requestPath = join(root, "handoff-request.json");
+    const draftPath = join(root, "draft.json");
+    const handoffPath = join(root, "handoff.json");
+    const receiptPath = join(root, "wrench-receipt.json");
+    const routeRef = "route_ref_private_synthetic_001";
+    const contextRef = "context_ref_private_synthetic_001";
+    const privateBody = "private synthetic response body";
+    try {
+      const paths = await initializeDataPaths(dataPaths(state));
+      const store = LocalStore.open(paths.database);
+      try {
+        store.replaceCorpus(corpus(), "2026-08-21T11:59:00.000Z");
+      } finally {
+        store.close();
+      }
+
+      expect(await main([
+        "--data-dir", state, "routes", "list", "contact_0123456789abcdef",
+        "--output", routesPath, "--private", "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        selectionState: "single-exact-candidate",
+        candidates: 1,
+        eligibleCandidates: 1,
+        privateCoordinatesIncluded: true,
+      });
+      expect(capture.stdout()).not.toContain("contact_0123456789abcdef");
+      const routes = JSON.parse(await readFile(routesPath, "utf8")) as {
+        selection: { state: string; eligibleCandidateId: string };
+        candidates: Array<{
+          sourceId: string;
+          conversationId: string;
+          privateBinding: unknown;
+          actionability: { state: string };
+        }>;
+      };
+      expect(routes.selection.state).toBe("single-exact-candidate");
+      expect(routes.candidates).toEqual([expect.objectContaining({
+        privateBinding: {
+          sourceAccountId: null,
+          sourceExternalId: "local-imessage",
+          coordinate: {
+            kind: "imessageChat",
+            chatGuid: "synthetic-private-chat-guid",
+            service: "iMessage",
+            observedChatRowId: null,
+          },
+        },
+        actionability: { state: "wrench-binding-eligible", reason: "requires-exact-wrench-binding" },
+      })]);
+      expect((await stat(routesPath)).mode & 0o077).toBe(0);
+      expect(capture.stdout()).not.toContain("local-imessage");
+      expect(capture.stdout()).not.toContain("synthetic-private-chat-guid");
+      const routeCandidateId = routes.selection.eligibleCandidateId;
+      expect(capture.stdout()).not.toContain(routeCandidateId);
+      capture.clear();
+
+      await writeFile(requestPath, `${JSON.stringify({
+        schemaVersion: 1,
+        format: "message-like-me.agent-message-handoff-request",
+        routeCandidateId,
+      }, null, 2)}\n`, { mode: 0o600 });
+
+      await writeFile(contextPath, `${JSON.stringify({
+        schemaVersion: 1,
+        format: "wrench.messaging-context-binding",
+        contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+        contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+        routeRef,
+        contextRef,
+        exactDataRevision: "d".repeat(64),
+        latestMessageRevision: "e".repeat(64),
+        validatedAt: "2026-08-21T11:59:00.000Z",
+        expiresAt: "2026-08-21T12:10:00.000Z",
+      }, null, 2)}\n`, { mode: 0o600 });
+      await writeFile(draftPath, `${JSON.stringify({
+        schemaVersion: 1,
+        format: "message-like-me.agent-message-draft",
+        bubbles: [
+          { id: "part_1", text: privateBody, replyToRef: null },
+          { id: "part_2", text: "private synthetic follow-up", replyToRef: "message_ref_private_001" },
+        ],
+      }, null, 2)}\n`, { mode: 0o600 });
+
+      expect(await main([
+        "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
+        "--request", requestPath,
+        "--wrench-context", contextPath,
+        "--draft", draftPath,
+        "--output", handoffPath,
+        "--json",
+      ], capture.io)).toBe(0);
+      const preparedOutput = capture.stdout();
+      const prepared = JSON.parse(preparedOutput) as {
+        handoffId: string;
+        handoffSha256: string;
+        turnDigest: string;
+        partCount: number;
+        state: string;
+      };
+      expect(prepared).toMatchObject({ partCount: 2, state: "prepared" });
+      expect(prepared.handoffId).toMatch(/^handoff_[a-f0-9]{64}$/u);
+      for (const privateValue of [
+        privateBody, routeRef, contextRef, routeCandidateId, contextPath, draftPath, handoffPath,
+        "contact_0123456789abcdef", routes.candidates[0]!.sourceId,
+        routes.candidates[0]!.conversationId,
+      ]) {
+        expect(preparedOutput).not.toContain(privateValue);
+      }
+      expect((await stat(handoffPath)).mode & 0o077).toBe(0);
+      const handoff = JSON.parse(await readFile(handoffPath, "utf8")) as {
+        wrench: { routeRef: string; contextRef: string };
+        turn: { bubbles: Array<{ text: string }> };
+      };
+      expect(handoff.wrench).toMatchObject({ routeRef, contextRef });
+      expect(handoff.turn.bubbles[0]!.text).toBe(privateBody);
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "handoff", "verify", handoffPath, "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        valid: true,
+        handoffId: prepared.handoffId,
+        handoffSha256: prepared.handoffSha256,
+        exactDataRevisionSha256: "d".repeat(64),
+        latestMessageRevisionSha256: "e".repeat(64),
+        partCount: 2,
+        expired: false,
+      });
+      expect(capture.stdout()).not.toContain(privateBody);
+      expect(capture.stdout()).not.toContain(routeRef);
+      expect(capture.stdout()).not.toContain(contextRef);
+      expect(capture.stdout()).not.toContain("contact_0123456789abcdef");
+      expect(capture.stdout()).not.toContain(routes.candidates[0]!.sourceId);
+      expect(capture.stdout()).not.toContain(routes.candidates[0]!.conversationId);
+
+      const beforeReceipt = LocalStore.open(dataPaths(state).database);
+      const before = beforeReceipt.doctor();
+      const beforeRevision = beforeReceipt.corpusRevision();
+      const beforeMessages = beforeReceipt.messages("contact_0123456789abcdef");
+      beforeReceipt.close();
+      const receiptCore = {
+        schemaVersion: 1,
+        format: "wrench.messaging-receipt-binding",
+        contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+        contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+        clientIntentSha256: prepared.handoffSha256,
+        routeRefSha256: sha256(routeRef),
+        contextRefSha256: sha256(contextRef),
+        turnDigest: prepared.turnDigest,
+        previewDigest: "9".repeat(64),
+        runId: "run_synthetic_private_001",
+        state: "submitted",
+        partCount: 2,
+        provenPartCount: 2,
+        recordedAt: "2026-08-21T12:01:00.000Z",
+      };
+      const receiptSha256 = sha256(canonicalJson(receiptCore));
+      await writeFile(receiptPath, `${JSON.stringify({
+        ...receiptCore,
+        receiptSha256,
+      }, null, 2)}\n`, { mode: 0o600 });
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "handoff", "record", prepared.handoffId,
+        "--wrench-receipt", receiptPath, "--json",
+      ], capture.io)).toBe(0);
+      const recordedOutput = capture.stdout();
+      expect(JSON.parse(recordedOutput)).toMatchObject({
+        handoffId: prepared.handoffId,
+        state: "recorded",
+        receipt: {
+          contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+          receiptSha256,
+          previewDigest: "9".repeat(64),
+          runIdSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          state: "submitted",
+          provenPartCount: 2,
+        },
+      });
+      for (const privateValue of [privateBody, routeRef, contextRef, receiptPath]) {
+        expect(recordedOutput).not.toContain(privateValue);
+      }
+
+      const afterReceipt = LocalStore.open(dataPaths(state).database);
+      try {
+        expect(afterReceipt.corpusRevision()).toBe(beforeRevision);
+        expect(afterReceipt.messages("contact_0123456789abcdef")).toEqual(beforeMessages);
+        expect(afterReceipt.doctor()).toMatchObject({
+          messages: before.messages,
+          activeMessages: before.activeMessages,
+          handoffs: 1,
+        });
+      } finally {
+        afterReceipt.close();
+      }
+      const storedBytes = await readFile(dataPaths(state).database);
+      for (const forbiddenStoredValue of [
+        privateBody,
+        routeRef,
+        contextRef,
+        "run_synthetic_private_001",
+      ]) expect(storedBytes.includes(Buffer.from(forbiddenStoredValue))).toBeFalse();
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "handoffs", "show", prepared.handoffId, "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({ state: "recorded", partCount: 2 });
+      expect(capture.stdout()).not.toContain(privateBody);
+      expect(capture.stdout()).not.toContain(routeRef);
+      expect(capture.stdout()).not.toContain(contextRef);
+
+      await chmod(contextPath, 0o644);
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
+        "--request", requestPath,
+        "--wrench-context", contextPath,
+        "--draft", draftPath,
+        "--output", join(root, "unsafe-output.json"),
+        "--json",
+      ], capture.io)).toBe(6);
+      expect(capture.stderr()).toContain("owner-only permissions");
+      expect(capture.stderr()).not.toContain(routeRef);
+      await chmod(contextPath, 0o600);
+
+      const linkedContext = join(root, "linked-context.json");
+      await symlink(contextPath, linkedContext);
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
+        "--request", requestPath,
+        "--wrench-context", linkedContext,
+        "--draft", draftPath,
+        "--output", join(root, "linked-output.json"),
+        "--json",
+      ], capture.io)).toBe(6);
+      expect(capture.stderr()).toContain("physical regular file");
+      expect(capture.stderr()).not.toContain(routeRef);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("ingests an official X archive with an aggregate-only receipt", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-x-"));
     const capture = ioCapture();
@@ -156,6 +468,157 @@ describe("messagelikeme CLI", () => {
         messages: 2,
       });
       expect(capture.stdout()).not.toContain("Owner");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "contacts", "list", "--json",
+      ], capture.io)).toBe(0);
+      const contactId = (JSON.parse(capture.stdout()) as { contacts: Array<{ id: string }> })
+        .contacts[0]!.id;
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "inspect", "tempo", contactId, "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        messageCount: 2,
+        outgoingCount: 1,
+        surface: { outgoingTextMessages: 1 },
+        tempo: {
+          responseEpisodes: 1,
+          explicitReplyMessages: 0,
+          explicitReplyEligibleMessages: 0,
+          explicitReplyUnavailableMessages: 1,
+          explicitReplyRatio: null,
+        },
+      });
+      capture.clear();
+      const xRoutesPath = join(root, "x-routes.json");
+      expect(await main([
+        "--data-dir", state, "routes", "list", contactId,
+        "--output", xRoutesPath, "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        selectionState: "unavailable",
+        candidates: 1,
+        eligibleCandidates: 0,
+      });
+      expect(capture.stdout()).not.toContain(contactId);
+      expect(JSON.parse(await readFile(xRoutesPath, "utf8"))).toMatchObject({
+        selection: { state: "unavailable", eligibleCandidateId: null },
+        candidates: [{
+          sourceKind: "x-archive",
+          actionability: { state: "evidence-only", reason: "archive-source" },
+        }],
+      });
+      const packetPath = join(root, "x-study-packet.json");
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "study", "prepare", contactId,
+        "--output", packetPath, "--json",
+      ], capture.io)).toBe(0);
+      const packet = JSON.parse(await readFile(packetPath, "utf8")) as StudyPacket;
+      expect(packet.metrics).toMatchObject({
+        messageCount: 2,
+        outgoingCount: 1,
+        tempo: {
+          explicitReplyEligibleMessages: 0,
+          explicitReplyUnavailableMessages: 1,
+        },
+      });
+      expect(packet.examples).toHaveLength(1);
+      expect(JSON.stringify(packet)).toContain("private outgoing body");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("replays exact X archive overlap idempotently and retains a later archive append", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-x-overlap-replay-"));
+    const capture = ioCapture();
+    try {
+      const state = join(root, "state");
+      const bundlePath = await writeSyntheticMessageBundle(
+        root,
+        syntheticXOverlapBundleRecords(),
+        { directoryName: "synthetic-x-beeper-bundle" },
+      );
+      expect(await main([
+        "--data-dir", state, "ingest", "bundle", "--input", bundlePath, "--json",
+      ], capture.io)).toBe(0);
+      const beeperSourceId = (JSON.parse(capture.stdout()) as {
+        sources: Array<{ id: string }>;
+      }).sources[0]!.id;
+
+      const archivePath = await writeSyntheticXArchive(root, { includeIdentityMetadata: true });
+      const ingest = async (): Promise<Readonly<{
+        active: { conversations: number; messages: number };
+        corpusRevision: string;
+        imported: { conversations: number; messages: number };
+        reconciliation: { conversations: number; messages: number };
+        source: { changed: boolean; id: string };
+      }>> => {
+        capture.clear();
+        expect(await main([
+          "--data-dir", state,
+          "ingest", "x-archive",
+          "--input", archivePath,
+          "--overlap-source", beeperSourceId,
+          "--json",
+        ], capture.io)).toBe(0);
+        for (const privateValue of [
+          archivePath,
+          bundlePath,
+          "private incoming body",
+          "private outgoing body",
+          "private later outgoing body",
+        ]) {
+          expect(capture.stdout()).not.toContain(privateValue);
+          expect(capture.stderr()).not.toContain(privateValue);
+        }
+        return JSON.parse(capture.stdout());
+      };
+
+      const first = await ingest();
+      expect(first).toMatchObject({
+        active: { conversations: 1, messages: 0 },
+        imported: { conversations: 1, messages: 2 },
+        reconciliation: { conversations: 1, messages: 2 },
+        source: { changed: true },
+      });
+
+      const replay = await ingest();
+      expect(replay).toMatchObject({
+        active: first.active,
+        imported: first.imported,
+        reconciliation: first.reconciliation,
+        source: { changed: false, id: first.source.id },
+      });
+      expect(replay.corpusRevision).toBe(first.corpusRevision);
+
+      await writeSyntheticXArchive(root, {
+        includeIdentityMetadata: true,
+        laterOutgoingMessage: true,
+      });
+      const later = await ingest();
+      expect(later).toMatchObject({
+        active: { conversations: 1, messages: 1 },
+        imported: { conversations: 1, messages: 3 },
+        reconciliation: { conversations: 1, messages: 2 },
+        source: { changed: true, id: first.source.id },
+      });
+      expect(later.corpusRevision).not.toBe(first.corpusRevision);
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "doctor", "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        activeMessages: 3,
+        conversationEquivalences: 1,
+        foreignKeyViolations: 0,
+        messageEquivalences: 2,
+        quickCheck: "ok",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

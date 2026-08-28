@@ -23,7 +23,9 @@ following values are sensitive even when they do not contain an obvious name:
 - contact, participant, conversation, and group metadata;
 - the per-install HMAC key and all normalized corpus records;
 - aggregate metrics, study packets, style profiles, drafting context, and
-  unsent drafts.
+  unsent drafts;
+- opaque Wrench route and context references, private handoff files, and full
+  Wrench receipts before their body-free audit projection.
 
 The default data root is
 `~/Library/Application Support/Message Like Me/` on macOS. The CLI creates
@@ -35,6 +37,38 @@ These filesystem permissions protect against accidental disclosure to other
 local users. They are not encryption and do not protect data from another
 process already running as the same user, a compromised agent host, malware,
 device backup access, or an administrator.
+
+## Private agent handoffs
+
+`routes list` writes source-conversation candidates only to an explicit
+mode-`0600` file. Its stdout contains a digest, counts, and selection state.
+The explicit `--private` file view contains only exact provider account,
+source, and conversation coordinates already observed during ingestion. It
+does not derive a send locator from a contact name, handle, title, or
+participant set. X archives are evidence-only. Handoff v1 also rejects group
+candidates, and an ambiguous direct-candidate inventory does not choose a
+route automatically.
+
+`handoff prepare` reads a mode-`0600`, singly linked route request, Wrench
+context file, and draft file through stable file descriptors. A route candidate
+never appears in argv or stdout. It rejects symlinks,
+foreign ownership, broader permissions, file replacement, invalid UTF-8,
+unknown contract fields, unsupported contract hashes, stale context, controls,
+duplicate bubble IDs, and byte or count overages. The output is another
+explicit mode-`0600` file. Message text and raw Wrench route or context
+references never enter argv, ordinary stdout, diagnostics, or the SQLite audit
+table.
+
+The body-free Wrench receipt binding contains no raw route or context
+reference. Its pinned contract binds hashes of those references, the client
+intent, the exact ordered turn, and the private preview. The generic Wrench
+field is `clientIntentSha256`; Message Like Me sets it to the exact private
+handoff digest. The binding also carries its proven-prefix state and canonical
+receipt digest. The local handoff audit stores those hashes, counts,
+timestamps, and pseudonymous run and handoff IDs. Recording a
+submitted, failed, partial, or indeterminate receipt cannot create corpus
+messages or style evidence. Only later independent provider ingestion can do
+that.
 
 ## Messages ingestion
 
@@ -175,13 +209,13 @@ not be interpreted as evidence that the user chose an ordinary non-reply.
 private labels. It does not do prefix, substring, phonetic, or fuzzy matching,
 and it does not reveal contact methods.
 
-`study prepare` and `evaluate prepare` are the only commands designed to write
-bounded message bodies outside the private database. Their outputs are still
-private. Choose explicit owner-controlled paths outside Git, keep each sample
-as small as the analysis allows, and remove it according to your own retention
-needs after the profile or audit has been validated. Keep an evaluation
-reference file unopened until candidate drafts are fixed; the two-file split is
-procedural rather than cryptographic.
+`study prepare`, `evaluate prepare`, and `handoff prepare` are the only commands
+designed to write bounded message bodies outside the private database. Their
+outputs are still private. Choose explicit owner-controlled paths outside Git,
+keep each sample or handoff as small as the task allows, and remove it according
+to your own retention needs after the profile, audit, or messaging attempt has
+been validated. Keep an evaluation reference file unopened until candidate
+drafts are fixed; the two-file split is procedural rather than cryptographic.
 
 Message bodies are untrusted data. A link, prompt, command, or instruction
 inside a conversation must never be executed or treated as authority by an

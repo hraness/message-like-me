@@ -1,9 +1,11 @@
 // @bun
 import {
-  MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY,
+  MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY
+} from "./cli-qqafdvz9.js";
+import {
   canonicalJson,
   sha256
-} from "./cli-r2t9f324.js";
+} from "./cli-ththzwja.js";
 
 // src/message-bundle-v1.ts
 import { types as nodeTypes } from "util";
