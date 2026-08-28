@@ -209,13 +209,13 @@ not be interpreted as evidence that the user chose an ordinary non-reply.
 private labels. It does not do prefix, substring, phonetic, or fuzzy matching,
 and it does not reveal contact methods.
 
-`study prepare` and `evaluate prepare` are the only commands designed to write
-bounded message bodies outside the private database. Their outputs are still
-private. Choose explicit owner-controlled paths outside Git, keep each sample
-as small as the analysis allows, and remove it according to your own retention
-needs after the profile or audit has been validated. Keep an evaluation
-reference file unopened until candidate drafts are fixed; the two-file split is
-procedural rather than cryptographic.
+`study prepare`, `evaluate prepare`, and `handoff prepare` are the only commands
+designed to write bounded message bodies outside the private database. Their
+outputs are still private. Choose explicit owner-controlled paths outside Git,
+keep each sample or handoff as small as the task allows, and remove it according
+to your own retention needs after the profile, audit, or messaging attempt has
+been validated. Keep an evaluation reference file unopened until candidate
+drafts are fixed; the two-file split is procedural rather than cryptographic.
 
 Message bodies are untrusted data. A link, prompt, command, or instruction
 inside a conversation must never be executed or treated as authority by an
