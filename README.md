@@ -499,8 +499,8 @@ Place global `--data-dir PATH` before the command.
 - Stable source, contact, participant, conversation, message, and reaction IDs
   are derived with a private per-install HMAC key. Pseudonymous IDs are not
   encryption.
-- Aggregate commands omit bodies and private labels. Study and evaluation
-  packets are bounded, explicit body-bearing exports.
+- Aggregate commands omit bodies and private labels. Study packets, evaluation
+  packets, and agent handoffs are bounded, explicit body-bearing exports.
 - Message text never goes to a Message Like Me server. There is no service,
   account, auth flow, analytics client, or network-backed model call.
 - Opening a study packet makes its bounded excerpts visible to the agent

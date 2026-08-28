@@ -27,9 +27,9 @@ ID with an X handle or display name; tweet prose is not added to the messaging
 corpus or used as style evidence.
 
 The normalized corpus, private installation key, aggregate metrics, profiles,
-and drafting context stay in the local data root. Study and evaluation files
-are written only to explicit paths. Ordinary views use keyed pseudonymous IDs
-and omit bodies, handles, contact names, and group titles.
+and drafting context stay in the local data root. Study, evaluation, and agent
+handoff files are written only to explicit paths. Ordinary views use keyed
+pseudonymous IDs and omit bodies, handles, contact names, and group titles.
 
 This is a process boundary, not encryption. Another process running as the
 same user, a compromised host, a device backup, or an agent provider that is
