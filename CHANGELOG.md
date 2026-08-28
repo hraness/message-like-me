@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0
+
+- Add the strict dependency-free local message bundle v2 contract for native
+  WhatsApp evidence: one Wrench/Wacli account, source `wacli-local@1.0.0`,
+  provider `whatsapp@0.15.0`, network `whatsapp`, exact supported JIDs, and
+  E.164 handles only when a user JID proves them.
+- Dispatch bundle ingestion by manifest schema while preserving the frozen v1
+  Beeper parser and fixture byte-for-byte. Keep both versions behind the same
+  fixed private directory, canonical JSON, digest, bounds, and replay laws.
+- Emit private `whatsappJid` route coordinates for native direct conversations.
+  Groups remain evidence-only, and Message Like Me still contains no Wacli
+  process, authentication, network, synchronization, preview, or send code.
+- Reconcile a named Beeper WhatsApp source only after exact self-account,
+  direct-peer, and shared text-message proof. Prefer native Wacli evidence,
+  preserve unique history and both provenances, and mark the proven Beeper
+  route `superseded-route`.
+- Publish the v2 schema, producer documentation, package export, synthetic
+  fixtures, CLI and privacy guidance, and informational site source entry.
+
 ## 0.6.0
 
 - Add a dependency-free `agentic-messaging-v1` contract that binds one exact

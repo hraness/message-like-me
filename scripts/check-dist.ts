@@ -118,6 +118,9 @@ export async function distFreshnessProblems(): Promise<string[]> {
       "index.js",
       "message-bundle-v1.d.ts",
       "message-bundle-v1.js",
+      "message-bundle-v2-identity.d.ts",
+      "message-bundle-v2.d.ts",
+      "message-bundle-v2.js",
       "types.d.ts",
     ]) {
       if (!expectedByPath.has(required)) problems.push(`fresh build did not emit dist/${required}`);

@@ -1,6 +1,6 @@
 {
   "name": "@hraness/message-like-me",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,9 @@
     "local-first",
     "messaging",
     "messaging-style",
-    "privacy"
+    "privacy",
+    "wacli",
+    "whatsapp"
   ],
   "bin": {
     "messagelikeme": "./dist/cli.js"
@@ -38,6 +40,10 @@
     "./message-bundle-v1": {
       "types": "./dist/message-bundle-v1.d.ts",
       "import": "./dist/message-bundle-v1.js"
+    },
+    "./message-bundle-v2": {
+      "types": "./dist/message-bundle-v2.d.ts",
+      "import": "./dist/message-bundle-v2.js"
     },
     "./agentic-messaging-v1": {
       "types": "./dist/agentic-messaging-v1.d.ts",

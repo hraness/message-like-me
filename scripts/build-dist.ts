@@ -49,6 +49,7 @@ export async function buildDist(argv: readonly string[]): Promise<void> {
     "src/cli.ts",
     "src/index.ts",
     "src/message-bundle-v1.ts",
+    "src/message-bundle-v2.ts",
     "src/agentic-messaging-v1.ts",
     "--outdir",
     outdir,

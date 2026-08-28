@@ -9,6 +9,7 @@ import { CliError } from "./errors.ts";
 import { LocalStore } from "./store.ts";
 import {
   syntheticBundleRecords,
+  syntheticWhatsAppBundleRecords,
   writeSyntheticMessageBundle,
 } from "./test-bundle-fixture.ts";
 
@@ -61,6 +62,127 @@ async function replaceArtifactBytes(
 }
 
 describe("private local message bundle", () => {
+  test("dispatches and normalizes the native Wrench/Wacli v2 contract", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-bundle-"));
+    try {
+      const path = await writeSyntheticMessageBundle(root, syntheticWhatsAppBundleRecords(), {
+        schemaVersion: 2,
+      });
+      const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
+      expect(bundle.schemaVersion).toBe(2);
+      expect(bundle.sources).toHaveLength(1);
+      expect(bundle.sources[0]!.source).toMatchObject({
+        kind: "bundle",
+        provider: "whatsapp",
+        network: "whatsapp",
+        producer: { id: "wacli-local", version: "1.0.0" },
+        coverage: { history: "bounded", kind: "truncated" },
+      });
+      expect(bundle.sources[0]!.conversations[0]).toMatchObject({
+        group: false,
+        privateParticipants: ["+15555550101"],
+      });
+      expect(bundle.sources[0]!.conversationProvenance[0]).toMatchObject({
+        externalId: "15555550101@s.whatsapp.net",
+      });
+      const store = LocalStore.open(join(root, "wacli-routes.sqlite3"));
+      try {
+        store.replaceSources(bundle.sources, "2026-08-20T12:06:00.000Z", TEST_KEY);
+        const conversationId = bundle.sources[0]!.conversations[0]!.id;
+        expect(store.routeCandidates(conversationId, true)?.candidates).toMatchObject([{
+          provider: "whatsapp",
+          network: "whatsapp",
+          actionability: {
+            state: "wrench-binding-eligible",
+            reason: "requires-exact-wrench-binding",
+          },
+          privateBinding: {
+            coordinate: { kind: "whatsappJid", jid: "15555550101@s.whatsapp.net" },
+          },
+        }]);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a v2 direct chat whose external JID is not the exact peer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-peer-"));
+    try {
+      const records = syntheticWhatsAppBundleRecords();
+      (records.conversation[0]!.provenance as Record<string, unknown>).providerId =
+        "15555550199@s.whatsapp.net";
+      const path = await writeSyntheticMessageBundle(root, records, { schemaVersion: 2 });
+      await expect(readMessageBundle(path, { hmacKey: TEST_KEY }))
+        .rejects.toThrow("bind its exact peer JID");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts a LID account realm without inventing an E.164 handle", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-lid-account-"));
+    try {
+      const records = syntheticWhatsAppBundleRecords();
+      const accountJid = "123456789012345@lid";
+      for (const values of Object.values(records)) {
+        for (const record of values) {
+          (record.provenance as Record<string, unknown>).connectedAccountProviderId = accountJid;
+        }
+      }
+      (records.account[0]!.provenance as Record<string, unknown>).providerId = accountJid;
+      records.account[0]!.handle = null;
+      (records.participant[0]!.provenance as Record<string, unknown>).providerId = accountJid;
+      records.participant[0]!.handle = null;
+      const path = await writeSyntheticMessageBundle(root, records, { schemaVersion: 2 });
+      const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
+      expect(bundle.sources[0]!.source).toMatchObject({
+        accountId: accountJid,
+        identity: { account: { handle: null } },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts an incomplete group roster and a direction-proven row without a sender", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-group-"));
+    try {
+      const records = syntheticWhatsAppBundleRecords();
+      records.conversation[0]!.type = "group";
+      records.conversation[0]!.participantsComplete = false;
+      (records.conversation[0]!.provenance as Record<string, unknown>).providerId =
+        "120363123456789012@g.us";
+      records.message[0]!.senderParticipantId = null;
+      const path = await writeSyntheticMessageBundle(root, records, { schemaVersion: 2 });
+      const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
+      expect(bundle.sources[0]!.conversations[0]).toMatchObject({ group: true });
+      expect(bundle.sources[0]!.messages[0]).toMatchObject({
+        direction: "incoming",
+      });
+      const store = LocalStore.open(join(root, "wacli-group-routes.sqlite3"));
+      try {
+        store.replaceSources(bundle.sources, "2026-08-20T12:06:00.000Z", TEST_KEY);
+        const conversationId = bundle.sources[0]!.conversations[0]!.id;
+        expect(store.routeCandidates(conversationId, true)?.candidates).toMatchObject([{
+          actionability: {
+            state: "evidence-only",
+            reason: "group-conversation",
+          },
+          privateBinding: {
+            coordinate: { kind: "whatsappJid", jid: "120363123456789012@g.us" },
+          },
+        }]);
+      } finally {
+        store.close();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("imports the exact canonical bundle emitted by Wrench", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-wrench-golden-"));
     try {

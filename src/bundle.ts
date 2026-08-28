@@ -9,23 +9,31 @@ import { CliError } from "./errors.ts";
 import {
   LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS as ARTIFACTS,
   LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
+  LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
   MessageBundleV1ContractError,
   parseLocalMessageBundleV1Manifest,
   parseLocalMessageBundleV1Record,
-  type LocalMessageBundleV1AccountRecord as AccountRecord,
-  type LocalMessageBundleV1AttachmentRecord as AttachmentRecord,
-  type LocalMessageBundleV1Artifact as Artifact,
-  type LocalMessageBundleV1ConversationRecord as ConversationRecord,
-  type LocalMessageBundleV1Manifest as Manifest,
-  type LocalMessageBundleV1MessageRecord as MessageRecord,
-  type LocalMessageBundleV1ParticipantRecord as ParticipantRecord,
-  type LocalMessageBundleV1ReactionRecord as ReactionRecord,
-  type LocalMessageBundleV1Record as BundleRecord,
-  type LocalMessageBundleV1RecordKind as RecordKind,
-  type LocalMessageBundleV1TombstoneRecord as TombstoneRecord,
 } from "./message-bundle-v1.ts";
 import {
-  MESSAGE_BUNDLE_SCHEMA_VERSION,
+  LOCAL_MESSAGE_BUNDLE_V2_LIMITS,
+  LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION,
+  MessageBundleV2ContractError,
+  parseLocalMessageBundleV2Manifest,
+  parseLocalMessageBundleV2Record,
+  parseLocalMessageBundleV2WhatsAppJid,
+  type LocalMessageBundleV2AccountRecord,
+  type LocalMessageBundleV2AttachmentRecord,
+  type LocalMessageBundleV2Artifact,
+  type LocalMessageBundleV2ConversationRecord,
+  type LocalMessageBundleV2Manifest,
+  type LocalMessageBundleV2MessageRecord,
+  type LocalMessageBundleV2ParticipantRecord,
+  type LocalMessageBundleV2ReactionRecord,
+  type LocalMessageBundleV2Record,
+  type LocalMessageBundleV2RecordKind,
+  type LocalMessageBundleV2TombstoneRecord,
+} from "./message-bundle-v2.ts";
+import {
   type CorpusAttachmentProvenance,
   type CorpusConversation,
   type CorpusMessage,
@@ -37,15 +45,47 @@ import {
   type SourceCorpusSnapshot,
 } from "./types.ts";
 
-const MAX_MANIFEST_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.manifestBytes;
-const MAX_RECORD_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.recordBytes;
-const MAX_ACCOUNTS = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.accounts;
+type Manifest = import("./message-bundle-v1.ts").LocalMessageBundleV1Manifest
+  | LocalMessageBundleV2Manifest;
+type Artifact = import("./message-bundle-v1.ts").LocalMessageBundleV1Artifact
+  | LocalMessageBundleV2Artifact;
+type RecordKind = import("./message-bundle-v1.ts").LocalMessageBundleV1RecordKind
+  | LocalMessageBundleV2RecordKind;
+type BundleRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1Record
+  | LocalMessageBundleV2Record;
+type AccountRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1AccountRecord
+  | LocalMessageBundleV2AccountRecord;
+type ParticipantRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1ParticipantRecord
+  | LocalMessageBundleV2ParticipantRecord;
+type ConversationRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1ConversationRecord
+  | LocalMessageBundleV2ConversationRecord;
+type MessageRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1MessageRecord
+  | LocalMessageBundleV2MessageRecord;
+type ReactionRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1ReactionRecord
+  | LocalMessageBundleV2ReactionRecord;
+type TombstoneRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1TombstoneRecord
+  | LocalMessageBundleV2TombstoneRecord;
+type AttachmentRecord = import("./message-bundle-v1.ts").LocalMessageBundleV1AttachmentRecord
+  | LocalMessageBundleV2AttachmentRecord;
+
+const MAX_MANIFEST_BYTES = Math.max(
+  LOCAL_MESSAGE_BUNDLE_V1_LIMITS.manifestBytes,
+  LOCAL_MESSAGE_BUNDLE_V2_LIMITS.manifestBytes,
+);
+const MAX_RECORD_BYTES = Math.max(
+  LOCAL_MESSAGE_BUNDLE_V1_LIMITS.recordBytes,
+  LOCAL_MESSAGE_BUNDLE_V2_LIMITS.recordBytes,
+);
+const MAX_ACCOUNTS = Math.max(
+  LOCAL_MESSAGE_BUNDLE_V1_LIMITS.accounts,
+  LOCAL_MESSAGE_BUNDLE_V2_LIMITS.accounts,
+);
 
 function contractValue<Result>(read: () => Result): Result {
   try {
     return read();
   } catch (error) {
-    if (error instanceof MessageBundleV1ContractError) {
+    if (error instanceof MessageBundleV1ContractError || error instanceof MessageBundleV2ContractError) {
       throw new CliError("invalid-data", error.message, { cause: error });
     }
     throw error;
@@ -53,11 +93,29 @@ function contractValue<Result>(read: () => Result): Result {
 }
 
 function parseManifest(value: unknown): Manifest {
-  return contractValue(() => parseLocalMessageBundleV1Manifest(value));
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const schemaVersion = Object.getOwnPropertyDescriptor(value, "schemaVersion");
+    if (schemaVersion !== undefined && "value" in schemaVersion) {
+      if (schemaVersion.value === LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION) {
+        return contractValue(() => parseLocalMessageBundleV1Manifest(value));
+      }
+      if (schemaVersion.value === LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION) {
+        return contractValue(() => parseLocalMessageBundleV2Manifest(value));
+      }
+    }
+  }
+  throw new CliError("invalid-data", "Manifest has an unsupported message bundle schemaVersion");
 }
 
-function parseRecord(value: unknown, kind: RecordKind, label: string): BundleRecord {
-  return contractValue(() => parseLocalMessageBundleV1Record(value, kind, label));
+function parseRecord(
+  value: unknown,
+  schemaVersion: 1 | 2,
+  kind: RecordKind,
+  label: string,
+): BundleRecord {
+  return schemaVersion === LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION
+    ? contractValue(() => parseLocalMessageBundleV1Record(value, kind, label))
+    : contractValue(() => parseLocalMessageBundleV2Record(value, kind, label));
 }
 
 function sameFile(left: Awaited<ReturnType<typeof lstat>>, right: Awaited<ReturnType<typeof lstat>>): boolean {
@@ -82,7 +140,7 @@ async function bundleDirectory(path: string): Promise<string> {
   const expected = ["manifest.json", ...ARTIFACTS.map(({ path: artifactPath }) => artifactPath)].sort();
   const entries = (await readdir(physical)).sort();
   if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {
-    throw new CliError("invalid-data", "Bundle directory does not contain exactly the version-one inventory");
+    throw new CliError("invalid-data", "Bundle directory does not contain exactly the supported fixed inventory");
   }
   return physical;
 }
@@ -161,7 +219,11 @@ async function readManifest(path: string): Promise<Readonly<{ bytes: Uint8Array;
   }
 }
 
-async function readArtifact(root: string, artifact: Artifact): Promise<readonly BundleRecord[]> {
+async function readArtifact(
+  root: string,
+  schemaVersion: 1 | 2,
+  artifact: Artifact,
+): Promise<readonly BundleRecord[]> {
   const path = join(root, artifact.path);
   const opened = await openPrivateFile(path, artifact.bytes, true);
   const hash = createHash("sha256");
@@ -198,6 +260,7 @@ async function readArtifact(root: string, artifact: Artifact): Promise<readonly 
         }
         const normalized = parseRecord(
           parsed,
+          schemaVersion,
           artifact.recordKind,
           `${artifact.path}:${records.length + 1}`,
         );
@@ -291,12 +354,76 @@ function reactionTimelineCoordinate(localReactionId: string): string {
   return `\u001freaction-timeline:${localReactionId}`;
 }
 
+function validateNativeWhatsAppGraph(
+  manifest: Manifest,
+  records: Readonly<Record<RecordKind, readonly BundleRecord[]>>,
+): void {
+  if (manifest.schemaVersion !== LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION) return;
+  const accounts = records.account as readonly AccountRecord[];
+  const participants = records.participant as readonly ParticipantRecord[];
+  const conversations = records.conversation as readonly ConversationRecord[];
+  const messages = records.message as readonly MessageRecord[];
+  const reactions = records.reaction as readonly ReactionRecord[];
+  const participantsById = new Map(participants.map((participant) => [participant.id, participant]));
+  const accountsById = new Map(accounts.map((account) => [account.id, account]));
+  for (const account of accounts) {
+    const self = participantsById.get(account.selfParticipantId);
+    if (
+      self === undefined
+      || self.accountId !== account.id
+      || self.provenance.providerId !== account.provenance.providerId
+      || self.provenance.connectedAccountProviderId !== account.provenance.providerId
+    ) throw new CliError("invalid-data", "A WhatsApp account must bind its exact self user or LID JID");
+  }
+  for (const conversation of conversations) {
+    const account = accountsById.get(conversation.accountId);
+    if (account === undefined) continue;
+    const jid = contractValue(() => parseLocalMessageBundleV2WhatsAppJid(
+      conversation.provenance.providerId,
+      "conversation.provenance.providerId",
+    ));
+    const members = conversation.participantIds.map((id) => participantsById.get(id));
+    if (members.some((member) => member === undefined)) continue;
+    if (conversation.type === "direct") {
+      const peers = members.filter((member) => member!.isSelf === false);
+      if (
+        conversation.participantsComplete !== true
+        || jid.kind === "group"
+        || peers.length !== 1
+        || peers[0]!.provenance.providerId !== jid.jid
+        || !conversation.participantIds.includes(account.selfParticipantId)
+      ) throw new CliError("invalid-data", "A direct WhatsApp conversation must bind its exact peer JID");
+    } else if (jid.kind !== "group") {
+      throw new CliError("invalid-data", "A group WhatsApp conversation must bind its exact group JID");
+    }
+  }
+  const conversationsById = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+  for (const message of messages) {
+    const conversation = conversationsById.get(message.conversationId);
+    if (
+      message.direction === "unknown"
+      || (message.senderParticipantId === null && conversation?.type !== "group")
+    ) {
+      throw new CliError(
+        "invalid-data",
+        "A native WhatsApp message requires proven direction and a sender unless it is a group row",
+      );
+    }
+  }
+  for (const reaction of reactions) {
+    if (reaction.participantId === null) {
+      throw new CliError("invalid-data", "A native WhatsApp reaction requires a proven participant");
+    }
+  }
+}
+
 function normalizeBundle(
   manifest: Manifest,
   manifestSha256: string,
   records: Readonly<Record<RecordKind, readonly BundleRecord[]>>,
   key: Uint8Array,
 ): readonly SourceCorpusSnapshot[] {
+  validateNativeWhatsAppGraph(manifest, records);
   const accounts = records.account as readonly AccountRecord[];
   const participants = records.participant as readonly ParticipantRecord[];
   const conversations = records.conversation as readonly ConversationRecord[];
@@ -787,7 +914,7 @@ function normalizeBundle(
     const accountObservedThrough = accountTimelineBounds.at(-1) ?? null;
     const revisionHash = createHash("sha256");
     const revisionHeader = canonicalJson({
-      schemaVersion: 1,
+      schemaVersion: manifest.schemaVersion,
       source: manifest.source,
       provider: manifest.provider,
       completeness: manifest.completeness,
@@ -828,7 +955,13 @@ function normalizeBundle(
           reason: manifest.completeness.reason,
         }),
         manifestSha256,
-        identity: Object.freeze({ account, selfParticipantProviderId: self.provenance.providerId }),
+        identity: Object.freeze({
+          account,
+          selfParticipantProviderId: self.provenance.providerId,
+          ...(manifest.schemaVersion === LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION
+            ? { provider: manifest.provider }
+            : {}),
+        }),
         warnings: Object.freeze(sourceWarnings),
       }),
       conversations: Object.freeze(normalizedConversations),
@@ -847,7 +980,7 @@ function normalizeBundle(
   return Object.freeze(result);
 }
 
-/** Read one complete private Wrench/Beeper replacement-snapshot bundle. */
+/** Read one complete private Wrench-produced replacement-snapshot bundle. */
 export async function readMessageBundle(
   path: string,
   options: Readonly<{ hmacKey: string | Uint8Array }>,
@@ -858,13 +991,15 @@ export async function readMessageBundle(
   const manifest = manifestResult.manifest;
   const manifestSha256 = sha256(manifestResult.bytes);
   const parsedRecords: Array<readonly BundleRecord[]> = [];
-  for (const artifact of manifest.artifacts) parsedRecords.push(await readArtifact(root, artifact));
+  for (const artifact of manifest.artifacts) {
+    parsedRecords.push(await readArtifact(root, manifest.schemaVersion, artifact));
+  }
   const records = Object.fromEntries(manifest.artifacts.map((artifact, index) => [
     artifact.recordKind,
     parsedRecords[index]!,
   ])) as Record<RecordKind, readonly BundleRecord[]>;
   return Object.freeze({
-    schemaVersion: MESSAGE_BUNDLE_SCHEMA_VERSION,
+    schemaVersion: manifest.schemaVersion,
     manifestSha256,
     sources: normalizeBundle(manifest, manifestSha256, records, key),
   });

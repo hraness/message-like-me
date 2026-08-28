@@ -1,0 +1,462 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://messagelikeme.com/schema/local-message-bundle-v2.schema.json",
+  "title": "Message Like Me local message bundle v2 JSON objects",
+  "description": "Validates manifest.json or one NDJSON record. Runtime validation additionally enforces canonical UTF-8 bytes, filesystem safety, byte bounds, digests, account realms, identity joins, and graph laws.",
+  "oneOf": [
+    { "$ref": "#/$defs/manifest" },
+    { "$ref": "#/$defs/account" },
+    { "$ref": "#/$defs/participant" },
+    { "$ref": "#/$defs/conversation" },
+    { "$ref": "#/$defs/message" },
+    { "$ref": "#/$defs/reaction" },
+    { "$ref": "#/$defs/tombstone" }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$",
+      "description": "Runtime bound is 1,024 UTF-8 bytes."
+    },
+    "shortText": {
+      "type": "string",
+      "maxLength": 8192,
+      "pattern": "^[^\\u0000]*$",
+      "description": "Runtime bound is 8 KiB UTF-8."
+    },
+    "mimeType": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[^\\u0000]*$",
+      "description": "Runtime bound is 256 UTF-8 bytes."
+    },
+    "body": {
+      "type": "string",
+      "maxLength": 1048576,
+      "pattern": "^[^\\u0000]*$",
+      "description": "Runtime bound is 1 MiB UTF-8."
+    },
+    "token": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9](?:[a-z0-9._+\\-]*[a-z0-9])?$"
+    },
+    "network": {
+      "const": "whatsapp",
+      "description": "The native Wacli bundle network is exactly WhatsApp."
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._+\\-]*[A-Za-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64,
+      "description": "Runtime requires exact canonical Date#toISOString() millisecond UTC text."
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableIdentifier": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/identifier" }
+      ]
+    },
+    "nullableShortText": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/shortText" }
+      ]
+    },
+    "nullableMimeType": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/mimeType" }
+      ]
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/timestamp" }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "providerRevision",
+        "observedAt",
+        "connectedAccountProviderId"
+      ],
+      "properties": {
+        "providerId": { "$ref": "#/$defs/identifier" },
+        "providerRevision": { "$ref": "#/$defs/nullableIdentifier" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "connectedAccountProviderId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "common": {
+      "type": "object",
+      "required": ["schemaVersion", "kind", "id", "accountId", "network", "provenance"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "kind": {
+          "enum": ["account", "participant", "conversation", "message", "reaction", "tombstone"]
+        },
+        "id": { "$ref": "#/$defs/identifier" },
+        "accountId": { "$ref": "#/$defs/identifier" },
+        "network": { "$ref": "#/$defs/network" },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "account": {
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["displayName", "handle", "selfParticipantId"],
+      "properties": {
+        "kind": { "const": "account" },
+        "displayName": { "$ref": "#/$defs/nullableShortText" },
+        "handle": { "$ref": "#/$defs/nullableShortText" },
+        "selfParticipantId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "participant": {
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["displayName", "handle", "isSelf"],
+      "properties": {
+        "kind": { "const": "participant" },
+        "displayName": { "$ref": "#/$defs/nullableShortText" },
+        "handle": { "$ref": "#/$defs/nullableShortText" },
+        "isSelf": { "type": "boolean" }
+      }
+    },
+    "conversation": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "const": "direct" } }
+          },
+          "then": {
+            "properties": {
+              "participantIds": { "minItems": 2, "maxItems": 2 },
+              "participantsComplete": { "const": true }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "type",
+        "title",
+        "participantIds",
+        "participantsComplete",
+        "startedAt",
+        "lastMessageAt"
+      ],
+      "properties": {
+        "kind": { "const": "conversation" },
+        "type": { "enum": ["direct", "group"] },
+        "title": { "$ref": "#/$defs/nullableShortText" },
+        "participantIds": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "participantsComplete": { "type": ["boolean", "null"] },
+        "startedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "lastMessageAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "mimeType", "name", "sizeBytes"],
+      "properties": {
+        "kind": { "enum": ["audio", "document", "image", "link", "sticker", "video", "unknown"] },
+        "mimeType": { "$ref": "#/$defs/nullableMimeType" },
+        "name": { "$ref": "#/$defs/nullableShortText" },
+        "sizeBytes": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+          ]
+        }
+      }
+    },
+    "reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messageId", "providerId"],
+      "properties": {
+        "messageId": { "$ref": "#/$defs/nullableIdentifier" },
+        "providerId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "editInPlace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "editedAt", "providerRevision"],
+      "properties": {
+        "kind": { "const": "in-place" },
+        "editedAt": { "$ref": "#/$defs/timestamp" },
+        "providerRevision": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "editReplacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "replacesMessageId", "replacesProviderId", "editedAt", "providerRevision"],
+      "properties": {
+        "kind": { "const": "replacement" },
+        "replacesMessageId": { "$ref": "#/$defs/nullableIdentifier" },
+        "replacesProviderId": { "$ref": "#/$defs/identifier" },
+        "editedAt": { "$ref": "#/$defs/timestamp" },
+        "providerRevision": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "deletion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "observedAt", "providerRevision"],
+      "properties": {
+        "state": { "enum": ["revoked", "deleted-for-me", "revoked-and-deleted-for-me"] },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "providerRevision": { "$ref": "#/$defs/nullableIdentifier" }
+      }
+    },
+    "message": {
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "conversationId",
+        "senderParticipantId",
+        "direction",
+        "sentAt",
+        "sortKey",
+        "body",
+        "bodyTruncated",
+        "replyTo",
+        "edit",
+        "deletion",
+        "attachments"
+      ],
+      "properties": {
+        "kind": { "const": "message" },
+        "conversationId": { "$ref": "#/$defs/identifier" },
+        "senderParticipantId": { "$ref": "#/$defs/nullableIdentifier" },
+        "direction": { "enum": ["incoming", "outgoing", "unknown"] },
+        "sentAt": { "$ref": "#/$defs/timestamp" },
+        "sortKey": { "$ref": "#/$defs/identifier" },
+        "body": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/body" }
+          ]
+        },
+        "bodyTruncated": { "type": ["boolean", "null"] },
+        "replyTo": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/reply" }
+          ]
+        },
+        "edit": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/editInPlace" },
+            { "$ref": "#/$defs/editReplacement" }
+          ]
+        },
+        "deletion": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/deletion" }
+          ]
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/attachment" }
+        }
+      }
+    },
+    "reaction": {
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["messageId", "messageProviderId", "participantId", "body", "reactedAt", "state"],
+      "properties": {
+        "kind": { "const": "reaction" },
+        "messageId": { "$ref": "#/$defs/nullableIdentifier" },
+        "messageProviderId": { "$ref": "#/$defs/identifier" },
+        "participantId": { "$ref": "#/$defs/nullableIdentifier" },
+        "body": { "$ref": "#/$defs/shortText" },
+        "reactedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "state": { "enum": ["active", "removed"] }
+      }
+    },
+    "tombstone": {
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["entityKind", "entityId", "entityProviderId", "deletedAt", "scope", "providerRevision"],
+      "properties": {
+        "kind": { "const": "tombstone" },
+        "entityKind": { "enum": ["conversation", "message", "reaction"] },
+        "entityId": { "$ref": "#/$defs/nullableIdentifier" },
+        "entityProviderId": { "$ref": "#/$defs/identifier" },
+        "deletedAt": { "$ref": "#/$defs/timestamp" },
+        "scope": { "enum": ["remote", "local", "unknown"] },
+        "providerRevision": { "$ref": "#/$defs/nullableIdentifier" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mediaType", "recordKind", "records", "bytes", "sha256"],
+      "properties": {
+        "path": { "enum": ["accounts.ndjson", "participants.ndjson", "conversations.ndjson", "messages.ndjson", "reactions.ndjson", "tombstones.ndjson"] },
+        "mediaType": { "const": "application/x-ndjson" },
+        "recordKind": { "enum": ["account", "participant", "conversation", "message", "reaction", "tombstone"] },
+        "records": { "type": "integer", "minimum": 0, "maximum": 500000 },
+        "bytes": { "type": "integer", "minimum": 0, "maximum": 536870912 },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "format",
+        "source",
+        "provider",
+        "timestamps",
+        "completeness",
+        "warnings",
+        "privacy",
+        "counts",
+        "artifacts",
+        "integrity"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "format": { "const": "message-like-me.local-message-bundle" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "const": "wacli-local" },
+            "version": {
+              "const": "1.0.0",
+              "description": "Message Like Me v2 source-transform compatibility coordinate."
+            }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "const": "whatsapp" },
+            "version": { "const": "0.15.0" }
+          }
+        },
+        "timestamps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["startedAt", "finishedAt", "createdAt"],
+          "properties": {
+            "startedAt": { "$ref": "#/$defs/timestamp" },
+            "finishedAt": { "$ref": "#/$defs/timestamp" },
+            "createdAt": { "$ref": "#/$defs/timestamp" }
+          }
+        },
+        "completeness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason", "observedFrom", "observedThrough"],
+          "properties": {
+            "kind": { "enum": ["bounded-local", "truncated", "unknown"] },
+            "reason": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/$defs/token" }
+              ]
+            },
+            "observedFrom": { "$ref": "#/$defs/nullableTimestamp" },
+            "observedThrough": { "$ref": "#/$defs/nullableTimestamp" }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/token" }
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification", "attachments", "providerUrls", "credentials"],
+          "properties": {
+            "classification": { "const": "private-local" },
+            "attachments": { "const": "metadata-only" },
+            "providerUrls": { "const": "excluded" },
+            "credentials": { "const": "excluded" }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["account", "participant", "conversation", "message", "reaction", "tombstone"],
+          "properties": {
+            "account": { "type": "integer", "minimum": 1, "maximum": 1 },
+            "participant": { "type": "integer", "minimum": 0, "maximum": 500000 },
+            "conversation": { "type": "integer", "minimum": 0, "maximum": 500000 },
+            "message": { "type": "integer", "minimum": 0, "maximum": 500000 },
+            "reaction": { "type": "integer", "minimum": 0, "maximum": 500000 },
+            "tombstone": { "type": "integer", "minimum": 0, "maximum": 500000 }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "accounts.ndjson" }, "recordKind": { "const": "account" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "participants.ndjson" }, "recordKind": { "const": "participant" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "conversations.ndjson" }, "recordKind": { "const": "conversation" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "messages.ndjson" }, "recordKind": { "const": "message" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "reactions.ndjson" }, "recordKind": { "const": "reaction" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/artifact" }, { "type": "object", "properties": { "path": { "const": "tombstones.ndjson" }, "recordKind": { "const": "tombstone" } } }] }
+          ]
+        },
+        "integrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "bundleSha256"],
+          "properties": {
+            "algorithm": { "const": "sha256" },
+            "bundleSha256": { "$ref": "#/$defs/digest" }
+          }
+        }
+      }
+    }
+  }
+}

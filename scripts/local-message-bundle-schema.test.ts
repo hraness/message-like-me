@@ -75,3 +75,31 @@ test("local message bundle schema publishes the frozen v1 contract", async () =>
   expect(object(tombstoneProperties.entityKind, "tombstone.entityKind").enum)
     .toEqual(["conversation", "message", "reaction"]);
 });
+
+test("local message bundle schema publishes the native WhatsApp v2 contract", async () => {
+  const schema = object(JSON.parse(await readFile(join(
+    import.meta.dir,
+    "..",
+    "schema",
+    "local-message-bundle-v2.schema.json",
+  ), "utf8")) as unknown, "schema");
+  expect(schema.$id).toBe("https://messagelikeme.com/schema/local-message-bundle-v2.schema.json");
+  const definitions = object(schema.$defs, "schema.$defs");
+  expect(object(definitions.network, "network").const).toBe("whatsapp");
+  const conversation = object(definitions.conversation, "conversation");
+  const conversationProperties = object(conversation.properties, "conversation.properties");
+  expect(object(conversationProperties.type, "conversation.type").enum).toEqual(["direct", "group"]);
+  const manifest = object(definitions.manifest, "manifest");
+  const properties = object(manifest.properties, "manifest.properties");
+  expect(object(properties.schemaVersion, "manifest.schemaVersion").const).toBe(2);
+  const source = object(properties.source, "manifest.source");
+  const sourceProperties = object(source.properties, "manifest.source.properties");
+  expect(object(sourceProperties.id, "manifest.source.id").const).toBe("wacli-local");
+  expect(object(sourceProperties.version, "manifest.source.version").const).toBe("1.0.0");
+  const provider = object(properties.provider, "manifest.provider");
+  const providerProperties = object(provider.properties, "manifest.provider.properties");
+  expect(object(providerProperties.id, "manifest.provider.id").const).toBe("whatsapp");
+  expect(object(providerProperties.version, "manifest.provider.version").const).toBe("0.15.0");
+  const counts = object(object(properties.counts, "manifest.counts").properties, "counts.properties");
+  expect(object(counts.account, "counts.account")).toMatchObject({ minimum: 1, maximum: 1 });
+});

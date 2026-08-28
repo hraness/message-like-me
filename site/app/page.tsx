@@ -31,8 +31,8 @@ export default function Home() {
           <p className="lede">
             A local-first CLI and Agent Skill for studying private messaging
             history and drafting messages that sound like you. It reads Apple
-            Messages, caller-owned X archives, and bounded Beeper exports made
-            by Wrench.
+            Messages, caller-owned X archives, bounded Beeper exports, and
+            native WhatsApp evidence exported through Wrench.
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/sources">
@@ -65,11 +65,11 @@ export default function Home() {
           </div>
           <div className="terminal-card">
             <p>
-              <span>$</span>{' '}wrench beeper export-message-like-me --auth beeper-main --output &quot;$HOME/message-like-me-beeper&quot;
+              <span>$</span>{' '}wrench whatsapp export-message-like-me --auth whatsapp-main --output &quot;$HOME/message-like-me-whatsapp&quot;
             </p>
             <p className="terminal-result">✓ compatible Wrench bundle written</p>
             <p>
-              <span>$</span>{' '}messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;
+              <span>$</span>{' '}messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;
             </p>
             <p className="terminal-result">✓ verified source observation ingested</p>
           </div>
@@ -90,9 +90,9 @@ export default function Home() {
           </div>
           <div>
             <p>
-              Three bounded messaging-history inputs and one optional local label
-              source. Beeper support is an explicit Wrench bundle path—not a hidden
-              account connection or a sending integration.
+              Four bounded messaging-history inputs and one optional local label
+              source. Beeper and native WhatsApp support use explicit Wrench bundle
+              paths, never hidden account connections or sending integrations.
             </p>
             <Link href="/sources">Compare every source and boundary →</Link>
           </div>
@@ -115,10 +115,10 @@ export default function Home() {
             <h3>Read stable local copies.</h3>
             <p>
               Import Apple Messages or a caller-owned X archive, optionally add
-              macOS Contacts labels, or ingest a private Beeper bundle exported
-              by a compatible Wrench release.
+              macOS Contacts labels, or ingest a private Beeper or native WhatsApp
+              bundle exported by a compatible Wrench release.
             </p>
-            <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code>
+            <code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;</code>
           </article>
           <article>
             <p className="section-number">02 / understand</p>
@@ -207,7 +207,7 @@ export default function Home() {
           <p><span>1</span><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
-          <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-beeper&quot;</code></p>
+          <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;</code></p>
         </div>
       </section>
 

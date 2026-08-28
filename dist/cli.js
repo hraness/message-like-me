@@ -5,19 +5,28 @@ import {
   CORPUS_SCHEMA_VERSION,
   EVALUATION_PACKET_SCHEMA_VERSION,
   LEGACY_PROFILE_SCHEMA_VERSION,
-  MESSAGE_BUNDLE_SCHEMA_VERSION,
   METRICS_SCHEMA_VERSION,
   PROFILE_SCHEMA_VERSION,
   STUDY_PACKET_SCHEMA_VERSION
-} from "./cli-d8tyw38n.js";
+} from "./cli-xdjykpdj.js";
 import {
   LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
   LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
+  LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
   MessageBundleV1ContractError,
   parseLocalMessageBundleV1Manifest,
   parseLocalMessageBundleV1Record
 } from "./cli-ry4128kz.js";
 import"./cli-qqafdvz9.js";
+import {
+  LOCAL_MESSAGE_BUNDLE_V2_LIMITS,
+  LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION,
+  MessageBundleV2ContractError,
+  parseLocalMessageBundleV2Manifest,
+  parseLocalMessageBundleV2Record,
+  parseLocalMessageBundleV2WhatsAppJid
+} from "./cli-bs3db5jr.js";
+import"./cli-kw20gkk3.js";
 import {
   AGENTIC_MESSAGING_V1_LIMITS,
   AgenticMessagingV1ContractError,
@@ -851,24 +860,35 @@ function readMacOSContacts(path, options) {
 }
 
 // src/bundle.ts
-var MAX_MANIFEST_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.manifestBytes;
-var MAX_RECORD_BYTES = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.recordBytes;
-var MAX_ACCOUNTS = LOCAL_MESSAGE_BUNDLE_V1_LIMITS.accounts;
+var MAX_MANIFEST_BYTES = Math.max(LOCAL_MESSAGE_BUNDLE_V1_LIMITS.manifestBytes, LOCAL_MESSAGE_BUNDLE_V2_LIMITS.manifestBytes);
+var MAX_RECORD_BYTES = Math.max(LOCAL_MESSAGE_BUNDLE_V1_LIMITS.recordBytes, LOCAL_MESSAGE_BUNDLE_V2_LIMITS.recordBytes);
+var MAX_ACCOUNTS = Math.max(LOCAL_MESSAGE_BUNDLE_V1_LIMITS.accounts, LOCAL_MESSAGE_BUNDLE_V2_LIMITS.accounts);
 function contractValue(read) {
   try {
     return read();
   } catch (error) {
-    if (error instanceof MessageBundleV1ContractError) {
+    if (error instanceof MessageBundleV1ContractError || error instanceof MessageBundleV2ContractError) {
       throw new CliError("invalid-data", error.message, { cause: error });
     }
     throw error;
   }
 }
 function parseManifest(value) {
-  return contractValue(() => parseLocalMessageBundleV1Manifest(value));
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const schemaVersion = Object.getOwnPropertyDescriptor(value, "schemaVersion");
+    if (schemaVersion !== undefined && "value" in schemaVersion) {
+      if (schemaVersion.value === LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION) {
+        return contractValue(() => parseLocalMessageBundleV1Manifest(value));
+      }
+      if (schemaVersion.value === LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION) {
+        return contractValue(() => parseLocalMessageBundleV2Manifest(value));
+      }
+    }
+  }
+  throw new CliError("invalid-data", "Manifest has an unsupported message bundle schemaVersion");
 }
-function parseRecord(value, kind, label) {
-  return contractValue(() => parseLocalMessageBundleV1Record(value, kind, label));
+function parseRecord(value, schemaVersion, kind, label) {
+  return schemaVersion === LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION ? contractValue(() => parseLocalMessageBundleV1Record(value, kind, label)) : contractValue(() => parseLocalMessageBundleV2Record(value, kind, label));
 }
 function sameFile2(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
@@ -889,7 +909,7 @@ async function bundleDirectory(path) {
   const expected = ["manifest.json", ...LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS.map(({ path: artifactPath }) => artifactPath)].sort();
   const entries = (await readdir(physical)).sort();
   if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {
-    throw new CliError("invalid-data", "Bundle directory does not contain exactly the version-one inventory");
+    throw new CliError("invalid-data", "Bundle directory does not contain exactly the supported fixed inventory");
   }
   return physical;
 }
@@ -946,7 +966,7 @@ async function readManifest(path) {
     await closeReadHandle(opened.handle);
   }
 }
-async function readArtifact(root, artifact) {
+async function readArtifact(root, schemaVersion, artifact) {
   const path = join2(root, artifact.path);
   const opened = await openPrivateFile(path, artifact.bytes, true);
   const hash = createHash("sha256");
@@ -982,7 +1002,7 @@ async function readArtifact(root, artifact) {
         } catch (error) {
           throw new CliError("invalid-data", `${artifact.path} contains invalid UTF-8 JSON`, { cause: error });
         }
-        const normalized = parseRecord(parsed, artifact.recordKind, `${artifact.path}:${records.length + 1}`);
+        const normalized = parseRecord(parsed, schemaVersion, artifact.recordKind, `${artifact.path}:${records.length + 1}`);
         if (!Buffer.from(canonicalJson(normalized), "utf8").equals(line)) {
           throw new CliError("invalid-data", `${artifact.path} records must use canonical JSON`);
         }
@@ -1052,7 +1072,52 @@ function attachmentProvenance(messageId, attachments) {
 function reactionTimelineCoordinate(localReactionId) {
   return `\x1Freaction-timeline:${localReactionId}`;
 }
+function validateNativeWhatsAppGraph(manifest, records) {
+  if (manifest.schemaVersion !== LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION)
+    return;
+  const accounts = records.account;
+  const participants = records.participant;
+  const conversations = records.conversation;
+  const messages = records.message;
+  const reactions = records.reaction;
+  const participantsById = new Map(participants.map((participant) => [participant.id, participant]));
+  const accountsById = new Map(accounts.map((account) => [account.id, account]));
+  for (const account of accounts) {
+    const self = participantsById.get(account.selfParticipantId);
+    if (self === undefined || self.accountId !== account.id || self.provenance.providerId !== account.provenance.providerId || self.provenance.connectedAccountProviderId !== account.provenance.providerId)
+      throw new CliError("invalid-data", "A WhatsApp account must bind its exact self user or LID JID");
+  }
+  for (const conversation of conversations) {
+    const account = accountsById.get(conversation.accountId);
+    if (account === undefined)
+      continue;
+    const jid = contractValue(() => parseLocalMessageBundleV2WhatsAppJid(conversation.provenance.providerId, "conversation.provenance.providerId"));
+    const members = conversation.participantIds.map((id) => participantsById.get(id));
+    if (members.some((member) => member === undefined))
+      continue;
+    if (conversation.type === "direct") {
+      const peers = members.filter((member) => member.isSelf === false);
+      if (conversation.participantsComplete !== true || jid.kind === "group" || peers.length !== 1 || peers[0].provenance.providerId !== jid.jid || !conversation.participantIds.includes(account.selfParticipantId))
+        throw new CliError("invalid-data", "A direct WhatsApp conversation must bind its exact peer JID");
+    } else if (jid.kind !== "group") {
+      throw new CliError("invalid-data", "A group WhatsApp conversation must bind its exact group JID");
+    }
+  }
+  const conversationsById = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+  for (const message of messages) {
+    const conversation = conversationsById.get(message.conversationId);
+    if (message.direction === "unknown" || message.senderParticipantId === null && conversation?.type !== "group") {
+      throw new CliError("invalid-data", "A native WhatsApp message requires proven direction and a sender unless it is a group row");
+    }
+  }
+  for (const reaction of reactions) {
+    if (reaction.participantId === null) {
+      throw new CliError("invalid-data", "A native WhatsApp reaction requires a proven participant");
+    }
+  }
+}
 function normalizeBundle(manifest, manifestSha256, records, key) {
+  validateNativeWhatsAppGraph(manifest, records);
   const accounts = records.account;
   const participants = records.participant;
   const conversations = records.conversation;
@@ -1454,7 +1519,7 @@ function normalizeBundle(manifest, manifestSha256, records, key) {
     const accountObservedThrough = accountTimelineBounds.at(-1) ?? null;
     const revisionHash = createHash("sha256");
     const revisionHeader = canonicalJson({
-      schemaVersion: 1,
+      schemaVersion: manifest.schemaVersion,
       source: manifest.source,
       provider: manifest.provider,
       completeness: manifest.completeness,
@@ -1495,7 +1560,11 @@ function normalizeBundle(manifest, manifestSha256, records, key) {
           reason: manifest.completeness.reason
         }),
         manifestSha256,
-        identity: Object.freeze({ account, selfParticipantProviderId: self.provenance.providerId }),
+        identity: Object.freeze({
+          account,
+          selfParticipantProviderId: self.provenance.providerId,
+          ...manifest.schemaVersion === LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION ? { provider: manifest.provider } : {}
+        }),
         warnings: Object.freeze(sourceWarnings)
       }),
       conversations: Object.freeze(normalizedConversations),
@@ -1520,14 +1589,15 @@ async function readMessageBundle(path, options) {
   const manifest = manifestResult.manifest;
   const manifestSha256 = sha256(manifestResult.bytes);
   const parsedRecords = [];
-  for (const artifact of manifest.artifacts)
-    parsedRecords.push(await readArtifact(root, artifact));
+  for (const artifact of manifest.artifacts) {
+    parsedRecords.push(await readArtifact(root, manifest.schemaVersion, artifact));
+  }
   const records = Object.fromEntries(manifest.artifacts.map((artifact, index) => [
     artifact.recordKind,
     parsedRecords[index]
   ]));
   return Object.freeze({
-    schemaVersion: MESSAGE_BUNDLE_SCHEMA_VERSION,
+    schemaVersion: manifest.schemaVersion,
     manifestSha256,
     sources: normalizeBundle(manifest, manifestSha256, records, key)
   });
@@ -4688,6 +4758,12 @@ function analysisScope(database, contactId) {
     conversationIds
   });
 }
+function hasExactNativeWhatsAppProviderIdentity(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const provider = value.provider;
+  return provider !== null && typeof provider === "object" && !Array.isArray(provider) && provider.id === "whatsapp" && provider.version === "0.15.0";
+}
 function routeCandidatesForScope(database, scope, privateDetails) {
   const placeholders = idPlaceholders(scope.conversationIds);
   const rows = all(database, `
@@ -4695,7 +4771,11 @@ function routeCandidatesForScope(database, scope, privateDetails) {
       source.id AS source_id,coalesce(source.kind_v4,source.kind) AS source_kind,
       source.provider,source.network,source.account_id,
       source.external_id AS source_external_id,source.revision AS source_revision,
-      ownership.external_id AS conversation_external_id
+      ownership.external_id AS conversation_external_id,source.producer_json,source.identity_json,
+      EXISTS (
+        SELECT 1 FROM conversation_equivalences equivalence
+        WHERE equivalence.duplicate_conversation_id=conversation.id
+      ) AS duplicate_route
     FROM conversations conversation
     JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
     JOIN corpus_sources source ON source.id=ownership.source_id
@@ -4714,8 +4794,16 @@ function routeCandidatesForScope(database, scope, privateDetails) {
   return Object.freeze(rows.map((row) => {
     const archive = row.source_kind === "x-archive";
     const group = row.is_group === 1;
+    const sourceIdentity = parsedJson(row.identity_json, `Source ${row.source_id} identity`);
+    const nativeWhatsApp = row.source_kind === "bundle" && row.provider === "whatsapp" && row.network === "whatsapp" && row.producer_json === canonicalJson({ id: "wacli-local", version: "1.0.0" }) && hasExactNativeWhatsAppProviderIdentity(sourceIdentity);
+    const supportedBeeper = row.source_kind === "bundle" && row.provider === "beeper";
+    const unsupportedRoute = row.source_kind === "bundle" && !supportedBeeper && !nativeWhatsApp;
+    const superseded = row.duplicate_route === 1;
     if (privateDetails && !archive && row.source_kind === "bundle" && row.network === null) {
-      throw new CliError("invalid-data", "Beeper route candidate has no provider network");
+      throw new CliError("invalid-data", "Bundle route candidate has no provider network");
+    }
+    if (privateDetails && nativeWhatsApp && !/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid|[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us)$/u.test(row.conversation_external_id)) {
+      throw new CliError("invalid-data", "Native WhatsApp route candidate has no exact canonical JID");
     }
     return Object.freeze({
       schemaVersion: 1,
@@ -4730,11 +4818,11 @@ function routeCandidatesForScope(database, scope, privateDetails) {
       service: row.service,
       group,
       sourceRevision: row.source_revision,
-      actionability: Object.freeze(archive ? { state: "evidence-only", reason: "archive-source" } : group ? { state: "evidence-only", reason: "group-conversation" } : {
+      actionability: Object.freeze(archive ? { state: "evidence-only", reason: "archive-source" } : group ? { state: "evidence-only", reason: "group-conversation" } : superseded ? { state: "evidence-only", reason: "superseded-route" } : unsupportedRoute ? { state: "evidence-only", reason: "unsupported-route" } : {
         state: "wrench-binding-eligible",
         reason: "requires-exact-wrench-binding"
       }),
-      privateBinding: privateDetails && !archive ? Object.freeze({
+      privateBinding: privateDetails && !archive && !unsupportedRoute ? Object.freeze({
         sourceAccountId: row.account_id,
         sourceExternalId: row.source_external_id,
         coordinate: row.source_kind === "imessage" ? Object.freeze({
@@ -4742,6 +4830,9 @@ function routeCandidatesForScope(database, scope, privateDetails) {
           chatGuid: row.conversation_external_id,
           service: row.service,
           observedChatRowId: null
+        }) : nativeWhatsApp ? Object.freeze({
+          kind: "whatsappJid",
+          jid: row.conversation_external_id
         }) : Object.freeze({
           kind: "beeperConversation",
           network: row.network,
@@ -5399,7 +5490,7 @@ function validateSourceSnapshot(snapshot) {
   }
 }
 function validateEquivalencePlan(plan, replacedSourceIds) {
-  if (plan.basis !== "exact-message-overlap" || plan.duplicateSourceId === plan.preferredSourceId || !/^source_[a-f0-9]{64}$/u.test(plan.duplicateSourceId) || !/^source_[a-f0-9]{64}$/u.test(plan.preferredSourceId) || !/^[a-f0-9]{64}$/u.test(plan.evidenceSha256) || !replacedSourceIds.has(plan.duplicateSourceId) || plan.conversations.length < 1 || plan.conversations.length > 1e5 || plan.messages.length < 1 || plan.messages.length > 2000000 || (plan.reactions?.length ?? 0) > 2000000)
+  if (plan.basis !== "exact-message-overlap" || plan.duplicateSourceId === plan.preferredSourceId || !/^source_[a-f0-9]{64}$/u.test(plan.duplicateSourceId) || !/^source_[a-f0-9]{64}$/u.test(plan.preferredSourceId) || !/^[a-f0-9]{64}$/u.test(plan.evidenceSha256) || !replacedSourceIds.has(plan.duplicateSourceId) && !replacedSourceIds.has(plan.preferredSourceId) || plan.conversations.length < 1 || plan.conversations.length > 1e5 || plan.messages.length < 1 || plan.messages.length > 2000000 || (plan.reactions?.length ?? 0) > 2000000)
     throw new CliError("invalid-data", "Cross-source equivalence plan is invalid or unbounded");
   const coordinates = (values, duplicateKey, preferredKey, label) => {
     const duplicates = new Set;
@@ -5421,10 +5512,14 @@ function validateEquivalencePlan(plan, replacedSourceIds) {
   coordinates(plan.reactions ?? [], "duplicateReactionId", "preferredReactionId", "reaction");
 }
 function applyEquivalencePlan(database, plan, establishedAt) {
-  const duplicateSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`, plan.duplicateSourceId);
-  const preferredSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`, plan.preferredSourceId);
-  if (duplicateSource?.kind !== "x-archive" || preferredSource?.kind !== "bundle" || duplicateSource.network !== "x" || preferredSource.network !== "x") {
-    throw new CliError("conflict", "Cross-source equivalence requires an X archive and an existing Beeper X source");
+  const duplicateSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network,provider,producer_json,identity_json
+    FROM corpus_sources WHERE id=?`, plan.duplicateSourceId);
+  const preferredSource = get(database, `SELECT coalesce(kind_v4,kind) AS kind,network,provider,producer_json,identity_json
+    FROM corpus_sources WHERE id=?`, plan.preferredSourceId);
+  const xArchivePair = duplicateSource?.kind !== "x-archive" ? false : preferredSource?.kind === "bundle" && preferredSource.provider === "beeper" && duplicateSource.network === "x" && preferredSource.network === "x";
+  const whatsappPair = duplicateSource?.kind === "bundle" && duplicateSource.provider === "beeper" && duplicateSource.network === "whatsapp" && preferredSource?.kind === "bundle" && preferredSource.provider === "whatsapp" && preferredSource.network === "whatsapp" && preferredSource.producer_json === canonicalJson({ id: "wacli-local", version: "1.0.0" }) && hasExactNativeWhatsAppProviderIdentity(parsedJson(preferredSource.identity_json, "Native WhatsApp source identity"));
+  if (!xArchivePair && !whatsappPair) {
+    throw new CliError("conflict", "Cross-source equivalence requires an allowed exact native-to-aggregate source pair");
   }
   const conversationPairs = new Map(plan.conversations.map((pair) => [pair.duplicateConversationId, pair.preferredConversationId]));
   const conversationMatchDigests = new Map;
@@ -6050,14 +6145,16 @@ class LocalStore {
         if (snapshot.source.kind === "bundle") {
           rerankBundleMessages(this.#database, snapshot.source.id);
         }
-        if (equivalencePlan?.duplicateSourceId === snapshot.source.id) {
+        const equivalenceTriggerSourceId = equivalencePlan === undefined ? null : sourceIds.has(equivalencePlan.preferredSourceId) ? equivalencePlan.preferredSourceId : equivalencePlan.duplicateSourceId;
+        if (equivalencePlan !== undefined && equivalenceTriggerSourceId === snapshot.source.id) {
           applyEquivalencePlan(this.#database, equivalencePlan, ingestedAt);
-          const preferredRevision = get(this.#database, `
+          const otherSourceId = snapshot.source.id === equivalencePlan.preferredSourceId ? equivalencePlan.duplicateSourceId : equivalencePlan.preferredSourceId;
+          const otherRevision = get(this.#database, `
             SELECT revision FROM corpus_sources WHERE id=?
-          `, equivalencePlan.preferredSourceId)?.revision;
-          const preferredStateRevision = sourceStateRevision(this.#database, equivalencePlan.preferredSourceId);
-          this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(preferredStateRevision, equivalencePlan.preferredSourceId);
-          changedAny ||= preferredRevision !== preferredStateRevision;
+          `, otherSourceId)?.revision;
+          const otherStateRevision = sourceStateRevision(this.#database, otherSourceId);
+          this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(otherStateRevision, otherSourceId);
+          changedAny ||= otherRevision !== otherStateRevision;
         }
         const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
         this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?").run(stateRevision, snapshot.source.id);
@@ -6880,7 +6977,7 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.6.0";
+var MESSAGE_LIKE_ME_VERSION = "0.7.0";
 
 // src/x-archive.ts
 import { createHash as createHash5 } from "crypto";
@@ -8749,13 +8846,277 @@ function planXArchiveEquivalence(archive, snapshot, preferred) {
   });
 }
 
+// src/whatsapp-source.ts
+function record2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function exactE164(value) {
+  return typeof value === "string" && /^\+[1-9][0-9]{4,14}$/u.test(value) ? value : null;
+}
+function exactStringArray2(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 1e4)
+    return null;
+  const result = [];
+  for (let index = 0;index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index))
+      return null;
+    const item = value[index];
+    if (typeof item !== "string" || item.length < 1 || item.length > 1024)
+      return null;
+    result.push(item);
+  }
+  return new Set(result).size === result.length ? Object.freeze(result) : null;
+}
+function accountProof(value, provider) {
+  if (value.kind !== "bundle" || value.provider !== provider || value.network !== "whatsapp") {
+    throw new CliError("conflict", provider === "beeper" ? "The overlap source must be an existing Beeper WhatsApp source" : "The imported source must be a native Wacli WhatsApp bundle");
+  }
+  const identity = record2(value.identity);
+  const account = record2(identity?.account);
+  const providerCoordinate = record2(identity?.provider);
+  if (provider === "whatsapp" && (providerCoordinate?.id !== "whatsapp" || providerCoordinate.version !== "0.15.0")) {
+    throw new CliError("conflict", "The imported source is not the exact native WhatsApp provider coordinate");
+  }
+  const handle = exactE164(account?.handle);
+  const selfParticipantId = account?.selfParticipantId;
+  if (handle === null || typeof selfParticipantId !== "string" || selfParticipantId.length < 1) {
+    throw new CliError("conflict", `${provider === "beeper" ? "Beeper" : "Wacli"} WhatsApp source has no exact self E.164 and participant identity`);
+  }
+  return Object.freeze({ handle, selfParticipantId });
+}
+function wacliBundleMatchesBeeperWhatsAppSource(snapshot, evidence) {
+  try {
+    const native = accountProof(snapshot.source, "whatsapp");
+    const beeper = accountProof(evidence.source, "beeper");
+    return native.handle === beeper.handle;
+  } catch {
+    return false;
+  }
+}
+function participantMap(auxiliary) {
+  const result = new Map;
+  const ambiguous = new Set;
+  for (const value of auxiliary) {
+    if (value.kind !== "participant")
+      continue;
+    const participant = record2(value.record);
+    const id = participant?.id;
+    const handle = exactE164(participant?.handle);
+    const isSelf = participant?.isSelf;
+    if (typeof id !== "string" || handle === null || typeof isSelf !== "boolean" || participant?.network !== "whatsapp")
+      continue;
+    if (result.has(id))
+      ambiguous.add(id);
+    result.set(id, Object.freeze({ handle, isSelf }));
+  }
+  for (const id of ambiguous)
+    result.delete(id);
+  return result;
+}
+function directProofs(source, account) {
+  const participants = participantMap(source.auxiliaryRecords);
+  const self = participants.get(account.selfParticipantId);
+  if (self?.isSelf !== true || self.handle !== account.handle) {
+    throw new CliError("conflict", "WhatsApp source self participant does not prove its exact account");
+  }
+  const result = new Map;
+  for (const conversation of source.conversations) {
+    const metadata = record2(conversation.metadata);
+    const participantIds = exactStringArray2(metadata?.participantIds);
+    if (conversation.group || metadata?.type !== "direct" || metadata.participantsComplete !== true || participantIds?.length !== 2 || !participantIds.includes(account.selfParticipantId))
+      continue;
+    const peerActorId = participantIds.find((id) => id !== account.selfParticipantId);
+    const peer = participants.get(peerActorId);
+    if (peer?.isSelf !== false)
+      continue;
+    result.set(conversation.id, Object.freeze({
+      peerHandle: peer.handle,
+      selfActorId: account.selfParticipantId,
+      peerActorId
+    }));
+  }
+  return result;
+}
+function messageFingerprint2(message, proof, senderActorId) {
+  if (message.body === null || message.kind === "reaction")
+    return null;
+  const actor = senderActorId === proof.selfActorId && message.direction === "outgoing" ? "self" : senderActorId === proof.peerActorId && message.direction === "incoming" ? proof.peerHandle : null;
+  if (actor === null)
+    return null;
+  return sha256(canonicalJson({
+    schemaVersion: 1,
+    network: "whatsapp",
+    conversationKind: "direct",
+    peerHandle: proof.peerHandle,
+    actor,
+    sentAt: message.sentAt,
+    direction: message.direction,
+    body: message.body,
+    kind: message.kind,
+    attachmentCount: message.attachmentCount
+  }));
+}
+function fingerprints(messages, proofs) {
+  const result = new Map;
+  for (const message of messages) {
+    const sender = record2(message.metadata)?.senderParticipantId;
+    const proof = proofs.get(message.conversationId);
+    if (typeof sender !== "string" || proof === undefined)
+      continue;
+    const fingerprint = messageFingerprint2(message, proof, sender);
+    if (fingerprint !== null)
+      result.set(message.id, fingerprint);
+  }
+  return result;
+}
+function grouped(values, key) {
+  const result = new Map;
+  for (const value of values) {
+    const coordinate = key(value);
+    const rows = result.get(coordinate) ?? [];
+    rows.push(value);
+    result.set(coordinate, rows);
+  }
+  return result;
+}
+function planWacliBeeperWhatsAppEquivalence(native, beeper) {
+  const nativeAccount = accountProof(native.source, "whatsapp");
+  const beeperAccount = accountProof(beeper.source, "beeper");
+  if (nativeAccount.handle !== beeperAccount.handle) {
+    throw new CliError("conflict", "The Wacli and Beeper WhatsApp sources belong to different exact E.164 accounts");
+  }
+  const nativeConversations = native.conversationProvenance.map((provenance) => ({
+    id: provenance.conversationId,
+    group: native.conversations.find(({ id }) => id === provenance.conversationId)?.group ?? true,
+    metadata: provenance.metadata
+  }));
+  const nativeProofs = directProofs({
+    conversations: nativeConversations,
+    auxiliaryRecords: (native.auxiliaryRecords ?? []).map((value) => ({
+      kind: value.kind,
+      record: value.record
+    }))
+  }, nativeAccount);
+  const beeperProofs = directProofs(beeper, beeperAccount);
+  const nativeProvenance = new Map(native.messageProvenance.map((value) => [value.messageId, value]));
+  const nativeMessages = native.messages.map((message) => ({
+    ...message,
+    metadata: nativeProvenance.get(message.id)?.metadata
+  }));
+  const nativeFingerprints = fingerprints(nativeMessages, nativeProofs);
+  const beeperFingerprints = fingerprints(beeper.messages, beeperProofs);
+  const nativeByFingerprint = grouped(nativeMessages.filter(({ id }) => nativeFingerprints.has(id)), ({ id }) => nativeFingerprints.get(id));
+  const beeperByFingerprint = grouped(beeper.messages.filter(({ id }) => beeperFingerprints.has(id)), ({ id }) => beeperFingerprints.get(id));
+  const candidates = new Map;
+  for (const [fingerprint, nativeRows] of nativeByFingerprint) {
+    const beeperRows = beeperByFingerprint.get(fingerprint) ?? [];
+    if (nativeRows.length !== 1 || beeperRows.length !== 1)
+      continue;
+    const values = candidates.get(beeperRows[0].conversationId) ?? new Set;
+    values.add(nativeRows[0].conversationId);
+    candidates.set(beeperRows[0].conversationId, values);
+  }
+  const conversationPairs = [];
+  const usedNative = new Set;
+  for (const [beeperConversationId, nativeCandidates] of [...candidates].sort()) {
+    if (nativeCandidates.size !== 1) {
+      throw new CliError("conflict", "Exact WhatsApp evidence maps one Beeper chat to multiple Wacli chats");
+    }
+    const nativeConversationId = [...nativeCandidates][0];
+    if (usedNative.has(nativeConversationId)) {
+      throw new CliError("conflict", "Exact WhatsApp evidence maps multiple Beeper chats to one Wacli chat");
+    }
+    usedNative.add(nativeConversationId);
+    conversationPairs.push({
+      duplicateConversationId: beeperConversationId,
+      preferredConversationId: nativeConversationId
+    });
+  }
+  const nativeConversationByBeeper = new Map(conversationPairs.map((pair) => [
+    pair.duplicateConversationId,
+    pair.preferredConversationId
+  ]));
+  const messagePairs = [];
+  for (const [fingerprint, beeperRows] of beeperByFingerprint) {
+    const nativeRows = nativeByFingerprint.get(fingerprint) ?? [];
+    if (beeperRows.length === 1 && nativeRows.length === 1 && nativeConversationByBeeper.get(beeperRows[0].conversationId) === nativeRows[0].conversationId) {
+      messagePairs.push({
+        duplicateMessageId: beeperRows[0].id,
+        preferredMessageId: nativeRows[0].id
+      });
+    }
+  }
+  const coveredBeeperConversations = new Set(messagePairs.map(({ duplicateMessageId }) => beeper.messages.find(({ id }) => id === duplicateMessageId).conversationId));
+  const filteredConversations = conversationPairs.filter(({ duplicateConversationId }) => coveredBeeperConversations.has(duplicateConversationId));
+  if (filteredConversations.length === 0 || messagePairs.length === 0) {
+    throw new CliError("conflict", "The WhatsApp sources have no unambiguous exact message overlap");
+  }
+  const beeperExternalToLocal = new Map(beeper.messages.map((message) => [message.externalId, message.id]));
+  const nativeExternalToLocal = new Map(native.messageProvenance.map((message) => [
+    message.externalId,
+    message.messageId
+  ]));
+  const preferredMessageByDuplicate = new Map(messagePairs.map((pair) => [
+    pair.duplicateMessageId,
+    pair.preferredMessageId
+  ]));
+  const beeperReactionCoordinates = beeper.reactions.flatMap((reaction) => {
+    const target = beeperExternalToLocal.get(reaction.targetExternalId);
+    const preferredTarget = target === undefined ? undefined : preferredMessageByDuplicate.get(target);
+    return preferredTarget === undefined ? [] : [{ reaction, preferredTarget }];
+  });
+  const nativeReactionCoordinates = (native.reactionFacts ?? []).flatMap((reaction) => {
+    const target = nativeExternalToLocal.get(reaction.targetExternalId);
+    return target === undefined ? [] : [{ reaction, preferredTarget: target }];
+  });
+  const reactionKey = (value) => canonicalJson([value.preferredTarget, value.reaction.direction, value.reaction.body]);
+  const beeperReactions = grouped(beeperReactionCoordinates, reactionKey);
+  const nativeReactions = grouped(nativeReactionCoordinates, reactionKey);
+  const reactionPairs = [];
+  for (const [coordinate, beeperRows] of beeperReactions) {
+    const nativeRows = nativeReactions.get(coordinate) ?? [];
+    if (beeperRows.length === 1 && nativeRows.length === 1) {
+      reactionPairs.push({
+        duplicateReactionId: beeperRows[0].reaction.id,
+        preferredReactionId: nativeRows[0].reaction.id
+      });
+    }
+  }
+  const sortedConversations = filteredConversations.sort((left, right) => left.duplicateConversationId.localeCompare(right.duplicateConversationId));
+  const sortedMessages = messagePairs.sort((left, right) => left.duplicateMessageId.localeCompare(right.duplicateMessageId));
+  const sortedReactions = reactionPairs.sort((left, right) => left.duplicateReactionId.localeCompare(right.duplicateReactionId));
+  const evidenceSha256 = sha256(canonicalJson({
+    schemaVersion: 1,
+    network: "whatsapp",
+    duplicateSourceId: beeper.source.id,
+    preferredSourceId: native.source.id,
+    selfE164Sha256: sha256(nativeAccount.handle),
+    conversations: sortedConversations,
+    messages: sortedMessages.map((pair) => ({
+      ...pair,
+      fingerprint: beeperFingerprints.get(pair.duplicateMessageId)
+    })),
+    reactions: sortedReactions
+  }));
+  return Object.freeze({
+    duplicateSourceId: beeper.source.id,
+    preferredSourceId: native.source.id,
+    basis: "exact-message-overlap",
+    evidenceSha256,
+    conversations: Object.freeze(sortedConversations.map((value) => Object.freeze(value))),
+    messages: Object.freeze(sortedMessages.map((value) => Object.freeze(value))),
+    reactions: Object.freeze(sortedReactions.map((value) => Object.freeze(value)))
+  });
+}
+
 // src/commands.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
-  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
+  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH
+                    [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest x-archive --input ABS_PATH
                     [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
@@ -9033,7 +9394,7 @@ async function runCommand(argv, io) {
     return;
   }
   if (command === "ingest" && subcommand === "bundle" && identifier === undefined) {
-    rejectUnused(parsed, ["data-dir", "input"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "input", "overlap-source"], ["json"]);
     const input = absolutePrivatePath(parsed.options.get("input"), "--input");
     const context = await writableStore(parsed);
     try {
@@ -9043,14 +9404,36 @@ async function runCommand(argv, io) {
       } catch (error) {
         translateBundleError(error);
       }
-      const stored = context.store.replaceSources(bundle.sources, canonicalNow(io), context.key);
+      const overlapSourceId = parsed.options.get("overlap-source");
+      if (overlapSourceId !== undefined && bundle.schemaVersion !== 2) {
+        throw new CliError("usage", "--overlap-source is supported for a native WhatsApp bundle v2 or an X archive");
+      }
+      const nativeSource = bundle.schemaVersion === 2 ? bundle.sources[0] : null;
+      const matchingBeeperSources = nativeSource === null ? [] : context.store.listSources().filter((source) => source.kind === "bundle" && source.provider === "beeper" && source.network === "whatsapp").filter((source) => wacliBundleMatchesBeeperWhatsAppSource(nativeSource, context.store.sourceOverlapEvidence(source.id)));
+      if (overlapSourceId === undefined && matchingBeeperSources.length > 0) {
+        const ids = matchingBeeperSources.map(({ id }) => id).join(", ");
+        throw new CliError("conflict", `A Beeper WhatsApp source for this exact account already exists; inspect sources and rerun with --overlap-source ${ids}`);
+      }
+      const equivalence = overlapSourceId === undefined ? undefined : planWacliBeeperWhatsAppEquivalence(nativeSource, context.store.sourceOverlapEvidence(overlapSourceId));
+      if (equivalence !== undefined) {
+        io.stderr(`Proved ${equivalence.messages.length} exact WhatsApp message overlaps with the named Beeper source; native Wacli evidence will be preferred atomically.
+`);
+      }
+      const stored = context.store.replaceSources(bundle.sources, canonicalNow(io), context.key, equivalence);
       const result = {
         schemaVersion: bundle.schemaVersion,
         manifestSha256: bundle.manifestSha256,
         corpusRevision: stored.corpusRevision,
         sources: stored.sources,
         conversations: stored.sources.reduce((sum, source) => sum + source.conversations, 0),
-        messages: stored.sources.reduce((sum, source) => sum + source.messages, 0)
+        messages: stored.sources.reduce((sum, source) => sum + source.messages, 0),
+        ...equivalence === undefined ? {} : {
+          reconciliation: {
+            conversations: equivalence.conversations.length,
+            messages: equivalence.messages.length,
+            reactions: equivalence.reactions?.length ?? 0
+          }
+        }
       };
       emit(io, json, result, `Ingested ${result.messages} active messages across ${result.conversations} conversations from ${result.sources.length} sources`);
     } finally {

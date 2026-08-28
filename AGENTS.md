@@ -1,8 +1,9 @@
 # Contents
 
 - `src/` – the deterministic local iMessage, X archive, Contacts, and private
-  source-bundle readers, normalized corpus and metrics, private SQLite store,
-  profile parser, Agent Skill installer, and `messagelikeme` CLI.
+  Beeper and native WhatsApp source-bundle readers, normalized corpus and
+  metrics, private SQLite store, profile parser, Agent Skill installer, and
+  `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
 - `docs/` – public methodology, evidence limits, research review, and prior-art
@@ -43,6 +44,12 @@
   Never let bundle absence erase retained history unless a future contract
   explicitly declares authoritative coverage; apply explicit deletions and
   tombstones separately.
+- Preserve local message bundle v1 as the frozen Beeper contract. Treat bundle
+  v2 as the exact one-account Wrench/Wacli WhatsApp seam: source
+  `wacli-local@1.0.0`, provider `whatsapp@0.15.0`, network `whatsapp`, canonical
+  supported JIDs, and E.164 handles only when the JID proves them. Never add
+  Wacli process, authentication, synchronization, network, or send code to
+  Message Like Me.
 - Treat AddressBook databases as optional label-enrichment sources. Isolate
   every database plus WAL or journal before SQLite opens it, validate contact
   entities and property owners dynamically, read only names and exact

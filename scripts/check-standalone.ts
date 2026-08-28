@@ -265,11 +265,14 @@ function checkRuntimeSource(path: string, source: string): string[] {
 function checkEmailAddresses(path: string, source: string): string[] {
   const problems: string[] = [];
   for (const match of source.matchAll(/\b[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})\b/giu)) {
+    const address = match[0]?.toLowerCase();
     const domain = match[1]?.toLowerCase();
-    if (domain === undefined) continue;
+    if (address === undefined || domain === undefined) continue;
     if (
       ["example.com", "example.net", "example.org"].includes(domain)
       || [".example", ".invalid", ".localhost", ".test"].some((suffix) => domain.endsWith(suffix))
+      || /^[1-9][0-9]{4,14}@s\.whatsapp\.net$/u.test(address)
+      || /^[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us$/u.test(address)
     ) continue;
     problems.push(`${path} contains a non-reserved email address`);
   }

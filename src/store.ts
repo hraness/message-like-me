@@ -952,6 +952,14 @@ function analysisScope(database: Database, contactId: string): AnalysisScope | n
   });
 }
 
+function hasExactNativeWhatsAppProviderIdentity(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const provider = (value as { provider?: unknown }).provider;
+  return provider !== null && typeof provider === "object" && !Array.isArray(provider)
+    && (provider as Record<string, unknown>).id === "whatsapp"
+    && (provider as Record<string, unknown>).version === "0.15.0";
+}
+
 function routeCandidatesForScope(
   database: Database,
   scope: AnalysisScope,
@@ -970,12 +978,19 @@ function routeCandidatesForScope(
     source_external_id: string;
     source_revision: string;
     conversation_external_id: string;
+    producer_json: string;
+    identity_json: string;
+    duplicate_route: number;
   }>(database, `
     SELECT conversation.id AS conversation_id,conversation.service,conversation.is_group,
       source.id AS source_id,coalesce(source.kind_v4,source.kind) AS source_kind,
       source.provider,source.network,source.account_id,
       source.external_id AS source_external_id,source.revision AS source_revision,
-      ownership.external_id AS conversation_external_id
+      ownership.external_id AS conversation_external_id,source.producer_json,source.identity_json,
+      EXISTS (
+        SELECT 1 FROM conversation_equivalences equivalence
+        WHERE equivalence.duplicate_conversation_id=conversation.id
+      ) AS duplicate_route
     FROM conversations conversation
     JOIN conversation_sources ownership ON ownership.conversation_id=conversation.id
     JOIN corpus_sources source ON source.id=ownership.source_id
@@ -993,8 +1008,25 @@ function routeCandidatesForScope(
   return Object.freeze(rows.map((row) => {
     const archive = row.source_kind === "x-archive";
     const group = row.is_group === 1;
+    const sourceIdentity = parsedJson(row.identity_json, `Source ${row.source_id} identity`);
+    const nativeWhatsApp = row.source_kind === "bundle"
+      && row.provider === "whatsapp"
+      && row.network === "whatsapp"
+      && row.producer_json === canonicalJson({ id: "wacli-local", version: "1.0.0" })
+      && hasExactNativeWhatsAppProviderIdentity(sourceIdentity);
+    const supportedBeeper = row.source_kind === "bundle" && row.provider === "beeper";
+    const unsupportedRoute = row.source_kind === "bundle" && !supportedBeeper && !nativeWhatsApp;
+    const superseded = row.duplicate_route === 1;
     if (privateDetails && !archive && row.source_kind === "bundle" && row.network === null) {
-      throw new CliError("invalid-data", "Beeper route candidate has no provider network");
+      throw new CliError("invalid-data", "Bundle route candidate has no provider network");
+    }
+    if (
+      privateDetails
+      && nativeWhatsApp
+      && !/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid|[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us)$/u
+        .test(row.conversation_external_id)
+    ) {
+      throw new CliError("invalid-data", "Native WhatsApp route candidate has no exact canonical JID");
     }
     return Object.freeze({
       schemaVersion: 1,
@@ -1016,11 +1048,15 @@ function routeCandidatesForScope(
         // candidate cannot authorize one through the v1 Message Like Me seam.
         : group
           ? { state: "evidence-only" as const, reason: "group-conversation" as const }
+          : superseded
+            ? { state: "evidence-only" as const, reason: "superseded-route" as const }
+            : unsupportedRoute
+              ? { state: "evidence-only" as const, reason: "unsupported-route" as const }
           : {
             state: "wrench-binding-eligible" as const,
             reason: "requires-exact-wrench-binding" as const,
           }),
-      privateBinding: privateDetails && !archive
+      privateBinding: privateDetails && !archive && !unsupportedRoute
         ? Object.freeze({
           sourceAccountId: row.account_id,
           sourceExternalId: row.source_external_id,
@@ -1031,11 +1067,16 @@ function routeCandidatesForScope(
               service: row.service,
               observedChatRowId: null,
             })
-            : Object.freeze({
-              kind: "beeperConversation" as const,
-              network: row.network!,
-              conversationId: row.conversation_external_id,
-            }),
+            : nativeWhatsApp
+              ? Object.freeze({
+                kind: "whatsappJid" as const,
+                jid: row.conversation_external_id,
+              })
+              : Object.freeze({
+                kind: "beeperConversation" as const,
+                network: row.network!,
+                conversationId: row.conversation_external_id,
+              }),
         })
         : null,
     });
@@ -2059,7 +2100,10 @@ function validateEquivalencePlan(
     || !/^source_[a-f0-9]{64}$/u.test(plan.duplicateSourceId)
     || !/^source_[a-f0-9]{64}$/u.test(plan.preferredSourceId)
     || !/^[a-f0-9]{64}$/u.test(plan.evidenceSha256)
-    || !replacedSourceIds.has(plan.duplicateSourceId)
+    || (
+      !replacedSourceIds.has(plan.duplicateSourceId)
+      && !replacedSourceIds.has(plan.preferredSourceId)
+    )
     || plan.conversations.length < 1
     || plan.conversations.length > 100_000
     || plan.messages.length < 1
@@ -2119,22 +2163,44 @@ function applyEquivalencePlan(
   const duplicateSource = get<{
     kind: string;
     network: string | null;
-  }>(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`,
+    provider: string;
+    producer_json: string;
+    identity_json: string;
+  }>(database, `SELECT coalesce(kind_v4,kind) AS kind,network,provider,producer_json,identity_json
+    FROM corpus_sources WHERE id=?`,
   plan.duplicateSourceId);
   const preferredSource = get<{
     kind: string;
     network: string | null;
-  }>(database, `SELECT coalesce(kind_v4,kind) AS kind,network FROM corpus_sources WHERE id=?`,
+    provider: string;
+    producer_json: string;
+    identity_json: string;
+  }>(database, `SELECT coalesce(kind_v4,kind) AS kind,network,provider,producer_json,identity_json
+    FROM corpus_sources WHERE id=?`,
   plan.preferredSourceId);
-  if (
+  const xArchivePair = (
     duplicateSource?.kind !== "x-archive"
-    || preferredSource?.kind !== "bundle"
-    || duplicateSource.network !== "x"
-    || preferredSource.network !== "x"
-  ) {
+    ? false
+    : preferredSource?.kind === "bundle"
+      && preferredSource.provider === "beeper"
+      && duplicateSource.network === "x"
+      && preferredSource.network === "x"
+  );
+  const whatsappPair = duplicateSource?.kind === "bundle"
+    && duplicateSource.provider === "beeper"
+    && duplicateSource.network === "whatsapp"
+    && preferredSource?.kind === "bundle"
+    && preferredSource.provider === "whatsapp"
+    && preferredSource.network === "whatsapp"
+    && preferredSource.producer_json === canonicalJson({ id: "wacli-local", version: "1.0.0" })
+    && hasExactNativeWhatsAppProviderIdentity(parsedJson(
+      preferredSource.identity_json,
+      "Native WhatsApp source identity",
+    ));
+  if (!xArchivePair && !whatsappPair) {
     throw new CliError(
       "conflict",
-      "Cross-source equivalence requires an X archive and an existing Beeper X source",
+      "Cross-source equivalence requires an allowed exact native-to-aggregate source pair",
     );
   }
   const conversationPairs = new Map(
@@ -3165,18 +3231,26 @@ export class LocalStore {
         if (snapshot.source.kind === "bundle") {
           rerankBundleMessages(this.#database, snapshot.source.id);
         }
-        if (equivalencePlan?.duplicateSourceId === snapshot.source.id) {
+        const equivalenceTriggerSourceId = equivalencePlan === undefined
+          ? null
+          : sourceIds.has(equivalencePlan.preferredSourceId)
+            ? equivalencePlan.preferredSourceId
+            : equivalencePlan.duplicateSourceId;
+        if (equivalencePlan !== undefined && equivalenceTriggerSourceId === snapshot.source.id) {
           applyEquivalencePlan(this.#database, equivalencePlan, ingestedAt);
-          const preferredRevision = get<{ revision: string }>(this.#database, `
+          const otherSourceId = snapshot.source.id === equivalencePlan.preferredSourceId
+            ? equivalencePlan.duplicateSourceId
+            : equivalencePlan.preferredSourceId;
+          const otherRevision = get<{ revision: string }>(this.#database, `
             SELECT revision FROM corpus_sources WHERE id=?
-          `, equivalencePlan.preferredSourceId)?.revision;
-          const preferredStateRevision = sourceStateRevision(
+          `, otherSourceId)?.revision;
+          const otherStateRevision = sourceStateRevision(
             this.#database,
-            equivalencePlan.preferredSourceId,
+            otherSourceId,
           );
           this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?")
-            .run(preferredStateRevision, equivalencePlan.preferredSourceId);
-          changedAny ||= preferredRevision !== preferredStateRevision;
+            .run(otherStateRevision, otherSourceId);
+          changedAny ||= otherRevision !== otherStateRevision;
         }
         const stateRevision = sourceStateRevision(this.#database, snapshot.source.id);
         this.#database.query("UPDATE corpus_sources SET revision=? WHERE id=?")

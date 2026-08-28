@@ -16,6 +16,9 @@ transactional sidecars.
 A caller-owned local message bundle is a separate versioned source
 observation. The CLI verifies its complete fixed inventory and digests before
 ingest, never obtains its provider credential, and does not call its producer.
+Frozen v1 carries bounded Beeper observations. V2 carries one native WhatsApp
+account exported through Wrench's official Wacli adapter. It requires exact
+WhatsApp JIDs and projects a phone handle only from an E.164-backed user JID.
 
 A caller-owned X data archive is another offline source observation. The CLI
 parses bounded supported entries directly from the owner-only ZIP without
@@ -65,6 +68,15 @@ legacy archive cannot establish cross-provider sender identity strongly enough.
 Missing or contradictory evidence fails closed. Proven equivalence survives
 later reingests, so the same message does not return as a duplicate. Archive
 absence does not suppress retained history.
+
+A native Wacli WhatsApp bundle normally has its own source namespace. If the
+caller names an existing Beeper WhatsApp source, the two reconcile only after
+exact self-account E.164, exact direct-peer E.164, and unambiguous shared text
+message proof. Groups and bodyless records cannot prove equivalence. Both
+provenances and unique history remain. Exact duplicates contribute once, the
+native conversation becomes the preferred private `whatsappJid` route, and its
+proven Beeper route remains evidence-only. This route preference does not grant
+Message Like Me provider access or sending authority.
 
 The analysis uses several operational units:
 

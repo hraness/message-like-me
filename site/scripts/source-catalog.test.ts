@@ -8,6 +8,7 @@ import {
   BEEPER_COMPATIBILITY,
   MESSAGING_HISTORY_SOURCES,
   SUPPORTED_SOURCES,
+  WHATSAPP_COMPATIBILITY,
 } from '../app/_lib/sources.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
@@ -22,6 +23,7 @@ describe('supported source presentation', () => {
     expect(SUPPORTED_SOURCES.map((entry) => entry.id)).toEqual([
       'apple-messages',
       'beeper-via-wrench',
+      'whatsapp-via-wrench',
       'x-data-archive',
       'macos-contacts',
     ]);
@@ -29,10 +31,28 @@ describe('supported source presentation', () => {
       SUPPORTED_SOURCES.length,
     );
     expect(SUPPORTED_SOURCES.every((entry) => entry.status === 'Supported')).toBe(true);
-    expect(MESSAGING_HISTORY_SOURCES).toHaveLength(3);
+    expect(MESSAGING_HISTORY_SOURCES).toHaveLength(4);
     expect(SUPPORTED_SOURCES.find((entry) => entry.id === 'macos-contacts')?.kind).toBe(
       'Label enrichment',
     );
+  });
+
+  test('pins the native WhatsApp Wrench/Wacli contract exactly', () => {
+    expect(WHATSAPP_COMPATIBILITY).toEqual({
+      producer: 'Wrench',
+      producerVersion: '0.16.3',
+      providerCli: 'Wacli',
+      providerCliVersion: '0.15.0',
+      bundleSchemaVersion: '2',
+      sourceId: 'wacli-local',
+      sourceTransformVersion: '1.0.0',
+      providerId: 'whatsapp',
+      network: 'whatsapp',
+    });
+    const whatsapp = SUPPORTED_SOURCES.find((entry) => entry.id === 'whatsapp-via-wrench');
+    expect(whatsapp?.name).toBe('WhatsApp via Wrench');
+    expect(whatsapp?.boundary).toContain('Wrench alone owns Wacli');
+    expect(whatsapp?.boundary).toContain('never sends');
   });
 
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
@@ -54,7 +74,7 @@ describe('supported source presentation', () => {
   test('publishes the catalog across human and machine discovery surfaces', async () => {
     const renderedHomePage = renderToStaticMarkup(HomePage());
     const renderedSourcesPage = renderToStaticMarkup(SourcesPage());
-    const [home, sourcesPage, chrome, sitemap, llms, readme, bundleContract] =
+    const [home, sourcesPage, chrome, sitemap, llms, readme, bundleContract, whatsappContract] =
       await Promise.all([
         source('site/app/page.tsx'),
         source('site/app/sources/page.tsx'),
@@ -63,21 +83,28 @@ describe('supported source presentation', () => {
         source('site/app/llms.txt/route.ts'),
         source('README.md'),
         source('docs/local-message-bundle-v1.md'),
+        source('docs/local-message-bundle-v2.md'),
       ]);
 
-    expect(home).toMatch(/bounded Beeper exports made\s+by Wrench/u);
+    expect(home).toMatch(/native WhatsApp evidence exported through Wrench/u);
     expect(home).toContain('<SourceCard');
-    expect(renderedHomePage).toContain('</span> wrench beeper export-message-like-me');
+    expect(renderedHomePage).toContain('</span> wrench whatsapp export-message-like-me');
     expect(renderedHomePage).toContain('</span> messagelikeme ingest bundle');
     expect(sourcesPage).toContain('Beeper via Wrench');
     expect(sourcesPage).toMatch(/Message Like\s+Me invokes none of them/u);
     expect(renderedSourcesPage).toContain('Beeper CLI v0.6.2 and publishes');
-    expect(renderedSourcesPage).toContain('Current support in v0.6.0');
+    expect(renderedSourcesPage).toContain('Current support in v0.7.0');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.6.0/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.7.0/docs/local-message-bundle-v1.md',
+    );
+    expect(renderedSourcesPage).toContain(
+      'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
+    );
+    expect(renderedSourcesPage).toContain(
+      'https://github.com/hraness/message-like-me/blob/v0.7.0/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -113,6 +140,16 @@ describe('supported source presentation', () => {
     expect(bundleContract).toContain(
       `schema version \`${BEEPER_COMPATIBILITY.bundleSchemaVersion}\``,
     );
+    for (const coordinate of [
+      `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion}`,
+      `Wacli v${WHATSAPP_COMPATIBILITY.providerCliVersion}`,
+      `schema version \`${WHATSAPP_COMPATIBILITY.bundleSchemaVersion}\``,
+      WHATSAPP_COMPATIBILITY.sourceId,
+      WHATSAPP_COMPATIBILITY.sourceTransformVersion,
+      `provider \`${WHATSAPP_COMPATIBILITY.providerId}@${WHATSAPP_COMPATIBILITY.providerCliVersion}\``,
+    ]) {
+      expect(whatsappContract).toContain(coordinate);
+    }
     for (const coordinate of [
       `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
       `Beeper CLI v${BEEPER_COMPATIBILITY.providerCliVersion}`,

@@ -10,6 +10,14 @@ import {
   LOCAL_MESSAGE_BUNDLE_V1_SOURCE_ID,
   LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
 } from "./message-bundle-v1.ts";
+import {
+  LOCAL_MESSAGE_BUNDLE_V2_FORMAT,
+  LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_ID,
+  LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_VERSION,
+  LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION,
+  LOCAL_MESSAGE_BUNDLE_V2_SOURCE_ID,
+  LOCAL_MESSAGE_BUNDLE_V2_SOURCE_TRANSFORM_VERSION,
+} from "./message-bundle-v2.ts";
 
 export const BUNDLE_ARTIFACTS = LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS;
 
@@ -161,6 +169,27 @@ export function syntheticBundleRecords(): SyntheticBundleRecords {
   };
 }
 
+export function syntheticWhatsAppBundleRecords(): SyntheticBundleRecords {
+  const records = syntheticBundleRecords();
+  const accountJid = "15555550100@s.whatsapp.net";
+  const peerJid = "15555550101@s.whatsapp.net";
+  for (const values of Object.values(records)) {
+    for (const record of values) {
+      record.schemaVersion = LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION;
+      record.network = "whatsapp";
+      (record.provenance as Record<string, unknown>).connectedAccountProviderId = accountJid;
+    }
+  }
+  (records.account[0]!.provenance as Record<string, unknown>).providerId = accountJid;
+  records.account[0]!.handle = "+15555550100";
+  (records.participant[0]!.provenance as Record<string, unknown>).providerId = accountJid;
+  records.participant[0]!.handle = "+15555550100";
+  (records.participant[1]!.provenance as Record<string, unknown>).providerId = peerJid;
+  records.participant[1]!.handle = "+15555550101";
+  (records.conversation[0]!.provenance as Record<string, unknown>).providerId = peerJid;
+  return records;
+}
+
 export async function writeSyntheticMessageBundle(
   parent: string,
   records: SyntheticBundleRecords = syntheticBundleRecords(),
@@ -169,6 +198,7 @@ export async function writeSyntheticMessageBundle(
     completenessKind?: "bounded-local" | "truncated" | "unknown";
     completenessReason?: string | null;
     createdAt?: string;
+    schemaVersion?: 1 | 2;
   }> = {},
 ): Promise<string> {
   const directory = join(parent, options.directoryName ?? "synthetic-message-bundle");
@@ -192,14 +222,21 @@ export async function writeSyntheticMessageBundle(
       sha256: sha256(bytes),
     });
   }
+  const schemaVersion = options.schemaVersion ?? LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION;
+  const v2 = schemaVersion === LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION;
   const projection = {
-    schemaVersion: LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
-    format: LOCAL_MESSAGE_BUNDLE_V1_FORMAT,
+    schemaVersion,
+    format: v2 ? LOCAL_MESSAGE_BUNDLE_V2_FORMAT : LOCAL_MESSAGE_BUNDLE_V1_FORMAT,
     source: {
-      id: LOCAL_MESSAGE_BUNDLE_V1_SOURCE_ID,
-      version: LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
+      id: v2 ? LOCAL_MESSAGE_BUNDLE_V2_SOURCE_ID : LOCAL_MESSAGE_BUNDLE_V1_SOURCE_ID,
+      version: v2
+        ? LOCAL_MESSAGE_BUNDLE_V2_SOURCE_TRANSFORM_VERSION
+        : LOCAL_MESSAGE_BUNDLE_V1_SOURCE_TRANSFORM_VERSION,
     },
-    provider: { id: LOCAL_MESSAGE_BUNDLE_V1_PROVIDER_ID, version: "1.2.3-test" },
+    provider: {
+      id: v2 ? LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_ID : LOCAL_MESSAGE_BUNDLE_V1_PROVIDER_ID,
+      version: v2 ? LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_VERSION : "1.2.3-test",
+    },
     timestamps: {
       startedAt: "2026-08-20T12:00:00.000Z",
       finishedAt: "2026-08-20T12:05:00.000Z",

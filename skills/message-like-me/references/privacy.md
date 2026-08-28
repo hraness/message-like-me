@@ -16,6 +16,12 @@ sensitive local data.
   their state through `messagelikeme sources list|show`; do not parse their
   manifest or NDJSON records in agent context. The bundle must not contain a
   provider credential, but it still contains private message and account data.
+- A native WhatsApp bundle is still only a finished offline input. Do not
+  request Wacli session files or WhatsApp authentication, invoke Wacli,
+  synchronize a linked device, inspect its database, or expose exact JIDs.
+  Wrench owns that provider boundary. `--overlap-source` requires explicit
+  intent and exact CLI proof; it never authorizes fuzzy account or contact
+  matching.
 - Treat a caller-owned X data archive ZIP as private source evidence. Pass only
   its explicit absolute path to `ingest x-archive`; do not extract it, evaluate
   archive JavaScript, fetch linked media, or open its message entries in agent

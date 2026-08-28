@@ -1,4 +1,5 @@
 import { MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY } from "./message-bundle-v1-identity.ts";
+import { MESSAGE_BUNDLE_V2_SCHEMA_IDENTITY } from "./message-bundle-v2-identity.ts";
 
 export const CORPUS_SCHEMA_VERSION = 2 as const;
 export const METRICS_SCHEMA_VERSION = 3 as const;
@@ -8,6 +9,10 @@ export const STUDY_PACKET_SCHEMA_VERSION = 3 as const;
 export const EVALUATION_PACKET_SCHEMA_VERSION = 2 as const;
 export const CONTACTS_SCHEMA_VERSION = 1 as const;
 export const MESSAGE_BUNDLE_SCHEMA_VERSION = MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY;
+export const MESSAGE_BUNDLE_SCHEMA_VERSIONS = Object.freeze([
+  MESSAGE_BUNDLE_V1_SCHEMA_IDENTITY,
+  MESSAGE_BUNDLE_V2_SCHEMA_IDENTITY,
+] as const);
 
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
@@ -160,7 +165,7 @@ export type SourceCorpusSnapshot = Readonly<{
 }>;
 
 export type MessageBundleSnapshot = Readonly<{
-  schemaVersion: typeof MESSAGE_BUNDLE_SCHEMA_VERSION;
+  schemaVersion: typeof MESSAGE_BUNDLE_SCHEMA_VERSIONS[number];
   manifestSha256: string;
   sources: readonly SourceCorpusSnapshot[];
 }>;
