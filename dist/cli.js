@@ -8938,7 +8938,7 @@ function directProofs(source, account) {
   return result;
 }
 function messageFingerprint2(message, proof, senderActorId) {
-  if (message.body === null || message.kind === "reaction")
+  if (message.body === null || message.body.trim().length === 0 || message.kind === "reaction")
     return null;
   const actor = senderActorId === proof.selfActorId && message.direction === "outgoing" ? "self" : senderActorId === proof.peerActorId && message.direction === "incoming" ? proof.peerHandle : null;
   if (actor === null)
