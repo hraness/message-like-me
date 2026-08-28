@@ -162,6 +162,22 @@ describe("private local message bundle", () => {
       expect(bundle.sources[0]!.messages[0]).toMatchObject({
         direction: "incoming",
       });
+      const store = LocalStore.open(join(root, "wacli-group-routes.sqlite3"));
+      try {
+        store.replaceSources(bundle.sources, "2026-08-20T12:06:00.000Z", TEST_KEY);
+        const conversationId = bundle.sources[0]!.conversations[0]!.id;
+        expect(store.routeCandidates(conversationId, true)?.candidates).toMatchObject([{
+          actionability: {
+            state: "evidence-only",
+            reason: "group-conversation",
+          },
+          privateBinding: {
+            coordinate: { kind: "whatsappJid", jid: "120363123456789012@g.us" },
+          },
+        }]);
+      } finally {
+        store.close();
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

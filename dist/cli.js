@@ -4802,8 +4802,8 @@ function routeCandidatesForScope(database, scope, privateDetails) {
     if (privateDetails && !archive && row.source_kind === "bundle" && row.network === null) {
       throw new CliError("invalid-data", "Bundle route candidate has no provider network");
     }
-    if (privateDetails && nativeWhatsApp && !/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid)$/u.test(row.conversation_external_id)) {
-      throw new CliError("invalid-data", "Native WhatsApp route candidate has no exact direct JID");
+    if (privateDetails && nativeWhatsApp && !/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid|[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us)$/u.test(row.conversation_external_id)) {
+      throw new CliError("invalid-data", "Native WhatsApp route candidate has no exact canonical JID");
     }
     return Object.freeze({
       schemaVersion: 1,
