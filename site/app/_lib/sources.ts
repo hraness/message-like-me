@@ -1,6 +1,6 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.16.0',
+  producerVersion: '0.16.1',
   providerCliVersion: '0.6.2',
   bundleSchemaVersion: '1',
   sourceId: 'beeper-local',

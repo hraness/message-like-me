@@ -8,11 +8,11 @@ importer never receives provider credentials, starts Wrench, invokes a Beeper
 operation, or sends a message.
 
 The currently verified producer is the local Beeper export in the
-[`@hraness/wrench@0.16.0`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.0)
+[`@hraness/wrench@0.16.1`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.1)
 npm package:
 
 ```sh
-bun add --global @hraness/wrench@0.16.0
+bun add --global @hraness/wrench@0.16.1
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output <normalized-absolute-new-directory> \
@@ -31,7 +31,7 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.16.0 emits those coordinates with
+source-transform version `1.1.0`. Wrench v0.16.1 emits those coordinates with
 the pinned Beeper CLI version `0.6.2`. A later Wrench package release remains
 compatible only while its manifest still declares that schema, source ID, and
 `source.version: "1.1.0"`; package age or a permissive version range never

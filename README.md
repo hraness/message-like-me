@@ -26,7 +26,7 @@ historical style.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.0 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
+| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Install
@@ -135,12 +135,12 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[`@hraness/wrench@0.16.0`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.0)
+[`@hraness/wrench@0.16.1`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.1)
 package from npm, then use Wrench to create a new private Message Like Me
 bundle:
 
 ```sh
-bun add --global @hraness/wrench@0.16.0
+bun add --global @hraness/wrench@0.16.1
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output /absolute/private/path/beeper-bundle \
@@ -149,7 +149,7 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench v0.16.0 calls the
+path to a directory that does not already exist. Wrench v0.16.1 calls the
 pinned [official Beeper CLI 0.6.2 release](https://github.com/beeper/cli/releases/tag/v0%2E6%2E2)
 directly. It enumerates
 the connected account realm, invokes `export --no-attachments` once per
@@ -183,7 +183,7 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.16.0 is the currently verified
+source-transform version `1.1.0`. Wrench v0.16.1 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
 not by an open-ended Wrench package range.
 
