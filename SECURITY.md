@@ -125,18 +125,36 @@ inventing a reply target or treating absence as an observed non-reply.
 ## Local message bundle ingestion
 
 `messagelikeme ingest bundle` accepts only a normalized absolute path to a
-current-user-owned physical mode-`0700` directory. The version-one directory
-contains exactly `manifest.json` and six mode-`0600` canonical UTF-8 NDJSON
-artifacts. Files must be regular, singly linked, owner-controlled, stable while
-read, and free of symbolic-link traversal.
+current-user-owned physical mode-`0700` directory. Frozen Beeper v1 and native
+WhatsApp v2 directories contain exactly `manifest.json` and six mode-`0600`
+canonical UTF-8 NDJSON artifacts. Files must be regular, singly linked,
+owner-controlled, stable while read, and free of symbolic-link traversal.
 
 The importer validates the manifest before allocating for its artifacts. It
 caps one line at 2 MiB, the complete bundle at 500,000 records and 512 MiB, and
-connected accounts at 128. It streams each artifact, rejects invalid UTF-8,
-requires canonical JSON plus final newlines, and verifies exact record counts,
-bytes, SHA-256 artifact digests, and the canonical manifest projection digest.
-These checks detect malformed or changed local input. They do not establish
-that the provider data is truthful or complete.
+connected accounts at 128 for v1 and exactly one for v2. It streams each
+artifact, rejects invalid UTF-8, requires canonical JSON plus final newlines,
+and verifies exact record counts, bytes, SHA-256 artifact digests, and the
+canonical manifest projection digest. These checks detect malformed or changed
+local input. They do not establish that the provider data is truthful or
+complete.
+
+V2 accepts only source `wacli-local@1.0.0`, provider `whatsapp@0.15.0`, and
+network `whatsapp`. It requires canonical supported WhatsApp JIDs, complete
+exact direct rosters, and proven message direction. Group rosters may remain
+explicitly incomplete, and a direction-proven group row may retain a null
+sender. Only a user JID's exact E.164 projection may become a Contacts-match
+handle. It rejects status, broadcast, newsletter, ambiguous JID, credential,
+session-state, provider-URL, and media-byte surfaces. Message Like Me never
+discovers or starts Wacli, authenticates WhatsApp, synchronizes a linked device,
+or accesses a network.
+
+When `--overlap-source` names Beeper WhatsApp evidence, reconciliation requires
+the same exact self E.164, exact one-to-one peer E.164, and unambiguous shared
+text-message evidence. Bodyless records, groups, names, phone suffixes, and
+approximate timestamps cannot establish equivalence. Both sources remain;
+native Wacli evidence is preferred and the proven Beeper route is marked
+`superseded-route`.
 
 The accepted privacy declaration permits attachment metadata only and requires
 provider URLs and credentials to be excluded. The bundle may still contain

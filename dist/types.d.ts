@@ -6,6 +6,7 @@ export declare const STUDY_PACKET_SCHEMA_VERSION: 3;
 export declare const EVALUATION_PACKET_SCHEMA_VERSION: 2;
 export declare const CONTACTS_SCHEMA_VERSION: 1;
 export declare const MESSAGE_BUNDLE_SCHEMA_VERSION: 1;
+export declare const MESSAGE_BUNDLE_SCHEMA_VERSIONS: readonly [1, 2];
 export type Direction = "incoming" | "outgoing";
 export type BodySource = "text" | "attributed-body" | "unavailable";
 export type ReplyState = "explicit" | "none" | "unavailable";
@@ -140,7 +141,7 @@ export type SourceCorpusSnapshot = Readonly<{
     deletions?: readonly CorpusSourceDeletion[];
 }>;
 export type MessageBundleSnapshot = Readonly<{
-    schemaVersion: typeof MESSAGE_BUNDLE_SCHEMA_VERSION;
+    schemaVersion: typeof MESSAGE_BUNDLE_SCHEMA_VERSIONS[number];
     manifestSha256: string;
     sources: readonly SourceCorpusSnapshot[];
 }>;

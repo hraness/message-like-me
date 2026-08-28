@@ -214,6 +214,11 @@ export async function packageSmoke(): Promise<void> {
     await run([
       process.execPath,
       "-e",
+      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)}); if (contract.LOCAL_MESSAGE_BUNDLE_V2_SOURCE_TRANSFORM_VERSION !== "1.0.0" || contract.LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_ID !== "whatsapp" || contract.LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_VERSION !== "0.15.0") throw new Error("wrong WhatsApp bundle contract")`,
+    ], consumer);
+    await run([
+      process.execPath,
+      "-e",
       `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4") throw new Error("wrong agentic messaging contract")`,
     ], consumer);
     await writeFile(
@@ -223,16 +228,20 @@ export async function packageSmoke(): Promise<void> {
         `import type { ContactMetrics, StyleProfileV2 } from ${JSON.stringify(PACKAGE_NAME)};`,
         `import { LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, parseLocalMessageBundleV1Record } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)};`,
         `import type { LocalMessageBundleV1Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)};`,
+        `import { LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, parseLocalMessageBundleV2Record } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)};`,
+        `import type { LocalMessageBundleV2Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)};`,
         `import { parseAgentMessageHandoffV1, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
         `import type { AgentMessageHandoffV1 } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
         "const digest: string = sha256(canonicalJson({ fixture: true }));",
         "const profile = null as unknown as StyleProfileV2;",
         "const metrics = null as unknown as ContactMetrics;",
         "const manifest = null as unknown as LocalMessageBundleV1Manifest;",
+        "const whatsappManifest = null as unknown as LocalMessageBundleV2Manifest;",
         "const parseRecord: typeof parseLocalMessageBundleV1Record = parseLocalMessageBundleV1Record;",
+        "const parseWhatsAppRecord: typeof parseLocalMessageBundleV2Record = parseLocalMessageBundleV2Record;",
         "const handoff = null as unknown as AgentMessageHandoffV1;",
         "const parseHandoff: typeof parseAgentMessageHandoffV1 = parseAgentMessageHandoffV1;",
-        "void [digest, profile, metrics, manifest, parseRecord, handoff, parseHandoff, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
+        "void [digest, profile, metrics, manifest, whatsappManifest, parseRecord, parseWhatsAppRecord, handoff, parseHandoff, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
         "",
       ].join("\n"),
       { mode: 0o600 },
@@ -301,6 +310,21 @@ export async function packageSmoke(): Promise<void> {
       || bundleSchema.$id !== "https://messagelikeme.com/schema/local-message-bundle-v1.schema.json"
     ) {
       throw new Error("Packed local message bundle schema has the wrong identity");
+    }
+    const whatsappBundleSchema = record(
+      JSON.parse(
+        await readFile(
+          join(installedPackage, "schema", "local-message-bundle-v2.schema.json"),
+          "utf8",
+        ),
+      ) as unknown,
+      "installed native WhatsApp bundle schema",
+    );
+    if (
+      whatsappBundleSchema.$schema !== "https://json-schema.org/draft/2020-12/schema"
+      || whatsappBundleSchema.$id !== "https://messagelikeme.com/schema/local-message-bundle-v2.schema.json"
+    ) {
+      throw new Error("Packed native WhatsApp bundle schema has the wrong identity");
     }
   } finally {
     await rm(work, { force: true, recursive: true });

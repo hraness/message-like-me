@@ -97,6 +97,24 @@ analysis. Use `sources show <source-id> --json` for redacted completeness and
 health. Add `--private` only when the user's task requires provider account
 metadata.
 
+When the user supplies a finished Wrench/Wacli native WhatsApp v2 bundle, use
+the same strict importer:
+
+```sh
+messagelikeme ingest bundle --input <absolute-private-whatsapp-bundle> --json
+```
+
+Do not request or handle Wacli session state or WhatsApp linked-device
+authentication, call Wacli, inspect its database, synchronize the account, or
+open bundle records in agent context. Wrench owns those provider operations.
+If the CLI reports an exact existing Beeper WhatsApp account, inspect the
+redacted source inventory and pass `--overlap-source <source-id>` only when the
+user intends that reconciliation. The CLI must prove exact self and direct-peer
+E.164 identity plus exact shared-message evidence. Groups, names, suffixes,
+bodyless records, and approximate timestamps cannot justify a merge. Prefer the
+resulting native `whatsappJid` route; treat its proven Beeper duplicate as
+evidence-only.
+
 Inspect source coverage before comparing channels. X archive reply links are
 unobservable: their messages remain valid prose, ordering, tempo, and response
 shape evidence, but they do not enter explicit-reply ratios and do not prove the

@@ -6,6 +6,7 @@ import {
   BEEPER_COMPATIBILITY,
   MESSAGING_HISTORY_SOURCES,
   SUPPORTED_SOURCES,
+  WHATSAPP_COMPATIBILITY,
 } from '../_lib/sources';
 import {
   GITHUB_URL,
@@ -16,7 +17,7 @@ import {
 export const metadata = pageMetadata({
   title: 'Supported sources',
   description:
-    'The exact Apple Messages, X archive, Beeper via Wrench, and macOS Contacts inputs supported by Message Like Me.',
+    'The exact Apple Messages, X archive, Beeper, native WhatsApp, and macOS Contacts inputs supported by Message Like Me.',
   path: '/sources',
 });
 
@@ -24,6 +25,11 @@ const beeperProducerSummary =
   `Verified producer Wrench v${BEEPER_COMPATIBILITY.producerVersion} calls ` +
   `its pinned official Beeper CLI v${BEEPER_COMPATIBILITY.providerCliVersion} ` +
   'and publishes a bounded, digest-bound local directory.';
+
+const whatsappProducerSummary =
+  `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion} owns official ` +
+  `${WHATSAPP_COMPATIBILITY.providerCli} v${WHATSAPP_COMPATIBILITY.providerCliVersion}, ` +
+  'linked-device authentication, synchronization, and the bounded local export.';
 
 export default function SourcesPage() {
   return (
@@ -99,6 +105,52 @@ export default function SourcesPage() {
           <div className="source-links">
             <a href="https://wrench.rip/providers/beeper/">Inspect Wrench’s Beeper surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v1.md`}>Read the versioned bundle contract ↗</a>
+            <Link href="/docs">Open Message Like Me docs →</Link>
+          </div>
+        </section>
+
+        <section className="beeper-workflow" aria-labelledby="whatsapp-workflow-title">
+          <div className="beeper-workflow-intro">
+            <p className="eyebrow">Native WhatsApp via Wrench</p>
+            <h2 id="whatsapp-workflow-title">Exact JIDs in. No provider session crosses over.</h2>
+            <p>
+              Wrench owns Wacli and the live linked-device boundary. Message Like Me
+              receives only one finished private v2 directory and performs no process,
+              authentication, synchronization, network, preview, or send operation.
+            </p>
+          </div>
+          <ol className="workflow-steps">
+            <li>
+              <span aria-hidden="true">01</span>
+              <div>
+                <h3>Wrench writes one native account observation.</h3>
+                <p>{whatsappProducerSummary}</p>
+                <code className="workflow-command">wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle</code>
+              </div>
+            </li>
+            <li>
+              <span aria-hidden="true">02</span>
+              <div>
+                <h3>Message Like Me proves the v2 coordinates.</h3>
+                <p>
+                  It accepts schema {WHATSAPP_COMPATIBILITY.bundleSchemaVersion}, source{' '}
+                  <code>{WHATSAPP_COMPATIBILITY.sourceId}@{WHATSAPP_COMPATIBILITY.sourceTransformVersion}</code>,
+                  provider <code>{WHATSAPP_COMPATIBILITY.providerId}@{WHATSAPP_COMPATIBILITY.providerCliVersion}</code>,
+                  and exact canonical WhatsApp JIDs.
+                </p>
+                <code className="workflow-command">messagelikeme ingest bundle --input &lt;private-whatsapp-directory&gt;</code>
+              </div>
+            </li>
+          </ol>
+          <aside className="beeper-boundary" aria-label="WhatsApp operation boundary">
+            <strong>What this does not mean:</strong> Message Like Me does not install or
+            start Wacli, receive a WhatsApp credential or session database, synchronize
+            a linked device, call a provider network, or send. Existing Beeper overlap
+            requires explicit exact account, peer, and shared-message proof.
+          </aside>
+          <div className="source-links">
+            <a href="https://wrench.rip/providers/whatsapp/">Inspect Wrench’s WhatsApp surface ↗</a>
+            <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v2.md`}>Read the native bundle contract ↗</a>
             <Link href="/docs">Open Message Like Me docs →</Link>
           </div>
         </section>

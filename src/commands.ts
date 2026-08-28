@@ -41,13 +41,18 @@ import {
   planXArchiveEquivalence,
   xArchiveMatchesBeeperSource,
 } from "./x-source.ts";
+import {
+  planWacliBeeperWhatsAppEquivalence,
+  wacliBundleMatchesBeeperWhatsAppSource,
+} from "./whatsapp-source.ts";
 
 export const HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 
 Usage:
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
-  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH [--json]
+  messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH
+                    [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest x-archive --input ABS_PATH
                     [--overlap-source SOURCE_ID] [--json]
   messagelikeme [--data-dir PATH] ingest contacts [--addressbook PATH] [--json]
@@ -377,7 +382,7 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
   }
 
   if (command === "ingest" && subcommand === "bundle" && identifier === undefined) {
-    rejectUnused(parsed, ["data-dir", "input"], ["json"]);
+    rejectUnused(parsed, ["data-dir", "input", "overlap-source"], ["json"]);
     const input = absolutePrivatePath(parsed.options.get("input"), "--input");
     const context = await writableStore(parsed);
     try {
@@ -387,7 +392,46 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
       } catch (error) {
         translateBundleError(error);
       }
-      const stored = context.store.replaceSources(bundle.sources, canonicalNow(io), context.key);
+      const overlapSourceId = parsed.options.get("overlap-source");
+      if (overlapSourceId !== undefined && bundle.schemaVersion !== 2) {
+        throw new CliError(
+          "usage",
+          "--overlap-source is supported for a native WhatsApp bundle v2 or an X archive",
+        );
+      }
+      const nativeSource = bundle.schemaVersion === 2 ? bundle.sources[0]! : null;
+      const matchingBeeperSources = nativeSource === null
+        ? []
+        : context.store.listSources().filter((source) =>
+          source.kind === "bundle" && source.provider === "beeper" && source.network === "whatsapp")
+          .filter((source) => wacliBundleMatchesBeeperWhatsAppSource(
+            nativeSource,
+            context.store.sourceOverlapEvidence(source.id),
+          ));
+      if (overlapSourceId === undefined && matchingBeeperSources.length > 0) {
+        const ids = matchingBeeperSources.map(({ id }) => id).join(", ");
+        throw new CliError(
+          "conflict",
+          `A Beeper WhatsApp source for this exact account already exists; inspect sources and rerun with --overlap-source ${ids}`,
+        );
+      }
+      const equivalence = overlapSourceId === undefined
+        ? undefined
+        : planWacliBeeperWhatsAppEquivalence(
+          nativeSource!,
+          context.store.sourceOverlapEvidence(overlapSourceId),
+        );
+      if (equivalence !== undefined) {
+        io.stderr(
+          `Proved ${equivalence.messages.length} exact WhatsApp message overlaps with the named Beeper source; native Wacli evidence will be preferred atomically.\n`,
+        );
+      }
+      const stored = context.store.replaceSources(
+        bundle.sources,
+        canonicalNow(io),
+        context.key,
+        equivalence,
+      );
       const result = {
         schemaVersion: bundle.schemaVersion,
         manifestSha256: bundle.manifestSha256,
@@ -395,6 +439,13 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
         sources: stored.sources,
         conversations: stored.sources.reduce((sum, source) => sum + source.conversations, 0),
         messages: stored.sources.reduce((sum, source) => sum + source.messages, 0),
+        ...(equivalence === undefined ? {} : {
+          reconciliation: {
+            conversations: equivalence.conversations.length,
+            messages: equivalence.messages.length,
+            reactions: equivalence.reactions?.length ?? 0,
+          },
+        }),
       };
       emit(
         io,

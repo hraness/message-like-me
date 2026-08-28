@@ -12,7 +12,7 @@ export function GET() {
     SITE_DESCRIPTION,
     '',
     'The website is informational. It never receives private message history, contacts, profiles, or drafts.',
-    'Supported sources are Apple Messages; X data archive DMs, not X Chat; Beeper via Wrench through a bounded local bundle; and macOS Contacts for optional label enrichment. Message Like Me never receives Beeper credentials, invokes Beeper or Wrench operations, or sends messages.',
+    'Supported sources are Apple Messages; X data archive DMs, not X Chat; Beeper via Wrench through a bounded v1 bundle; native WhatsApp via Wrench and official Wacli through a one-account v2 bundle; and macOS Contacts for optional label enrichment. Message Like Me never receives provider credentials or Wacli session state, invokes Wrench or provider operations, accesses a network, or sends messages.',
     '',
     '## Canonical pages',
     `- ${absoluteUrl('/')}`,

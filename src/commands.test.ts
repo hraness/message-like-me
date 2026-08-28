@@ -17,6 +17,7 @@ import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
 import {
   syntheticBundleRecords,
+  syntheticWhatsAppBundleRecords,
   type SyntheticBundleRecords,
   writeSyntheticMessageBundle,
 } from "./test-bundle-fixture.ts";
@@ -140,6 +141,14 @@ function syntheticXOverlapBundleRecords(): SyntheticBundleRecords {
     reaction: [],
     tombstone: [],
   };
+}
+
+function syntheticBeeperWhatsAppBundleRecords(): SyntheticBundleRecords {
+  const records = syntheticBundleRecords();
+  records.account[0]!.handle = "+15555550100";
+  records.participant[0]!.handle = "+15555550100";
+  records.participant[1]!.handle = "+15555550101";
+  return records;
 }
 
 async function createContactsFixture(root: string): Promise<string> {
@@ -527,6 +536,62 @@ describe("messagelikeme CLI", () => {
       });
       expect(packet.examples).toHaveLength(1);
       expect(JSON.stringify(packet)).toContain("private outgoing body");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("requires and applies exact Beeper overlap when ingesting native WhatsApp v2", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-whatsapp-overlap-"));
+    const capture = ioCapture();
+    try {
+      const state = join(root, "state");
+      const beeperPath = await writeSyntheticMessageBundle(
+        root,
+        syntheticBeeperWhatsAppBundleRecords(),
+        { directoryName: "beeper-whatsapp" },
+      );
+      expect(await main([
+        "--data-dir", state, "ingest", "bundle", "--input", beeperPath, "--json",
+      ], capture.io)).toBe(0);
+      const beeperSourceId = (JSON.parse(capture.stdout()) as {
+        sources: Array<{ id: string }>;
+      }).sources[0]!.id;
+      const nativePath = await writeSyntheticMessageBundle(
+        root,
+        syntheticWhatsAppBundleRecords(),
+        { directoryName: "wacli-whatsapp", schemaVersion: 2 },
+      );
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state, "ingest", "bundle", "--input", nativePath, "--json",
+      ], capture.io)).toBe(4);
+      expect(capture.stdout()).toBe("");
+      expect(capture.stderr()).toContain("--overlap-source");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", state,
+        "ingest", "bundle",
+        "--input", nativePath,
+        "--overlap-source", beeperSourceId,
+        "--json",
+      ], capture.io)).toBe(0);
+      expect(JSON.parse(capture.stdout())).toMatchObject({
+        schemaVersion: 2,
+        reconciliation: { conversations: 1, messages: 2, reactions: 2 },
+      });
+      expect(capture.stderr()).toContain("native Wacli evidence will be preferred atomically");
+      for (const privateValue of [
+        nativePath,
+        beeperPath,
+        "Synthetic question?",
+        "Synthetic answer.",
+      ]) {
+        expect(capture.stdout()).not.toContain(privateValue);
+        expect(capture.stderr()).not.toContain(privateValue);
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

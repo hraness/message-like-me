@@ -7,5 +7,10 @@
     "noEmit": false,
     "rootDir": "src"
   },
-  "include": ["src/index.ts", "src/message-bundle-v1.ts", "src/agentic-messaging-v1.ts"]
+  "include": [
+    "src/index.ts",
+    "src/message-bundle-v1.ts",
+    "src/message-bundle-v2.ts",
+    "src/agentic-messaging-v1.ts"
+  ]
 }

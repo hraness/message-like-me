@@ -7,11 +7,28 @@ export const BEEPER_COMPATIBILITY = Object.freeze({
   sourceTransformVersion: '1.1.0',
 } as const);
 
+export const WHATSAPP_COMPATIBILITY = Object.freeze({
+  producer: 'Wrench',
+  producerVersion: '0.16.3',
+  providerCli: 'Wacli',
+  providerCliVersion: '0.15.0',
+  bundleSchemaVersion: '2',
+  sourceId: 'wacli-local',
+  sourceTransformVersion: '1.0.0',
+  providerId: 'whatsapp',
+  network: 'whatsapp',
+} as const);
+
 export type SourceIconName = 'archive' | 'contacts' | 'messages' | 'wrench';
 export type SourceKind = 'Messaging history' | 'Label enrichment';
 
 export type SupportedSource = Readonly<{
-  id: 'apple-messages' | 'beeper-via-wrench' | 'x-data-archive' | 'macos-contacts';
+  id:
+    | 'apple-messages'
+    | 'beeper-via-wrench'
+    | 'whatsapp-via-wrench'
+    | 'x-data-archive'
+    | 'macos-contacts';
   name: string;
   kind: SourceKind;
   mode: string;
@@ -47,6 +64,19 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Message Like Me receives no Beeper credential, calls no Beeper or Wrench operation, and never sends.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
+    icon: 'wrench',
+  },
+  {
+    id: 'whatsapp-via-wrench',
+    name: 'WhatsApp via Wrench',
+    kind: 'Messaging history',
+    mode: 'Native · bounded local bundle',
+    status: 'Supported',
+    summary:
+      'Ingests one native WhatsApp linked-device observation exported by Wrench through official Wacli.',
+    boundary:
+      'Wrench alone owns Wacli, authentication, synchronization, and provider operations; Message Like Me verifies the finished bundle and never sends.',
+    command: 'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
     icon: 'wrench',
   },
   {

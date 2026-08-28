@@ -6,14 +6,16 @@ drafting messages that sound like you.**
 Message Like Me turns private local messaging history into deterministic
 conversation metrics, bounded study packets, and reusable style profiles. It
 reads native iMessage history, caller-owned X data archives, and strict local
-source bundles, including multi-account Beeper exports produced through
-Wrench. Its Agent Skill teaches Codex, Claude, and other coding agents how to
-interpret those local artifacts and draft unsent replies in your voice.
+source bundles, including multi-account Beeper and native WhatsApp exports
+produced through Wrench. Its Agent Skill teaches Codex, Claude, and other coding
+agents how to interpret those local artifacts and draft unsent replies in your
+voice.
 
 The CLI has no model integration. It does not authenticate with a product
-account, invoke Wrench or Beeper, send messages, or operate Messages. An agent
-you already run may use the installed skill for semantic analysis and drafting;
-opening a study packet exposes its bounded excerpts to that agent environment.
+account, invoke Wrench, Beeper, Wacli, or WhatsApp, send messages, or operate
+Messages. An agent you already run may use the installed skill for semantic
+analysis and drafting; opening a study packet exposes its bounded excerpts to
+that agent environment.
 
 This is an evidence layer for relationship-aware drafting. It does not train a
 model, represent your identity, infer your beliefs, or claim that a draft is
@@ -27,6 +29,7 @@ historical style.
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
 | Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
+| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.3 with official Wacli 0.15.0 | Message Like Me verifies the finished bundle; Wrench alone owns Wacli, linked-device authentication, synchronization, and provider operations. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Install
@@ -35,7 +38,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install the Agent Skill:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.6.0
+bun add --global github:hraness/message-like-me#v0.7.0
 messagelikeme skill install
 ```
 
@@ -194,6 +197,46 @@ reappearance restores it. Older snapshots cannot overwrite newer state. Use
 `sources show <source-id> --private --json` only when you deliberately need the
 private provider account and source metadata.
 
+For native WhatsApp evidence, install Wrench v0.16.3 and let its official
+Wacli 0.15.0 adapter create the one-account v2 bundle:
+
+```sh
+bun add --global @hraness/wrench@0.16.3
+wrench whatsapp export-message-like-me \
+  --auth <whatsapp-auth-id> \
+  --output /absolute/private/path/whatsapp-bundle \
+  --json
+
+messagelikeme ingest bundle \
+  --input /absolute/private/path/whatsapp-bundle \
+  --json
+```
+
+Message Like Me accepts exactly bundle schema `2`, source
+`wacli-local@1.0.0`, provider `whatsapp@0.15.0`, and network `whatsapp`. The
+bundle admits canonical WhatsApp user, LID, and group JIDs; only an exact
+E.164-backed user JID supplies a Contacts-match phone handle. Status,
+broadcast, newsletter, credential, session-database, provider-URL, and media-byte
+surfaces are excluded. The complete contract is in
+[local message bundle v2](docs/local-message-bundle-v2.md).
+
+If a Beeper WhatsApp source already represents the same exact account, inspect
+the redacted source inventory and name it explicitly:
+
+```sh
+messagelikeme ingest bundle \
+  --input /absolute/private/path/whatsapp-bundle \
+  --overlap-source <beeper-whatsapp-source-id> \
+  --json
+```
+
+Reconciliation requires exact self and direct-peer E.164 identity plus an
+unambiguous shared text-message fingerprint. Groups, bodyless messages, names,
+phone suffixes, and approximate timestamps cannot prove equivalence. Both
+provenances and source-unique history remain. Native Wacli evidence becomes the
+preferred `whatsappJid` route; its proven Beeper duplicate remains
+`evidence-only` with reason `superseded-route`.
+
 Optionally enrich and join direct conversations with private identities from
 macOS Contacts:
 
@@ -289,10 +332,10 @@ one pseudonymous source and conversation inside that mode-`0600` output.
 Ordinary stdout reports only its digest, counts, and selection state.
 `--private` additionally reveals only
 the exact account, source, and tagged conversation coordinate already observed
-in that imported source: `beeperConversation` for a Beeper bundle or
-`imessageChat` for Messages. It never emits names, handles, participants, or a
-locator derived from them. Wrench rejects a coordinate whose tag does not match
-the selected provider adapter.
+in that imported source: `beeperConversation` for a Beeper bundle,
+`whatsappJid` for a native Wacli bundle, or `imessageChat` for Messages. It never
+emits names, handles, participants, or a locator derived from them. Wrench
+rejects a coordinate whose tag does not match the selected provider adapter.
 
 An X archive candidate is always `evidence-only` with reason
 `archive-source`. Handoff v1 also keeps group candidates evidence-only as an
@@ -453,7 +496,8 @@ messagelikeme ingest imessage [--database PATH] [--json]
 messagelikeme ingest x-archive --input ABS_PATH
   [--overlap-source SOURCE_ID] [--json]
 messagelikeme ingest contacts [--addressbook PATH] [--json]
-messagelikeme ingest bundle --input ABS_PATH [--json]
+messagelikeme ingest bundle --input ABS_PATH
+  [--overlap-source SOURCE_ID] [--json]
 messagelikeme sources list [--private] [--json]
 messagelikeme sources show SOURCE_ID [--private] [--json]
 messagelikeme contacts list [--min-outgoing N] [--limit N] [--private] [--json]
@@ -526,8 +570,8 @@ import type { ContactMetrics, StyleProfileV2 } from "@hraness/message-like-me"
 import { canonicalJson, sha256 } from "@hraness/message-like-me"
 ```
 
-The immutable version-one local message bundle contract has a separate,
-dependency-free producer and consumer surface:
+The immutable Beeper v1 and native WhatsApp v2 local message bundle contracts
+have separate dependency-free producer and consumer surfaces:
 
 ```ts
 import {
@@ -536,9 +580,16 @@ import {
   parseLocalMessageBundleV1Manifest,
   parseLocalMessageBundleV1Record,
 } from "@hraness/message-like-me/message-bundle-v1"
+
+import {
+  LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS,
+  LOCAL_MESSAGE_BUNDLE_V2_PROVIDER_VERSION,
+  parseLocalMessageBundleV2Manifest,
+  parseLocalMessageBundleV2Record,
+} from "@hraness/message-like-me/message-bundle-v2"
 ```
 
-That subpath owns the exact readonly wire types, compatibility constants,
+Those subpaths own the exact readonly wire types, compatibility constants,
 safety bounds, digest helpers, and pure strict parsers. Importing it performs no
 filesystem or network work.
 

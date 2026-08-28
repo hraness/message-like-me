@@ -164,7 +164,12 @@ export type AgentMessageRouteCandidateV1 = Readonly<{
   sourceRevision: string;
   actionability: Readonly<{
     state: "evidence-only" | "wrench-binding-eligible";
-    reason: "archive-source" | "group-conversation" | "requires-exact-wrench-binding";
+    reason:
+      | "archive-source"
+      | "group-conversation"
+      | "requires-exact-wrench-binding"
+      | "superseded-route"
+      | "unsupported-route";
   }>;
   privateBinding: Readonly<{
     sourceAccountId: string | null;
