@@ -106,6 +106,8 @@ const X_BEEPER_SOURCE_ID = `source_${"8".repeat(64)}`;
 const X_ARCHIVE_SOURCE_ID = `source_${"9".repeat(64)}`;
 const X_BEEPER_CONVERSATION_ID = "conversation_x_beeper_synthetic";
 const X_ARCHIVE_CONVERSATION_ID = "conversation_x_archive_synthetic";
+const X_BEEPER_REBOUND_CONVERSATION_ID = "conversation_x_beeper_rebound_synthetic";
+const X_ARCHIVE_REBOUND_CONVERSATION_ID = "conversation_x_archive_rebound_synthetic";
 
 function bundleMessage(
   id: string,
@@ -402,6 +404,94 @@ function xArchiveSnapshot(): SourceCorpusSnapshot {
       reactedAt: "2026-08-20T10:00:30.000Z",
       state: "active",
     }],
+  };
+}
+
+function xSnapshotWithConversationRebind(
+  snapshot: SourceCorpusSnapshot,
+  revision: string,
+  generatedAt: string,
+  rebound: boolean,
+): SourceCorpusSnapshot {
+  const beeper = snapshot.source.id === X_BEEPER_SOURCE_ID;
+  if (!beeper && snapshot.source.id !== X_ARCHIVE_SOURCE_ID) {
+    throw new Error("Synthetic X rebind requires a known source");
+  }
+  const originalConversationId = beeper
+    ? X_BEEPER_CONVERSATION_ID
+    : X_ARCHIVE_CONVERSATION_ID;
+  const reboundConversationId = beeper
+    ? X_BEEPER_REBOUND_CONVERSATION_ID
+    : X_ARCHIVE_REBOUND_CONVERSATION_ID;
+  const originalConversation = snapshot.conversations.find(({ id }) =>
+    id === originalConversationId);
+  const originalProvenance = snapshot.conversationProvenance.find(({ conversationId }) =>
+    conversationId === originalConversationId);
+  if (originalConversation === undefined || originalProvenance === undefined) {
+    throw new Error("Synthetic X rebind is missing its original conversation");
+  }
+  const activeConversationId = rebound ? reboundConversationId : originalConversationId;
+  return {
+    ...snapshot,
+    source: {
+      ...snapshot.source,
+      revision,
+      generatedAt,
+      manifestSha256: revision,
+    },
+    conversations: [
+      originalConversation,
+      {
+        ...originalConversation,
+        id: reboundConversationId,
+        sourceKey: `${originalConversation.sourceKey}-rebound`,
+        privateLabel: `${originalConversation.privateLabel ?? "Synthetic X Peer"} Rebound`,
+      },
+    ],
+    conversationProvenance: [
+      originalProvenance,
+      {
+        ...originalProvenance,
+        conversationId: reboundConversationId,
+        externalId: `${originalProvenance.externalId}-rebound`,
+      },
+    ],
+    messages: snapshot.messages.map((message) => ({
+      ...message,
+      conversationId: activeConversationId,
+    })),
+    ...(snapshot.reactionFacts === undefined ? {} : {
+      reactionFacts: snapshot.reactionFacts.map((reaction) => ({
+        ...reaction,
+        conversationId: activeConversationId,
+      })),
+    }),
+  };
+}
+
+function xEquivalencePlan(preferredReaction: "beeper" | "archive") {
+  return {
+    duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+    preferredSourceId: X_BEEPER_SOURCE_ID,
+    basis: "exact-message-overlap" as const,
+    evidenceSha256: "d".repeat(64),
+    conversations: [{
+      duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+      preferredConversationId: X_BEEPER_CONVERSATION_ID,
+    }],
+    messages: [{
+      duplicateMessageId: "x-archive-message-overlap",
+      preferredMessageId: "x-beeper-message-overlap",
+    }],
+    reactions: [preferredReaction === "beeper"
+      ? {
+        duplicateReactionId: "x-archive-reaction",
+        preferredReactionId: "x-beeper-reaction",
+      }
+      : {
+        duplicateReactionId: "x-beeper-reaction",
+        preferredReactionId: "x-archive-reaction",
+      }],
   };
 }
 
@@ -1514,29 +1604,6 @@ describe("local corpus store", () => {
       },
       deletions,
     });
-    const equivalence = (preferredReaction: "beeper" | "archive") => ({
-      duplicateSourceId: X_ARCHIVE_SOURCE_ID,
-      preferredSourceId: X_BEEPER_SOURCE_ID,
-      basis: "exact-message-overlap" as const,
-      evidenceSha256: "d".repeat(64),
-      conversations: [{
-        duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
-        preferredConversationId: X_BEEPER_CONVERSATION_ID,
-      }],
-      messages: [{
-        duplicateMessageId: "x-archive-message-overlap",
-        preferredMessageId: "x-beeper-message-overlap",
-      }],
-      reactions: [preferredReaction === "beeper"
-        ? {
-          duplicateReactionId: "x-archive-reaction",
-          preferredReactionId: "x-beeper-reaction",
-        }
-        : {
-          duplicateReactionId: "x-beeper-reaction",
-          preferredReactionId: "x-archive-reaction",
-        }],
-    });
     const messageIds = (store: LocalStore): string[] =>
       store.contactCorpus(X_BEEPER_CONVERSATION_ID)!.messages.map(({ id }) => id);
     const reactionIds = (store: LocalStore): string[] =>
@@ -1547,7 +1614,7 @@ describe("local corpus store", () => {
         [xArchiveSnapshot()],
         "2026-08-26T04:00:00.000Z",
         undefined,
-        equivalence("beeper"),
+        xEquivalencePlan("beeper"),
       );
       expect(messageIds(beeperPreferred)).toEqual([
         "x-beeper-message-overlap",
@@ -1591,7 +1658,7 @@ describe("local corpus store", () => {
         [xArchiveSnapshot()],
         "2026-08-26T04:00:00.000Z",
         undefined,
-        equivalence("archive"),
+        xEquivalencePlan("archive"),
       );
       expect(reactionIds(archivePreferred)).toEqual(["x-archive-reaction"]);
 
@@ -1627,6 +1694,209 @@ describe("local corpus store", () => {
     } finally {
       beeperPreferred.close();
       archivePreferred.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back when either equivalent message side rebinds and restores exact-pair deduplication", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-message-rebind-"));
+    const store = LocalStore.open(join(root, "store.sqlite3"));
+    const messageIds = (conversationId: string): string[] =>
+      store.contactCorpus(conversationId)!.messages.map(({ id }) => id);
+    try {
+      store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      store.replaceSources(
+        [xArchiveSnapshot()],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        xEquivalencePlan("beeper"),
+      );
+
+      store.replaceSources([xSnapshotWithConversationRebind(
+        xBeeperSnapshot(),
+        "e".repeat(64),
+        "2026-08-22T00:00:00.000Z",
+        true,
+      )], "2026-08-22T00:00:01.000Z");
+      expect(messageIds(X_BEEPER_CONVERSATION_ID)).toEqual([
+        "x-archive-message-overlap",
+        "x-archive-message-unique",
+      ]);
+      expect(messageIds(X_BEEPER_REBOUND_CONVERSATION_ID)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+      ]);
+
+      store.replaceSources([xSnapshotWithConversationRebind(
+        xBeeperSnapshot(),
+        "f".repeat(64),
+        "2026-08-23T00:00:00.000Z",
+        false,
+      )], "2026-08-23T00:00:01.000Z");
+      expect(messageIds(X_BEEPER_CONVERSATION_ID)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+      ]);
+      expect(messageIds(X_BEEPER_REBOUND_CONVERSATION_ID)).toEqual([]);
+
+      store.replaceSources([xSnapshotWithConversationRebind(
+        xArchiveSnapshot(),
+        "e".repeat(64),
+        "2026-08-27T03:02:10.221Z",
+        true,
+      )], "2026-08-27T03:02:11.000Z");
+      expect(messageIds(X_BEEPER_CONVERSATION_ID)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+      ]);
+      expect(messageIds(X_ARCHIVE_REBOUND_CONVERSATION_ID)).toEqual([
+        "x-archive-message-overlap",
+        "x-archive-message-unique",
+      ]);
+
+      store.replaceSources([xSnapshotWithConversationRebind(
+        xArchiveSnapshot(),
+        "f".repeat(64),
+        "2026-08-28T03:02:10.221Z",
+        false,
+      )], "2026-08-28T03:02:11.000Z");
+      expect(messageIds(X_BEEPER_CONVERSATION_ID)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+      ]);
+      expect(messageIds(X_ARCHIVE_REBOUND_CONVERSATION_ID)).toEqual([]);
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("scopes reaction equivalence to current target conversations in both preference orientations", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-reaction-rebind-"));
+    try {
+      for (const preferredSource of ["beeper", "archive"] as const) {
+        const store = LocalStore.open(join(root, `${preferredSource}-preferred.sqlite3`));
+        const preferredReactionId = preferredSource === "beeper"
+          ? "x-beeper-reaction"
+          : "x-archive-reaction";
+        const duplicateSource = preferredSource === "beeper" ? "archive" : "beeper";
+        const duplicateReactionId = duplicateSource === "beeper"
+          ? "x-beeper-reaction"
+          : "x-archive-reaction";
+        const reactionIds = (conversationId: string): string[] =>
+          store.contactCorpus(conversationId)!.reactions.map(({ id }) => id);
+        try {
+          store.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+          store.replaceSources(
+            [xArchiveSnapshot()],
+            "2026-08-26T04:00:00.000Z",
+            undefined,
+            xEquivalencePlan(preferredSource),
+          );
+          expect(reactionIds(X_BEEPER_CONVERSATION_ID)).toEqual([preferredReactionId]);
+
+          for (const movedSource of [preferredSource, duplicateSource] as const) {
+            const beeper = movedSource === "beeper";
+            const baseSnapshot = beeper ? xBeeperSnapshot() : xArchiveSnapshot();
+            const reboundConversationId = beeper
+              ? X_BEEPER_REBOUND_CONVERSATION_ID
+              : X_ARCHIVE_REBOUND_CONVERSATION_ID;
+            const movedReactionId = beeper ? "x-beeper-reaction" : "x-archive-reaction";
+            const movedTargetId = beeper
+              ? "x-beeper-message-overlap"
+              : "x-archive-message-overlap";
+            const fallbackReactionId = movedSource === preferredSource
+              ? duplicateReactionId
+              : preferredReactionId;
+            const movedGeneratedAt = beeper
+              ? "2026-08-22T00:00:00.000Z"
+              : "2026-08-27T03:02:10.221Z";
+            const movedIngestedAt = beeper
+              ? "2026-08-22T00:00:01.000Z"
+              : "2026-08-27T03:02:11.000Z";
+            const restoredGeneratedAt = beeper
+              ? "2026-08-23T00:00:00.000Z"
+              : "2026-08-28T03:02:10.221Z";
+            const restoredIngestedAt = beeper
+              ? "2026-08-23T00:00:01.000Z"
+              : "2026-08-28T03:02:11.000Z";
+            const targetMovedGeneratedAt = beeper
+              ? "2026-08-24T00:00:00.000Z"
+              : "2026-08-29T03:02:10.221Z";
+            const targetMovedIngestedAt = beeper
+              ? "2026-08-24T00:00:01.000Z"
+              : "2026-08-29T03:02:11.000Z";
+            const targetRestoredGeneratedAt = beeper
+              ? "2026-08-25T00:00:00.000Z"
+              : "2026-08-30T03:02:10.221Z";
+            const targetRestoredIngestedAt = beeper
+              ? "2026-08-25T00:00:01.000Z"
+              : "2026-08-30T03:02:11.000Z";
+
+            store.replaceSources([xSnapshotWithConversationRebind(
+              baseSnapshot,
+              "e".repeat(64),
+              movedGeneratedAt,
+              true,
+            )], movedIngestedAt);
+            const originalCorpus = store.contactCorpus(X_BEEPER_CONVERSATION_ID)!;
+            const reboundCorpus = store.contactCorpus(reboundConversationId)!;
+            expect(originalCorpus.reactions.map(({ id }) => id)).toEqual([fallbackReactionId]);
+            expect(originalCorpus.reactions).toHaveLength(1);
+            expect(reboundCorpus.reactions.map(({ id }) => id)).toEqual([movedReactionId]);
+            expect(reboundCorpus.messages.map(({ id }) => id)).toContain(movedTargetId);
+            expect(reboundCorpus.reactions).toEqual([
+              expect.objectContaining({
+                id: movedReactionId,
+                conversationId: reboundConversationId,
+              }),
+            ]);
+
+            store.replaceSources([xSnapshotWithConversationRebind(
+              baseSnapshot,
+              "f".repeat(64),
+              restoredGeneratedAt,
+              false,
+            )], restoredIngestedAt);
+            expect(reactionIds(X_BEEPER_CONVERSATION_ID)).toEqual([preferredReactionId]);
+            expect(reactionIds(reboundConversationId)).toEqual([]);
+
+            store.replaceSources([{
+              ...xSnapshotWithConversationRebind(
+                baseSnapshot,
+                "1".repeat(64),
+                targetMovedGeneratedAt,
+                true,
+              ),
+              reactionFacts: [],
+            }], targetMovedIngestedAt);
+            expect(reactionIds(X_BEEPER_CONVERSATION_ID).sort()).toEqual([
+              "x-archive-reaction",
+              "x-beeper-reaction",
+            ]);
+            expect(reactionIds(reboundConversationId)).toEqual([]);
+            expect(store.contactCorpus(reboundConversationId)!.messages.map(({ id }) => id))
+              .toContain(movedTargetId);
+
+            store.replaceSources([{
+              ...xSnapshotWithConversationRebind(
+                baseSnapshot,
+                "2".repeat(64),
+                targetRestoredGeneratedAt,
+                false,
+              ),
+              reactionFacts: [],
+            }], targetRestoredIngestedAt);
+            expect(reactionIds(X_BEEPER_CONVERSATION_ID)).toEqual([preferredReactionId]);
+            expect(reactionIds(reboundConversationId)).toEqual([]);
+          }
+        } finally {
+          store.close();
+        }
+      }
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });

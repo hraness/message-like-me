@@ -4476,11 +4476,20 @@ function personScopeId(addressBookContactId) {
 }
 var ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
   SELECT 1 FROM message_equivalences equivalence
+  JOIN message_provenance duplicate_provenance
+    ON duplicate_provenance.message_id=equivalence.duplicate_message_id
   JOIN message_provenance preferred_provenance
     ON preferred_provenance.message_id=equivalence.preferred_message_id
   JOIN messages preferred_message
     ON preferred_message.id=equivalence.preferred_message_id
+  JOIN conversation_equivalences current_conversation_equivalence
+    ON current_conversation_equivalence.duplicate_conversation_id=message.conversation_id
+      AND current_conversation_equivalence.preferred_conversation_id=preferred_message.conversation_id
+      AND current_conversation_equivalence.duplicate_source_id=duplicate_provenance.source_id
+      AND current_conversation_equivalence.preferred_source_id=preferred_provenance.source_id
   WHERE equivalence.duplicate_message_id=message.id
+    AND equivalence.duplicate_source_id=duplicate_provenance.source_id
+    AND equivalence.preferred_source_id=preferred_provenance.source_id
     AND preferred_message.sent_at=message.sent_at
     AND preferred_message.direction=message.direction
     AND preferred_message.body IS message.body
@@ -4511,6 +4520,10 @@ var ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
   JOIN message_provenance preferred_target
     ON preferred_target.source_id=preferred_reaction.source_id
       AND preferred_target.external_id=preferred_reaction.target_external_id
+  JOIN messages duplicate_current_target
+    ON duplicate_current_target.id=duplicate_target.message_id
+  JOIN messages preferred_current_target
+    ON preferred_current_target.id=preferred_target.message_id
   JOIN message_equivalences target_equivalence
     ON (target_equivalence.duplicate_message_id=duplicate_target.message_id
         AND target_equivalence.preferred_message_id=preferred_target.message_id)
@@ -4520,7 +4533,23 @@ var ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
     ON target_duplicate_message.id=target_equivalence.duplicate_message_id
   JOIN messages target_preferred_message
     ON target_preferred_message.id=target_equivalence.preferred_message_id
+  JOIN conversation_equivalences current_conversation_equivalence
+    ON (
+      current_conversation_equivalence.duplicate_source_id=reaction.source_id
+      AND current_conversation_equivalence.duplicate_conversation_id=reaction.conversation_id
+      AND current_conversation_equivalence.preferred_source_id=preferred_reaction.source_id
+      AND current_conversation_equivalence.preferred_conversation_id=preferred_reaction.conversation_id
+    ) OR (
+      current_conversation_equivalence.duplicate_source_id=preferred_reaction.source_id
+      AND current_conversation_equivalence.duplicate_conversation_id=preferred_reaction.conversation_id
+      AND current_conversation_equivalence.preferred_source_id=reaction.source_id
+      AND current_conversation_equivalence.preferred_conversation_id=reaction.conversation_id
+    )
   WHERE equivalence.duplicate_reaction_id=reaction.id
+    AND equivalence.duplicate_source_id=reaction.source_id
+    AND equivalence.preferred_source_id=preferred_reaction.source_id
+    AND duplicate_current_target.conversation_id=reaction.conversation_id
+    AND preferred_current_target.conversation_id=preferred_reaction.conversation_id
     AND preferred_reaction.state='active'
     AND preferred_reaction.body=reaction.body
     AND preferred_reaction.direction IS reaction.direction
