@@ -1495,6 +1495,142 @@ describe("local corpus store", () => {
     }
   });
 
+  test("falls back across an equivalent conversation tombstone and restores either reaction preference", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-x-equivalence-conversation-tombstone-"));
+    const beeperPreferred = LocalStore.open(join(root, "beeper-preferred.sqlite3"));
+    const archivePreferred = LocalStore.open(join(root, "archive-preferred.sqlite3"));
+    const laterSnapshot = (
+      snapshot: SourceCorpusSnapshot,
+      revision: string,
+      generatedAt: string,
+      deletions: SourceCorpusSnapshot["deletions"] = [],
+    ): SourceCorpusSnapshot => ({
+      ...snapshot,
+      source: {
+        ...snapshot.source,
+        revision,
+        generatedAt,
+        manifestSha256: revision,
+      },
+      deletions,
+    });
+    const equivalence = (preferredReaction: "beeper" | "archive") => ({
+      duplicateSourceId: X_ARCHIVE_SOURCE_ID,
+      preferredSourceId: X_BEEPER_SOURCE_ID,
+      basis: "exact-message-overlap" as const,
+      evidenceSha256: "d".repeat(64),
+      conversations: [{
+        duplicateConversationId: X_ARCHIVE_CONVERSATION_ID,
+        preferredConversationId: X_BEEPER_CONVERSATION_ID,
+      }],
+      messages: [{
+        duplicateMessageId: "x-archive-message-overlap",
+        preferredMessageId: "x-beeper-message-overlap",
+      }],
+      reactions: [preferredReaction === "beeper"
+        ? {
+          duplicateReactionId: "x-archive-reaction",
+          preferredReactionId: "x-beeper-reaction",
+        }
+        : {
+          duplicateReactionId: "x-beeper-reaction",
+          preferredReactionId: "x-archive-reaction",
+        }],
+    });
+    const messageIds = (store: LocalStore): string[] =>
+      store.contactCorpus(X_BEEPER_CONVERSATION_ID)!.messages.map(({ id }) => id);
+    const reactionIds = (store: LocalStore): string[] =>
+      store.contactCorpus(X_BEEPER_CONVERSATION_ID)!.reactions.map(({ id }) => id);
+    try {
+      beeperPreferred.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      beeperPreferred.replaceSources(
+        [xArchiveSnapshot()],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        equivalence("beeper"),
+      );
+      expect(messageIds(beeperPreferred)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+      ]);
+      expect(reactionIds(beeperPreferred)).toEqual(["x-beeper-reaction"]);
+
+      beeperPreferred.replaceSources([laterSnapshot(
+        xBeeperSnapshot(),
+        "e".repeat(64),
+        "2026-08-22T00:00:00.000Z",
+        [{
+          entityKind: "conversation",
+          localEntityId: X_BEEPER_CONVERSATION_ID,
+          externalId: "x-beeper-conversation-external",
+          deletedAt: "2026-08-22T00:00:00.000Z",
+          reason: "tombstone",
+        }],
+      )], "2026-08-22T00:00:01.000Z");
+      expect(messageIds(beeperPreferred)).toEqual([
+        "x-archive-message-overlap",
+        "x-archive-message-unique",
+      ]);
+      expect(reactionIds(beeperPreferred)).toEqual(["x-archive-reaction"]);
+
+      beeperPreferred.replaceSources([laterSnapshot(
+        xBeeperSnapshot(),
+        "f".repeat(64),
+        "2026-08-23T00:00:00.000Z",
+      )], "2026-08-23T00:00:01.000Z");
+      expect(messageIds(beeperPreferred)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+      ]);
+      expect(reactionIds(beeperPreferred)).toEqual(["x-beeper-reaction"]);
+
+      archivePreferred.replaceSources([xBeeperSnapshot()], "2026-08-21T00:01:00.000Z");
+      archivePreferred.replaceSources(
+        [xArchiveSnapshot()],
+        "2026-08-26T04:00:00.000Z",
+        undefined,
+        equivalence("archive"),
+      );
+      expect(reactionIds(archivePreferred)).toEqual(["x-archive-reaction"]);
+
+      archivePreferred.replaceSources([laterSnapshot(
+        xArchiveSnapshot(),
+        "e".repeat(64),
+        "2026-08-27T03:02:10.221Z",
+        [{
+          entityKind: "conversation",
+          localEntityId: X_ARCHIVE_CONVERSATION_ID,
+          externalId: "x-archive-conversation-external",
+          deletedAt: "2026-08-27T03:02:10.221Z",
+          reason: "tombstone",
+        }],
+      )], "2026-08-27T03:02:11.000Z");
+      expect(messageIds(archivePreferred)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+      ]);
+      expect(reactionIds(archivePreferred)).toEqual(["x-beeper-reaction"]);
+
+      archivePreferred.replaceSources([laterSnapshot(
+        xArchiveSnapshot(),
+        "f".repeat(64),
+        "2026-08-28T03:02:10.221Z",
+      )], "2026-08-28T03:02:11.000Z");
+      expect(messageIds(archivePreferred)).toEqual([
+        "x-beeper-message-overlap",
+        "x-beeper-message-unique",
+        "x-archive-message-unique",
+      ]);
+      expect(reactionIds(archivePreferred)).toEqual(["x-archive-reaction"]);
+    } finally {
+      beeperPreferred.close();
+      archivePreferred.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("keeps an archive-only X conversation as style evidence without minting an action route", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-x-evidence-route-"));
     const store = LocalStore.open(join(root, "store.sqlite3"));

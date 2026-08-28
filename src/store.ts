@@ -741,6 +741,13 @@ const ACTIVE_MESSAGE_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
         AND preferred_suppression.kind IN ('message','reaction','reaction-timeline')
         AND preferred_suppression.suppressed=1
     )
+    AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions preferred_conversation_suppression
+      WHERE preferred_conversation_suppression.source_id=preferred_provenance.source_id
+        AND preferred_conversation_suppression.kind='conversation'
+        AND preferred_conversation_suppression.local_id=preferred_message.conversation_id
+        AND preferred_conversation_suppression.suppressed=1
+    )
 )`;
 
 const ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
@@ -784,6 +791,13 @@ const ACTIVE_REACTION_EQUIVALENCE_EXCLUSION = `NOT EXISTS (
         AND preferred_suppression.kind='reaction'
         AND preferred_suppression.local_id=preferred_reaction.id
         AND preferred_suppression.suppressed=1
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM corpus_source_suppressions preferred_conversation_suppression
+      WHERE preferred_conversation_suppression.source_id=preferred_reaction.source_id
+        AND preferred_conversation_suppression.kind='conversation'
+        AND preferred_conversation_suppression.local_id=preferred_reaction.conversation_id
+        AND preferred_conversation_suppression.suppressed=1
     )
 )`;
 
