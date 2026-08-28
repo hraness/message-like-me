@@ -167,7 +167,7 @@ function messageFingerprint(
   proof: DirectProof,
   senderActorId: string,
 ): string | null {
-  if (message.body === null || message.kind === "reaction") return null;
+  if (message.body === null || message.body.trim().length === 0 || message.kind === "reaction") return null;
   const actor = senderActorId === proof.selfActorId && message.direction === "outgoing"
     ? "self"
     : senderActorId === proof.peerActorId && message.direction === "incoming"

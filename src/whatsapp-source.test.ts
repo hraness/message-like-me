@@ -145,4 +145,41 @@ describe("native WhatsApp and Beeper overlap", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("does not use empty or whitespace-only text as overlap proof", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-whatsapp-overlap-blank-"));
+    try {
+      for (const body of ["", " \t\n"] as const) {
+        const beeperRecords = syntheticBeeperWhatsAppRecords();
+        const nativeRecords = syntheticWhatsAppBundleRecords();
+        for (const message of beeperRecords.message) {
+          if (message.body !== null) message.body = body;
+        }
+        for (const message of nativeRecords.message) {
+          if (message.body !== null) message.body = body;
+        }
+        const beeperPath = await writeSyntheticMessageBundle(root, beeperRecords, {
+          directoryName: `blank-beeper-${body.length}`,
+        });
+        const nativePath = await writeSyntheticMessageBundle(root, nativeRecords, {
+          directoryName: `blank-native-${body.length}`,
+          schemaVersion: 2,
+        });
+        const beeper = (await readMessageBundle(beeperPath, { hmacKey: KEY })).sources[0]!;
+        const native = (await readMessageBundle(nativePath, { hmacKey: KEY })).sources[0]!;
+        const store = LocalStore.open(join(root, `blank-${body.length}.sqlite3`));
+        try {
+          store.replaceSources([beeper], "2026-08-20T12:06:00.000Z", KEY);
+          const evidence = store.sourceOverlapEvidence(beeper.source.id);
+          expect(wacliBundleMatchesBeeperWhatsAppSource(native, evidence)).toBeTrue();
+          expect(() => planWacliBeeperWhatsAppEquivalence(native, evidence))
+            .toThrow("no unambiguous exact message overlap");
+        } finally {
+          store.close();
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
