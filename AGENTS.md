@@ -10,6 +10,8 @@
   comparisons.
 - `skills/message-like-me/` – the canonical Message Like Me Agent Skill and its
   progressive analysis, drafting, privacy, and profile references.
+- `.agents/skills/` – portable plan authoring, phased execution, implementation,
+  and independent review workflows.
 - `site/` – the informational public project page; it has no private-data or
   product-runtime connection.
 - `scripts/` – skill, standalone-boundary, built-output, and packed-consumer
