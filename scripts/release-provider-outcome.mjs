@@ -5,6 +5,9 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
+import { withReleaseAppTokenFromEnvironment } from "./release-app-token.mjs";
+import { advanceWebsiteProductionRefFromEnvironment } from "./release-ref-writer.mjs";
+
 const BASELINE_SCHEMA = "message-like-me-provider-baseline-v1";
 const PROMOTION_SCHEMA = "message-like-me-provider-promotion-v1";
 const PRODUCTION_REF = "refs/heads/website-production";
@@ -953,7 +956,9 @@ async function revalidateWorkflowSource(
     if (recovery !== "") fail("tag release unexpectedly carried a recovery workflow source");
     return;
   }
-  if (event !== "workflow_dispatch") fail("provider wait received an unsupported release event");
+  if (event !== "workflow_dispatch" && event !== "workflow_run") {
+    fail("provider wait received an unsupported release event");
+  }
   const sha = expectSha(recovery, "recovery workflow SHA");
   const repositoryState = expectRecord(
     await api.get(`/repos/${repository}`),
@@ -1096,11 +1101,63 @@ async function readLatestRelease(api, repository, tag) {
 
 async function readVerifiedTagCommit(api, repository, tag, verifiedSha) {
   const value = expectRecord(
-    await api.get(`/repos/${repository}/commits/tags/${tag}`),
+    await api.get(`/repos/${repository}/commits/refs%2Ftags%2F${tag}`),
     `tag ${tag}`,
   );
   const tagSha = expectSha(value.sha, `tag ${tag} SHA`);
   if (tagSha !== verifiedSha) fail(`tag ${tag} moved from the verified release commit`);
+}
+
+export async function revalidateReleaseAuthority({
+  api,
+  defaultBranch,
+  eventName,
+  recoveryWorkflowSha,
+  repository,
+  verifiedSha,
+  verifiedTag,
+}) {
+  const coordinate = expectRepository(repository);
+  const sha = expectSha(verifiedSha, "verified SHA");
+  const tag = expectStableTag(verifiedTag, "verified tag");
+  const workflowSource = Object.freeze({ defaultBranch, eventName, recoveryWorkflowSha });
+  if (
+    (eventName !== "workflow_dispatch" && eventName !== "workflow_run") ||
+    recoveryWorkflowSha !== sha
+  ) {
+    fail("site promotion authority must be an exact current-main release workflow");
+  }
+
+  await revalidateWorkflowSource(api, coordinate, workflowSource);
+  await readVerifiedTagCommit(api, coordinate, tag, sha);
+  const firstRelease = exactPublishedRelease(
+    await api.get(`/repos/${coordinate}/releases/tags/${tag}`),
+    tag,
+    `Release ${tag}`,
+  );
+  if (firstRelease.target_commitish !== sha) {
+    fail(`Release ${tag} target_commitish is not the verified release commit`);
+  }
+  await readLatestRelease(api, coordinate, tag);
+
+  await revalidateWorkflowSource(api, coordinate, workflowSource);
+  await readVerifiedTagCommit(api, coordinate, tag, sha);
+  const secondRelease = exactPublishedRelease(
+    await api.get(`/repos/${coordinate}/releases/tags/${tag}`),
+    tag,
+    `terminal Release ${tag}`,
+  );
+  if (secondRelease.target_commitish !== sha) {
+    fail(`terminal Release ${tag} target_commitish is not the verified release commit`);
+  }
+  await readLatestRelease(api, coordinate, tag);
+  if (
+    firstRelease.id !== secondRelease.id ||
+    firstRelease.published_at !== secondRelease.published_at ||
+    firstRelease.target_commitish !== secondRelease.target_commitish
+  ) {
+    fail(`Release ${tag} changed during authority verification`);
+  }
 }
 
 export function exactPublishedRelease(value, tag, label = "published Release") {
@@ -1127,13 +1184,19 @@ async function readFastForwardComparison(api, repository, currentSha, verifiedSh
   );
   const base = expectRecord(value.base_commit, "comparison.base_commit");
   const mergeBase = expectRecord(value.merge_base_commit, "comparison.merge_base_commit");
+  const commits = expectArray(value.commits, "comparison.commits");
+  const terminalCommit = commits.length === 0
+    ? undefined
+    : expectRecord(commits[commits.length - 1], "comparison terminal commit");
   if (
     value.status !== "ahead" ||
     !Number.isSafeInteger(value.ahead_by) ||
     value.ahead_by <= 0 ||
     value.behind_by !== 0 ||
     base.sha !== currentSha ||
-    mergeBase.sha !== currentSha
+    mergeBase.sha !== currentSha ||
+    terminalCommit === undefined ||
+    terminalCommit.sha !== verifiedSha
   ) {
     fail(`website-production does not fast-forward from ${currentSha} to ${verifiedSha}`);
   }
@@ -1349,10 +1412,7 @@ export async function promoteWebsiteProduction({
     mode = "advanced";
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
-    await api.patch(
-      `/repos/${coordinate}/git/refs/heads/website-production`,
-      Object.freeze({ force: false, sha }),
-    );
+    await api.advanceRef(coordinate, prePatchRef.sha, sha);
   }
 
   const promotedSha = await readProductionRef(api, coordinate);
@@ -1825,9 +1885,13 @@ class GitHubApi {
   }
 
   #runRaw(args, label) {
+    const readOnlyEnvironment = { ...this.#environment };
+    for (const key of Object.keys(readOnlyEnvironment)) {
+      if (key.startsWith("MLM_RELEASE_APP_")) delete readOnlyEnvironment[key];
+    }
     const result = spawnSync("gh", ["api", ...args], {
       encoding: "utf8",
-      env: this.#environment,
+      env: readOnlyEnvironment,
       maxBuffer: MAX_RESPONSE_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -1870,14 +1934,13 @@ class GitHubApi {
     return this.#run(args, "GraphQL Production deployments");
   }
 
-  async patch(endpoint, body) {
-    if (!isRecord(body) || body.force !== false || typeof body.sha !== "string") {
-      fail("PATCH body is not the exact non-force ref update");
-    }
-    return this.#run(
-      ["--method", "PATCH", endpoint, "-f", `sha=${body.sha}`, "-F", "force=false"],
-      `PATCH ${endpoint}`,
-    );
+  async advanceRef(repository, expectedOldSha, verifiedSha) {
+    advanceWebsiteProductionRefFromEnvironment({
+      environment: this.#environment,
+      expectedOldSha,
+      repository,
+      verifiedSha,
+    });
   }
 }
 
@@ -1885,6 +1948,15 @@ function writeReceiptOutput(receipt) {
   const output = process.env.GITHUB_OUTPUT;
   if (typeof output !== "string" || output.length === 0) fail("GITHUB_OUTPUT is unavailable");
   appendFileSync(output, `receipt=${encodeProviderReceipt(receipt)}\n`, { encoding: "utf8" });
+}
+
+function writeNamedOutput(name, value) {
+  const output = process.env.GITHUB_OUTPUT;
+  if (typeof output !== "string" || output.length === 0) fail("GITHUB_OUTPUT is unavailable");
+  if (!/^[a-z][a-z0-9_]*$/u.test(name) || !/^[A-Za-z0-9_-]+$/u.test(value)) {
+    fail("workflow output name or value is malformed");
+  }
+  appendFileSync(output, `${name}=${value}\n`, { encoding: "utf8" });
 }
 
 async function main() {
@@ -1897,6 +1969,11 @@ async function main() {
       verifiedSha: process.env.VERIFIED_SHA,
     });
     writeReceiptOutput(receipt);
+    const parsed = parseBaselineReceipt(receipt);
+    writeNamedOutput(
+      "advance_required",
+      parsed.refSha === parsed.verifiedSha ? "false" : "true",
+    );
     return;
   }
   if (command === "release-order") {
@@ -1936,9 +2013,25 @@ async function main() {
     });
     return;
   }
-  if (command === "promote") {
-    const receipt = await promoteWebsiteProduction({
+  if (command === "revalidate-authority") {
+    await revalidateReleaseAuthority({
       api,
+      defaultBranch: process.env.DEFAULT_BRANCH,
+      eventName: process.env.EVENT_NAME,
+      recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA,
+      repository: process.env.GITHUB_REPOSITORY,
+      verifiedSha: process.env.VERIFIED_SHA,
+      verifiedTag: process.env.VERIFIED_TAG,
+    });
+    return;
+  }
+  if (command === "promote") {
+    const expectedMode = process.env.PROMOTION_EXPECTED_MODE;
+    if (expectedMode !== "advanced" && expectedMode !== "already-exact") {
+      fail("PROMOTION_EXPECTED_MODE is not exact");
+    }
+    const promote = (promotionApi) => promoteWebsiteProduction({
+      api: promotionApi,
       baselineReceipt: decodeProviderReceipt(process.env.BASELINE_RECEIPT, "BASELINE_RECEIPT"),
       defaultBranch: process.env.DEFAULT_BRANCH,
       eventName: process.env.EVENT_NAME,
@@ -1947,6 +2040,18 @@ async function main() {
       verifiedSha: process.env.VERIFIED_SHA,
       verifiedTag: process.env.VERIFIED_TAG,
     });
+    const receipt = expectedMode === "advanced"
+      ? await withReleaseAppTokenFromEnvironment(process.env, async (token) => {
+        const promotionApi = new GitHubApi({
+          ...process.env,
+          MLM_RELEASE_APP_TOKEN: token,
+        });
+        return promote(promotionApi);
+      })
+      : await promote(api);
+    if (receipt.mode !== expectedMode) {
+      fail(`promotion mode ${String(receipt.mode)} did not match ${expectedMode}`);
+    }
     writeReceiptOutput(receipt);
     return;
   }
@@ -1976,7 +2081,7 @@ async function main() {
     );
     return;
   }
-  fail("expected baseline, release-order, release validation, promote, or wait command");
+  fail("expected baseline, release-order, release validation, authority, promote, or wait command");
 }
 
 const invokedPath = process.argv[1];
