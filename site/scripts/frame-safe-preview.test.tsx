@@ -38,4 +38,10 @@ test('permits only Hraness to frame /preview while every other path stays denied
     key: 'Content-Security-Policy',
     value: expect.stringContaining("frame-ancestors 'none'"),
   });
+  expect(deniedRule?.headers).toContainEqual({
+    key: 'Content-Security-Policy',
+    value: expect.stringContaining(
+      "img-src 'self' data: https://raw.githubusercontent.com https://skills.sh https://www.skills.sh",
+    ),
+  });
 });

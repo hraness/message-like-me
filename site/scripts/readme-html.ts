@@ -45,6 +45,50 @@ function rewriteRelativeTargets(html: string): string {
   });
 }
 
+function headingText(html: string): string {
+  return decodeCharacterReferences(html.replace(/<[^>]+>/gu, ""))
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
+}
+
+function githubHeadingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Mark}\p{Number}\s_-]/gu, "")
+    .replace(/\s/gu, "-");
+}
+
+function addHeadingIds(html: string): string {
+  const occurrences = new Map<string, number>();
+  return html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/gu, (_, level: string, body: string) => {
+    const base = githubHeadingSlug(headingText(body));
+    if (base === "") throw new Error("README contains a heading without a stable fragment ID");
+    const occurrence = occurrences.get(base) ?? 0;
+    occurrences.set(base, occurrence + 1);
+    const id = occurrence === 0 ? base : `${base}-${occurrence}`;
+    return `<h${level} id="${id}">${body}</h${level}>`;
+  });
+}
+
+function assertFragmentsResolve(html: string): void {
+  const ids = new Set(Array.from(html.matchAll(/\sid="([^"]+)"/gu), ([, id]) => id));
+  for (const [, encodedFragment] of html.matchAll(/\shref="#([^"]+)"/gu)) {
+    let fragment: string;
+    try {
+      fragment = decodeURIComponent(encodedFragment);
+    } catch {
+      throw new Error(`README contains an invalid encoded fragment: ${JSON.stringify(encodedFragment)}`);
+    }
+    if (!ids.has(fragment)) {
+      throw new Error(`README fragment has no rendered heading: ${JSON.stringify(fragment)}`);
+    }
+  }
+}
+
 export function renderReadmeHtml(source: string): string {
   const html = Bun.markdown.html(source, {
     noHtmlBlocks: true,
@@ -55,5 +99,7 @@ export function renderReadmeHtml(source: string): string {
     const target = match[1];
     if (target !== undefined) assertSafeTarget(target);
   }
-  return rewriteRelativeTargets(html);
+  const rendered = rewriteRelativeTargets(addHeadingIds(html));
+  assertFragmentsResolve(rendered);
+  return rendered;
 }

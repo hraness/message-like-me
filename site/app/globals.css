@@ -573,6 +573,11 @@ nav.message-like-me-ask-ai + footer {
 .readme-heading h2 { font-size: clamp(38px, 4.6vw, 64px); }
 .readme-heading a { display: inline-block; font-size: 13px; font-weight: 720; margin-top: 28px; text-decoration: underline; text-underline-offset: 4px; }
 .readme-prose { font-size: 15px; line-height: 1.72; min-width: 0; }
+.readme-prose h1 {
+  font-size: clamp(44px, 6vw, 82px);
+  line-height: 0.96;
+  margin: 0 0 32px;
+}
 .readme-prose h2 {
   border-top: 1px solid var(--line);
   font-family: "Nebula Sans", ui-sans-serif, system-ui, sans-serif;
@@ -586,6 +591,7 @@ nav.message-like-me-ask-ai + footer {
 .readme-prose h3 { font-size: 17px; margin: 34px 0 12px; }
 .readme-prose p { color: #393a34; }
 .readme-prose a { text-decoration: underline; text-underline-offset: 3px; }
+.readme-prose img { height: auto; max-width: 100%; }
 .readme-prose pre {
   background: #252620;
   color: #f6f1e7;
@@ -678,6 +684,7 @@ nav.message-like-me-ask-ai + footer {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.document-source-chrome { padding-bottom: 32px; }
 .document-prose {
   margin-left: clamp(0px, 22vw, 310px);
   max-width: 820px;

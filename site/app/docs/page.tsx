@@ -15,11 +15,12 @@ export default function DocsPage() {
   return (
     <DocumentPage
       eyebrow="Documentation"
-      title="Use Message Like Me"
+      title="Message Like Me"
       summary={description}
       path="/docs"
       html={readmeHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/README.md`}
+      sourceOwnsHeading
     />
   );
 }

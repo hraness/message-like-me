@@ -15,11 +15,12 @@ export default function MethodologyPage() {
   return (
     <DocumentPage
       eyebrow="Methodology"
-      title="Measure behavior without claiming identity"
+      title="Methodology"
       summary={description}
       path="/methodology"
       html={methodologyHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/docs/methodology.md`}
+      sourceOwnsHeading
     />
   );
 }

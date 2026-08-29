@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderReadmeHtml } from "./readme-html.ts";
-import { siteDocumentSource, SKILLS_SH_README_BADGE } from "./sync-readme.ts";
+import { siteDocumentSource } from "./sync-readme.ts";
 
 describe("renderReadmeHtml", () => {
   test("escapes raw HTML and rewrites repository-relative links and images", () => {
@@ -32,17 +32,31 @@ describe("renderReadmeHtml", () => {
 
   test("allows HTTPS, mail, root-relative, and fragment targets", () => {
     expect(() => renderReadmeHtml(
-      "[web](https://example.com) [mail](mailto:test@example.com) [root](/x) [part](#x)",
+      "# X\n\n[web](https://example.com) [mail](mailto:test@example.com) [root](/x) [part](#x)",
     )).not.toThrow();
   });
 
-  test("keeps the repository badge out of the CSP-bound site document", () => {
-    const readme = `# Message Like Me\n\n${SKILLS_SH_README_BADGE}\n\nIntroduction.\n`;
-    expect(siteDocumentSource("README.md", readme)).toBe(
-      "# Message Like Me\n\nIntroduction.\n",
-    );
+  test("preserves the complete README source for the site", () => {
+    const readme = "# Message Like Me\n\n![Architecture](docs/architecture.png)\n";
+    expect(siteDocumentSource("README.md", readme)).toBe(readme);
     expect(siteDocumentSource("docs/research.md", readme)).toBe(readme);
-    expect(() => siteDocumentSource("README.md", "# Message Like Me\n"))
-      .toThrow("official skills.sh repository badge");
+    expect(() => siteDocumentSource("", readme)).toThrow("must not be empty");
+  });
+
+  test("adds GitHub-compatible unique heading IDs and validates fragments", () => {
+    const html = renderReadmeHtml([
+      "# Product",
+      "",
+      "[First](#install-and-first-run) [Second](#install-and-first-run-1)",
+      "",
+      "## Install and first run",
+      "",
+      "## Install and first run",
+    ].join("\n"));
+    expect(html).toContain('<h1 id="product">Product</h1>');
+    expect(html).toContain('<h2 id="install-and-first-run">Install and first run</h2>');
+    expect(html).toContain('<h2 id="install-and-first-run-1">Install and first run</h2>');
+    expect(() => renderReadmeHtml("# Product\n\n[Missing](#missing)"))
+      .toThrow('README fragment has no rendered heading: "missing"');
   });
 });
