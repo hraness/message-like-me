@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.1
+
+- Bind the native WhatsApp producer guidance to immutable Wrench v0.16.3 and
+  official Wacli v0.15.0 across the README, v2 contract, informational site,
+  machine-readable discovery, and installed Message Like Me skill. Keep the
+  separately verified Beeper path pinned to Wrench v0.16.1 and Beeper CLI
+  v0.6.2.
+- Treat Wacli reaction state as unobservable instead of absent. Wrench v0.16.3
+  omits every reaction-shaped row and reports `reaction-state-unproven` when it
+  encounters one because Wacli v0.15.0 cannot durably distinguish active from
+  removed state.
+- Preserve the general v2 reaction artifact and strict parser while explaining
+  that an empty reaction artifact from the checked producer does not establish
+  that no reactions occurred. Add cross-surface regression coverage for the
+  producer coordinates and this evidence limit.
+
 ## 0.8.0
 
 - Add `ensoul prepare` as an offline, bounded source adapter for the owner or

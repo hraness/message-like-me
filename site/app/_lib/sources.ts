@@ -17,6 +17,8 @@ export const WHATSAPP_COMPATIBILITY = Object.freeze({
   sourceTransformVersion: '1.0.0',
   providerId: 'whatsapp',
   network: 'whatsapp',
+  reactionState: 'unproven-omitted',
+  reactionWarning: 'reaction-state-unproven',
 } as const);
 
 export type SourceIconName = 'archive' | 'contacts' | 'messages' | 'wrench';
@@ -75,7 +77,7 @@ export const SUPPORTED_SOURCES = Object.freeze([
     summary:
       'Ingests one native WhatsApp linked-device observation exported by Wrench through official Wacli.',
     boundary:
-      'Wrench alone owns Wacli, authentication, synchronization, and provider operations; Message Like Me verifies the finished bundle and never sends.',
+      'Wrench omits reaction-shaped rows when Wacli cannot prove current state; Message Like Me verifies the finished bundle and never operates WhatsApp.',
     command: 'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
     icon: 'wrench',
   },

@@ -6214,7 +6214,7 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.8.0";
+var MESSAGE_LIKE_ME_VERSION = "0.8.1";
 
 // src/x-archive.ts
 import { createHash as createHash4 } from "crypto";

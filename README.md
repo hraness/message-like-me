@@ -37,7 +37,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install both bundled Agent Skills:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.8.0
+bun add --global github:hraness/message-like-me#v0.8.1
 messagelikeme skill install
 ```
 
@@ -84,7 +84,7 @@ visibly instead of being treated as current.
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
 | Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
-| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.3 with official Wacli 0.15.0 | Message Like Me verifies the finished bundle; Wrench alone owns Wacli, linked-device authentication, synchronization, and provider operations. |
+| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.3 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Add private local history
@@ -245,6 +245,14 @@ broadcast, newsletter, credential, session-database, provider-URL, and media-byt
 surfaces are excluded. The complete contract is in
 [local message bundle v2](docs/local-message-bundle-v2.md).
 
+Wacli v0.15.0 may retain an earlier emoji after a reaction is removed, so its
+local rows cannot prove current active reaction state. Wrench v0.16.3 omits
+every reaction-shaped row and adds `reaction-state-unproven` when it observes
+one. An empty `reactions.ndjson` from this producer means reaction behavior was
+unobservable, not that the account had no reactions. The v2 wire contract keeps
+its fixed reaction artifact and strict parser for proven records; Message Like
+Me imports only the records the producer can establish.
+
 If a Beeper WhatsApp source already represents the same exact account, inspect
 the redacted source inventory and name it explicitly:
 
@@ -260,7 +268,8 @@ unambiguous shared text-message fingerprint. Groups, bodyless messages, names,
 phone suffixes, and approximate timestamps cannot prove equivalence. Both
 provenances and source-unique history remain. Native Wacli evidence becomes the
 preferred `whatsappJid` route; its proven Beeper duplicate remains
-`evidence-only` with reason `superseded-route`.
+`evidence-only` with reason `superseded-route`. This producer supplies no native
+reaction records, so overlap cannot reconcile reaction state.
 
 Optionally enrich and join direct conversations with private identities from
 macOS Contacts:
