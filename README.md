@@ -4,18 +4,20 @@
 drafting messages that sound like you.**
 
 Message Like Me turns private local messaging history into deterministic
-conversation metrics, bounded study packets, and reusable style profiles. It
+conversation metrics, bounded study packets, reusable style profiles, and
+privacy-bounded evidence packets for the Ensoul person-model workflow. It
 reads native iMessage history, caller-owned X data archives, and strict local
 source bundles, including multi-account Beeper and native WhatsApp exports
-produced through Wrench. Its Agent Skill teaches Codex, Claude, and other coding
-agents how to interpret those local artifacts and draft unsent replies in your
-voice.
+produced through Wrench. Its copied Message Like Me and Ensoul Agent Skills
+teach Codex, Claude, and other coding agents how to interpret those local
+artifacts, build revisable evidence-led person models, and draft unsent replies
+in your voice.
 
 The CLI has no model integration. It does not authenticate with a product
 account, invoke Wrench, Beeper, Wacli, or WhatsApp, send messages, or operate
 Messages. An agent you already run may use the installed skill for semantic
-analysis and drafting; opening a study packet exposes its bounded excerpts to
-that agent environment.
+analysis and drafting; opening a study or Ensoul packet exposes its bounded
+excerpts to that agent environment.
 
 This is an evidence layer for relationship-aware drafting. It does not train a
 model, represent your identity, infer your beliefs, or claim that a draft is
@@ -35,16 +37,18 @@ historical style.
 ## Install
 
 Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
-release from GitHub, then install the Agent Skill:
+release from GitHub, then install both bundled Agent Skills:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.7.0
+bun add --global github:hraness/message-like-me#v0.8.0
 messagelikeme skill install
 ```
 
-Start a new agent session after installing the skill. The default target is
-Codex at user scope. Other supported targets and project-local installation are
-available explicitly:
+Start a new agent session after installing the `message-like-me` and `ensoul`
+skills. The command preflights and stages both copied directories before it
+publishes either one; `--force` replaces both as one installation. The default
+target is Codex at user scope. Other supported targets and project-local
+installation are available explicitly:
 
 ```sh
 messagelikeme skill install --target claude
@@ -390,6 +394,64 @@ must observe that message before it can affect
 style, tempo, reply, or interaction evidence. The pure contract is exported as
 `@hraness/message-like-me/agentic-messaging-v1` for checked local consumers.
 
+## Prepare bounded evidence for Ensoul
+
+Message Like Me can prepare one private messages-source packet for the local
+owner or for one exact direct person resolved through Contacts:
+
+```sh
+messagelikeme ensoul prepare <contact-id> \
+  --subject owner \
+  --output /absolute/private/path/owner-messages.json \
+  --after 2026-01-01T00:00:00.000Z \
+  --before 2026-08-01T00:00:00.000Z \
+  --limit 24 \
+  --json
+
+messagelikeme ensoul prepare <person-id> \
+  --subject contact \
+  --output /absolute/private/path/contact-messages.json \
+  --limit 24 \
+  --json
+```
+
+For `--subject contact`, `<person-id>` must be the exact `person_…` result of
+`contacts resolve`; a conversation alias, unmatched direct thread, or group is
+rejected. Both subject modes reject groups and multi-participant scopes. The
+packet carries only redacted scope shape, conversation count, and sorted service
+labels; private names, participants, and provider coordinates remain excluded.
+The adapter reverses owner-relative direction before selection, so a
+contact's attributable incoming prose becomes `authorRole: subject` and the
+owner's prose becomes `counterpart`. For `--subject owner`, outgoing prose is
+the subject's and incoming prose is counterpart context. A consumer must never
+learn counterpart text as the subject's voice.
+
+The output is a strict `ensoul.source-packet.v1` artifact with payload schema
+`ensoul.messages-source.v1`. It reuses the deterministic diverse response
+selector and the same default limits as a study packet: 24 response examples,
+4 KiB per text body, 12 messages per direction per example, and 256 KiB total.
+It excludes system events, retractions, reactions, attachments, names, handles,
+and raw provider coordinates. Scope revisions, inclusive `--after`, exclusive
+`--before`, selection omissions, byte truncation, transport status, strong
+source authorship, content and record digests, and the RFC 8785 canonical packet
+digest remain explicit. The scope and body-free receipt also preserve the exact
+session and burst gaps used for selection, including defaults. Selected prose
+records use `contentRole: original`. Records sharing one pseudonymous
+`provenance.runId` belong to the same selected
+response context. Consumers must not join records from different context IDs.
+The normalized sources cannot detect pasted quotations, forwarding, or AI
+assistance; the packet states that limitation, and visible quoted material must
+remain contextual. No claims are derived in the adapter.
+
+The packet is written once to an explicit owner-controlled mode-`0600` physical
+path; it never appears on stdout, and an existing file or symlink is not
+overwritten. The JSON receipt contains only pseudonymous IDs, revisions,
+digests, counts, bounds, and the chosen path. Run `$ensoul` in an agent
+environment you authorize, open only that packet, and preserve its limitations.
+Private messages are situated evidence, not a transcript, identity proof,
+consent record, relationship label, diagnosis, stable personality, or authority
+to impersonate or act for anyone.
+
 ## Build a style profile
 
 Aggregate metrics cannot explain why a short burst works in one context or why
@@ -404,9 +466,9 @@ messagelikeme study prepare <contact-id> \
   --json
 ```
 
-`study prepare`, `evaluate prepare`, and `handoff prepare` are the only commands
-that write bounded message bodies outside the private database. Their outputs
-are mode `0600`.
+`study prepare`, `ensoul prepare`, `evaluate prepare`, and `handoff prepare` are
+the only commands that write bounded message bodies outside the private
+database. Their outputs are mode `0600`.
 A study packet contains incoming context and outgoing responses selected across
 different response shapes; it is not a full transcript export. By default,
 each body is capped at 4 KiB, each example keeps at most 12 text messages per
@@ -509,6 +571,9 @@ messagelikeme inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst
 messagelikeme study prepare CONTACT_ID --output FILE [--limit N]
   [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
   [--session-gap N] [--burst-gap N] [--json]
+messagelikeme ensoul prepare CONTACT_ID --subject owner|contact --output FILE
+  [--limit N] [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+  [--session-gap N] [--burst-gap N] [--json]
 messagelikeme evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
   --prompt-output FILE --reference-output FILE [--before ISO_TIMESTAMP]
   [--limit N] [--session-gap N] [--burst-gap N] [--json]
@@ -543,13 +608,13 @@ Place global `--data-dir PATH` before the command.
 - Stable source, contact, participant, conversation, message, and reaction IDs
   are derived with a private per-install HMAC key. Pseudonymous IDs are not
   encryption.
-- Aggregate commands omit bodies and private labels. Study packets, evaluation
-  packets, and agent handoffs are bounded, explicit body-bearing exports.
+- Aggregate commands omit bodies and private labels. Study, Ensoul, evaluation,
+  and handoff packets are bounded, explicit body-bearing exports.
 - Message text never goes to a Message Like Me server. There is no service,
   account, auth flow, analytics client, or network-backed model call.
-- Opening a study packet makes its bounded excerpts visible to the agent
-  environment already running the skill. Use an agent environment whose data
-  handling you accept; the CLI cannot make a hosted agent local.
+- Opening a study or Ensoul packet makes its bounded excerpts visible to the
+  agent environment already running the skill. Use an agent environment whose
+  data handling you accept; the CLI cannot make a hosted agent local.
 - Public fixtures are synthetic. Private corpora, profiles, packets, and drafts
   do not belong in Git, issues, logs, packages, or examples.
 - A draft is never sent.
@@ -592,6 +657,20 @@ import {
 Those subpaths own the exact readonly wire types, compatibility constants,
 safety bounds, digest helpers, and pure strict parsers. Importing it performs no
 filesystem or network work.
+
+The Ensoul messages-source builder and readonly wire types have a separate
+dependency-free subpath. The matching strict JSON Schema is bundled at
+`schema/ensoul-messages-source-v1.schema.json`:
+
+```ts
+import {
+  buildEnsoulMessagesSourcePacketV1,
+  ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID,
+} from "@hraness/message-like-me/ensoul-source-v1"
+import type {
+  EnsoulMessagesSourcePacketV1,
+} from "@hraness/message-like-me/ensoul-source-v1"
+```
 
 The library does not start the CLI, inspect Messages, Contacts, or an X archive,
 connect to a network, or send a draft merely because it is imported.

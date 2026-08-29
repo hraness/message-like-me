@@ -49,6 +49,7 @@ const TEXT_EXTENSIONS = new Set([
   ".lock",
   ".md",
   ".mjs",
+  ".py",
   ".sh",
   ".toml",
   ".ts",

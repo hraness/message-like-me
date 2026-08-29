@@ -196,3 +196,26 @@ export async function writeSyntheticXArchive(
   await chmod(path, 0o600);
   return realpath(path);
 }
+
+export async function writeSyntheticXPublicPostsArchive(parent: string): Promise<string> {
+  const path = join(parent, "synthetic-x-public-posts-archive.zip");
+  const posts = assignment("tweets", [
+    { tweet: {
+      id_str: "9001",
+      created_at: "2026-08-01T12:00:00.000Z",
+      full_text: "synthetic public post",
+    } },
+    { tweet: {
+      id_str: "9002",
+      created_at: "2026-08-02T12:00:00.000Z",
+      full_text: "synthetic public reply",
+      in_reply_to_status_id_str: "8000",
+    } },
+  ]);
+  await writeFile(path, storedZip([
+    { name: "data/tweets.js", value: posts },
+    { name: "data/direct-messages.js", value: "PRIVATE_DM_CANARY" },
+  ]), { mode: 0o600 });
+  await chmod(path, 0o600);
+  return realpath(path);
+}

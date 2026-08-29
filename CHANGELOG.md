@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.0
+
+- Add `ensoul prepare` as an offline, bounded source adapter for the owner or
+  one exact direct AddressBook person scope. Rebase direction onto the selected
+  subject so only that person's messages carry `authorRole: subject` and all
+  other prose remains counterpart context.
+- Emit strict `ensoul.source-packet.v1` artifacts with the
+  `ensoul.messages-source.v1` payload identity, scope and corpus revisions,
+  inclusive/exclusive time bounds, explicit sample budgets and limitations,
+  deterministic record identities, canonical record and packet digests, and no
+  derived person claims.
+- Preserve exact session/burst selection parameters, redacted direct-scope and
+  service context, and pseudonymous response-context linkage. Reject groups and
+  multi-participant owner scopes instead of flattening ambiguous counterpart
+  authorship.
+- Keep message bodies inside an explicit no-overwrite mode-`0600` export while
+  stdout receives only a body-free receipt. Continue excluding retractions,
+  system events, reactions, attachments, group-contact attribution, private
+  labels, handles, and raw provider coordinates.
+- Bundle the copied Ensoul skill alongside Message Like Me without a runtime
+  dependency. Skill installation preflights and stages both complete skill
+  directories before publishing either one, with rollback on failure.
+- Publish the strict adapter schema, TypeScript subpath, package smoke coverage,
+  synthetic attribution and privacy tests, and operator guidance for using
+  private messages as revisable evidence rather than consent, identity proof,
+  sensitive-trait inference, or impersonation authority.
+
 ## 0.7.0
 
 - Add the strict dependency-free local message bundle v2 contract for native

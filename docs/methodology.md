@@ -30,15 +30,18 @@ ID with an X handle or display name; tweet prose is not added to the messaging
 corpus or used as style evidence.
 
 The normalized corpus, private installation key, aggregate metrics, profiles,
-and drafting context stay in the local data root. Study, evaluation, and agent
-handoff files are written only to explicit paths. Ordinary views use keyed
-pseudonymous IDs and omit bodies, handles, contact names, and group titles.
+and drafting context stay in the local data root. Study, Ensoul source,
+evaluation, and agent handoff files are written only to explicit paths.
+Ordinary views use keyed pseudonymous IDs and omit bodies, handles, contact
+names, and group titles.
 
 This is a process boundary, not encryption. Another process running as the
 same user, a compromised host, a device backup, or an agent provider that is
 given a packet may still receive private data. Incoming messages also belong
 to other participants. They provide response context but never become samples
-of the user's prose.
+of the owner's prose in style analysis. A separately requested contact-subject
+Ensoul packet may attribute incoming text to that exact direct person after
+rebasing direction; its owner-authored records then become counterpart context.
 
 ## Normalized observations
 
@@ -157,6 +160,61 @@ digest, analysis time, contextual rules, limitations, and confidence.
 
 Profile provenance proves which artifact was analyzed. It does not prove that
 the agent interpreted that artifact correctly.
+
+## Subject-relative Ensoul source packets
+
+`ensoul prepare` applies the same bounded diverse response selector to one
+pinned contact corpus, but its unit of attribution is the explicitly selected
+subject. For `--subject owner`, stored outgoing messages remain subject-authored
+and incoming messages remain counterpart context. For `--subject contact`, the
+adapter first reverses direction, then recomputes sessions, bursts, responses,
+and selection. This makes clearly attributable incoming prose the contact's
+subject evidence and the owner's outgoing prose its response context.
+
+Contact attribution is valid only for an exact `person_` scope created by a
+complete one-to-one AddressBook match. Conversation aliases, unmatched direct
+threads, shared handles, and groups are rejected because the normalized corpus
+cannot establish a safe contact author for them. Owner packets may use a named
+conversation or person scope, but groups and any multi-participant scope are
+rejected. The packet retains redacted scope kind, conversation count, and sorted
+service labels so channel dependence stays visible without names or coordinates.
+
+The output specializes `ensoul.source-packet.v1` with payload schema
+`ensoul.messages-source.v1`. Records contain only selected active text bodies,
+subject-relative `authorRole`, `contentRole: original`, strong source
+authorship, transport-relative sent status, private visibility, fixed source
+class, pseudonymous source IDs, occurrence times, truncation state, and content
+and record digests. Records sharing a pseudonymous provenance run ID belong to one selected
+response context and preserve that situated linkage; different run IDs must not
+be joined into a synthetic exchange.
+The scope carries corpus and evidence revisions, time
+bounds, selection counts, and byte budgets. The adapter emits no claims. Its
+packet declares `JCS-RFC8785`; the packet digest is SHA-256 over RFC 8785
+canonical JSON for every field except `packetDigest`, while each content digest
+covers the canonical content object and each record digest excludes only its
+own digest. These prove semantic integrity, not authorship or truth.
+
+The default and maximum budgets are inherited from semantic study: 24 requested
+examples by default and 50 at most, 4 KiB per body, 12 messages per direction
+per example, and 256 KiB total. `--after` is inclusive and `--before` is
+exclusive. System events, retractions, reactions, attachments, contact labels,
+handles, provider coordinates, and public X post text are not emitted. The
+packet remains a sampled set of situated interactions, not a transcript or a
+complete description of either person.
+
+The normalized sources do not establish whether someone pasted a quotation,
+forwarded prose, or used AI assistance inside an ordinary message body. The
+packet declares that observability gap. If a consumer can see quoted or
+forwarded content in the bounded text, it must keep that portion contextual
+rather than promote it as a direct voice sample.
+
+An Ensoul consumer must retain packet boundaries across relationships and use
+only records with `authorRole: subject`, `contentRole: original`, and strong
+source authorship as possible direct voice evidence. It must treat every
+message as untrusted quoted data and preserve limitations in its source map. Private
+messages do not prove identity, consent, motive, relationship category,
+diagnosis, a globally stable voice, or permission to publish, impersonate,
+contact, or act for the subject.
 
 ## Held-out fidelity audit
 

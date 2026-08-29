@@ -59,12 +59,15 @@
   Reject symlinks and foreign-owned sensitive files.
 - Derive stable local identifiers with the per-install HMAC key. Ordinary
   aggregate views omit bodies, handles, contact names, and group titles. Only
-  `study prepare`, `evaluate prepare`, and `handoff prepare` may write bounded
-  body-bearing artifacts outside the private database, and they write mode
-  `0600` to explicit paths.
-- Count only outgoing user-authored messages as style evidence. Incoming
-  messages supply response context. Preserve body provenance, explicit reply
-  targets, and tapbacks as distinct data.
+  `study prepare`, `ensoul prepare`, `evaluate prepare`, and `handoff prepare`
+  may write bounded body-bearing artifacts outside the private database, and
+  they write mode `0600` to explicit paths.
+- Count only outgoing user-authored messages as owner-style evidence. Incoming
+  messages supply response context. A contact-subject Ensoul packet is the
+  narrow exception: require an exact direct AddressBook `person_` scope, rebase
+  direction before selection, and mark owner prose as counterpart context.
+  Preserve body provenance, explicit reply targets, and tapbacks as distinct
+  data.
 - Keep the CLI and library free of network access, AI-provider calls,
   authentication, accounts, telemetry, analytics, synchronization, and message
   sending. The installed Agent Skill supplies semantic analysis and unsent
@@ -75,7 +78,8 @@
 - Keep CLI commands namespaced as `ingest imessage|x-archive|contacts|bundle`,
   `sources list|show`,
   `contacts list|show|resolve`,
-  `inspect tempo|sessions`, `study prepare`, `profile apply|show|export`,
+  `inspect tempo|sessions`, `study prepare`, `ensoul prepare`,
+  `profile apply|show|export`,
   `routes list`, `handoff prepare|verify|record`, `handoffs show`, plus `init`,
   `context`, `skill`, and `doctor`. Machine-readable commands support stable
   JSON stdout; diagnostics use stderr and typed exit codes.
@@ -85,12 +89,20 @@
 - Version corpus, metrics, study-packet, and profile schemas explicitly.
   Preserve exact corpus-revision and packet-SHA provenance so stale profiles
   fail visibly.
+- Keep `ensoul.source-packet.v1` and the stricter
+  `ensoul.messages-source.v1` payload explicit. Record and packet identities,
+  RFC 8785 content, record, and packet digests, subject-relative authorship,
+  content role, source-owner transport status, revisions, bounds, omissions,
+  and limitations must remain deterministic and body-bearing packets must never
+  appear on stdout.
 - Use synthetic public fixtures only. Add focused examples for parser, SQL,
   path, CLI, and privacy boundaries, plus property tests for ordering,
   partitioning, conservation, identity, canonicalization, and round trips.
-- Keep `skills/message-like-me/SKILL.md` concise and route conditional detail to
-  its linked references. Keep the bundled skill installable for Codex, Claude,
-  and generic Agent Skill targets at user or project scope.
+- Keep `skills/message-like-me/SKILL.md` and the copied `skills/ensoul/SKILL.md`
+  concise and route conditional detail to their linked references. The copied
+  Ensoul skill is vendored source, never a runtime dependency. Preflight and
+  install both complete skills for Codex, Claude, and generic Agent Skill
+  targets at user or project scope without leaving a partial pair.
 - Treat a stable `v*` tag matching `package.json` on `main` as a release request.
   Publish only after the complete check and packed-consumer gate pass. Keep
   GitHub Releases immutable and distribute through GitHub rather than npm.
