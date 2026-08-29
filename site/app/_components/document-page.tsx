@@ -13,6 +13,7 @@ export function DocumentPage({
   path,
   html,
   sourceUrl,
+  sourceOwnsHeading = false,
 }: {
   eyebrow: string;
   title: string;
@@ -20,6 +21,7 @@ export function DocumentPage({
   path: CanonicalPagePath;
   html: string;
   sourceUrl: string;
+  sourceOwnsHeading?: boolean;
 }) {
   const articleJsonLd = {
     '@context': 'https://schema.org',
@@ -48,12 +50,19 @@ export function DocumentPage({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(articleJsonLd) }}
         />
-        <header className="document-hero">
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
-          <p>{summary}</p>
-          <a href={sourceUrl}>View the checked source ↗</a>
-        </header>
+        {sourceOwnsHeading ? (
+          <div className="document-hero document-source-chrome">
+            <p className="eyebrow">{eyebrow}</p>
+            <a href={sourceUrl}>View the checked source ↗</a>
+          </div>
+        ) : (
+          <header className="document-hero">
+            <p className="eyebrow">{eyebrow}</p>
+            <h1>{title}</h1>
+            <p>{summary}</p>
+            <a href={sourceUrl}>View the checked source ↗</a>
+          </header>
+        )}
         <article
           className="readme-prose document-prose"
           dangerouslySetInnerHTML={{ __html: html }}

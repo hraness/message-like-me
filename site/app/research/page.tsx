@@ -15,11 +15,12 @@ export default function ResearchPage() {
   return (
     <DocumentPage
       eyebrow="Research"
-      title="Evidence, prior art, and limits"
+      title="Research and prior art"
       summary={description}
       path="/research"
       html={researchHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/docs/research.md`}
+      sourceOwnsHeading
     />
   );
 }

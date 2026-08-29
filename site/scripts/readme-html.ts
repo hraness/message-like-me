@@ -1,4 +1,5 @@
 const REPOSITORY_BLOB_ROOT = "https://github.com/hraness/message-like-me/blob/main/";
+const REPOSITORY_RAW_ROOT = "https://raw.githubusercontent.com/hraness/message-like-me/main/";
 
 function decodeCharacterReferences(value: string): string {
   return value
@@ -24,8 +25,12 @@ function assertSafeTarget(encodedTarget: string): void {
   }
 }
 
-function rewriteRelativeLinks(html: string): string {
-  return html.replace(/href="([^"]*)"/gu, (attribute, target: string) => {
+function rewriteRelativeTargets(html: string): string {
+  return html.replace(/(href|src)="([^"]*)"/gu, (
+    attribute,
+    name: "href" | "src",
+    target: string,
+  ) => {
     assertSafeTarget(target);
     if (
       target === ""
@@ -35,8 +40,53 @@ function rewriteRelativeLinks(html: string): string {
     ) {
       return attribute;
     }
-    return `href="${REPOSITORY_BLOB_ROOT}${target}"`;
+    const root = name === "src" ? REPOSITORY_RAW_ROOT : REPOSITORY_BLOB_ROOT;
+    return `${name}="${root}${target}"`;
   });
+}
+
+function headingText(html: string): string {
+  return decodeCharacterReferences(html.replace(/<[^>]+>/gu, ""))
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
+}
+
+function githubHeadingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Mark}\p{Number}\s_-]/gu, "")
+    .replace(/\s/gu, "-");
+}
+
+function addHeadingIds(html: string): string {
+  const occurrences = new Map<string, number>();
+  return html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/gu, (_, level: string, body: string) => {
+    const base = githubHeadingSlug(headingText(body));
+    if (base === "") throw new Error("README contains a heading without a stable fragment ID");
+    const occurrence = occurrences.get(base) ?? 0;
+    occurrences.set(base, occurrence + 1);
+    const id = occurrence === 0 ? base : `${base}-${occurrence}`;
+    return `<h${level} id="${id}">${body}</h${level}>`;
+  });
+}
+
+function assertFragmentsResolve(html: string): void {
+  const ids = new Set(Array.from(html.matchAll(/\sid="([^"]+)"/gu), ([, id]) => id));
+  for (const [, encodedFragment] of html.matchAll(/\shref="#([^"]+)"/gu)) {
+    let fragment: string;
+    try {
+      fragment = decodeURIComponent(encodedFragment);
+    } catch {
+      throw new Error(`README contains an invalid encoded fragment: ${JSON.stringify(encodedFragment)}`);
+    }
+    if (!ids.has(fragment)) {
+      throw new Error(`README fragment has no rendered heading: ${JSON.stringify(fragment)}`);
+    }
+  }
 }
 
 export function renderReadmeHtml(source: string): string {
@@ -49,5 +99,7 @@ export function renderReadmeHtml(source: string): string {
     const target = match[1];
     if (target !== undefined) assertSafeTarget(target);
   }
-  return rewriteRelativeLinks(html);
+  const rendered = rewriteRelativeTargets(addHeadingIds(html));
+  assertFragmentsResolve(rendered);
+  return rendered;
 }

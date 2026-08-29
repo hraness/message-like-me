@@ -6,7 +6,7 @@ const contentSecurityPolicy = [
   "connect-src 'self'",
   "font-src 'self' data:",
   "form-action 'none'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://raw.githubusercontent.com https://skills.sh https://www.skills.sh",
   "object-src 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
