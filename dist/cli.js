@@ -1,15 +1,6 @@
 #!/usr/bin/env bun
 // @bun
 import {
-  CONTACTS_SCHEMA_VERSION,
-  CORPUS_SCHEMA_VERSION,
-  EVALUATION_PACKET_SCHEMA_VERSION,
-  LEGACY_PROFILE_SCHEMA_VERSION,
-  METRICS_SCHEMA_VERSION,
-  PROFILE_SCHEMA_VERSION,
-  STUDY_PACKET_SCHEMA_VERSION
-} from "./cli-xdjykpdj.js";
-import {
   LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS,
   LOCAL_MESSAGE_BUNDLE_V1_LIMITS,
   LOCAL_MESSAGE_BUNDLE_V1_SCHEMA_VERSION,
@@ -17,7 +8,6 @@ import {
   parseLocalMessageBundleV1Manifest,
   parseLocalMessageBundleV1Record
 } from "./cli-ry4128kz.js";
-import"./cli-qqafdvz9.js";
 import {
   LOCAL_MESSAGE_BUNDLE_V2_LIMITS,
   LOCAL_MESSAGE_BUNDLE_V2_SCHEMA_VERSION,
@@ -26,7 +16,6 @@ import {
   parseLocalMessageBundleV2Record,
   parseLocalMessageBundleV2WhatsAppJid
 } from "./cli-bs3db5jr.js";
-import"./cli-kw20gkk3.js";
 import {
   AGENTIC_MESSAGING_V1_LIMITS,
   AgenticMessagingV1ContractError,
@@ -39,6 +28,20 @@ import {
   parseWrenchMessagingReceiptBindingV1,
   wrenchMessagingTurnDigestV1
 } from "./cli-d7qv38ab.js";
+import {
+  CONTACTS_SCHEMA_VERSION,
+  CORPUS_SCHEMA_VERSION,
+  LEGACY_PROFILE_SCHEMA_VERSION,
+  PROFILE_SCHEMA_VERSION,
+  analyzeContact,
+  buildEnsoulMessagesSourcePacketV1,
+  buildEvaluationPackets,
+  buildStudyPacket,
+  ensoulSubjectMessages,
+  ensoulSubjectReactions
+} from "./cli-x1qncxm7.js";
+import"./cli-qqafdvz9.js";
+import"./cli-kw20gkk3.js";
 import {
   canonicalJson,
   prettyJson,
@@ -96,6 +99,7 @@ var VALUE_OPTIONS = new Set([
   "request",
   "scope",
   "session-gap",
+  "subject",
   "target",
   "draft",
   "wrench-context",
@@ -2368,835 +2372,6 @@ function readIMessageDatabase(path, options) {
   }
 }
 
-// src/metrics.ts
-import { createHash as createHash3 } from "crypto";
-var DEFAULT_SESSION_GAP_SECONDS = 8 * 60 * 60;
-var DEFAULT_BURST_GAP_SECONDS = 5 * 60;
-var DEFAULT_STUDY_LIMIT = 12;
-var MAX_STUDY_LIMIT = 50;
-var DEFAULT_MAX_STUDY_TEXT_BYTES = 4 * 1024;
-var MAX_STUDY_TEXT_BYTES = 64 * 1024;
-var DEFAULT_MAX_STUDY_MESSAGES_PER_DIRECTION = 12;
-var MAX_STUDY_MESSAGES_PER_DIRECTION = 64;
-var DEFAULT_MAX_STUDY_PACKET_BODY_BYTES = 256 * 1024;
-var MAX_STUDY_PACKET_BODY_BYTES = 1024 * 1024;
-var MAX_GAP_SECONDS = 30 * 24 * 60 * 60;
-function digest(namespace, parts) {
-  const hash = createHash3("sha256");
-  hash.update(`message-like-me\x00${namespace}\x00`, "utf8");
-  for (const part of parts)
-    hash.update(`${part.length}:`, "utf8").update(part, "utf8");
-  return hash.digest("hex");
-}
-function round(value, places = 6) {
-  if (!Number.isFinite(value))
-    return 0;
-  const scale = 10 ** places;
-  return Math.round((value + Number.EPSILON) * scale) / scale;
-}
-function boundedGap(value, fallback, label) {
-  const result = value ?? fallback;
-  if (!Number.isSafeInteger(result) || result < 1 || result > MAX_GAP_SECONDS) {
-    throw new Error(`${label} must be an integer from 1 through ${MAX_GAP_SECONDS}`);
-  }
-  return result;
-}
-function boundedStudyInteger(value, fallback, maximum, label) {
-  const result = value ?? fallback;
-  if (!Number.isSafeInteger(result) || result < 1 || result > maximum) {
-    throw new Error(`${label} must be an integer from 1 through ${maximum}`);
-  }
-  return result;
-}
-function canonicalTimestamp(value, label) {
-  const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString() !== value) {
-    throw new Error(`${label} must be a canonical ISO timestamp`);
-  }
-  return milliseconds;
-}
-function optionalCanonicalTimestamp(value, label) {
-  if (value === undefined || value === null)
-    return Object.freeze({ value: null, milliseconds: null });
-  return Object.freeze({ value, milliseconds: canonicalTimestamp(value, label) });
-}
-function orderedMessages(messages) {
-  if (!Array.isArray(messages))
-    throw new Error("messages must be an array");
-  const ids = new Set;
-  const rows = messages.map((message, index) => {
-    if (typeof message.id !== "string" || message.id.length === 0) {
-      throw new Error(`messages[${index}].id must be non-empty text`);
-    }
-    if (ids.has(message.id))
-      throw new Error(`messages repeat ID ${message.id}`);
-    ids.add(message.id);
-    if (!Number.isSafeInteger(message.sourceRowId) || message.sourceRowId < 1) {
-      throw new Error(`messages[${index}].sourceRowId must be a positive safe integer`);
-    }
-    if (message.direction !== "incoming" && message.direction !== "outgoing") {
-      throw new Error(`messages[${index}].direction is invalid`);
-    }
-    return Object.freeze({
-      message,
-      milliseconds: canonicalTimestamp(message.sentAt, `messages[${index}].sentAt`)
-    });
-  });
-  rows.sort((left, right) => left.milliseconds - right.milliseconds || left.message.sourceRowId - right.message.sourceRowId || left.message.id.localeCompare(right.message.id, "en-US"));
-  return Object.freeze(rows);
-}
-function timelineEligible(message) {
-  return message.retractedAt === null && (message.kind === "text" || message.kind === "attachment" || message.kind === "reaction");
-}
-function responseEligible(message) {
-  return message.retractedAt === null && (message.kind === "text" || message.kind === "attachment");
-}
-function secondsBetween(left, right) {
-  return Math.max(0, (right.milliseconds - left.milliseconds) / 1000);
-}
-function sessionsFor(messages, corpusRevision, contactId, gapSeconds) {
-  const eligible = messages.filter(({ message }) => timelineEligible(message));
-  if (eligible.length === 0)
-    return Object.freeze([]);
-  const groups = [];
-  for (const row of eligible) {
-    const current = groups.at(-1);
-    const prior = current?.at(-1);
-    if (current === undefined || prior === undefined || secondsBetween(prior, row) > gapSeconds) {
-      groups.push([row]);
-    } else
-      current.push(row);
-  }
-  return Object.freeze(groups.map((group, index) => {
-    const first = group[0];
-    const last = group.at(-1);
-    const incomingCount = group.filter(({ message }) => message.direction === "incoming").length;
-    const outgoingCount = group.length - incomingCount;
-    return Object.freeze({
-      id: digest("session", [corpusRevision, contactId, String(index), ...group.map(({ message }) => message.id)]),
-      startedAt: first.message.sentAt,
-      endedAt: last.message.sentAt,
-      durationSeconds: round((last.milliseconds - first.milliseconds) / 1000, 3),
-      messageCount: group.length,
-      incomingCount,
-      outgoingCount,
-      startedBy: first.message.direction,
-      endedBy: last.message.direction
-    });
-  }));
-}
-function blocksFor(messages, burstGapSeconds) {
-  const eligible = messages.filter(({ message }) => responseEligible(message));
-  const blocks = [];
-  for (const row of eligible) {
-    const current = blocks.at(-1);
-    const prior = current?.messages.at(-1);
-    if (current === undefined || prior === undefined || current.direction !== row.message.direction || secondsBetween(prior, row) > burstGapSeconds) {
-      blocks.push({ direction: row.message.direction, messages: [row] });
-    } else
-      current.messages.push(row);
-  }
-  return Object.freeze(blocks.map((block) => Object.freeze({
-    direction: block.direction,
-    messages: Object.freeze(block.messages)
-  })));
-}
-function burstsFor(messages, sessions, corpusRevision, contactId, burstGapSeconds) {
-  const result = [];
-  for (const session of sessions) {
-    const started = Date.parse(session.startedAt);
-    const ended = Date.parse(session.endedAt);
-    const sessionRows = messages.filter((row) => row.milliseconds >= started && row.milliseconds <= ended && responseEligible(row.message));
-    for (const block of blocksFor(sessionRows, burstGapSeconds)) {
-      const first = block.messages[0];
-      const last = block.messages.at(-1);
-      const messageIds = Object.freeze(block.messages.map(({ message }) => message.id));
-      const textBodies = bodies(block.messages);
-      result.push(Object.freeze({
-        metric: Object.freeze({
-          id: digest("burst", [corpusRevision, contactId, session.id, ...messageIds]),
-          sessionId: session.id,
-          startedAt: first.message.sentAt,
-          endedAt: last.message.sentAt,
-          durationSeconds: round((last.milliseconds - first.milliseconds) / 1000, 3),
-          direction: block.direction,
-          messageIds,
-          messageCount: block.messages.length,
-          textMessageCount: textBodies.length,
-          characters: textBodies.reduce((total, body) => total + characterCount(body), 0)
-        }),
-        messages: block.messages
-      }));
-    }
-  }
-  return Object.freeze(result);
-}
-function bodies(rows) {
-  return rows.flatMap(({ message }) => message.retractedAt === null && message.kind === "text" && message.body !== null ? [message.body] : []);
-}
-function characterCount(value) {
-  return Array.from(value).length;
-}
-function questionCount(value) {
-  return value.match(/[?\uFF1F]/gu)?.length ?? 0;
-}
-function containsMultiItemBody(value) {
-  const lines = value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
-  if (lines.length >= 2)
-    return true;
-  return /(?:^|\n)\s*(?:[-*\u2022]|[0-9]{1,2}[.)])\s+/u.test(value) || (value.match(/;/gu)?.length ?? 0) >= 2;
-}
-function responseTags(incoming, outgoing, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount, replyUnavailableCount) {
-  const tags = new Set;
-  tags.add(outgoing.length === 1 ? "single-message-response" : "multi-message-response");
-  if (incoming.length > 1)
-    tags.add("multi-incoming");
-  if (incomingQuestions > 1)
-    tags.add("multi-question");
-  if (incoming.length > 1 || incomingQuestions > 1 || bodies(incoming).some(containsMultiItemBody))
-    tags.add("multi-item-context");
-  if (explicitReplyCount > 0)
-    tags.add("explicit-reply");
-  if (replyUnavailableCount > 0)
-    tags.add("reply-unavailable");
-  if (latencySeconds <= 60)
-    tags.add("fast-response");
-  else if (latencySeconds >= 60 * 60)
-    tags.add("delayed-response");
-  if (outgoingCharacters <= 40)
-    tags.add("short-response");
-  else if (outgoingCharacters >= 280)
-    tags.add("long-response");
-  if (bodies(outgoing).some((body) => body.includes(`
-`)))
-    tags.add("multiline-response");
-  return Object.freeze([...tags].sort((left, right) => left.localeCompare(right, "en-US")));
-}
-function responsesFor(bursts, corpusRevision, contactId) {
-  const result = [];
-  const bySession = new Map;
-  for (const burst of bursts) {
-    const values = bySession.get(burst.metric.sessionId) ?? [];
-    values.push(burst);
-    bySession.set(burst.metric.sessionId, values);
-  }
-  for (const sessionBursts of bySession.values()) {
-    for (let index = 0;index + 1 < sessionBursts.length; index += 1) {
-      const incoming = sessionBursts[index];
-      const outgoing = sessionBursts[index + 1];
-      if (incoming.metric.direction !== "incoming" || outgoing.metric.direction !== "outgoing")
-        continue;
-      const incomingBodies = bodies(incoming.messages);
-      const outgoingBodies = bodies(outgoing.messages);
-      const incomingCharacters = incomingBodies.reduce((total, body) => total + characterCount(body), 0);
-      const outgoingCharacters = outgoingBodies.reduce((total, body) => total + characterCount(body), 0);
-      const incomingQuestions = incomingBodies.reduce((total, body) => total + questionCount(body), 0);
-      const explicitReplyCount = outgoing.messages.filter(({ message }) => message.replyState === "explicit").length;
-      const replyEligibleCount = outgoing.messages.filter(({ message }) => message.replyState !== "unavailable").length;
-      const replyUnavailableCount = outgoing.messages.length - replyEligibleCount;
-      const lastIncoming = incoming.messages.at(-1);
-      const firstOutgoing = outgoing.messages[0];
-      const latencySeconds = round(secondsBetween(lastIncoming, firstOutgoing), 3);
-      const incomingIds = Object.freeze(incoming.messages.map(({ message }) => message.id));
-      const outgoingIds = Object.freeze(outgoing.messages.map(({ message }) => message.id));
-      result.push(Object.freeze({
-        id: digest("response", [corpusRevision, contactId, ...incomingIds, "->", ...outgoingIds]),
-        startedAt: incoming.messages[0].message.sentAt,
-        incomingMessageIds: incomingIds,
-        outgoingMessageIds: outgoingIds,
-        incomingCount: incoming.messages.length,
-        outgoingCount: outgoing.messages.length,
-        incomingCharacters,
-        outgoingCharacters,
-        incomingQuestions,
-        latencySeconds,
-        explicitReplyCount,
-        replyEligibleCount,
-        replyUnavailableCount,
-        tags: responseTags(incoming.messages, outgoing.messages, latencySeconds, incomingQuestions, outgoingCharacters, explicitReplyCount, replyUnavailableCount)
-      }));
-    }
-  }
-  return Object.freeze(result);
-}
-function quantile(values, proportion) {
-  if (values.length === 0)
-    return null;
-  const sorted = [...values].sort((left, right) => left - right);
-  if (sorted.length === 1)
-    return sorted[0];
-  const position = (sorted.length - 1) * proportion;
-  const lower = Math.floor(position);
-  const upper = Math.ceil(position);
-  const low = sorted[lower];
-  const high = sorted[upper];
-  return round(low + (high - low) * (position - lower), 6);
-}
-function numericDistribution(values) {
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return Object.freeze({
-    total,
-    mean: values.length === 0 ? 0 : round(total / values.length),
-    median: quantile(values, 0.5) ?? 0,
-    p90: quantile(values, 0.9) ?? 0
-  });
-}
-function wordCount(value) {
-  return value.match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)?.length ?? 0;
-}
-function firstLetterIsLowercase(value) {
-  const letter = value.match(/\p{L}/u)?.[0];
-  return letter !== undefined && letter.toLocaleLowerCase() === letter && letter.toLocaleUpperCase() !== letter;
-}
-function ratio(count, total) {
-  return total === 0 ? 0 : round(count / total);
-}
-function surfaceMetrics(messages) {
-  const outgoing = messages.flatMap(({ message }) => message.retractedAt === null && message.direction === "outgoing" && message.kind === "text" && message.body !== null ? [message.body] : []);
-  const characters = outgoing.map(characterCount);
-  const words = outgoing.map(wordCount);
-  return Object.freeze({
-    outgoingTextMessages: outgoing.length,
-    characters: numericDistribution(characters),
-    words: numericDistribution(words),
-    lowercaseStartsRatio: ratio(outgoing.filter(firstLetterIsLowercase).length, outgoing.length),
-    terminalPunctuationRatio: ratio(outgoing.filter((body) => /[.!?\u2026\u3002\uFF01\uFF1F]$/u.test(body.trimEnd())).length, outgoing.length),
-    questionRatio: ratio(outgoing.filter((body) => /[?\uFF1F]/u.test(body)).length, outgoing.length),
-    exclamationRatio: ratio(outgoing.filter((body) => /[!\uFF01]/u.test(body)).length, outgoing.length),
-    emojiMessageRatio: ratio(outgoing.filter((body) => /\p{Extended_Pictographic}/u.test(body)).length, outgoing.length),
-    multilineRatio: ratio(outgoing.filter((body) => /\r?\n/u.test(body)).length, outgoing.length)
-  });
-}
-function tempoMetrics(messages, responses) {
-  const latencies = responses.map((response) => response.latencySeconds);
-  const bundles = responses.map((response) => response.outgoingCount);
-  const outgoingText = messages.filter(({ message }) => message.retractedAt === null && message.direction === "outgoing" && message.kind === "text" && message.body !== null);
-  const replyEligible = outgoingText.filter(({ message }) => message.replyState !== "unavailable");
-  const explicitReplies = replyEligible.filter(({ message }) => message.replyState === "explicit").length;
-  const replyUnavailable = outgoingText.length - replyEligible.length;
-  return Object.freeze({
-    responseEpisodes: responses.length,
-    responseLatencySeconds: Object.freeze({
-      median: quantile(latencies, 0.5),
-      p25: quantile(latencies, 0.25),
-      p75: quantile(latencies, 0.75),
-      p90: quantile(latencies, 0.9)
-    }),
-    outgoingMessagesPerResponse: Object.freeze({
-      mean: bundles.length === 0 ? 0 : round(bundles.reduce((sum, value) => sum + value, 0) / bundles.length),
-      median: quantile(bundles, 0.5) ?? 0,
-      p90: quantile(bundles, 0.9) ?? 0,
-      singleRatio: ratio(bundles.filter((value) => value === 1).length, bundles.length),
-      multiRatio: ratio(bundles.filter((value) => value > 1).length, bundles.length)
-    }),
-    explicitReplyMessages: explicitReplies,
-    explicitReplyEligibleMessages: replyEligible.length,
-    explicitReplyUnavailableMessages: replyUnavailable,
-    explicitReplyRatio: replyEligible.length === 0 ? null : ratio(explicitReplies, replyEligible.length),
-    multiIncomingEpisodes: responses.filter((response) => response.incomingCount > 1).length,
-    multiQuestionEpisodes: responses.filter((response) => response.incomingQuestions > 1).length
-  });
-}
-function reactionMetrics(messages, facts) {
-  const legacy = messages.filter(({ message }) => message.kind === "reaction" && message.retractedAt === null).map(({ message }) => ({
-    id: message.id,
-    externalId: message.sourceGuid,
-    targetExternalId: message.replyToSourceGuid ?? message.sourceGuid,
-    conversationId: message.conversationId,
-    direction: message.direction,
-    body: "unknown",
-    reactedAt: message.sentAt,
-    state: "active"
-  }));
-  const merged = new Map(legacy.map((fact) => [fact.id, fact]));
-  for (const fact of facts ?? [])
-    merged.set(fact.id, fact);
-  const source = [...merged.values()];
-  const ids = new Set;
-  const reactions = source.filter((fact, index) => {
-    if (typeof fact.id !== "string" || fact.id.length === 0 || ids.has(fact.id) || fact.direction !== null && fact.direction !== "incoming" && fact.direction !== "outgoing" || typeof fact.body !== "string" || fact.state !== "active" && fact.state !== "removed")
-      throw new Error(`reactionFacts[${index}] is invalid`);
-    if (fact.reactedAt !== null)
-      canonicalTimestamp(fact.reactedAt, `reactionFacts[${index}].reactedAt`);
-    ids.add(fact.id);
-    return fact.state === "active";
-  });
-  const outgoing = reactions.filter(({ direction }) => direction === "outgoing").length;
-  const incoming = reactions.filter(({ direction }) => direction === "incoming").length;
-  const unknownDirection = reactions.length - outgoing - incoming;
-  const outgoingActions = messages.filter(({ message }) => message.kind !== "reaction" && message.direction === "outgoing" && timelineEligible(message)).length + outgoing;
-  return Object.freeze({
-    total: reactions.length,
-    incoming,
-    outgoing,
-    unknownDirection,
-    dated: reactions.filter(({ reactedAt }) => reactedAt !== null).length,
-    undated: reactions.filter(({ reactedAt }) => reactedAt === null).length,
-    outgoingReactionRatio: ratio(outgoing, outgoingActions)
-  });
-}
-function analyzeContact(messages, corpusRevision, contactId, options = {}) {
-  if (typeof corpusRevision !== "string" || !/^[a-f0-9]{64}$/u.test(corpusRevision)) {
-    throw new Error("corpusRevision must be a lowercase SHA-256 digest");
-  }
-  if (typeof contactId !== "string" || contactId.length < 1 || contactId.length > 256) {
-    throw new Error("contactId must be bounded non-empty text");
-  }
-  const sessionGapSeconds = boundedGap(options.sessionGapSeconds, DEFAULT_SESSION_GAP_SECONDS, "sessionGapSeconds");
-  const burstGapSeconds = boundedGap(options.burstGapSeconds, DEFAULT_BURST_GAP_SECONDS, "burstGapSeconds");
-  if (burstGapSeconds > sessionGapSeconds) {
-    throw new Error("burstGapSeconds cannot exceed sessionGapSeconds");
-  }
-  const ordered = orderedMessages(messages);
-  const byConversation = new Map;
-  for (const row of ordered) {
-    const rows = byConversation.get(row.message.conversationId) ?? [];
-    rows.push(row);
-    byConversation.set(row.message.conversationId, rows);
-  }
-  const sessions = [];
-  const burstRecords = [];
-  const responses = [];
-  for (const conversationId of [...byConversation.keys()].sort((left, right) => left.localeCompare(right, "en-US"))) {
-    const rows = Object.freeze(byConversation.get(conversationId));
-    const conversationSessions = sessionsFor(rows, corpusRevision, contactId, sessionGapSeconds);
-    const conversationBursts = burstsFor(rows, conversationSessions, corpusRevision, contactId, burstGapSeconds);
-    sessions.push(...conversationSessions);
-    burstRecords.push(...conversationBursts);
-    responses.push(...responsesFor(conversationBursts, corpusRevision, contactId));
-  }
-  sessions.sort((left, right) => left.startedAt.localeCompare(right.startedAt, "en-US") || left.id.localeCompare(right.id, "en-US"));
-  burstRecords.sort((left, right) => left.metric.startedAt.localeCompare(right.metric.startedAt, "en-US") || left.metric.id.localeCompare(right.metric.id, "en-US"));
-  responses.sort((left, right) => left.startedAt.localeCompare(right.startedAt, "en-US") || left.id.localeCompare(right.id, "en-US"));
-  return Object.freeze({
-    schemaVersion: METRICS_SCHEMA_VERSION,
-    corpusRevision,
-    contactId,
-    firstMessageAt: ordered[0]?.message.sentAt ?? null,
-    lastMessageAt: ordered.at(-1)?.message.sentAt ?? null,
-    messageCount: ordered.length,
-    incomingCount: ordered.filter(({ message }) => message.direction === "incoming").length,
-    outgoingCount: ordered.filter(({ message }) => message.direction === "outgoing").length,
-    textMessageCount: ordered.filter(({ message }) => message.retractedAt === null && message.kind === "text" && message.body !== null).length,
-    sessionGapSeconds,
-    burstGapSeconds,
-    sessions: Object.freeze(sessions),
-    bursts: Object.freeze(burstRecords.map(({ metric }) => metric)),
-    responses: Object.freeze(responses),
-    tempo: tempoMetrics(ordered, responses),
-    reactions: reactionMetrics(ordered, options.reactionFacts),
-    surface: surfaceMetrics(ordered)
-  });
-}
-function studyMessages(response, byId, maximumTextBytes, maximumMessagesPerDirection) {
-  const resolveRows = (ids, expectedDirection) => {
-    const rows2 = [];
-    let missing = 0;
-    for (const id of ids) {
-      const row = byId.get(id);
-      if (row === undefined) {
-        missing += 1;
-        continue;
-      }
-      if (row.message.direction !== expectedDirection) {
-        throw new Error(`response ${response.id} references a message with the wrong direction`);
-      }
-      rows2.push(row);
-    }
-    return Object.freeze({ rows: Object.freeze(rows2), missing });
-  };
-  const incoming = resolveRows(response.incomingMessageIds, "incoming");
-  const outgoing = resolveRows(response.outgoingMessageIds, "outgoing");
-  const incomingText = incoming.rows.filter(({ message }) => message.kind === "text" && message.body !== null);
-  const outgoingText = outgoing.rows.filter(({ message }) => message.kind === "text" && message.body !== null);
-  const selectedIncoming = incomingText.slice(-maximumMessagesPerDirection);
-  const selectedOutgoing = outgoingText.slice(0, maximumMessagesPerDirection);
-  const rows = [...selectedIncoming, ...selectedOutgoing].sort((left, right) => left.milliseconds - right.milliseconds || left.message.sourceRowId - right.message.sourceRowId || left.message.id.localeCompare(right.message.id, "en-US"));
-  const started = canonicalTimestamp(response.startedAt, `response ${response.id} startedAt`);
-  const messages = Object.freeze(rows.map(({ message, milliseconds }) => {
-    const sourceBody = message.body;
-    const sourceBodyBytes = Buffer.byteLength(sourceBody, "utf8");
-    let body = sourceBody;
-    let emittedBodyBytes = sourceBodyBytes;
-    if (sourceBodyBytes > maximumTextBytes) {
-      let bytes = 0;
-      let bounded = "";
-      for (const symbol of sourceBody) {
-        const symbolBytes = Buffer.byteLength(symbol, "utf8");
-        if (bytes + symbolBytes > maximumTextBytes)
-          break;
-        bounded += symbol;
-        bytes += symbolBytes;
-      }
-      body = bounded;
-      emittedBodyBytes = bytes;
-    }
-    return Object.freeze({
-      id: message.id,
-      offsetSeconds: round((milliseconds - started) / 1000, 3),
-      direction: message.direction,
-      body,
-      sourceBodyBytes,
-      emittedBodyBytes,
-      bodyTruncated: emittedBodyBytes < sourceBodyBytes,
-      explicitReply: message.replyState === "unavailable" ? null : message.replyState === "explicit"
-    });
-  }));
-  const eligibleRows = [...incomingText, ...outgoingText];
-  const coverage = Object.freeze({
-    source: Object.freeze({
-      responseIncomingMessages: response.incomingMessageIds.length,
-      responseOutgoingMessages: response.outgoingMessageIds.length,
-      eligibleIncomingTextMessages: incomingText.length,
-      eligibleOutgoingTextMessages: outgoingText.length,
-      bodyBytes: eligibleRows.reduce((total, { message }) => total + Buffer.byteLength(message.body, "utf8"), 0)
-    }),
-    emitted: Object.freeze({
-      incomingTextMessages: selectedIncoming.length,
-      outgoingTextMessages: selectedOutgoing.length,
-      bodyBytes: messages.reduce((total, message) => total + message.emittedBodyBytes, 0),
-      truncatedMessages: messages.filter(({ bodyTruncated }) => bodyTruncated).length
-    }),
-    omitted: Object.freeze({
-      missingMessages: incoming.missing + outgoing.missing,
-      nonTextOrBodylessMessages: incoming.rows.length + outgoing.rows.length - eligibleRows.length,
-      incomingTextMessagesByDirectionLimit: incomingText.length - selectedIncoming.length,
-      outgoingTextMessagesByDirectionLimit: outgoingText.length - selectedOutgoing.length
-    })
-  });
-  return Object.freeze({ messages, coverage });
-}
-function responseSignature(response) {
-  const latency = response.latencySeconds <= 60 ? "immediate" : response.latencySeconds < 15 * 60 ? "minutes" : response.latencySeconds < 60 * 60 ? "hour" : "delayed";
-  const length = response.outgoingCharacters <= 40 ? "short" : response.outgoingCharacters >= 280 ? "long" : "medium";
-  return [
-    response.incomingCount > 1 ? "multi-in" : "single-in",
-    response.outgoingCount > 1 ? "multi-out" : "single-out",
-    response.incomingQuestions > 1 ? "multi-q" : response.incomingQuestions === 1 ? "one-q" : "no-q",
-    response.explicitReplyCount > 0 ? "reply" : response.replyUnavailableCount > 0 ? "reply-unknown" : "no-reply",
-    latency,
-    length
-  ].join(":");
-}
-function candidatesFor(ordered, metrics, maximumTextBytes, maximumMessagesPerDirection) {
-  const byId = new Map(ordered.map((row) => [row.message.id, row]));
-  const candidates = [];
-  let omittedWithoutBidirectionalText = 0;
-  for (const response of metrics.responses) {
-    const study = studyMessages(response, byId, maximumTextBytes, maximumMessagesPerDirection);
-    const hasIncoming = study.messages.some((message) => message.direction === "incoming");
-    const hasOutgoing = study.messages.some((message) => message.direction === "outgoing");
-    if (!hasIncoming || !hasOutgoing) {
-      omittedWithoutBidirectionalText += 1;
-      continue;
-    }
-    const example = Object.freeze({
-      id: response.id,
-      tags: response.tags,
-      startedAt: response.startedAt,
-      messages: study.messages,
-      coverage: study.coverage
-    });
-    candidates.push(Object.freeze({
-      response,
-      example,
-      bodyBytes: study.coverage.emitted.bodyBytes,
-      signature: responseSignature(response),
-      informationCharacters: study.messages.reduce((total, message) => total + characterCount(message.body), 0),
-      milliseconds: Date.parse(response.startedAt)
-    }));
-  }
-  return Object.freeze({
-    candidates: Object.freeze(candidates),
-    responseCandidates: metrics.responses.length,
-    omittedWithoutBidirectionalText
-  });
-}
-function selectDiverse(candidates, limit, maximumBodyBytes) {
-  if (candidates.length === 0) {
-    return Object.freeze({
-      examples: Object.freeze([]),
-      omittedByExampleLimit: 0,
-      omittedByTotalBodyBytes: 0,
-      omittedExampleBodyBytes: 0
-    });
-  }
-  const frequencies = new Map;
-  for (const candidate of candidates) {
-    for (const tag of candidate.example.tags)
-      frequencies.set(tag, (frequencies.get(tag) ?? 0) + 1);
-  }
-  const remaining = [...candidates];
-  const selected = [];
-  const coveredTags = new Set;
-  const coveredSignatures = new Set;
-  let emittedBodyBytes = 0;
-  let omittedByTotalBodyBytes = 0;
-  let omittedExampleBodyBytes = 0;
-  const minimumTime = Math.min(...remaining.map((candidate) => candidate.milliseconds));
-  const maximumTime = Math.max(...remaining.map((candidate) => candidate.milliseconds));
-  const timeSpan = Math.max(1, maximumTime - minimumTime);
-  while (selected.length < limit && remaining.length > 0) {
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    for (const [index, candidate] of remaining.entries()) {
-      const newTags = candidate.example.tags.filter((tag) => !coveredTags.has(tag));
-      const rareTagScore = candidate.example.tags.reduce((total, tag) => total + 1 / (frequencies.get(tag) ?? 1), 0);
-      const signatureScore = coveredSignatures.has(candidate.signature) ? 0 : 1;
-      const temporalDistance = selected.length === 0 ? 0 : Math.min(...selected.map((prior) => Math.abs(candidate.milliseconds - prior.milliseconds) / timeSpan));
-      const information = Math.min(candidate.informationCharacters, 1000) / 1000;
-      const score = newTags.length * 1e4 + signatureScore * 2000 + rareTagScore * 100 + temporalDistance * 50 + information;
-      const best = remaining[bestIndex];
-      if (score > bestScore || score === bestScore && (candidate.milliseconds < best.milliseconds || candidate.milliseconds === best.milliseconds && candidate.example.id < best.example.id)) {
-        bestIndex = index;
-        bestScore = score;
-      }
-    }
-    const chosen = remaining.splice(bestIndex, 1)[0];
-    if (chosen.bodyBytes > maximumBodyBytes - emittedBodyBytes) {
-      omittedByTotalBodyBytes += 1;
-      omittedExampleBodyBytes += chosen.bodyBytes;
-      continue;
-    }
-    selected.push(chosen);
-    emittedBodyBytes += chosen.bodyBytes;
-    coveredSignatures.add(chosen.signature);
-    for (const tag of chosen.example.tags)
-      coveredTags.add(tag);
-  }
-  return Object.freeze({
-    examples: Object.freeze(selected.map((candidate) => candidate.example)),
-    omittedByExampleLimit: remaining.length,
-    omittedByTotalBodyBytes,
-    omittedExampleBodyBytes
-  });
-}
-function aggregateStudyMetrics(metrics) {
-  return Object.freeze({
-    schemaVersion: metrics.schemaVersion,
-    firstMessageAt: metrics.firstMessageAt,
-    lastMessageAt: metrics.lastMessageAt,
-    messageCount: metrics.messageCount,
-    incomingCount: metrics.incomingCount,
-    outgoingCount: metrics.outgoingCount,
-    textMessageCount: metrics.textMessageCount,
-    sessionGapSeconds: metrics.sessionGapSeconds,
-    burstGapSeconds: metrics.burstGapSeconds,
-    sessionCount: metrics.sessions.length,
-    burstCount: metrics.bursts.length,
-    responseCount: metrics.responses.length,
-    tempo: Object.freeze({
-      responseEpisodes: metrics.tempo.responseEpisodes,
-      responseLatencySeconds: Object.freeze({
-        median: metrics.tempo.responseLatencySeconds.median,
-        p25: metrics.tempo.responseLatencySeconds.p25,
-        p75: metrics.tempo.responseLatencySeconds.p75,
-        p90: metrics.tempo.responseLatencySeconds.p90
-      }),
-      outgoingMessagesPerResponse: Object.freeze({
-        mean: metrics.tempo.outgoingMessagesPerResponse.mean,
-        median: metrics.tempo.outgoingMessagesPerResponse.median,
-        p90: metrics.tempo.outgoingMessagesPerResponse.p90,
-        singleRatio: metrics.tempo.outgoingMessagesPerResponse.singleRatio,
-        multiRatio: metrics.tempo.outgoingMessagesPerResponse.multiRatio
-      }),
-      explicitReplyMessages: metrics.tempo.explicitReplyMessages,
-      explicitReplyEligibleMessages: metrics.tempo.explicitReplyEligibleMessages,
-      explicitReplyUnavailableMessages: metrics.tempo.explicitReplyUnavailableMessages,
-      explicitReplyRatio: metrics.tempo.explicitReplyRatio,
-      multiIncomingEpisodes: metrics.tempo.multiIncomingEpisodes,
-      multiQuestionEpisodes: metrics.tempo.multiQuestionEpisodes
-    }),
-    reactions: Object.freeze({
-      total: metrics.reactions.total,
-      incoming: metrics.reactions.incoming,
-      outgoing: metrics.reactions.outgoing,
-      unknownDirection: metrics.reactions.unknownDirection,
-      dated: metrics.reactions.dated,
-      undated: metrics.reactions.undated,
-      outgoingReactionRatio: metrics.reactions.outgoingReactionRatio
-    }),
-    surface: Object.freeze({
-      outgoingTextMessages: metrics.surface.outgoingTextMessages,
-      characters: Object.freeze({
-        total: metrics.surface.characters.total,
-        mean: metrics.surface.characters.mean,
-        median: metrics.surface.characters.median,
-        p90: metrics.surface.characters.p90
-      }),
-      words: Object.freeze({
-        total: metrics.surface.words.total,
-        mean: metrics.surface.words.mean,
-        median: metrics.surface.words.median,
-        p90: metrics.surface.words.p90
-      }),
-      lowercaseStartsRatio: metrics.surface.lowercaseStartsRatio,
-      terminalPunctuationRatio: metrics.surface.terminalPunctuationRatio,
-      questionRatio: metrics.surface.questionRatio,
-      exclamationRatio: metrics.surface.exclamationRatio,
-      emojiMessageRatio: metrics.surface.emojiMessageRatio,
-      multilineRatio: metrics.surface.multilineRatio
-    })
-  });
-}
-function buildStudyPacket(messages, metrics, options = {}) {
-  const limit = options.limit ?? DEFAULT_STUDY_LIMIT;
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_STUDY_LIMIT) {
-    throw new Error(`study packet limit must be an integer from 1 through ${MAX_STUDY_LIMIT}`);
-  }
-  const maximumTextBytes = boundedStudyInteger(options.maxTextBytesPerMessage, DEFAULT_MAX_STUDY_TEXT_BYTES, MAX_STUDY_TEXT_BYTES, "maxTextBytesPerMessage");
-  const maximumMessagesPerDirection = boundedStudyInteger(options.maxMessagesPerDirectionPerExample, DEFAULT_MAX_STUDY_MESSAGES_PER_DIRECTION, MAX_STUDY_MESSAGES_PER_DIRECTION, "maxMessagesPerDirectionPerExample");
-  const maximumBodyBytes = boundedStudyInteger(options.maxTotalBodyBytes, DEFAULT_MAX_STUDY_PACKET_BODY_BYTES, MAX_STUDY_PACKET_BODY_BYTES, "maxTotalBodyBytes");
-  const generatedAt = options.generatedAt ?? new Date().toISOString();
-  canonicalTimestamp(generatedAt, "generatedAt");
-  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
-  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
-    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
-  }
-  const after = optionalCanonicalTimestamp(options.evidenceWindow?.after, "evidenceWindow.after");
-  const before = optionalCanonicalTimestamp(options.evidenceWindow?.before, "evidenceWindow.before");
-  if (after.milliseconds !== null && before.milliseconds !== null && after.milliseconds >= before.milliseconds)
-    throw new Error("evidenceWindow.after must be earlier than evidenceWindow.before");
-  const afterMilliseconds = after.milliseconds;
-  const beforeMilliseconds = before.milliseconds;
-  const ordered = orderedMessages(messages).filter(({ milliseconds }) => (afterMilliseconds === null || milliseconds >= afterMilliseconds) && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
-  const candidateSet = candidatesFor(ordered, metrics, maximumTextBytes, maximumMessagesPerDirection);
-  const selected = selectDiverse(candidateSet.candidates, limit, maximumBodyBytes);
-  const emittedBodyBytes = selected.examples.reduce((total, example) => total + example.coverage.emitted.bodyBytes, 0);
-  return Object.freeze({
-    schemaVersion: STUDY_PACKET_SCHEMA_VERSION,
-    generatedAt,
-    corpusRevision: metrics.corpusRevision,
-    evidenceRevision,
-    contactId: metrics.contactId,
-    evidenceWindow: Object.freeze({ after: after.value, before: before.value }),
-    metrics: aggregateStudyMetrics(metrics),
-    examples: selected.examples,
-    selection: Object.freeze({
-      algorithm: "bounded-diverse-response-contexts-v1",
-      requestedLimit: limit,
-      responseCandidates: candidateSet.responseCandidates,
-      eligibleCandidates: candidateSet.candidates.length,
-      emitted: selected.examples.length,
-      omittedWithoutBidirectionalText: candidateSet.omittedWithoutBidirectionalText,
-      omittedByExampleLimit: selected.omittedByExampleLimit,
-      omittedByTotalBodyBytes: selected.omittedByTotalBodyBytes
-    }),
-    budget: Object.freeze({
-      maxTextBytesPerMessage: maximumTextBytes,
-      maxMessagesPerDirectionPerExample: maximumMessagesPerDirection,
-      maxTotalBodyBytes: maximumBodyBytes,
-      emittedBodyBytes,
-      sourceBodyBytesInEmittedExamples: selected.examples.reduce((total, example) => total + example.coverage.source.bodyBytes, 0),
-      truncatedMessages: selected.examples.reduce((total, example) => total + example.coverage.emitted.truncatedMessages, 0),
-      omittedTextMessagesByDirectionLimit: selected.examples.reduce((total, example) => total + example.coverage.omitted.incomingTextMessagesByDirectionLimit + example.coverage.omitted.outgoingTextMessagesByDirectionLimit, 0),
-      omittedExamplesByTotalBodyBytes: selected.omittedByTotalBodyBytes,
-      omittedExampleBodyBytes: selected.omittedExampleBodyBytes
-    })
-  });
-}
-function buildEvaluationPackets(messages, metrics, options) {
-  const limit = options.limit ?? 8;
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) {
-    throw new Error("evaluation limit must be an integer from 1 through 25");
-  }
-  const maximumTextBytes = boundedStudyInteger(options.maxTextBytesPerMessage, DEFAULT_MAX_STUDY_TEXT_BYTES, MAX_STUDY_TEXT_BYTES, "maxTextBytesPerMessage");
-  const maximumMessagesPerDirection = boundedStudyInteger(options.maxMessagesPerDirectionPerCase, DEFAULT_MAX_STUDY_MESSAGES_PER_DIRECTION, MAX_STUDY_MESSAGES_PER_DIRECTION, "maxMessagesPerDirectionPerCase");
-  const maximumBodyBytes = boundedStudyInteger(options.maxTotalBodyBytes, DEFAULT_MAX_STUDY_PACKET_BODY_BYTES, MAX_STUDY_PACKET_BODY_BYTES, "maxTotalBodyBytes");
-  const generatedAt = options.generatedAt ?? new Date().toISOString();
-  canonicalTimestamp(generatedAt, "generatedAt");
-  const evidenceRevision = options.evidenceRevision ?? metrics.corpusRevision;
-  if (!/^[a-f0-9]{64}$/u.test(evidenceRevision)) {
-    throw new Error("evidenceRevision must be a lowercase SHA-256 digest");
-  }
-  const after = optionalCanonicalTimestamp(options.after, "after");
-  const before = optionalCanonicalTimestamp(options.before, "before");
-  if (after.value === null || after.milliseconds === null)
-    throw new Error("after is required");
-  if (before.milliseconds !== null && after.milliseconds >= before.milliseconds)
-    throw new Error("after must be earlier than before");
-  const afterMilliseconds = after.milliseconds;
-  const beforeMilliseconds = before.milliseconds;
-  const ordered = orderedMessages(messages).filter(({ milliseconds }) => milliseconds >= afterMilliseconds && (beforeMilliseconds === null || milliseconds < beforeMilliseconds));
-  const candidateSet = candidatesFor(ordered, metrics, maximumTextBytes, maximumMessagesPerDirection);
-  const chronological = [...candidateSet.candidates].sort((left, right) => left.milliseconds - right.milliseconds || left.example.id.localeCompare(right.example.id, "en-US"));
-  const selected = [];
-  let emittedBodyBytes = 0;
-  for (const candidate of chronological) {
-    if (selected.length >= limit)
-      break;
-    if (candidate.bodyBytes > maximumBodyBytes - emittedBodyBytes)
-      continue;
-    selected.push(candidate);
-    emittedBodyBytes += candidate.bodyBytes;
-  }
-  const caseIds = selected.map(({ example }) => example.id);
-  const evaluationId = digest("evaluation", [
-    metrics.corpusRevision,
-    evidenceRevision,
-    metrics.contactId,
-    after.value,
-    before.value ?? "",
-    ...caseIds
-  ]);
-  const promptCases = Object.freeze(selected.map(({ example }) => Object.freeze({
-    id: example.id,
-    startedAt: example.startedAt,
-    incoming: Object.freeze(example.messages.filter(({ direction }) => direction === "incoming"))
-  })));
-  const referenceCases = Object.freeze(selected.map(({ example }) => {
-    const outgoing = Object.freeze(example.messages.filter(({ direction }) => direction === "outgoing"));
-    return Object.freeze({
-      id: example.id,
-      startedAt: example.startedAt,
-      outgoing,
-      shape: Object.freeze({
-        bubbles: outgoing.length,
-        characters: outgoing.reduce((total, message) => total + characterCount(message.body), 0),
-        words: outgoing.reduce((total, message) => total + wordCount(message.body), 0),
-        explicitReplyMessages: outgoing.filter(({ explicitReply }) => explicitReply === true).length,
-        explicitReplyEligibleMessages: outgoing.filter(({ explicitReply }) => explicitReply !== null).length,
-        explicitReplyUnavailableMessages: outgoing.filter(({ explicitReply }) => explicitReply === null).length
-      })
-    });
-  }));
-  const promptMessages = promptCases.flatMap(({ incoming }) => incoming);
-  const evidenceWindow = Object.freeze({ after: after.value, before: before.value });
-  const shared = {
-    schemaVersion: EVALUATION_PACKET_SCHEMA_VERSION,
-    evaluationId,
-    generatedAt,
-    corpusRevision: metrics.corpusRevision,
-    evidenceRevision,
-    contactId: metrics.contactId,
-    evidenceWindow
-  };
-  return Object.freeze({
-    prompt: Object.freeze({
-      ...shared,
-      cases: promptCases,
-      selection: Object.freeze({
-        algorithm: "temporal-held-out-responses-v1",
-        requestedLimit: limit,
-        eligibleCandidates: candidateSet.candidates.length,
-        emitted: promptCases.length
-      }),
-      budget: Object.freeze({
-        maxTextBytesPerMessage: maximumTextBytes,
-        maxMessagesPerDirectionPerCase: maximumMessagesPerDirection,
-        maxTotalBodyBytes: maximumBodyBytes,
-        emittedBodyBytes: promptMessages.reduce((total, message) => total + message.emittedBodyBytes, 0),
-        truncatedMessages: promptMessages.filter(({ bodyTruncated }) => bodyTruncated).length
-      })
-    }),
-    reference: Object.freeze({
-      ...shared,
-      cases: referenceCases,
-      notice: "Open only after the candidate drafts for every case are fixed."
-    })
-  });
-}
-
 // src/paths.ts
 import { randomBytes } from "crypto";
 import {
@@ -3429,7 +2604,7 @@ function isoTimestamp(value, label) {
 function nullableIsoTimestamp(value, label) {
   return value === null ? null : isoTimestamp(value, label);
 }
-function digest2(value, label) {
+function digest(value, label) {
   const parsed = text(value, label, 64);
   if (!/^[a-f0-9]{64}$/u.test(parsed)) {
     throw new CliError("invalid-data", `${label} must be lowercase SHA-256`);
@@ -3585,8 +2760,8 @@ function parseStyleProfileV2(value) {
     throw new CliError("invalid-data", `profile.schemaVersion must be ${PROFILE_SCHEMA_VERSION}`);
   }
   const contactId = text(root.contactId, "profile.contactId", 128);
-  const corpusRevision = digest2(root.corpusRevision, "profile.corpusRevision");
-  const packetSha256 = digest2(root.packetSha256, "profile.packetSha256");
+  const corpusRevision = digest(root.corpusRevision, "profile.corpusRevision");
+  const packetSha256 = digest(root.packetSha256, "profile.packetSha256");
   const evidence = object(root.evidence, "profile.evidence");
   exactKeys(evidence, [
     "evidenceRevision",
@@ -3706,7 +2881,7 @@ function parseStyleProfileV2(value) {
     packetSha256,
     analyzedAt: isoTimestamp(root.analyzedAt, "profile.analyzedAt"),
     evidence: {
-      evidenceRevision: digest2(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
+      evidenceRevision: digest(evidence.evidenceRevision, "profile.evidence.evidenceRevision"),
       firstMessageAt,
       lastMessageAt,
       messageCount: nonNegativeInteger(evidence.messageCount, "profile.evidence.messageCount"),
@@ -3883,7 +3058,8 @@ async function readStablePrivateJson(path, label, maximumBytes) {
 }
 
 // src/skill-install.ts
-import { cp, lstat as lstat4, mkdir as mkdir2, realpath as realpath3, rm } from "fs/promises";
+import { randomBytes as randomBytes2 } from "crypto";
+import { cp, lstat as lstat4, mkdir as mkdir2, realpath as realpath3, rename, rm } from "fs/promises";
 import { homedir as homedir4 } from "os";
 import { dirname as dirname3, join as join5, resolve as resolve5 } from "path";
 import { fileURLToPath } from "url";
@@ -3900,38 +3076,99 @@ async function exists(path) {
 function bundledSkillPath() {
   return resolve5(dirname3(fileURLToPath(import.meta.url)), "../skills/message-like-me");
 }
+function bundledEnsoulSkillPath() {
+  return resolve5(dirname3(fileURLToPath(import.meta.url)), "../skills/ensoul");
+}
 function targetRoot(target, scope, projectDirectory) {
   const directory = target === "codex" ? ".codex" : target === "claude" ? ".claude" : ".agents";
   return scope === "user" ? join5(homedir4(), directory, "skills") : join5(resolve5(projectDirectory), directory, "skills");
 }
 async function installSkill(options) {
-  const source = bundledSkillPath();
-  if (!await exists(source))
-    throw new CliError("not-found", `Bundled skill is missing at ${source}`);
-  const sourceMetadata = await lstat4(source);
-  if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isDirectory()) {
-    throw new CliError("unsafe-path", "Bundled skill must be a physical directory");
+  const sources = Object.freeze([
+    Object.freeze({ name: "message-like-me", path: bundledSkillPath() }),
+    Object.freeze({ name: "ensoul", path: bundledEnsoulSkillPath() })
+  ]);
+  for (const source of sources) {
+    if (!await exists(source.path)) {
+      throw new CliError("not-found", `Bundled ${source.name} skill is missing at ${source.path}`);
+    }
+    const sourceMetadata = await lstat4(source.path);
+    if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isDirectory()) {
+      throw new CliError("unsafe-path", `Bundled ${source.name} skill must be a physical directory`);
+    }
   }
   const root = targetRoot(options.target, options.scope, options.projectDirectory ?? process.cwd());
   await mkdir2(root, { recursive: true, mode: 448 });
-  const destination = join5(root, "message-like-me");
-  if (await exists(destination)) {
-    const metadata = await lstat4(destination);
-    if (metadata.isSymbolicLink()) {
-      throw new CliError("unsafe-path", `Refusing to replace symbolic link ${destination}`);
+  const destinations = sources.map((source) => Object.freeze({
+    ...source,
+    destination: join5(root, source.name)
+  }));
+  for (const item of destinations) {
+    if (await exists(item.destination)) {
+      const metadata = await lstat4(item.destination);
+      if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+        throw new CliError("unsafe-path", `Refusing to replace non-directory ${item.destination}`);
+      }
+      if (!options.force) {
+        throw new CliError("conflict", `Skill already exists at ${item.destination}; pass --force to replace both bundled skills`);
+      }
     }
-    if (!options.force) {
-      throw new CliError("conflict", `Skill already exists at ${destination}; pass --force to replace it`);
-    }
-    await rm(destination, { recursive: true, force: true });
   }
-  await cp(source, destination, { recursive: true, errorOnExist: true });
-  return realpath3(destination);
+  const nonce = `${process.pid}.${randomBytes2(8).toString("hex")}`;
+  const state = destinations.map((item) => ({
+    ...item,
+    stage: join5(root, `.${item.name}.install.${nonce}`),
+    backup: join5(root, `.${item.name}.backup.${nonce}`),
+    hadExisting: false,
+    published: false
+  }));
+  try {
+    for (const item of state) {
+      await cp(item.path, item.stage, { recursive: true, errorOnExist: true });
+    }
+    for (const item of state) {
+      if (await exists(item.destination)) {
+        await rename(item.destination, item.backup);
+        item.hadExisting = true;
+      }
+    }
+    for (const item of state) {
+      await rename(item.stage, item.destination);
+      item.published = true;
+    }
+  } catch (error) {
+    for (const item of [...state].reverse()) {
+      if (item.published)
+        await rm(item.destination, { recursive: true, force: true }).catch(() => {
+          return;
+        });
+      if (item.hadExisting) {
+        await rename(item.backup, item.destination).catch(() => {
+          return;
+        });
+      }
+      await rm(item.stage, { recursive: true, force: true }).catch(() => {
+        return;
+      });
+    }
+    throw error;
+  }
+  for (const item of state) {
+    if (item.hadExisting) {
+      await rm(item.backup, { recursive: true, force: true }).catch(() => {
+        return;
+      });
+    }
+  }
+  return Object.freeze({
+    messageLikeMe: await realpath3(join5(root, "message-like-me")),
+    ensoul: await realpath3(join5(root, "ensoul"))
+  });
 }
 
 // src/store.ts
 import { Database as Database3 } from "bun:sqlite";
-import { createHash as createHash4 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import {
   closeSync,
   constants as fsConstants6,
@@ -5252,7 +4489,7 @@ function globalCorpusRevision(database) {
   }));
 }
 function sourceStateRevision(database, sourceId) {
-  const hash = createHash4("sha256");
+  const hash = createHash3("sha256");
   hash.update("message-like-me\x00stored-source-state-v1\x00", "utf8");
   const append = (kind, row) => {
     const encoded = canonicalJson(row);
@@ -6977,10 +6214,10 @@ class LocalStore {
 }
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.7.0";
+var MESSAGE_LIKE_ME_VERSION = "0.8.0";
 
 // src/x-archive.ts
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash4 } from "crypto";
 import {
   closeSync as closeSync2,
   constants,
@@ -7546,7 +6783,7 @@ var PROVIDER_ID = /^[1-9][0-9]{0,39}$/u;
 var OPAQUE_PROVIDER_ID = /^-?[0-9]{1,40}$/u;
 var HANDLE = /^[A-Za-z0-9_]{1,15}$/u;
 function sha2563(value) {
-  return createHash5("sha256").update(value).digest("hex");
+  return createHash4("sha256").update(value).digest("hex");
 }
 function plain(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -8234,17 +7471,17 @@ function parseXArchiveMembers(members) {
   };
 }
 function sha256Descriptor(descriptor, size) {
-  const digest3 = createHash5("sha256");
+  const digest2 = createHash4("sha256");
   const buffer = Buffer.allocUnsafe(8 * 1024 * 1024);
   let position = 0;
   while (position < size) {
     const count = readSync2(descriptor, buffer, 0, Math.min(buffer.length, size - position), position);
     if (count < 1)
       throw new Error("X archive changed while being hashed");
-    digest3.update(buffer.subarray(0, count));
+    digest2.update(buffer.subarray(0, count));
     position += count;
   }
-  return digest3.digest("hex");
+  return digest2.digest("hex");
 }
 function sameStat(left, right) {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs && left.mode === right.mode && left.uid === right.uid && left.nlink === right.nlink;
@@ -8271,7 +7508,7 @@ async function readXArchive(path) {
       throw new Error("X archive size is invalid");
     }
     const size = Number(before.size);
-    const digest3 = sha256Descriptor(descriptor, size);
+    const digest2 = sha256Descriptor(descriptor, size);
     const members = extractXArchiveFile(descriptor, size);
     const parsed = parseXArchiveMembers(members);
     const after = fstatSync2(descriptor, { bigint: true });
@@ -8283,7 +7520,7 @@ async function readXArchive(path) {
       format: parsed.format,
       version: parsed.version,
       archive: {
-        sha256: digest3,
+        sha256: digest2,
         manifestSha256: parsed.manifest.manifestSha256,
         sizeBytes: size,
         declaredSizeBytes: parsed.manifest.declaredSizeBytes,
@@ -9131,6 +8368,10 @@ Usage:
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
                     [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
                     [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] ensoul prepare CONTACT_ID --subject owner|contact
+                    --output FILE [--limit N]
+                    [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+                    [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
                     --prompt-output FILE --reference-output FILE [--before ISO_TIMESTAMP]
                     [--limit N] [--session-gap N] [--burst-gap N] [--json]
@@ -9229,6 +8470,15 @@ function canonicalTimestampOption(parsed, key, required = false) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
     throw new CliError("usage", `--${key} must be a canonical ISO timestamp`);
+  }
+  return value;
+}
+function ensoulSubjectOption(parsed) {
+  const value = parsed.options.get("subject");
+  if (value === undefined)
+    throw new CliError("usage", "--subject is required");
+  if (value !== "owner" && value !== "contact") {
+    throw new CliError("usage", "--subject must be owner or contact");
   }
   return value;
 }
@@ -9747,6 +8997,93 @@ async function runCommand(argv, io) {
     }
     return;
   }
+  if (command === "ensoul" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir",
+      "subject",
+      "output",
+      "limit",
+      "after",
+      "before",
+      "session-gap",
+      "burst-gap"
+    ], ["json"]);
+    const subjectRole = ensoulSubjectOption(parsed);
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    const context = await existingStore(parsed);
+    try {
+      const scope = requireContact(context.store, identifier);
+      if (scope.group || scope.participantCount !== 1) {
+        throw new CliError("usage", "Ensoul message packets require a direct one-to-one scope");
+      }
+      if (subjectRole === "contact" && (!/^person_[a-f0-9]{64}$/u.test(identifier) || scope.scopeKind !== "person" || scope.group || scope.participantCount !== 1)) {
+        throw new CliError("usage", "--subject contact requires an exact direct person_ scope resolved from Contacts");
+      }
+      const after = canonicalTimestampOption(parsed, "after");
+      const before = canonicalTimestampOption(parsed, "before");
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError)
+          throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const messages = ensoulSubjectMessages(evidence.messages, subjectRole);
+      const reactions = ensoulSubjectReactions(evidence.reactions, subjectRole);
+      const metrics = analyzeContact(messages, evidence.corpusRevision, identifier, { ...metricOptions(parsed), reactionFacts: reactions });
+      let packet;
+      try {
+        packet = buildEnsoulMessagesSourcePacketV1(messages, metrics, {
+          subjectRole,
+          contactScopeKind: scope.scopeKind,
+          scopeContext: {
+            group: scope.group,
+            participantCount: scope.participantCount,
+            conversationCount: scope.conversationCount,
+            services: scope.services
+          },
+          generatedAt: canonicalNow(io),
+          evidenceRevision: evidence.evidenceRevision,
+          evidenceWindow: { after, before },
+          limit: integerOption(parsed, "limit", 24, 1, 50)
+        });
+      } catch (error) {
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const bytes = prettyJson(packet);
+      const packetSha256 = sha256(bytes);
+      await atomicWritePrivate(output, bytes);
+      const result = {
+        subject: subjectRole,
+        contactId: identifier,
+        corpusRevision: packet.scope.limits.corpusRevision,
+        evidenceRevision: packet.scope.sourceRevision,
+        packetId: packet.packetId,
+        packetDigest: packet.packetDigest,
+        packetSha256,
+        records: packet.records.length,
+        sessionGapSeconds: packet.scope.limits.sessionGapSeconds,
+        burstGapSeconds: packet.scope.limits.burstGapSeconds,
+        scope: {
+          kind: packet.scope.limits.contactScopeKind,
+          group: packet.scope.limits.group,
+          participantCount: packet.scope.limits.participantCount,
+          conversationCount: packet.scope.limits.conversationCount,
+          services: packet.scope.limits.services
+        },
+        evidenceWindow: {
+          after: packet.scope.limits.after,
+          before: packet.scope.limits.before
+        },
+        output
+      };
+      emit(io, json, result, `Prepared ${packet.records.length} private Ensoul message records at ${output} (SHA-256 ${packetSha256})`);
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
   if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
     rejectUnused(parsed, [
       "data-dir",
@@ -10028,13 +9365,13 @@ async function runCommand(argv, io) {
     if (project !== undefined && scope !== "project") {
       throw new CliError("usage", "--project requires --scope project");
     }
-    const destination = await installSkill({
+    const destinations = await installSkill({
       target,
       scope,
       ...project === undefined ? {} : { projectDirectory: project },
       force: parsed.flags.has("force")
     });
-    emit(io, json, { destination, target, scope }, `Installed message-like-me skill at ${destination}`);
+    emit(io, json, { destination: destinations.messageLikeMe, destinations, target, scope }, `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`);
     return;
   }
   if (command === "doctor" && subcommand === undefined) {

@@ -1,6 +1,6 @@
 {
   "name": "@hraness/message-like-me",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.",
   "license": "MIT",
   "type": "module",
@@ -48,6 +48,10 @@
     "./agentic-messaging-v1": {
       "types": "./dist/agentic-messaging-v1.d.ts",
       "import": "./dist/agentic-messaging-v1.js"
+    },
+    "./ensoul-source-v1": {
+      "types": "./dist/ensoul-source-v1.d.ts",
+      "import": "./dist/ensoul-source-v1.js"
     }
   },
   "files": [

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ensoul"
+  short_description: "Build a calibrated working model of a person"
+  default_prompt: "Use $ensoul to synthesize a dated, evidence-calibrated, partial and revisable working model of this person from the authorized corpus."

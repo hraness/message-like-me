@@ -3,17 +3,30 @@ import { dirname, extname, join, normalize, relative, resolve, sep } from "node:
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "..");
 const SKILL_ROOT = join(PACKAGE_ROOT, "skills", "message-like-me");
+const ENSOUL_SKILL_ROOT = join(PACKAGE_ROOT, "skills", "ensoul");
 const SKILL_PATH = join(SKILL_ROOT, "SKILL.md");
 const UI_PATH = join(SKILL_ROOT, "agents", "openai.yaml");
 const REQUIRED_REFERENCES = [
   "references/analysis.md",
   "references/drafting.md",
+  "references/ensoul.md",
   "references/privacy.md",
   "references/profile-schema.md",
 ] as const;
+const REQUIRED_ENSOUL_FILES = [
+  "LICENSE",
+  "NOTICE.md",
+  "VENDORED_FROM.md",
+  "references/ensoul-source-packet-v1.schema.json",
+  "references/evidence-method.md",
+  "references/output-blueprint.md",
+  "references/source-packets.md",
+  "scripts/prepare_x_archive.py",
+  "scripts/validate_source_packet.py",
+] as const;
 
 const PLACEHOLDER = /(?:\b(?:change[ -]?me|coming soon|fixme|lorem ipsum|placeholder|tbd|todo)\b|<[^>\n]*(?:placeholder|todo)[^>\n]*>)/iu;
-const SKILL_TEXT_EXTENSIONS = new Set([".json", ".md", ".txt", ".yaml", ".yml"]);
+const SKILL_TEXT_EXTENSIONS = new Set([".json", ".md", ".py", ".txt", ".yaml", ".yml"]);
 
 type StringRecord = Record<string, string>;
 
@@ -111,14 +124,14 @@ async function collectSkillFiles(path: string): Promise<string[]> {
   return files;
 }
 
-function insideSkillRoot(path: string): boolean {
-  const pathFromRoot = relative(SKILL_ROOT, path);
+function insideSkillRoot(path: string, skillRoot: string): boolean {
+  const pathFromRoot = relative(skillRoot, path);
   return pathFromRoot !== ""
     && pathFromRoot !== ".."
     && !pathFromRoot.startsWith(`..${sep}`);
 }
 
-async function assertMarkdownLinks(sourcePath: string): Promise<void> {
+async function assertMarkdownLinks(sourcePath: string, skillRoot: string): Promise<void> {
   const source = await readFile(sourcePath, "utf8");
   for (const match of source.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
     const target = match[1];
@@ -126,7 +139,7 @@ async function assertMarkdownLinks(sourcePath: string): Promise<void> {
     const withoutFragment = target.split("#", 1)[0];
     if (withoutFragment === undefined || withoutFragment === "") continue;
     const resolved = normalize(resolve(dirname(sourcePath), withoutFragment));
-    if (!insideSkillRoot(resolved)) {
+    if (!insideSkillRoot(resolved, skillRoot)) {
       throw new Error(`${relative(PACKAGE_ROOT, sourcePath)} links outside the skill: ${target}`);
     }
     try {
@@ -192,10 +205,61 @@ export async function validateSkill(): Promise<void> {
 
   await Promise.all(skillFiles
     .filter((path) => extname(path).toLowerCase() === ".md")
-    .map(assertMarkdownLinks));
+    .map((path) => assertMarkdownLinks(path, SKILL_ROOT)));
+}
+
+export async function validateEnsoulSkill(): Promise<void> {
+  const skillFiles = await collectSkillFiles(ENSOUL_SKILL_ROOT);
+  for (const path of skillFiles) {
+    if (!SKILL_TEXT_EXTENSIONS.has(extname(path).toLowerCase())) continue;
+    assertFinished(await readFile(path, "utf8"), relative(PACKAGE_ROOT, path));
+  }
+  const skill = await readFile(join(ENSOUL_SKILL_ROOT, "SKILL.md"), "utf8");
+  const frontmatter = parseSkillFrontmatter(skill);
+  exactKeys(frontmatter, ["description", "name"], "Ensoul SKILL.md frontmatter");
+  if (frontmatter.name !== "ensoul") throw new Error("Ensoul skill name must be ensoul");
+  const description = frontmatter.description ?? "";
+  if (description.length < 40 || description.length > 1_024) {
+    throw new Error("Ensoul skill description must contain 40-1024 characters");
+  }
+  assertFinished(description, "Ensoul skill description");
+  for (const relativePath of REQUIRED_ENSOUL_FILES) {
+    try {
+      await access(join(ENSOUL_SKILL_ROOT, relativePath));
+    } catch {
+      throw new Error(`Ensoul skill is missing ${relativePath}`);
+    }
+  }
+  const ui = parseOpenAiInterface(await readFile(
+    join(ENSOUL_SKILL_ROOT, "agents", "openai.yaml"),
+    "utf8",
+  ));
+  exactKeys(
+    ui,
+    ["default_prompt", "display_name", "short_description"],
+    "Ensoul agents/openai.yaml interface",
+  );
+  if (ui.display_name !== "Ensoul") {
+    throw new Error("Ensoul agents/openai.yaml display_name must be Ensoul");
+  }
+  const shortDescription = ui.short_description ?? "";
+  if (shortDescription.length < 10 || shortDescription.length > 100) {
+    throw new Error("Ensoul agents/openai.yaml short_description must contain 10-100 characters");
+  }
+  const defaultPrompt = ui.default_prompt ?? "";
+  if (defaultPrompt.length < 20 || defaultPrompt.length > 500 || !defaultPrompt.includes("$ensoul")) {
+    throw new Error("Ensoul agents/openai.yaml default_prompt must invoke $ensoul");
+  }
+  for (const [key, value] of Object.entries(ui)) {
+    assertFinished(value, `Ensoul agents/openai.yaml ${key}`);
+  }
+  await Promise.all(skillFiles
+    .filter((path) => extname(path).toLowerCase() === ".md")
+    .map((path) => assertMarkdownLinks(path, ENSOUL_SKILL_ROOT)));
 }
 
 if (import.meta.main) {
   await validateSkill();
-  console.log("message-like-me skill is valid");
+  await validateEnsoulSkill();
+  console.log("message-like-me and ensoul skills are valid");
 }

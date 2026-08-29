@@ -24,6 +24,7 @@ const TEXT_EXTENSIONS = new Set([
   ".json",
   ".md",
   ".mjs",
+  ".py",
   ".sh",
   ".toml",
   ".ts",
@@ -221,6 +222,11 @@ export async function packageSmoke(): Promise<void> {
       "-e",
       `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4") throw new Error("wrong agentic messaging contract")`,
     ], consumer);
+    await run([
+      process.execPath,
+      "-e",
+      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/ensoul-source-v1`)}); if (contract.ENSOUL_SOURCE_PACKET_V1_SCHEMA_IDENTITY !== "ensoul.source-packet.v1" || contract.ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID !== "ensoul.messages-source.v1" || contract.ENSOUL_DIGEST_CANONICALIZATION !== "JCS-RFC8785") throw new Error("wrong Ensoul source contract")`,
+    ], consumer);
     await writeFile(
       join(consumer, "index.ts"),
       [
@@ -232,6 +238,8 @@ export async function packageSmoke(): Promise<void> {
         `import type { LocalMessageBundleV2Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)};`,
         `import { parseAgentMessageHandoffV1, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
         `import type { AgentMessageHandoffV1 } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
+        `import { buildEnsoulMessagesSourcePacketV1, ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID } from ${JSON.stringify(`${PACKAGE_NAME}/ensoul-source-v1`)};`,
+        `import type { EnsoulMessagesSourcePacketV1 } from ${JSON.stringify(`${PACKAGE_NAME}/ensoul-source-v1`)};`,
         "const digest: string = sha256(canonicalJson({ fixture: true }));",
         "const profile = null as unknown as StyleProfileV2;",
         "const metrics = null as unknown as ContactMetrics;",
@@ -241,7 +249,9 @@ export async function packageSmoke(): Promise<void> {
         "const parseWhatsAppRecord: typeof parseLocalMessageBundleV2Record = parseLocalMessageBundleV2Record;",
         "const handoff = null as unknown as AgentMessageHandoffV1;",
         "const parseHandoff: typeof parseAgentMessageHandoffV1 = parseAgentMessageHandoffV1;",
-        "void [digest, profile, metrics, manifest, whatsappManifest, parseRecord, parseWhatsAppRecord, handoff, parseHandoff, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
+        "const ensoulPacket = null as unknown as EnsoulMessagesSourcePacketV1;",
+        "const buildEnsoul: typeof buildEnsoulMessagesSourcePacketV1 = buildEnsoulMessagesSourcePacketV1;",
+        "void [digest, profile, metrics, manifest, whatsappManifest, parseRecord, parseWhatsAppRecord, handoff, parseHandoff, ensoulPacket, buildEnsoul, ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
         "",
       ].join("\n"),
       { mode: 0o600 },
@@ -274,6 +284,9 @@ export async function packageSmoke(): Promise<void> {
     if (!help.includes("messagelikeme")) {
       throw new Error("Packed CLI help does not identify messagelikeme");
     }
+    if (!help.includes("ensoul prepare CONTACT_ID --subject owner|contact")) {
+      throw new Error("Packed CLI help does not expose the Ensoul source adapter");
+    }
     const reportedVersion = (await run([binary, "--version"], consumer, { capture: true })).trim();
     if (reportedVersion !== manifest.version) {
       throw new Error(
@@ -287,6 +300,53 @@ export async function packageSmoke(): Promise<void> {
       throw new Error(`Packed CLI resolved skill outside its install: ${reportedSkill}`);
     }
     await access(join(installedSkill, "SKILL.md"));
+    const installedEnsoulSkill = await realpath(join(installedPackage, "skills", "ensoul"));
+    if (!isWithin(installedPackage, installedEnsoulSkill)) {
+      throw new Error("Packed Ensoul skill resolved outside its install");
+    }
+    await Promise.all([
+      access(join(installedEnsoulSkill, "SKILL.md")),
+      access(join(installedEnsoulSkill, "LICENSE")),
+      access(join(installedEnsoulSkill, "NOTICE.md")),
+      access(join(installedEnsoulSkill, "VENDORED_FROM.md")),
+      access(join(installedEnsoulSkill, "references", "ensoul-source-packet-v1.schema.json")),
+      access(join(installedEnsoulSkill, "scripts", "prepare_x_archive.py")),
+      access(join(installedEnsoulSkill, "scripts", "validate_source_packet.py")),
+    ]);
+    const installReceipt = record(
+      JSON.parse(await run([
+        binary,
+        "skill",
+        "install",
+        "--target",
+        "agents",
+        "--scope",
+        "project",
+        "--project",
+        consumer,
+        "--json",
+      ], consumer, { capture: true })) as unknown,
+      "packed dual-skill install receipt",
+    );
+    if (installReceipt.target !== "agents" || installReceipt.scope !== "project") {
+      throw new Error("Packed dual-skill install receipt has the wrong target or scope");
+    }
+    const destinations = record(installReceipt.destinations, "packed dual-skill destinations");
+    if (installReceipt.destination !== destinations.messageLikeMe) {
+      throw new Error("Packed dual-skill install receipt broke the legacy destination field");
+    }
+    await Promise.all([
+      access(join(consumer, ".agents", "skills", "message-like-me", "SKILL.md")),
+      access(join(consumer, ".agents", "skills", "ensoul", "SKILL.md")),
+      access(join(
+        consumer,
+        ".agents",
+        "skills",
+        "ensoul",
+        "scripts",
+        "validate_source_packet.py",
+      )),
+    ]);
     const schema = record(
       JSON.parse(
         await readFile(join(installedPackage, "schema", "style-profile-v1.schema.json"), "utf8"),
@@ -326,6 +386,21 @@ export async function packageSmoke(): Promise<void> {
     ) {
       throw new Error("Packed native WhatsApp bundle schema has the wrong identity");
     }
+    const ensoulSchema = record(
+      JSON.parse(
+        await readFile(
+          join(installedPackage, "schema", "ensoul-messages-source-v1.schema.json"),
+          "utf8",
+        ),
+      ) as unknown,
+      "installed Ensoul messages source schema",
+    );
+    if (
+      ensoulSchema.$schema !== "https://json-schema.org/draft/2020-12/schema"
+      || ensoulSchema.$id !== "https://messagelikeme.com/schema/ensoul-messages-source-v1.schema.json"
+    ) {
+      throw new Error("Packed Ensoul messages source schema has the wrong identity");
+    }
   } finally {
     await rm(work, { force: true, recursive: true });
   }
@@ -333,5 +408,5 @@ export async function packageSmoke(): Promise<void> {
 
 if (import.meta.main) {
   await packageSmoke();
-  console.log("Packed install, consumer types, library import, CLI identity, and bundled skill path verified.");
+  console.log("Packed install, consumer types, library import, CLI identity, and both bundled skills verified.");
 }

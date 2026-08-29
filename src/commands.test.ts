@@ -11,6 +11,7 @@ import {
   WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
 } from "./agentic-messaging-v1.ts";
 import { canonicalJson, sha256 } from "./canonical-json.ts";
+import type { EnsoulMessagesSourcePacketV1 } from "./ensoul-source-v1.ts";
 import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
 import { LocalStore } from "./store.ts";
@@ -179,6 +180,169 @@ async function createContactsFixture(root: string): Promise<string> {
 }
 
 describe("messagelikeme CLI", () => {
+  test("prepares bounded subject-relative Ensoul packets with body-free receipts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-ensoul-"));
+    const paths = await initializeDataPaths(dataPaths(join(root, "state")));
+    await loadOrCreateInstallKey(paths.installKey);
+    const store = LocalStore.open(paths.database);
+    store.replaceCorpus(corpus(), "2026-08-21T11:00:00.000Z");
+    store.close();
+    const capture = ioCapture();
+    try {
+      const ownerOutput = join(root, "owner-source.json");
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", "contact_0123456789abcdef",
+        "--subject", "owner", "--output", ownerOutput,
+        "--before", "2026-08-21T11:00:00.000Z", "--limit", "4", "--json",
+      ], capture.io)).toBe(0);
+      const ownerBytes = await readFile(ownerOutput, "utf8");
+      const ownerReceipt = JSON.parse(capture.stdout()) as {
+        packetSha256: string;
+        packetDigest: string;
+        records: number;
+        sessionGapSeconds: number;
+        burstGapSeconds: number;
+        scope: {
+          kind: string;
+          group: boolean;
+          participantCount: number;
+          conversationCount: number;
+          services: string[];
+        };
+      };
+      const ownerPacket = JSON.parse(ownerBytes) as EnsoulMessagesSourcePacketV1;
+      expect(ownerReceipt.packetSha256).toBe(sha256(ownerBytes));
+      expect(ownerReceipt.packetDigest).toBe(ownerPacket.packetDigest);
+      expect(ownerReceipt.records).toBe(ownerPacket.records.length);
+      expect(ownerReceipt.sessionGapSeconds).toBe(28_800);
+      expect(ownerReceipt.burstGapSeconds).toBe(300);
+      expect(ownerReceipt.scope).toEqual({
+        kind: "conversation",
+        group: false,
+        participantCount: 1,
+        conversationCount: 1,
+        services: ["iMessage"],
+      });
+      expect(ownerPacket).toMatchObject({
+        schemaVersion: "ensoul.source-packet.v1",
+        digestCanonicalization: "JCS-RFC8785",
+        subject: { localId: "owner", kind: "owner" },
+        scope: {
+          adapter: "message-like-me",
+          payloadSchema: "ensoul.messages-source.v1",
+          completeness: "sampled",
+          sourceCutoff: "2026-08-21T10:01:20.000Z",
+          limits: {
+            subjectRole: "owner",
+            group: false,
+            participantCount: 1,
+            conversationCount: 1,
+            services: ["iMessage"],
+            before: "2026-08-21T11:00:00.000Z",
+            sessionGapSeconds: 28_800,
+            burstGapSeconds: 300,
+          },
+        },
+        claims: [],
+      });
+      expect(ownerPacket.records.some(({ authorRole }) => authorRole === "subject")).toBe(true);
+      expect(ownerPacket.records.some(({ authorRole }) => authorRole === "counterpart")).toBe(true);
+      expect((await stat(ownerOutput)).mode & 0o077).toBe(0);
+      expect(capture.stdout()).not.toContain("Can we use the synthetic plan?");
+      expect(capture.stdout()).not.toContain("that works");
+      expect(capture.stdout()).not.toContain("synthetic@example.test");
+      expect(capture.stdout()).not.toContain("private-guid");
+
+      capture.clear();
+      const futureBoundOutput = join(root, "future-bound-owner-source.json");
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", "contact_0123456789abcdef",
+        "--subject", "owner", "--output", futureBoundOutput,
+        "--before", "2027-01-01T00:00:00.000Z", "--limit", "4", "--json",
+      ], capture.io)).toBe(0);
+      const futurePacket = JSON.parse(
+        await readFile(futureBoundOutput, "utf8"),
+      ) as EnsoulMessagesSourcePacketV1;
+      expect(futurePacket.scope.limits.before).toBe("2027-01-01T00:00:00.000Z");
+      expect(futurePacket.scope.sourceCutoff).toBe("2026-08-21T11:01:00.000Z");
+      const validator = Bun.spawn([
+        "python3",
+        join(import.meta.dir, "../skills/ensoul/scripts/validate_source_packet.py"),
+        futureBoundOutput,
+      ], { stderr: "pipe", stdout: "pipe" });
+      const [validatorExit, validatorStderr] = await Promise.all([
+        validator.exited,
+        new Response(validator.stderr).text(),
+      ]);
+      expect(validatorExit).toBe(0);
+      expect(validatorStderr).toBe("");
+
+      const symlinkTarget = join(root, "ensoul-symlink-target.txt");
+      const symlinkOutput = join(root, "ensoul-symlink-output.json");
+      await writeFile(symlinkTarget, "sentinel", { mode: 0o600 });
+      await symlink(symlinkTarget, symlinkOutput);
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", "contact_0123456789abcdef",
+        "--subject", "owner", "--output", symlinkOutput, "--json",
+      ], capture.io)).toBe(1);
+      expect(await readFile(symlinkTarget, "utf8")).toBe("sentinel");
+
+      capture.clear();
+      const rejectedContactOutput = join(root, "rejected-contact-source.json");
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", "contact_0123456789abcdef",
+        "--subject", "contact", "--output", rejectedContactOutput, "--json",
+      ], capture.io)).toBe(2);
+      expect(capture.stderr()).toContain("exact direct person_ scope");
+      expect(await Bun.file(rejectedContactOutput).exists()).toBe(false);
+
+      const contactsRoot = await createContactsFixture(root);
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "ingest", "contacts", "--addressbook", contactsRoot, "--json",
+      ], capture.io)).toBe(0);
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "contacts", "resolve", "CLI Private Name", "--private", "--json",
+      ], capture.io)).toBe(0);
+      const resolved = JSON.parse(capture.stdout()) as { matches: Array<{ id: string }> };
+      const personId = resolved.matches[0]!.id;
+      const contactOutput = join(root, "contact-source.json");
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", personId,
+        "--subject", "contact", "--output", contactOutput, "--limit", "4", "--json",
+      ], capture.io)).toBe(0);
+      const contactPacket = JSON.parse(
+        await readFile(contactOutput, "utf8"),
+      ) as EnsoulMessagesSourcePacketV1;
+      expect(contactPacket.subject.localId).toBe(personId);
+      expect(contactPacket.subject.kind).toBe("contact");
+      expect(contactPacket.scope.limits).toMatchObject({
+        contactId: personId,
+        contactScopeKind: "person",
+        subjectRole: "contact",
+      });
+      expect(contactPacket.records.some(({ content, authorRole }) =>
+        content.text === "What about the later check?" && authorRole === "subject")).toBe(true);
+      expect(contactPacket.records.some(({ content, authorRole }) =>
+        content.text === "that works" && authorRole === "counterpart")).toBe(true);
+      expect(capture.stdout()).not.toContain("What about the later check?");
+      expect(capture.stdout()).not.toContain("that works");
+      expect(capture.stdout()).not.toContain("CLI Private Name");
+
+      capture.clear();
+      expect(await main([
+        "--data-dir", paths.root, "ensoul", "prepare", personId,
+        "--subject", "contact", "--output", contactOutput, "--json",
+      ], capture.io)).toBe(1);
+      expect(await readFile(contactOutput, "utf8")).toBe(`${JSON.stringify(contactPacket, null, 2)}\n`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("prepares, verifies, and records a private body-bearing handoff with a body-free audit", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-cli-handoff-"));
     const capture = ioCapture();

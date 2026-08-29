@@ -18,6 +18,7 @@ const VALUE_OPTIONS = new Set([
   "request",
   "scope",
   "session-gap",
+  "subject",
   "target",
   "draft",
   "wrench-context",

@@ -114,6 +114,8 @@ export async function distFreshnessProblems(): Promise<string[]> {
       "agentic-messaging-v1.js",
       "canonical-json.d.ts",
       "cli.js",
+      "ensoul-source-v1.d.ts",
+      "ensoul-source-v1.js",
       "index.d.ts",
       "index.js",
       "message-bundle-v1.d.ts",

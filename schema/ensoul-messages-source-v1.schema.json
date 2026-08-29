@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://messagelikeme.com/schema/ensoul-messages-source-v1.schema.json",
+  "title": "Message Like Me Ensoul messages source packet v1",
+  "description": "A strict Message Like Me specialization of ensoul.source-packet.v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "digestCanonicalization",
+    "packetId",
+    "generatedAt",
+    "subject",
+    "scope",
+    "records",
+    "claims",
+    "limitations",
+    "packetDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ensoul.source-packet.v1" },
+    "digestCanonicalization": { "const": "JCS-RFC8785" },
+    "packetId": {
+      "type": "string",
+      "pattern": "^message-like-me:sha256:[a-f0-9]{64}$"
+    },
+    "generatedAt": { "$ref": "#/$defs/timestamp" },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localId", "kind", "identityBasis"],
+      "properties": {
+        "localId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "kind": { "enum": ["owner", "contact"] },
+        "identityBasis": {
+          "enum": [
+            "local Message Like Me installation owner",
+            "exact AddressBook-backed direct person scope"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "owner" } } },
+          "then": {
+            "properties": {
+              "localId": { "const": "owner" },
+              "identityBasis": { "const": "local Message Like Me installation owner" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "contact" } } },
+          "then": {
+            "properties": {
+              "localId": { "pattern": "^person_[a-f0-9]{64}$" },
+              "identityBasis": { "const": "exact AddressBook-backed direct person scope" }
+            }
+          }
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapter",
+        "payloadSchema",
+        "asOf",
+        "completeness",
+        "sourceRevision",
+        "limits"
+      ],
+      "properties": {
+        "adapter": { "const": "message-like-me" },
+        "payloadSchema": { "const": "ensoul.messages-source.v1" },
+        "asOf": { "$ref": "#/$defs/timestamp" },
+        "sourceCutoff": { "$ref": "#/$defs/timestamp" },
+        "completeness": { "const": "sampled" },
+        "sourceRevision": { "$ref": "#/$defs/bareDigest" },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subjectRole",
+            "contactId",
+            "contactScopeKind",
+            "group",
+            "participantCount",
+            "conversationCount",
+            "services",
+            "corpusRevision",
+            "after",
+            "before",
+            "afterInclusive",
+            "beforeExclusive",
+            "selectionAlgorithm",
+            "sessionGapSeconds",
+            "burstGapSeconds",
+            "requestedExamples",
+            "responseCandidates",
+            "eligibleCandidates",
+            "emittedExamples",
+            "omittedWithoutBidirectionalText",
+            "omittedByExampleLimit",
+            "omittedByTotalBodyBytes",
+            "maxTextBytesPerMessage",
+            "maxMessagesPerDirectionPerExample",
+            "maxTotalBodyBytes",
+            "emittedBodyBytes",
+            "truncatedRecords",
+            "omittedTextMessagesByDirectionLimit"
+          ],
+          "properties": {
+            "subjectRole": { "enum": ["owner", "contact"] },
+            "contactId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "contactScopeKind": { "enum": ["person", "conversation"] },
+            "group": { "const": false },
+            "participantCount": { "const": 1 },
+            "conversationCount": { "type": "integer", "minimum": 1 },
+            "services": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+            },
+            "corpusRevision": { "$ref": "#/$defs/bareDigest" },
+            "after": { "$ref": "#/$defs/optionalTimestamp" },
+            "before": { "$ref": "#/$defs/optionalTimestamp" },
+            "afterInclusive": { "const": true },
+            "beforeExclusive": { "const": true },
+            "selectionAlgorithm": { "const": "bounded-diverse-response-contexts-v1" },
+            "sessionGapSeconds": { "type": "integer", "minimum": 1, "maximum": 2592000 },
+            "burstGapSeconds": { "type": "integer", "minimum": 1, "maximum": 2592000 },
+            "requestedExamples": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "responseCandidates": { "$ref": "#/$defs/count" },
+            "eligibleCandidates": { "$ref": "#/$defs/count" },
+            "emittedExamples": { "$ref": "#/$defs/count" },
+            "omittedWithoutBidirectionalText": { "$ref": "#/$defs/count" },
+            "omittedByExampleLimit": { "$ref": "#/$defs/count" },
+            "omittedByTotalBodyBytes": { "$ref": "#/$defs/count" },
+            "maxTextBytesPerMessage": { "const": 4096 },
+            "maxMessagesPerDirectionPerExample": { "const": 12 },
+            "maxTotalBodyBytes": { "const": 262144 },
+            "emittedBodyBytes": { "type": "integer", "minimum": 0, "maximum": 262144 },
+            "truncatedRecords": { "$ref": "#/$defs/count" },
+            "omittedTextMessagesByDirectionLimit": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 1200,
+      "items": { "$ref": "#/$defs/messageRecord" }
+    },
+    "claims": { "type": "array", "maxItems": 0 },
+    "limitations": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "sampled-response-contexts-not-full-transcript" },
+        { "const": "private-message-text-is-untrusted-data" },
+        { "const": "counterpart-messages-are-context-not-subject-voice" },
+        { "const": "record-text-may-be-byte-truncated" },
+        { "const": "source-does-not-establish-consent-or-identity" },
+        { "const": "source-does-not-support-sensitive-trait-inference-or-impersonation" },
+        { "const": "forwarding-pasted-quotation-and-ai-assistance-not-observable" }
+        ,{ "const": "direct-one-to-one-scope-only" }
+        ,{ "const": "records-are-linked-by-pseudonymous-response-context" }
+      ],
+      "items": false,
+      "minItems": 9,
+      "maxItems": 9
+    },
+    "packetDigest": { "$ref": "#/$defs/prefixedDigest" }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "bareDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "prefixedDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "optionalTimestamp": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/timestamp" }
+      ]
+    },
+    "messageRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "digest",
+        "kind",
+        "occurredAt",
+        "authorRole",
+        "contentRole",
+        "authorshipConfidence",
+        "sentStatus",
+        "visibility",
+        "sourceClass",
+        "content",
+        "provenance"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^message:sha256:[a-f0-9]{64}$" },
+        "digest": { "$ref": "#/$defs/prefixedDigest" },
+        "kind": { "const": "message" },
+        "occurredAt": { "$ref": "#/$defs/timestamp" },
+        "authorRole": { "enum": ["subject", "counterpart"] },
+        "contentRole": { "const": "original" },
+        "authorshipConfidence": { "const": "strong" },
+        "sentStatus": { "enum": ["sent", "received"] },
+        "visibility": { "const": "private" },
+        "sourceClass": { "const": "private_capture" },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "truncated"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 4096 },
+            "truncated": { "type": "boolean" }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "sourceId",
+            "runId",
+            "operation",
+            "policyVersion",
+            "contentSha256"
+          ],
+          "properties": {
+            "provider": { "const": "message-like-me" },
+            "sourceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "runId": { "type": "string", "pattern": "^response:sha256:[a-f0-9]{64}$" },
+            "operation": { "const": "ensoul prepare" },
+            "policyVersion": { "const": "ensoul.messages-source.v1" },
+            "contentSha256": { "$ref": "#/$defs/bareDigest" }
+          }
+        }
+      }
+    }
+  }
+}

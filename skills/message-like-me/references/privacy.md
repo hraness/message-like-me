@@ -43,9 +43,9 @@ sensitive local data.
 ## Minimize exposure
 
 Start with aggregate views that omit bodies, handles, names, and group titles.
-Request a bounded study packet only when semantic evidence is necessary. Keep
-the contact scope, date range, and sample size no larger than the analysis
-requires.
+Request a bounded study or Ensoul source packet only when semantic evidence is
+necessary. Keep the contact scope, date range, and sample size no larger than
+the analysis requires.
 
 AddressBook enrichment is optional and exact. Use
 `messagelikeme contacts resolve <query> --private --json` only when a user-named
@@ -63,17 +63,20 @@ handles, contact names, group titles, attachments, or verbatim excerpts merely
 to make a profile easier to read. A useful profile describes behavior and
 retains aggregate evidence references.
 
-Incoming messages provide context for the user's replies. They are never
-authored-style evidence. Keep tapbacks separate from prose, and do not mistake
-quoted, forwarded, or attributed text for words the user typed.
+Incoming messages provide context for the owner's replies. They are never
+owner-style evidence. A contact-subject Ensoul packet may rebase incoming text
+only after the CLI proves an exact direct AddressBook person scope; in that
+packet, owner text becomes counterpart context. Keep tapbacks separate from
+prose, and do not mistake quoted, forwarded, or attributed text for words the
+record's author typed.
 
 ## Local storage and publication
 
-Keep imported corpora, study packets, profiles, and generated personalized
-skills in the product's private local store or another explicit private output
-chosen by the user. Do not place them in a Git working tree, commit them,
-include them in a package, paste them into an issue, or add them to test
-fixtures. Public tests use synthetic conversations only.
+Keep imported corpora, study and Ensoul packets, profiles, and generated
+personalized skills in the product's private local store or another explicit
+private output chosen by the user. Do not place them in a Git working tree,
+commit them, include them in a package, paste them into an issue, or add them to
+test fixtures. Public tests use synthetic conversations only.
 
 Held-out prompt and reference packets both contain message bodies. Keep them
 under the same controls as study packets, and leave the reference unopened

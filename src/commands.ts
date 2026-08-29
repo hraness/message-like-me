@@ -18,6 +18,12 @@ import { CliError } from "./errors.ts";
 import { DEFAULT_IMESSAGE_DATABASE, readIMessageDatabase } from "./imessage.ts";
 import type { CommandIo } from "./io.ts";
 import {
+  buildEnsoulMessagesSourcePacketV1,
+  ensoulSubjectMessages,
+  ensoulSubjectReactions,
+  type EnsoulMessagesSubjectRole,
+} from "./ensoul-source-v1.ts";
+import {
   analyzeContact,
   buildEvaluationPackets,
   buildStudyPacket,
@@ -65,6 +71,10 @@ Usage:
   messagelikeme [--data-dir PATH] inspect tempo CONTACT_ID [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] inspect sessions CONTACT_ID [--limit N] [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] study prepare CONTACT_ID --output FILE [--limit N]
+                    [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
+                    [--session-gap N] [--burst-gap N] [--json]
+  messagelikeme [--data-dir PATH] ensoul prepare CONTACT_ID --subject owner|contact
+                    --output FILE [--limit N]
                     [--after ISO_TIMESTAMP] [--before ISO_TIMESTAMP]
                     [--session-gap N] [--burst-gap N] [--json]
   messagelikeme [--data-dir PATH] evaluate prepare CONTACT_ID --after ISO_TIMESTAMP
@@ -188,6 +198,15 @@ function canonicalTimestampOption(
   const date = new Date(value);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
     throw new CliError("usage", `--${key} must be a canonical ISO timestamp`);
+  }
+  return value;
+}
+
+function ensoulSubjectOption(parsed: ParsedArguments): EnsoulMessagesSubjectRole {
+  const value = parsed.options.get("subject");
+  if (value === undefined) throw new CliError("usage", "--subject is required");
+  if (value !== "owner" && value !== "contact") {
+    throw new CliError("usage", "--subject must be owner or contact");
   }
   return value;
 }
@@ -812,6 +831,110 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
     return;
   }
 
+  if (command === "ensoul" && subcommand === "prepare" && identifier !== undefined) {
+    rejectUnused(parsed, [
+      "data-dir", "subject", "output", "limit", "after", "before", "session-gap", "burst-gap",
+    ], ["json"]);
+    const subjectRole = ensoulSubjectOption(parsed);
+    const output = absolutePrivatePath(parsed.options.get("output"), "--output");
+    const context = await existingStore(parsed);
+    try {
+      const scope = requireContact(context.store, identifier);
+      if (scope.group || scope.participantCount !== 1) {
+        throw new CliError(
+          "usage",
+          "Ensoul message packets require a direct one-to-one scope",
+        );
+      }
+      if (
+        subjectRole === "contact"
+        && (
+          !/^person_[a-f0-9]{64}$/u.test(identifier)
+          || scope.scopeKind !== "person"
+          || scope.group
+          || scope.participantCount !== 1
+        )
+      ) {
+        throw new CliError(
+          "usage",
+          "--subject contact requires an exact direct person_ scope resolved from Contacts",
+        );
+      }
+      const after = canonicalTimestampOption(parsed, "after");
+      const before = canonicalTimestampOption(parsed, "before");
+      let evidence;
+      try {
+        evidence = contactEvidence(context.store, identifier, { after, before });
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const messages = ensoulSubjectMessages(evidence.messages, subjectRole);
+      const reactions = ensoulSubjectReactions(evidence.reactions, subjectRole);
+      const metrics = analyzeContact(
+        messages,
+        evidence.corpusRevision,
+        identifier,
+        { ...metricOptions(parsed), reactionFacts: reactions },
+      );
+      let packet;
+      try {
+        packet = buildEnsoulMessagesSourcePacketV1(messages, metrics, {
+          subjectRole,
+          contactScopeKind: scope.scopeKind,
+          scopeContext: {
+            group: scope.group,
+            participantCount: scope.participantCount,
+            conversationCount: scope.conversationCount,
+            services: scope.services,
+          },
+          generatedAt: canonicalNow(io),
+          evidenceRevision: evidence.evidenceRevision,
+          evidenceWindow: { after, before },
+          limit: integerOption(parsed, "limit", 24, 1, 50),
+        });
+      } catch (error) {
+        throw new CliError("usage", error instanceof Error ? error.message : String(error), { cause: error });
+      }
+      const bytes = prettyJson(packet);
+      const packetSha256 = sha256(bytes);
+      await atomicWritePrivate(output, bytes);
+      const result = {
+        subject: subjectRole,
+        contactId: identifier,
+        corpusRevision: packet.scope.limits.corpusRevision,
+        evidenceRevision: packet.scope.sourceRevision,
+        packetId: packet.packetId,
+        packetDigest: packet.packetDigest,
+        packetSha256,
+        records: packet.records.length,
+        sessionGapSeconds: packet.scope.limits.sessionGapSeconds,
+        burstGapSeconds: packet.scope.limits.burstGapSeconds,
+        scope: {
+          kind: packet.scope.limits.contactScopeKind,
+          group: packet.scope.limits.group,
+          participantCount: packet.scope.limits.participantCount,
+          conversationCount: packet.scope.limits.conversationCount,
+          services: packet.scope.limits.services,
+        },
+        evidenceWindow: {
+          after: packet.scope.limits.after,
+          before: packet.scope.limits.before,
+        },
+        output,
+      };
+      emit(
+        io,
+        json,
+        result,
+        `Prepared ${packet.records.length} private Ensoul message records at ${output} (SHA-256 ${packetSha256})`,
+      );
+    } finally {
+      context.store.close();
+    }
+    return;
+  }
+
   if (command === "evaluate" && subcommand === "prepare" && identifier !== undefined) {
     rejectUnused(parsed, [
       "data-dir", "after", "before", "prompt-output", "reference-output", "limit",
@@ -1123,13 +1246,18 @@ export async function runCommand(argv: readonly string[], io: CommandIo): Promis
     if (project !== undefined && scope !== "project") {
       throw new CliError("usage", "--project requires --scope project");
     }
-    const destination = await installSkill({
+    const destinations = await installSkill({
       target,
       scope,
       ...(project === undefined ? {} : { projectDirectory: project }),
       force: parsed.flags.has("force"),
     });
-    emit(io, json, { destination, target, scope }, `Installed message-like-me skill at ${destination}`);
+    emit(
+      io,
+      json,
+      { destination: destinations.messageLikeMe, destinations, target, scope },
+      `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`,
+    );
     return;
   }
 
