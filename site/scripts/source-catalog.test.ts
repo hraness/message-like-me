@@ -87,6 +87,9 @@ describe('supported source presentation', () => {
       ]);
 
     expect(home).toMatch(/native WhatsApp evidence exported through Wrench/u);
+    expect(home).toContain(
+      '<a className="button button-primary" href="#install">',
+    );
     expect(home).toContain('<SourceCard');
     expect(renderedHomePage).toContain('</span> wrench whatsapp export-message-like-me');
     expect(renderedHomePage).toContain('</span> messagelikeme ingest bundle');
