@@ -21,6 +21,7 @@ export type CanonicalPagePath = (typeof CANONICAL_PAGE_PATHS)[number];
 export type SitePath = `/${string}`;
 
 export function absoluteUrl(path: SitePath = '/'): string {
+  if (path === '/') return SITE_ORIGIN;
   return new URL(path, `${SITE_ORIGIN}/`).toString();
 }
 

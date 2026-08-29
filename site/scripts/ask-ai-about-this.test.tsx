@@ -15,6 +15,7 @@ import {
   absoluteUrl,
   CANONICAL_PAGE_PATHS,
   type CanonicalPagePath,
+  SITE_ORIGIN,
 } from '../app/_lib/site.ts';
 
 type PageRender = () => ReactNode | Promise<ReactNode>;
@@ -46,9 +47,10 @@ function askAiNav(html: string): string {
 
 function assertAskAiLinks(html: string, path: CanonicalPagePath): void {
   const nav = askAiNav(html);
-  const expectedSubject = absoluteUrl(path);
+  const expectedSubject = path === '/' ? SITE_ORIGIN : `${SITE_ORIGIN}${path}`;
   const anchors = [...nav.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/gu)];
 
+  expect(absoluteUrl(path)).toBe(expectedSubject);
   expect(nav).toContain('>Ask AI about this<');
   expect(nav).toContain('class="hraness-ask-ai-about-this');
   expect(nav).toContain('message-like-me-ask-ai');
