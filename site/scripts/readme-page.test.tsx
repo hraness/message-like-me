@@ -24,5 +24,6 @@ test.each([
 ] as const)('keeps one source-owned heading on the %s document', (_, heading, Page) => {
   const html = renderToStaticMarkup(<Page />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
+  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe(heading);
   expect(html).toContain(`"headline":"${heading}"`);
 });
