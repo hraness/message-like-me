@@ -20,6 +20,7 @@
 - `.github/workflows/` – read-only CI and checks-gated immutable tag releases.
 - `README.md`, `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `LICENSE` –
   standalone public documentation, release history, policy, and terms.
+- `STYLE.md` – the public and reader-facing prose contract.
 - `package.json`, `tsconfig.json`, and `bun.lock` – Bun package, build, and
   verification configuration.
 
@@ -30,6 +31,8 @@
 - Keep the public description exact: “A local-first CLI and Agent Skill for
   studying private messaging history and drafting messages that sound like
   you.”
+- Follow `STYLE.md` for public site, documentation, README, release, and
+  Agent Skill prose.
 - Keep the public repository independently buildable. Do not reference another
   source repository, private packages, sibling paths, private fixtures, or
   publication mechanics.
