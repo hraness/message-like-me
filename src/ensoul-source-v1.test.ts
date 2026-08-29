@@ -277,8 +277,8 @@ describe("Ensoul messages source v1", () => {
       const packet = packetFor(conversation(), "owner");
       await writeFile(path, `${JSON.stringify(packet, null, 2)}\n`, { mode: 0o600 });
       const child = Bun.spawn([
-        "python3",
-        resolve(import.meta.dir, "../skills/ensoul/scripts/validate_source_packet.py"),
+        process.execPath,
+        resolve(import.meta.dir, "../skills/ensoul/scripts/validate-source-packet.ts"),
         path,
       ], { stderr: "pipe", stdout: "pipe" });
       const [exitCode, stdout, stderr] = await Promise.all([
@@ -310,7 +310,7 @@ describe("Ensoul messages source v1", () => {
       const archive = await writeSyntheticXPublicPostsArchive(root);
       const scripts = resolve(import.meta.dir, "../skills/ensoul/scripts");
       const producer = Bun.spawn([
-        "python3", join(scripts, "prepare_x_archive.py"), archive,
+        process.execPath, join(scripts, "prepare-x-archive.ts"), archive,
         "--output", output, "--limit", "2",
       ], { stderr: "pipe", stdout: "pipe" });
       const [producerExit, producerStdout, producerStderr] = await Promise.all([
@@ -324,7 +324,7 @@ describe("Ensoul messages source v1", () => {
       expect(await readFile(output, "utf8")).not.toContain("PRIVATE_DM_CANARY");
 
       const validator = Bun.spawn([
-        "python3", join(scripts, "validate_source_packet.py"), output,
+        process.execPath, join(scripts, "validate-source-packet.ts"), output,
       ], { stderr: "pipe", stdout: "pipe" });
       const [validatorExit, validatorStdout, validatorStderr] = await Promise.all([
         validator.exited,
@@ -340,7 +340,7 @@ describe("Ensoul messages source v1", () => {
       });
 
       const overCap = Bun.spawn([
-        "python3", join(scripts, "prepare_x_archive.py"), archive,
+        process.execPath, join(scripts, "prepare-x-archive.ts"), archive,
         "--output", overCapOutput, "--limit", "2001",
       ], { stderr: "pipe", stdout: "pipe" });
       const [overCapExit, overCapStderr] = await Promise.all([

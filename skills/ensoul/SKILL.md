@@ -59,7 +59,7 @@ Do not browse for personal information by default. Browse when the user asks, wh
 
 Use format-specific skills when needed to read PDFs, documents, sheets, slides, images, audio, or video. Extract faithfully before interpreting.
 
-For a caller-owned official X archive, use `scripts/prepare_x_archive.py` rather than manually extracting it. The script opens only allowlisted account-authored public-post members and writes a bounded private packet. It deliberately does not open direct messages, address books, ad data, media, deleted posts, or community posts. Confirm archive ownership with the user, use absolute paths, and keep the packet outside version control.
+For a caller-owned official X archive, use `bun scripts/prepare-x-archive.ts` rather than manually extracting it. The script opens only allowlisted account-authored public-post members and writes a bounded private packet. It deliberately does not open direct messages, address books, ad data, media, deleted posts, or community posts. Confirm archive ownership with the user, use absolute paths, and keep the packet outside version control.
 
 ### 2. Inventory the corpus
 
@@ -70,7 +70,7 @@ If the corpus contains `ensoul.*-source` packets, also read [references/source-p
 Validate each packet before opening or interpreting its records:
 
 ```sh
-python3 scripts/validate_source_packet.py /absolute/private/path/source.ensoul-source.json
+bun scripts/validate-source-packet.ts /absolute/private/path/source.ensoul-source.json
 ```
 
 Require a zero exit status and a receipt with `valid: true`. The dependency-free validator emits only schema/digest/count metadata. If validation fails, do not inspect, guess, repair, or partially use the packet.

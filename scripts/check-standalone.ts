@@ -16,6 +16,7 @@ import {
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const PUBLIC_DESCRIPTION = "A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.";
+const SKILLS_BADGE = "[![skills.sh](https://skills.sh/b/hraness/message-like-me)](https://skills.sh/hraness/message-like-me)";
 const SCANNED_DIRECTORIES = [
   ".github",
   "dist",
@@ -40,6 +41,8 @@ const SCANNED_ROOT_FILES = [
 ] as const;
 const IGNORED_NAMES = new Set([".git", "node_modules"]);
 const DATABASE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
+const NON_BUN_SCRIPT_EXTENSIONS = new Set(["." + "p" + "y", "." + "p" + "yc", "." + "p" + "yo"]);
+const NON_BUN_CACHE_DIRECTORY = ["__", "py", "cache__"].join("");
 const TEXT_EXTENSIONS = new Set([
   ".cjs",
   ".css",
@@ -49,7 +52,6 @@ const TEXT_EXTENSIONS = new Set([
   ".lock",
   ".md",
   ".mjs",
-  ".py",
   ".sh",
   ".toml",
   ".ts",
@@ -63,6 +65,31 @@ const SELF_SCANNERS = new Set([
   "scripts/check-standalone.test.ts",
   "scripts/package-smoke.ts",
 ]);
+const EXPECTED_ENSOUL_FILES = [
+  "LICENSE",
+  "NOTICE.md",
+  "SKILL.md",
+  "VENDORED_FROM.md",
+  "agents/openai.yaml",
+  "references/ensoul-source-packet-v1.schema.json",
+  "references/evidence-method.md",
+  "references/output-blueprint.md",
+  "references/source-packets.md",
+  "scripts/prepare-x-archive.ts",
+  "scripts/source-packet.ts",
+  "scripts/validate-source-packet.ts",
+  "scripts/x-zip-file.ts",
+] as const;
+const LEGACY_NON_BUN_REFERENCE = new RegExp([
+  String.raw`\bpy`,
+  String.raw`thon3?\b`,
+  String.raw`|prepare_`,
+  String.raw`x_archive\.p`,
+  "y",
+  String.raw`|validate_`,
+  String.raw`source_packet\.p`,
+  "y",
+].join(""), "u");
 
 const OPACITY_RULES = [
   { label: "private package name", pattern: /@jungle\//u },
@@ -354,6 +381,9 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (!readme.includes(expectedInstall)) {
     problems.push(`README.md install tag must match package version v${version}`);
   }
+  if (!readme.startsWith(`# Message Like Me\n\n${SKILLS_BADGE}\n\n`)) {
+    problems.push("README.md must place the official skills.sh repository badge below the title");
+  }
   return problems;
 }
 
@@ -374,9 +404,26 @@ export async function standaloneProblems(): Promise<string[]> {
   problems.push(...checkPackageManifest(manifest));
   problems.push(...await checkVersionContracts(manifest));
 
+  const actualEnsoulFiles = files
+    .map(normalizedRelative)
+    .filter((path) => path.startsWith("skills/ensoul/"))
+    .map((path) => path.slice("skills/ensoul/".length))
+    .sort();
+  const expectedEnsoulFiles = [...EXPECTED_ENSOUL_FILES].sort();
+  if (actualEnsoulFiles.join("\n") !== expectedEnsoulFiles.join("\n")) {
+    problems.push([
+      "skills/ensoul inventory must exactly match the approved v0.3.0 copy.",
+      `Expected: ${expectedEnsoulFiles.join(", ")}`,
+      `Received: ${actualEnsoulFiles.join(", ")}`,
+    ].join("\n"));
+  }
+
   for (const file of files) {
     const path = normalizedRelative(file);
     const extension = extname(file).toLowerCase();
+    if (NON_BUN_SCRIPT_EXTENSIONS.has(extension) || path.split("/").includes(NON_BUN_CACHE_DIRECTORY)) {
+      problems.push(`${path} is a legacy non-Bun script artifact`);
+    }
     if (DATABASE_EXTENSIONS.has(extension)) {
       problems.push(`${path} is a committed database artifact; fixtures must be constructed at test time`);
     }
@@ -386,6 +433,9 @@ export async function standaloneProblems(): Promise<string[]> {
     if (!TEXT_EXTENSIONS.has(extension) && basename(file) !== "LICENSE") continue;
     const source = await readFile(file, "utf8");
     if (!SELF_SCANNERS.has(path)) {
+      if (LEGACY_NON_BUN_REFERENCE.test(source)) {
+        problems.push(`${path} contains a legacy non-Bun Ensoul script reference`);
+      }
       for (const rule of [...OPACITY_RULES, ...CREDENTIAL_RULES]) {
         if (rule.pattern.test(source)) problems.push(`${path} contains ${rule.label}`);
       }
