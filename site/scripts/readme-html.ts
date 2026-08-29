@@ -1,4 +1,5 @@
 const REPOSITORY_BLOB_ROOT = "https://github.com/hraness/message-like-me/blob/main/";
+const REPOSITORY_RAW_ROOT = "https://raw.githubusercontent.com/hraness/message-like-me/main/";
 
 function decodeCharacterReferences(value: string): string {
   return value
@@ -24,8 +25,12 @@ function assertSafeTarget(encodedTarget: string): void {
   }
 }
 
-function rewriteRelativeLinks(html: string): string {
-  return html.replace(/href="([^"]*)"/gu, (attribute, target: string) => {
+function rewriteRelativeTargets(html: string): string {
+  return html.replace(/(href|src)="([^"]*)"/gu, (
+    attribute,
+    name: "href" | "src",
+    target: string,
+  ) => {
     assertSafeTarget(target);
     if (
       target === ""
@@ -35,7 +40,8 @@ function rewriteRelativeLinks(html: string): string {
     ) {
       return attribute;
     }
-    return `href="${REPOSITORY_BLOB_ROOT}${target}"`;
+    const root = name === "src" ? REPOSITORY_RAW_ROOT : REPOSITORY_BLOB_ROOT;
+    return `${name}="${root}${target}"`;
   });
 }
 
@@ -49,5 +55,5 @@ export function renderReadmeHtml(source: string): string {
     const target = match[1];
     if (target !== undefined) assertSafeTarget(target);
   }
-  return rewriteRelativeLinks(html);
+  return rewriteRelativeTargets(html);
 }

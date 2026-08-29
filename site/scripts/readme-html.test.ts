@@ -3,13 +3,22 @@ import { renderReadmeHtml } from "./readme-html.ts";
 import { siteDocumentSource, SKILLS_SH_README_BADGE } from "./sync-readme.ts";
 
 describe("renderReadmeHtml", () => {
-  test("escapes raw HTML and rewrites repository-relative links", () => {
-    const html = renderReadmeHtml("<img src=x onerror=alert(1)>\n\n[Security](SECURITY.md)");
+  test("escapes raw HTML and rewrites repository-relative links and images", () => {
+    const html = renderReadmeHtml([
+      "<img src=x onerror=alert(1)>",
+      "",
+      "[Security](SECURITY.md)",
+      "",
+      "![Architecture](docs/architecture.png)",
+    ].join("\n"));
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
     expect(html).toContain(
       'href="https://github.com/hraness/message-like-me/blob/main/SECURITY.md"',
     );
-    expect(html).not.toContain("<img");
+    expect(html).toContain(
+      'src="https://raw.githubusercontent.com/hraness/message-like-me/main/docs/architecture.png"',
+    );
+    expect(html).not.toContain("<img src=x");
   });
 
   test.each([
