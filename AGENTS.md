@@ -6,8 +6,8 @@
   `messagelikeme` CLI.
 - `schema/` – public versioned JSON Schemas for deterministic artifacts and
   agent-authored profiles.
-- `docs/` – public methodology, evidence limits, research review, and prior-art
-  comparisons.
+- `docs/` – public methodology, evidence limits, research review, prior-art
+  comparisons, and the release-bound publication runbook.
 - `skills/message-like-me/` – the canonical Message Like Me Agent Skill and its
   progressive analysis, drafting, privacy, and profile references.
 - `.agents/skills/` – portable plan authoring, phased execution, implementation,
@@ -112,6 +112,14 @@
   Ensoul skill is vendored source, never a runtime dependency. Preflight and
   install both complete skills for Codex, Claude, and generic Agent Skill
   targets at user or project scope without leaving a partial pair.
-- Treat a stable `v*` tag matching `package.json` on `main` as a release request.
-  Publish only after the complete check and packed-consumer gate pass. Keep
-  GitHub Releases immutable and distribute through GitHub rather than npm.
+- Follow `docs/publishing.md` for the one-time production controls, stable
+  release, and current-`main` recovery procedure. Treat a stable `v*` tag
+  matching every checked version identity at the current `main` head as a
+  release request. Publish only after the complete root, site, packed-consumer,
+  and synthetic macOS gates pass. Publish the immutable, asset-free Latest
+  GitHub Release before the workflow fast-forwards the established
+  `website-production` ref without force. Keep the write-scoped job limited to
+  Release and ref mutation, and require the bounded read-only provider outcome
+  gate to finish. Recovery may revalidate only an existing immutable Latest
+  Release and must never create one. Keep Vercel Production Branch on
+  `website-production`; `main` and pull requests are preview sources.
