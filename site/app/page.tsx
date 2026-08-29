@@ -35,12 +35,12 @@ export default function Home() {
             native WhatsApp evidence exported through Wrench.
           </p>
           <div className="hero-actions">
-            <Link className="button button-primary" href="/sources">
-              See supported sources <span aria-hidden="true">→</span>
-            </Link>
-            <a className="button button-secondary" href="#install">
+            <a className="button button-primary" href="#install">
               Install v{SOFTWARE_VERSION} <span aria-hidden="true">↓</span>
             </a>
+            <Link className="button button-secondary" href="/sources">
+              See supported sources <span aria-hidden="true">→</span>
+            </Link>
           </div>
           <ul className="signal-list" aria-label="Style signals analyzed">
             <li>prose</li>

@@ -3,38 +3,33 @@
 **A local-first CLI and Agent Skill for studying private messaging history and
 drafting messages that sound like you.**
 
-Message Like Me turns private local messaging history into deterministic
-conversation metrics, bounded study packets, reusable style profiles, and
-privacy-bounded evidence packets for the Ensoul person-model workflow. It
-reads native iMessage history, caller-owned X data archives, and strict local
-source bundles, including multi-account Beeper and native WhatsApp exports
-produced through Wrench. Its copied Message Like Me and Ensoul Agent Skills
-teach Codex, Claude, and other coding agents how to interpret those local
-artifacts, build revisable evidence-led person models, and draft unsent replies
-in your voice.
+Message Like Me turns caller-owned messaging history into deterministic local
+metrics, bounded evidence packets, reusable style profiles, and unsent drafts.
+The CLI owns ingestion, storage, measurement, and export. Its copied Message
+Like Me and Ensoul Agent Skills teach Codex, Claude, and other coding agents how
+to interpret those artifacts through the agent environment you already use.
 
-The CLI has no model integration. It does not authenticate with a product
-account, invoke Wrench, Beeper, Wacli, or WhatsApp, send messages, or operate
-Messages. An agent you already run may use the installed skill for semantic
-analysis and drafting; opening a study or Ensoul packet exposes its bounded
-excerpts to that agent environment.
-
-This is an evidence layer for relationship-aware drafting. It does not train a
-model, represent your identity, infer your beliefs, or claim that a draft is
-what you would have written. Your current meaning, facts, and intent outrank
+The result is an inspectable evidence layer for relationship-aware drafting,
+not a model of your identity. Your current meaning, facts, and intent outrank
 historical style.
 
-## Supported sources
+## Why Message Like Me
 
-| Source | What Message Like Me reads | Boundary |
-| --- | --- | --- |
-| Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
-| X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
-| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.3 with official Wacli 0.15.0 | Message Like Me verifies the finished bundle; Wrench alone owns Wacli, linked-device authentication, synchronization, and provider operations. |
-| macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
+- **Separate evidence from interpretation.** The CLI produces deterministic
+  metrics and versioned packets without a model integration. Semantic analysis
+  happens only when you deliberately open an artifact in your own agent
+  environment.
+- **Study each relationship in context.** Outgoing messages supply style
+  evidence; incoming messages supply the response context. Tempo, sessions,
+  bubble shape, replies, and prose remain attributable to their source.
+- **Keep private history bounded.** Read-only import uses stable local copies,
+  ordinary views omit bodies and private labels, and body-bearing exports go
+  only to explicit owner-selected paths.
+- **Stop at an inspectable draft.** The installed skill can help draft text,
+  but Message Like Me never authenticates with a messaging provider, operates a
+  messaging app, or sends, reacts to, or schedules a message.
 
-## Install
+## Install and first run
 
 Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install both bundled Agent Skills:
@@ -59,14 +54,38 @@ messagelikeme skill path
 Message Like Me is distributed directly through GitHub and is not published to
 npm.
 
-## Start with private local history
-
-Initialize the private data store and inspect its location:
+Initialize an empty private store, then inspect it without reading any messaging
+source:
 
 ```sh
 messagelikeme init
 messagelikeme doctor --json
 ```
+
+The JSON response reports the initialized state, exact local paths, and store
+integrity checks. This is the shortest complete product check; no message body,
+contact, account, or provider credential is involved.
+
+## What becomes observable
+
+After you add a source, ordinary commands expose pseudonymous contacts, source
+health, conversation counts, sessions, response tempo, bubble sequences,
+reactions, and explicit-reply coverage. Study and Ensoul commands can then write
+bounded, body-bearing packets to paths you name. Profiles retain the exact
+corpus revision and packet digest they came from, so stale evidence fails
+visibly instead of being treated as current.
+
+## Supported sources
+
+| Source | What Message Like Me reads | Boundary |
+| --- | --- | --- |
+| Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
+| X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
+| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.1 with Beeper CLI 0.6.2 | Message Like Me reads the finished bundle; it receives no Beeper credential, invokes no Wrench or Beeper operation, and sends nothing. |
+| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.3 with official Wacli 0.15.0 | Message Like Me verifies the finished bundle; Wrench alone owns Wacli, linked-device authentication, synchronization, and provider operations. |
+| macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
+
+## Add private local history
 
 On macOS, the default store is:
 
@@ -548,6 +567,22 @@ context support them.
 Drafting ends with text in the agent task. Message Like Me has no send, react,
 schedule, or messaging-application command.
 
+## Find the right documentation
+
+- **Install and prove the local boundary:** use [Install and first run](#install-and-first-run).
+- **Add evidence:** choose a path under [Supported sources](#supported-sources),
+  then follow [Add private local history](#add-private-local-history).
+- **Study or draft:** inspect behavior, prepare a study packet, build a profile,
+  audit it against later conversations, then draft an unsent reply using the
+  task sections above.
+- **Review evidence and safety claims:** read the
+  [methodology](docs/methodology.md), [research review](docs/research.md), and
+  [security policy](SECURITY.md).
+- **Integrate a producer:** use the versioned
+  [Beeper bundle](docs/local-message-bundle-v1.md),
+  [WhatsApp bundle](docs/local-message-bundle-v2.md), and public JSON Schemas
+  instead of inferring a wire format from examples.
+
 ## Command reference
 
 Run `messagelikeme --help` for the checked grammar. The public surfaces are:
@@ -594,7 +629,7 @@ messagelikeme doctor [--json]
 
 Place global `--data-dir PATH` before the command.
 
-## Privacy model
+## Privacy, security, and limitations
 
 - The original `chat.db` and AddressBook databases remain authoritative.
   SQLite opens only stable private copies, never the source files or sidecars.
@@ -617,6 +652,9 @@ Place global `--data-dir PATH` before the command.
   data handling you accept; the CLI cannot make a hosted agent local.
 - Public fixtures are synthetic. Private corpora, profiles, packets, and drafts
   do not belong in Git, issues, logs, packages, or examples.
+- Message Like Me does not train a model, represent your identity, infer your
+  beliefs, or claim that a draft is what you would have written. Current facts,
+  meaning, and intent remain the user's responsibility.
 - A draft is never sent.
 
 Read [SECURITY.md](SECURITY.md) before integrating the library into another
@@ -675,17 +713,25 @@ import type {
 The library does not start the CLI, inspect Messages, Contacts, or an X archive,
 connect to a network, or send a draft merely because it is imported.
 
-## Development
+## Verify a checkout
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
+The complete gate type-checks the project, runs the synthetic test suite,
+validates both bundled Agent Skills and the standalone public boundary,
+rebuilds `dist/`, checks the committed build, and exercises a packed consumer.
+
+## Develop and contribute
+
 Tests use synthetic Messages and AddressBook databases, synthetic X archive
 ZIPs, and synthetic source bundles and conversations. Never add a real message,
 handle, group title, attachment, contact record, private path, or derived
 profile to a fixture.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change.
 
 The canonical repository is
 [`hraness/message-like-me`](https://github.com/hraness/message-like-me).
