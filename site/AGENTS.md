@@ -20,3 +20,10 @@
 - Use Bun 1.3.14 for installation and scripts and Node 24 for Next.js. Run
   `bun run check` before publishing. Production builds consume the committed
   generated documentation because the Vercel project root is this directory.
+- Keep Vercel Production Branch on `website-production`. The checked Release
+  workflow is the sole routine writer of that established ref and may only
+  fast-forward it after the exact immutable, asset-free Latest GitHub Release
+  exists. Treat `main` and pull requests as preview sources. A missing,
+  divergent, force-moved, or manually advanced production ref is a hard
+  release failure; follow `../docs/publishing.md` rather than recreating or
+  redeploying it.
