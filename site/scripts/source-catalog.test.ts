@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import HomePage from '../app/page.tsx';
+import sitemap from '../app/sitemap.ts';
 import SourcesPage from '../app/sources/page.tsx';
 import { SourceIcon } from '../app/_components/source-icon.tsx';
 import {
@@ -20,6 +21,24 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
+  test('dates only the routes whose v0.8.1 content changed', () => {
+    const routeDates = sitemap().map(({ lastModified, url }) => {
+      if (!(lastModified instanceof Date)) {
+        throw new Error(`Expected a Date lastModified value for ${url}`);
+      }
+      return [new URL(url).pathname, lastModified.toISOString()];
+    });
+
+    expect(routeDates).toEqual([
+      ['/', '2026-08-29T00:00:00.000Z'],
+      ['/sources', '2026-08-29T00:00:00.000Z'],
+      ['/docs', '2026-08-29T00:00:00.000Z'],
+      ['/methodology', '2026-08-27T00:00:00.000Z'],
+      ['/research', '2026-08-27T00:00:00.000Z'],
+      ['/about', '2026-08-27T00:00:00.000Z'],
+    ]);
+  });
+
   test('keeps one exact, source-aware catalog', () => {
     expect(SUPPORTED_SOURCES.map((entry) => entry.id)).toEqual([
       'apple-messages',
