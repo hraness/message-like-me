@@ -1,0 +1,22 @@
+{
+  "schema": "message-like-me.github-tag-resolution-fixture.v1",
+  "tag": "v0.8.0",
+  "tagRef": {
+    "ref": "refs/tags/v0.8.0",
+    "node_id": "REF_kwDOT_98drByZWZzL3RhZ3MvdjAuOC4w",
+    "url": "https://api.github.com/repos/hraness/message-like-me/git/refs/tags/v0.8.0",
+    "object": {
+      "sha": "ed74895d9b2fe69328b8f16a774bcd94a8fe45a9",
+      "type": "tag",
+      "url": "https://api.github.com/repos/hraness/message-like-me/git/tags/ed74895d9b2fe69328b8f16a774bcd94a8fe45a9"
+    }
+  },
+  "resolvedCommitEndpoint": "/repos/hraness/message-like-me/commits/refs%2Ftags%2Fv0.8.0",
+  "resolvedCommit": {
+    "sha": "d8443c1cb5fa53aabb3a17508539a26f07451301",
+    "node_id": "C_kwDOT_98dtoAKGQ4NDQzYzFjYjVmYTUzYWFiYjNhMTc1MDg1MzlhMjZmMDc0NTEzMDE",
+    "url": "https://api.github.com/repos/hraness/message-like-me/commits/d8443c1cb5fa53aabb3a17508539a26f07451301",
+    "html_url": "https://github.com/hraness/message-like-me/commit/d8443c1cb5fa53aabb3a17508539a26f07451301",
+    "comments_url": "https://api.github.com/repos/hraness/message-like-me/commits/d8443c1cb5fa53aabb3a17508539a26f07451301/comments"
+  }
+}

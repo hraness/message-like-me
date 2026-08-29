@@ -1,4 +1,9 @@
 export interface ReleaseProviderApi {
+  advanceRef?(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+  ): Promise<void>;
   get?(endpoint: string): Promise<unknown>;
   getWithServerDate?(endpoint: string): Promise<unknown>;
   graphql?(input: Readonly<{
@@ -7,10 +12,6 @@ export interface ReleaseProviderApi {
     owner: string;
     query: string;
   }>): Promise<unknown>;
-  patch?(
-    endpoint: string,
-    body: Readonly<{ force: boolean; sha: string }>,
-  ): Promise<unknown>;
 }
 
 export interface ProductionDeployment {
@@ -87,6 +88,16 @@ export function exactPublishedRelease(
   tag: string,
   label?: string,
 ): unknown;
+
+export function revalidateReleaseAuthority(input: Readonly<{
+  api: ReleaseProviderApi;
+  defaultBranch: string;
+  eventName: string;
+  recoveryWorkflowSha: string;
+  repository: string;
+  verifiedSha: string;
+  verifiedTag: string;
+}>): Promise<void>;
 
 export function createProviderBaseline(input: Readonly<{
   api: ReleaseProviderApi;

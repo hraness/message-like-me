@@ -17,7 +17,8 @@
 - `scripts/` – skill, standalone-boundary, built-output, and packed-consumer
   verification.
 - `dist/` – committed Bun-targeted JavaScript used by immutable GitHub installs.
-- `.github/workflows/` – read-only CI and checks-gated immutable tag releases.
+- `.github/workflows/` – read-only CI, checks-gated immutable tag releases,
+  and the separately admitted production-ref writer.
 - `README.md`, `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `LICENSE` –
   standalone public documentation, release history, policy, and terms.
 - `STYLE.md` – the public and reader-facing prose contract.
@@ -117,9 +118,13 @@
   matching every checked version identity at the current `main` head as a
   release request. Publish only after the complete root, site, packed-consumer,
   and synthetic macOS gates pass. Publish the immutable, asset-free Latest
-  GitHub Release before the workflow fast-forwards the established
-  `website-production` ref without force. Keep the write-scoped job limited to
-  Release and ref mutation, and require the bounded read-only provider outcome
-  gate to finish. Recovery may revalidate only an existing immutable Latest
-  Release and must never create one. Keep Vercel Production Branch on
-  `website-production`; `main` and pull requests are preview sources.
+  GitHub Release before the separate current-`main` promotion workflow
+  fast-forwards the established `website-production` ref with its dedicated
+  release App and exact expected-old lease. Keep the tag workflow's write scope
+  limited to Release publication. Keep the App private key inside the
+  main-only `production-ref-writer-key` environment, mint the numeric
+  one-repository token only when the ref must advance, and require the bounded
+  read-only provider outcome gate to finish. Already-exact recovery must not
+  enter the key environment. Recovery may revalidate only an existing
+  immutable Latest Release and must never create one. Keep Vercel Production
+  Branch on `website-production`; `main` and pull requests are preview sources.

@@ -19,6 +19,7 @@ import {
 } from "./release-provider-outcome.mjs";
 
 const releaseWorkflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
+const productionWorkflowUrl = new URL("../.github/workflows/website-production.yml", import.meta.url);
 const providerOutcomeHelperUrl = new URL("./release-provider-outcome.mjs", import.meta.url);
 const repository = fileURLToPath(new URL("../", import.meta.url));
 
@@ -62,8 +63,15 @@ async function runWorkflowScript(
 
 const providerRepository = "hraness/message-like-me";
 const providerPreviousSha = "1".repeat(40);
-const providerVerifiedSha = "2".repeat(40);
 const providerTag = "v0.8.0";
+const tagResolutionFixture = JSON.parse(await readFile(
+  new URL("./fixtures/github-v0.8.0-tag-resolution.json", import.meta.url),
+  "utf8",
+)) as Readonly<{
+  resolvedCommit: Readonly<Record<string, ProviderJson> & { sha: string }>;
+  resolvedCommitEndpoint: string;
+}>;
+const providerVerifiedSha = tagResolutionFixture.resolvedCommit.sha;
 const providerReleasePublishedAt = "2026-08-29T14:00:00Z";
 const providerBaselineServerDate = "2026-08-29T15:00:00.000Z";
 const providerPromotionServerDate = "2026-08-29T15:01:00.000Z";
@@ -277,6 +285,7 @@ function providerCompare(overrides: Readonly<Record<string, ProviderJson>> = {})
     ahead_by: 1,
     base_commit: { sha: providerPreviousSha },
     behind_by: 0,
+    commits: [{ sha: providerVerifiedSha }],
     merge_base_commit: { sha: providerPreviousSha },
     status: "ahead",
     ...overrides,
@@ -299,7 +308,7 @@ class ProviderApiFixture {
   compare: ProviderJson = providerCompare();
   compareHook: (() => void) | undefined;
   deploymentDetailError: Error | undefined;
-  patchError: Error | undefined;
+  advanceError: Error | undefined;
   refSha: string;
   readonly refSnapshots: readonly string[];
   readonly refValues: readonly ProviderJson[];
@@ -458,10 +467,10 @@ class ProviderApiFixture {
       this.#latestRead += 1;
       return snapshot ?? this.latest;
     }
-    if (endpoint === `/repos/${providerRepository}/commits/tags/${providerTag}`) {
+    if (endpoint === tagResolutionFixture.resolvedCommitEndpoint) {
       const snapshot = this.tagSnapshots[Math.min(this.#tagRead, this.tagSnapshots.length - 1)];
       this.#tagRead += 1;
-      return { sha: snapshot ?? providerVerifiedSha };
+      return { ...tagResolutionFixture.resolvedCommit, sha: snapshot ?? providerVerifiedSha };
     }
     if (
       endpoint ===
@@ -532,13 +541,13 @@ class ProviderApiFixture {
     return { body, serverDate: serverDate ?? providerPromotionServerDate };
   }
 
-  async patch(endpoint: string, body: Readonly<{ force: boolean; sha: string }>): Promise<ProviderJson> {
-    this.calls.push(`PATCH ${endpoint} ${JSON.stringify(body)}`);
-    expect(endpoint).toBe(`/repos/${providerRepository}/git/refs/heads/website-production`);
-    expect(body).toEqual({ force: false, sha: providerVerifiedSha });
-    if (this.patchError !== undefined) throw this.patchError;
+  async advanceRef(repository: string, expectedOldSha: string, verifiedSha: string): Promise<void> {
+    this.calls.push(`GIT PUSH ${repository} ${expectedOldSha} ${verifiedSha}`);
+    expect(repository).toBe(providerRepository);
+    expect(expectedOldSha).toBe(providerPreviousSha);
+    expect(verifiedSha).toBe(providerVerifiedSha);
+    if (this.advanceError !== undefined) throw this.advanceError;
     this.refSha = providerVerifiedSha;
-    return providerRef(providerVerifiedSha);
   }
 }
 
@@ -602,15 +611,13 @@ async function providerReceipts(mode: "advanced" | "already-exact"): Promise<Rea
 
 
 describe("release-bound site control", () => {
-  test("accepts only exact tag pushes or current-default-branch release recovery", async () => {
+  test("accepts only one exact stable tag push in the Release workflow", async () => {
     const workflow = await readFile(releaseWorkflowUrl, "utf8");
     const script = workflowStepScript(workflow, "Resolve release request");
     const directory = await mkdtemp(join(tmpdir(), "message-like-me-release-request-"));
     const output = join(directory, "github-output.txt");
 
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("release_tag:");
-    expect(workflow).toContain("required: true");
+    expect(workflow).not.toContain("workflow_dispatch:");
     expect(workflow).toContain("ref: refs/tags/${{ steps.request.outputs.tag }}");
 
     try {
@@ -619,13 +626,11 @@ describe("release-bound site control", () => {
       ): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> => {
         await rm(output, { force: true });
         return runWorkflowScript(script, {
-          DEFAULT_BRANCH: "main",
           EVENT_NAME: "push",
           EVENT_REF: "refs/tags/v0.8.0",
           EVENT_REF_NAME: "v0.8.0",
           EVENT_REF_TYPE: "tag",
           GITHUB_OUTPUT: output,
-          INPUT_RELEASE_TAG: "",
           ...overrides,
         });
       };
@@ -634,26 +639,9 @@ describe("release-bound site control", () => {
       expect(pushed.exitCode).toBe(0);
       expect(await readFile(output, "utf8")).toBe("tag=v0.8.0\n");
 
-      const recovered = await runCase({
-        EVENT_NAME: "workflow_dispatch",
-        EVENT_REF: "refs/heads/main",
-        EVENT_REF_NAME: "main",
-        EVENT_REF_TYPE: "branch",
-        INPUT_RELEASE_TAG: "v0.8.0",
-      });
-      expect(recovered.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toBe("tag=v0.8.0\n");
-
       for (const rejectedEnvironment of [
-        {
-          EVENT_NAME: "workflow_dispatch",
-          EVENT_REF: "refs/heads/recovery",
-          EVENT_REF_NAME: "recovery",
-          EVENT_REF_TYPE: "branch",
-          INPUT_RELEASE_TAG: "v0.8.0",
-        },
         { EVENT_REF: "refs/heads/main", EVENT_REF_NAME: "main", EVENT_REF_TYPE: "branch" },
-        { INPUT_RELEASE_TAG: "v0.8.0\npoison", EVENT_NAME: "workflow_dispatch", EVENT_REF: "refs/heads/main" },
+        { EVENT_REF_NAME: "v0.8.0\npoison", EVENT_REF: "refs/tags/v0.8.0\npoison" },
         { EVENT_NAME: "schedule" },
       ] as const) {
         const rejected = await runCase(rejectedEnvironment);
@@ -665,262 +653,202 @@ describe("release-bound site control", () => {
     }
   });
 
-  test("binds the recovery source and routes strong revalidation at Release creation", async () => {
-    const workflow = await readFile(releaseWorkflowUrl, "utf8");
-    const bindScript = workflowStepScript(workflow, "Bind recovery workflow source");
-    const publishScript = workflowStepScript(workflow, "Publish verified GitHub Release");
-    const directory = await mkdtemp(join(tmpdir(), "message-like-me-release-workflow-source-"));
-    const binaryDirectory = join(directory, "bin");
-    const ghStub = join(binaryDirectory, "gh");
-    const commandLog = join(directory, "commands.log");
+  test("binds workflow-run and recovery requests to the checked Release run and exact current main", async () => {
+    const workflow = await readFile(productionWorkflowUrl, "utf8");
+    const script = workflowStepScript(workflow, "Bind dispatch to exact current main");
+    const directory = await mkdtemp(join(tmpdir(), "message-like-me-site-request-"));
+    const bin = join(directory, "bin");
     const output = join(directory, "github-output.txt");
-    const workflowSha = "1".repeat(40);
+    const gh = join(bin, "gh");
+    const sha = "2".repeat(40);
 
-    expect(workflow).toContain(
-      "recovery_workflow_sha: ${{ steps.recovery_source.outputs.sha }}",
-    );
-    expect(workflow).toContain(
-      "RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.recovery_workflow_sha }}",
-    );
-    expect(publishScript.match(/release-provider-outcome\.mjs revalidate-source/gu)).toHaveLength(1);
-    expect(publishScript.indexOf("release-provider-outcome.mjs release-order"))
-      .toBeLessThan(publishScript.indexOf("release-provider-outcome.mjs revalidate-source"));
-    expect(publishScript.indexOf("release-provider-outcome.mjs revalidate-source"))
-      .toBeLessThan(publishScript.indexOf("--method POST"));
+    await mkdir(bin);
+    await writeFile(gh, `#!/bin/sh
+set -eu
+if [ "$1" != "api" ]; then exit 90; fi
+case "$2|$4" in
+  "/repos/hraness/message-like-me|.default_branch") printf '%s\\n' "$STUB_DEFAULT_BRANCH" ;;
+  "/repos/hraness/message-like-me/git/ref/heads/main|.object.sha") printf '%s\\n' "$STUB_MAIN_SHA" ;;
+  *) exit 91 ;;
+esac
+`, "utf8");
+    await chmod(gh, 0o700);
+
+    const baseline = Object.freeze({
+      DEFAULT_BRANCH: "main",
+      EVENT_NAME: "workflow_run",
+      EVENT_REF: "refs/heads/main",
+      EVENT_REPOSITORY: providerRepository,
+      EVENT_SHA: sha,
+      EXPECTED_RELEASE_WORKFLOW_ID: "12345",
+      GH_TOKEN: "read-only-test-token",
+      GITHUB_OUTPUT: output,
+      GITHUB_REPOSITORY: providerRepository,
+      INPUT_RELEASE_TAG: "",
+      PATH: `${bin}:/usr/bin:/bin`,
+      STUB_DEFAULT_BRANCH: "main",
+      STUB_MAIN_SHA: sha,
+      UPSTREAM_CONCLUSION: "success",
+      UPSTREAM_EVENT: "push",
+      UPSTREAM_HEAD_BRANCH: "v0.8.0",
+      UPSTREAM_HEAD_REPOSITORY: providerRepository,
+      UPSTREAM_HEAD_SHA: sha,
+      UPSTREAM_PATH: ".github/workflows/release.yml",
+      UPSTREAM_RUN_ATTEMPT: "1",
+      UPSTREAM_WORKFLOW_ID: "12345",
+      UPSTREAM_WORKFLOW_NAME: "Release",
+    });
+    const runCase = async (
+      overrides: Readonly<Record<string, string>>,
+    ): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> => {
+      await rm(output, { force: true });
+      return runWorkflowScript(script, { ...baseline, ...overrides });
+    };
 
     try {
-      await mkdir(binaryDirectory, { recursive: true });
-      await writeFile(ghStub, `#!/bin/bash
-set -euo pipefail
-printf '%s\n' "$*" >> "$COMMAND_LOG"
-[[ "$*" == *"/git/ref/heads/$DEFAULT_BRANCH"* ]]
-if [[ "$DEFAULT_HEAD" == "api-failure" ]]; then
-  exit 1
-fi
-printf '%s\n' "$DEFAULT_HEAD"
-`, "utf8");
-      await chmod(ghStub, 0o755);
+      const workflowRun = await runCase({});
+      expect(workflowRun.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe(`sha=${sha}\ntag=v0.8.0\n`);
 
-      const baseEnvironment = Object.freeze({
-        COMMAND_LOG: commandLog,
-        DEFAULT_BRANCH: "main",
-        DEFAULT_HEAD: workflowSha,
+      const recovery = await runCase({
         EVENT_NAME: "workflow_dispatch",
-        EVENT_SHA: workflowSha,
-        GITHUB_OUTPUT: output,
-        GITHUB_REPOSITORY: "hraness/message-like-me",
-        PATH: `${binaryDirectory}:${process.env.PATH ?? ""}`,
-        RECOVERY_WORKFLOW_SHA: workflowSha,
+        INPUT_RELEASE_TAG: "v0.8.0",
+        UPSTREAM_CONCLUSION: "",
+        UPSTREAM_EVENT: "",
+        UPSTREAM_HEAD_BRANCH: "",
+        UPSTREAM_HEAD_REPOSITORY: "",
+        UPSTREAM_HEAD_SHA: "",
+        UPSTREAM_PATH: "",
+        UPSTREAM_RUN_ATTEMPT: "",
+        UPSTREAM_WORKFLOW_ID: "",
+        UPSTREAM_WORKFLOW_NAME: "",
       });
-      const runBind = async (
-        overrides: Readonly<Record<string, string>>,
-      ): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> => {
-        await Promise.all([
-          rm(commandLog, { force: true }),
-          rm(output, { force: true }),
-        ]);
-        return runWorkflowScript(bindScript, { ...baseEnvironment, ...overrides });
-      };
-      const bound = await runBind({});
-      expect(bound.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toBe(`sha=${workflowSha}\n`);
-      expect(await readFile(commandLog, "utf8")).toContain(
-        "/git/ref/heads/main",
-      );
+      expect(recovery.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe(`sha=${sha}\ntag=v0.8.0\n`);
 
-      for (const overrides of [
-        { DEFAULT_HEAD: "2".repeat(40) },
-        { DEFAULT_HEAD: "api-failure" },
-        { EVENT_SHA: "not-a-commit" },
-        { EVENT_NAME: "schedule" },
+      for (const rejectedEnvironment of [
+        { DEFAULT_BRANCH: "trunk" },
+        { EVENT_REF: "refs/tags/v0.8.0" },
+        { EVENT_REPOSITORY: "attacker/message-like-me" },
+        { EVENT_SHA: "3".repeat(40) },
+        { EXPECTED_RELEASE_WORKFLOW_ID: "" },
+        { UPSTREAM_WORKFLOW_ID: "54321" },
+        { UPSTREAM_WORKFLOW_NAME: "Release copy" },
+        { UPSTREAM_PATH: ".github/workflows/copied-release.yml" },
+        { UPSTREAM_EVENT: "workflow_dispatch" },
+        { UPSTREAM_RUN_ATTEMPT: "2" },
+        { UPSTREAM_CONCLUSION: "failure" },
+        { UPSTREAM_HEAD_REPOSITORY: "attacker/message-like-me" },
+        { UPSTREAM_HEAD_SHA: "3".repeat(40) },
+        { UPSTREAM_HEAD_BRANCH: "main" },
+        { STUB_DEFAULT_BRANCH: "trunk" },
+        { STUB_MAIN_SHA: "3".repeat(40) },
       ] as const) {
-        const rejected = await runBind(overrides);
+        const rejected = await runCase(rejectedEnvironment);
         expect(rejected.exitCode).not.toBe(0);
         expect(await Bun.file(output).exists()).toBe(false);
       }
-
-      const tagBind = await runBind({
-        DEFAULT_HEAD: "2".repeat(40),
-        EVENT_NAME: "push",
-        EVENT_SHA: "3".repeat(40),
-      });
-      expect(tagBind.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toBe("sha=\n");
-      expect(await Bun.file(commandLog).exists()).toBe(false);
-
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
   });
 
-  test("revalidates an existing immutable Latest release and never creates during recovery", async () => {
-    const workflow = await readFile(releaseWorkflowUrl, "utf8");
-    const script = workflowStepScript(workflow, "Publish verified GitHub Release");
-    const directory = await mkdtemp(join(tmpdir(), "message-like-me-release-recovery-publish-"));
-    const binaryDirectory = join(directory, "bin");
-    const ghStub = join(binaryDirectory, "gh");
-    const commandLog = join(directory, "commands.log");
-    const verifiedSha = "2".repeat(40);
-    const workflowSha = "1".repeat(40);
+  test("selects exactly one bounded ASCII promotion receipt", async () => {
+    const workflow = await readFile(productionWorkflowUrl, "utf8");
+    const script = workflowStepScript(workflow, "Bind exactly one promotion path");
+    const directory = await mkdtemp(join(tmpdir(), "message-like-me-promotion-select-"));
+    const output = join(directory, "github-output.txt");
+    const runCase = async (
+      overrides: Readonly<Record<string, string>>,
+    ): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> => {
+      await rm(output, { force: true });
+      return runWorkflowScript(script, {
+        ADVANCE_REQUIRED: "true",
+        ADVANCE_RESULT: "success",
+        ADVANCED_RECEIPT: "valid_receipt-1",
+        EXISTING_RESULT: "skipped",
+        EXISTING_RECEIPT: "",
+        GITHUB_OUTPUT: output,
+        ...overrides,
+      });
+    };
 
     try {
-      await mkdir(binaryDirectory, { recursive: true });
-      await writeFile(ghStub, `#!/bin/bash
-set -euo pipefail
-printf '%s\n' "$*" >> "$COMMAND_LOG"
-args="$*"
-release_json() {
-  printf '{"assets":[],"draft":false,"immutable":%s,"prerelease":false,"published_at":"2026-08-29T14:00:00Z","tag_name":"%s"}' "$RELEASE_IMMUTABLE" "$VERIFIED_TAG"
-}
-if [[ "$args" == *"/commits/tags/$VERIFIED_TAG"* ]]; then
-  printf '%s\n' "$TAG_SHA"
-elif [[ "$args" == "api --include /repos/$GITHUB_REPOSITORY/releases/tags/$VERIFIED_TAG" ]]; then
-  case "$LOOKUP_MODE" in
-    existing)
-      printf 'HTTP/2.0 200 OK\r\ndate: Sat, 29 Aug 2026 14:01:00 GMT\r\ncontent-type: application/json\r\n\r\n'
-      release_json
-      ;;
-    missing)
-      printf 'HTTP/2.0 404 Not Found\r\ndate: Sat, 29 Aug 2026 14:01:00 GMT\r\ncontent-type: application/json\r\n\r\n{"message":"Not Found"}\n'
-      exit 1
-      ;;
-    api-failure)
-      printf 'HTTP/2.0 500 Internal Server Error\r\ndate: Sat, 29 Aug 2026 14:01:00 GMT\r\ncontent-type: application/json\r\n\r\n{"message":"failure"}\n'
-      exit 1
-      ;;
-    malformed-404)
-      printf 'HTTP/2.0 404 Not Found\r\ndate: Sat, 29 Aug 2026 14:01:00 GMT\r\ncontent-type: application/json\r\n\r\n{"message":"Forbidden"}\n'
-      exit 1
-      ;;
-  esac
-elif [[ "$args" == "api /repos/$GITHUB_REPOSITORY/releases/tags/$VERIFIED_TAG" ]]; then
-  release_json
-elif [[ "$args" == *"/releases?per_page=100&page="* ]]; then
-  printf '[]\n'
-elif [[ "$args" == "api /repos/$GITHUB_REPOSITORY" ]]; then
-  case "$SOURCE_MODE" in
-    valid)
-      printf '{"default_branch":"%s"}\n' "$DEFAULT_BRANCH_STATE"
-      ;;
-    move-default)
-      if [[ "$(grep -Fxc "api /repos/$GITHUB_REPOSITORY" "$COMMAND_LOG")" -eq 1 ]]; then
-        printf '{"default_branch":"%s"}\n' "$DEFAULT_BRANCH"
-      else
-        printf '{"default_branch":"trunk"}\n'
-      fi
-      ;;
-    malformed)
-      printf '{"default_branch":null}\n'
-      ;;
-    api-failure)
-      exit 1
-      ;;
-  esac
-elif [[ "$args" == "api /repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" ]]; then
-  printf '{"object":{"sha":"%s","type":"commit"},"ref":"refs/heads/%s"}\n' \
-    "$SOURCE_SHA" "$DEFAULT_BRANCH"
-elif [[ "$args" == *"/releases/latest"* ]]; then
-  printf '%s\n' "$LATEST_TAG"
-elif [[ "$args" == *"api --method POST /repos/$GITHUB_REPOSITORY/releases"* ]]; then
-  if [[ "$ALLOW_CREATE" != "true" ]]; then
-    echo "recovery attempted to recreate an existing release" >&2
-    exit 91
-  fi
-  release_json
-else
-  echo "unexpected gh command: $args" >&2
-  exit 1
-fi
-`, "utf8");
-      await chmod(ghStub, 0o755);
+      const advanced = await runCase({});
+      expect(advanced.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe("receipt=valid_receipt-1\n");
 
-      const baseEnvironment = Object.freeze({
-        COMMAND_LOG: commandLog,
-        DEFAULT_BRANCH: "main",
-        DEFAULT_BRANCH_STATE: "main",
-        EVENT_NAME: "workflow_dispatch",
-        GITHUB_REF_NAME: "main",
-        GITHUB_REPOSITORY: "hraness/message-like-me",
-        LATEST_TAG: "v0.8.0",
-        LOOKUP_MODE: "existing",
-        ALLOW_CREATE: "false",
-        PATH: `${binaryDirectory}:${process.env.PATH ?? ""}`,
-        RELEASE_IMMUTABLE: "true",
-        RECOVERY_WORKFLOW_SHA: workflowSha,
-        SOURCE_MODE: "valid",
-        SOURCE_SHA: workflowSha,
-        TAG_SHA: verifiedSha,
-        VERIFIED_SHA: verifiedSha,
-        VERIFIED_TAG: "v0.8.0",
+      const maximum = "A".repeat(65_536);
+      const exactBound = await runCase({ ADVANCED_RECEIPT: maximum });
+      expect(exactBound.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe(`receipt=${maximum}\n`);
+
+      const existing = await runCase({
+        ADVANCE_REQUIRED: "false",
+        ADVANCE_RESULT: "skipped",
+        ADVANCED_RECEIPT: "",
+        EXISTING_RESULT: "success",
+        EXISTING_RECEIPT: "existing_receipt-1",
       });
-      const runCase = async (
-        overrides: Readonly<Record<string, string>>,
-      ): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> => {
-        await rm(commandLog, { force: true });
-        return runWorkflowScript(script, { ...baseEnvironment, ...overrides });
-      };
+      expect(existing.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe("receipt=existing_receipt-1\n");
 
-      const recovered = await runCase({});
-      expect(recovered.exitCode).toBe(0);
-      expect(await readFile(commandLog, "utf8")).not.toContain("--method POST");
-
-      const missingRecovery = await runCase({ ALLOW_CREATE: "true", LOOKUP_MODE: "missing" });
-      expect(missingRecovery.exitCode).not.toBe(0);
-      expect(`${missingRecovery.stdout}${missingRecovery.stderr}`).toContain(
-        "Release recovery requires an existing immutable Latest release",
-      );
-      expect(await readFile(commandLog, "utf8")).not.toContain("--method POST");
-
-      const tagCreated = await runCase({
-        ALLOW_CREATE: "true",
-        EVENT_NAME: "push",
-        LOOKUP_MODE: "missing",
-        RECOVERY_WORKFLOW_SHA: "",
-      });
-      expect(tagCreated.exitCode).toBe(0);
-      const tagCreateCommands = await readFile(commandLog, "utf8");
-      expect(tagCreateCommands).toContain("--method POST");
-      expect(tagCreateCommands).not.toContain(`api /repos/${providerRepository}\n`);
-      expect(tagCreateCommands).not.toContain("/git/ref/heads/main");
-
-      const crossWiredTag = await runCase({
-        ALLOW_CREATE: "true",
-        EVENT_NAME: "push",
-        LOOKUP_MODE: "missing",
-        RECOVERY_WORKFLOW_SHA: workflowSha,
-      });
-      expect(crossWiredTag.exitCode).not.toBe(0);
-      const crossWiredCommands = await readFile(commandLog, "utf8");
-      expect(crossWiredCommands).not.toContain("--method POST");
-      expect(crossWiredCommands).not.toContain(`api /repos/${providerRepository}\n`);
-      expect(crossWiredCommands).not.toContain("/git/ref/heads/main");
-
-      const lookupFailure = await runCase({ LOOKUP_MODE: "api-failure" });
-      expect(lookupFailure.exitCode).not.toBe(0);
-      expect(await readFile(commandLog, "utf8")).not.toContain("--method POST");
-
-      const falseAbsence = await runCase({ LOOKUP_MODE: "malformed-404" });
-      expect(falseAbsence.exitCode).not.toBe(0);
-      expect(await readFile(commandLog, "utf8")).not.toContain("--method POST");
-
-      for (const [overrides, message] of [
-        [{ TAG_SHA: "3".repeat(40) }, "Remote v0.8.0 resolves to"],
-        [{ RELEASE_IMMUTABLE: "false" }, "is not exact, published, immutable, and asset-free"],
-        [{ LATEST_TAG: "v0.7.9" }, "Latest release is v0.7.9"],
-        [{ VERIFIED_TAG: "v0.8.0\npoison" }, "no verified stable release tag"],
+      for (const rejectedEnvironment of [
+        { ADVANCED_RECEIPT: "" },
+        { ADVANCED_RECEIPT: "A".repeat(65_537) },
+        { ADVANCED_RECEIPT: "not/base64url" },
+        { EXISTING_RECEIPT: "unexpected" },
+        { ADVANCE_RESULT: "failure" },
+        { ADVANCE_REQUIRED: "unknown" },
       ] as const) {
-        const rejected = await runCase(overrides);
+        const rejected = await runCase(rejectedEnvironment);
         expect(rejected.exitCode).not.toBe(0);
-        expect(`${rejected.stdout}${rejected.stderr}`).toContain(message);
+        expect(await Bun.file(output).exists()).toBe(false);
       }
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
+  });
+
+  test("separates immutable Release publication from the privileged site writer", async () => {
+    const [releaseWorkflow, productionWorkflow] = await Promise.all([
+      readFile(releaseWorkflowUrl, "utf8"),
+      readFile(productionWorkflowUrl, "utf8"),
+    ]);
+
+    expect(releaseWorkflow).toContain('tags:\n      - "v*"');
+    expect(releaseWorkflow).not.toContain("workflow_dispatch:");
+    expect(releaseWorkflow).not.toContain("create-github-app-token");
+    expect(releaseWorkflow).not.toContain("production-ref-writer-key");
+    expect(releaseWorkflow).not.toContain("release-provider-outcome.mjs promote");
+    expect(releaseWorkflow).toContain("Publish immutable GitHub Release");
+
+    expect(productionWorkflow).toContain("workflow_run:");
+    expect(productionWorkflow).toContain("workflow_dispatch:");
+    expect(productionWorkflow).toContain("environment: { name: production-ref-writer-key, deployment: false }");
+    expect(productionWorkflow).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(productionWorkflow).toContain("release-provider-outcome.mjs promote");
+    expect(productionWorkflow).not.toContain("--method POST");
+    expect(productionWorkflow).not.toContain('"/repos/$GITHUB_REPOSITORY/releases"');
+  });
+
+  test("uses workflow dispatch only to recover an existing immutable release", async () => {
+    const workflow = await readFile(productionWorkflowUrl, "utf8");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("release_tag:");
+    expect(workflow).toContain('case "$EVENT_NAME" in');
+    expect(workflow).toContain("workflow_run)");
+    expect(workflow).toContain("workflow_dispatch)");
+    expect(workflow).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(workflow).not.toContain("release-provider-outcome.mjs release-order");
+    expect(workflow).not.toContain("inspect-release-response");
+    expect(workflow).not.toContain("generate_release_notes");
+    expect(workflow).not.toContain("make_latest");
   });
 
   test("keeps provider verification read-only, terminal, and release-authoritative", async () => {
     const [workflow, helper] = await Promise.all([
-      readFile(releaseWorkflowUrl, "utf8"),
+      readFile(productionWorkflowUrl, "utf8"),
       readFile(providerOutcomeHelperUrl, "utf8"),
     ]);
     const job = (name: string): string => {
@@ -932,7 +860,9 @@ fi
       return workflow.slice(start, next < 0 ? undefined : next);
     };
     const baselineJob = job("provider_baseline");
-    const publishJob = job("publish");
+    const advanceJob = job("advance_production_ref");
+    const existingJob = job("confirm_existing_production_ref");
+    const selectJob = job("select_promotion");
     const providerJob = job("provider_outcome");
     const permissions = (jobText: string): readonly string[] => {
       const match = /\n    permissions:\n((?:      [a-z-]+: (?:read|write)\n)+)/u.exec(jobText);
@@ -940,45 +870,58 @@ fi
       return match[1].trim().split("\n").map((line) => line.trim()).sort();
     };
 
-    for (const exactNodeJob of [baselineJob, publishJob, providerJob]) {
+    for (const exactNodeJob of [baselineJob, advanceJob, existingJob, providerJob]) {
       expect(exactNodeJob).toContain("node-version: \"24.19.0\"");
       expect(exactNodeJob).toContain("package-manager-cache: false");
     }
 
     expect(workflow.indexOf("\n  provider_baseline:\n"))
-      .toBeLessThan(workflow.indexOf("\n  publish:\n"));
-    expect(workflow.indexOf("\n  publish:\n"))
+      .toBeLessThan(workflow.indexOf("\n  advance_production_ref:\n"));
+    expect(workflow.indexOf("\n  advance_production_ref:\n"))
+      .toBeLessThan(workflow.indexOf("\n  select_promotion:\n"));
+    expect(workflow.indexOf("\n  confirm_existing_production_ref:\n"))
+      .toBeLessThan(workflow.indexOf("\n  select_promotion:\n"));
+    expect(workflow.indexOf("\n  select_promotion:\n"))
       .toBeLessThan(workflow.indexOf("\n  provider_outcome:\n"));
     expect(baselineJob).toContain("needs: verify");
     expect(permissions(baselineJob)).toEqual(["contents: read", "deployments: read"]);
     expect(baselineJob).not.toContain("contents: write");
     expect(baselineJob).toContain("release-provider-outcome.mjs baseline");
-    expect(publishJob).toContain("- provider_baseline");
-    expect(permissions(publishJob)).toEqual(["contents: write"]);
-    expect(publishJob).toContain("promotion_receipt:");
-    expect(publishJob).toContain("release-provider-outcome.mjs promote");
-    expect(publishJob).not.toContain("release-provider-outcome.mjs wait");
-    expect(publishJob).not.toContain("/statuses?");
-    expect(providerJob).toContain("- publish");
+    expect(baselineJob).toContain("advance_required:");
+    expect(advanceJob).toContain("- provider_baseline");
+    expect(permissions(advanceJob)).toEqual(["contents: read"]);
+    expect(advanceJob).toContain("PROMOTION_EXPECTED_MODE: advanced");
+    expect(advanceJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(advanceJob).toContain("release-provider-outcome.mjs promote");
+    expect(advanceJob).not.toContain("release-provider-outcome.mjs wait");
+    expect(advanceJob).not.toContain("/statuses?");
+    expect(existingJob).toContain("PROMOTION_EXPECTED_MODE: already-exact");
+    expect(existingJob).not.toContain("environment:");
+    expect(existingJob).not.toContain("MLM_RELEASE_APP_");
+    expect(existingJob).toContain("release-provider-outcome.mjs promote");
+    expect(selectJob).toContain("Bind exactly one promotion path");
+    expect(selectJob).toContain("ADVANCE_RESULT");
+    expect(selectJob).toContain("EXISTING_RESULT");
+    expect(providerJob).toContain("- select_promotion");
     expect(providerJob).toContain("timeout-minutes: 20");
     expect(permissions(providerJob)).toEqual(["contents: read", "deployments: read"]);
     expect(providerJob).not.toContain("contents: write");
     expect(providerJob).not.toContain("continue-on-error");
     expect(providerJob).toContain("release-provider-outcome.mjs wait");
-    expect(providerJob).toContain("needs.publish.outputs.promotion_receipt");
+    expect(providerJob).toContain("needs.select_promotion.outputs.receipt");
     expect(providerJob).toContain("VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}");
     expect(providerJob).toContain("VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}");
-    expect(providerJob).toContain("DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}");
+    expect(providerJob).toContain("DEFAULT_BRANCH: main");
     expect(providerJob).toContain("EVENT_NAME: ${{ github.event_name }}");
     expect(providerJob).toContain(
-      "RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.recovery_workflow_sha }}",
+      "RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}",
     );
     expect(helper).toContain("defaultBranch: process.env.DEFAULT_BRANCH");
     expect(helper).toContain("eventName: process.env.EVENT_NAME");
     expect(helper).toContain("recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA");
     expect(workflow.match(
-      /ref: \$\{\{ needs\.verify\.outputs\.recovery_workflow_sha \|\| needs\.verify\.outputs\.verified_sha \}\}/gu,
-    )).toHaveLength(3);
+      /ref: \$\{\{ needs\.verify\.outputs\.workflow_sha \}\}/gu,
+    )).toHaveLength(4);
     expect(workflow).not.toContain("VERCEL_TOKEN");
     expect(workflow).not.toContain("projectSettings");
     expect(workflow).not.toContain("redeploy");
@@ -993,14 +936,14 @@ fi
     expect(helper).toContain("PROVIDER_POLL_INTERVAL_MILLISECONDS = 60_000");
     expect(helper).not.toContain("Date.now");
     expect(helper).toContain('this.#runRaw(["--include", endpoint]');
-    expect(workflow).toContain("release-provider-outcome.mjs release-order");
+    expect(workflow).not.toContain("release-provider-outcome.mjs release-order");
     expect(workflow).not.toContain("gh api --paginate");
     expect(helper).toContain('mode = "already-exact"');
     expect(helper).toContain('mode = "advanced"');
     expect(helper).toContain("35613825");
-    expect(helper).toContain("force: false");
+    expect(helper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha)");
     expect(helper).toContain("/git/ref/heads/website-production");
-    expect(helper).toContain("/git/refs/heads/website-production");
+    expect(helper).not.toContain("/git/refs/heads/website-production");
     expect(helper).not.toContain("matching-refs");
     expect(helper).not.toContain("api.post");
     expect(helper).not.toContain('["--method", "POST"');
@@ -1371,16 +1314,13 @@ fi
 
     const advanced = await providerReceipts("advanced");
     expect((advanced.promotion as Readonly<Record<string, unknown>>).mode).toBe("advanced");
-    expect(advanced.promotionCalls.filter((call) => call.startsWith("PATCH "))).toEqual([
-      `PATCH /repos/${providerRepository}/git/refs/heads/website-production ${JSON.stringify({
-        force: false,
-        sha: providerVerifiedSha,
-      })}`,
+    expect(advanced.promotionCalls.filter((call) => call.startsWith("GIT PUSH "))).toEqual([
+      `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha}`,
     ]);
     expect(advanced.promotionCalls.some((call) => call.includes("/deployments"))).toBe(false);
     const recovered = await providerReceipts("already-exact");
     expect((recovered.promotion as Readonly<Record<string, unknown>>).mode).toBe("already-exact");
-    expect(recovered.promotionCalls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(recovered.promotionCalls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const concurrent = providerDeployment(11, "2026-08-29T15:01:00Z");
     await expect(createProviderBaseline({
@@ -1609,7 +1549,7 @@ fi
     );
   });
 
-  test("fails promotion closed on comparison, ref, and PATCH races", async () => {
+  test("fails promotion closed on comparison, ref, and lease races", async () => {
     const { baseline, baselineDeployment } = await providerReceipts("advanced");
     const staleLatest = new ProviderApiFixture({
       latestSnapshots: [providerLatest({ tag_name: "v0.7.9" })],
@@ -1622,7 +1562,7 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("Latest Release is not v0.8.0");
-    expect(staleLatest.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(staleLatest.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     for (const compare of [
       providerCompare({ ahead_by: 0 }),
@@ -1631,6 +1571,11 @@ fi
       providerCompare({ status: "diverged" }),
       providerCompare({ base_commit: { sha: "3".repeat(40) } }),
       providerCompare({ merge_base_commit: { sha: "3".repeat(40) } }),
+      providerCompare({ commits: [] }),
+      providerCompare({ commits: null }),
+      providerCompare({ commits: [{ sha: "3".repeat(40) }] }),
+      providerCompare({ commits: [{ sha: providerVerifiedSha }, { sha: "3".repeat(40) }] }),
+      providerCompare({ commits: [{ sha: providerVerifiedSha }, {}] }),
       null,
     ] as const) {
       const api = new ProviderApiFixture({
@@ -1645,7 +1590,7 @@ fi
         verifiedSha: providerVerifiedSha,
         verifiedTag: providerTag,
       })).rejects.toThrow();
-      expect(api.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+      expect(api.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
     }
 
     const refRace = new ProviderApiFixture({
@@ -1660,20 +1605,20 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("moved before promotion");
-    expect(refRace.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(refRace.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const patchFailure = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
       statuses: terminalBaselineStatus(),
     });
-    patchFailure.patchError = new Error("simulated PATCH race");
+    patchFailure.advanceError = new Error("simulated stale lease");
     await expect(promoteWebsiteProduction({
       api: patchFailure,
       baselineReceipt: baseline,
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("simulated PATCH race");
+    })).rejects.toThrow("simulated stale lease");
 
     const movedBeforePatch = new ProviderApiFixture({
       defaultBranchShaSnapshots: ["3".repeat(40)],
@@ -1690,7 +1635,7 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("workflow source is no longer current main");
-    expect(movedBeforePatch.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(movedBeforePatch.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const movedAfterPatch = new ProviderApiFixture({
       defaultBranchShaSnapshots: [providerVerifiedSha, "3".repeat(40)],
@@ -1707,7 +1652,7 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("workflow source is no longer current main");
-    expect(movedAfterPatch.calls.filter((call) => call.startsWith("PATCH "))).toHaveLength(1);
+    expect(movedAfterPatch.calls.filter((call) => call.startsWith("GIT PUSH "))).toHaveLength(1);
 
     const alreadyExact = await providerReceipts("already-exact");
     const alreadyExactSourceDrift = new ProviderApiFixture({
@@ -1733,7 +1678,7 @@ fi
     );
     expect(alreadyExactTerminalRefRead).toBeGreaterThanOrEqual(0);
     expect(alreadyExactSourceRead).toBeGreaterThan(alreadyExactTerminalRefRead);
-    expect(alreadyExactSourceDrift.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(alreadyExactSourceDrift.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const postPatchMismatch = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
@@ -1747,7 +1692,7 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("after promotion");
-    expect(postPatchMismatch.calls.filter((call) => call.startsWith("PATCH "))).toHaveLength(1);
+    expect(postPatchMismatch.calls.filter((call) => call.startsWith("GIT PUSH "))).toHaveLength(1);
 
     const missingRef = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
@@ -1761,7 +1706,7 @@ fi
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     })).rejects.toThrow("is not an object");
-    expect(missingRef.calls.some((call) => call.startsWith("PATCH "))).toBe(false);
+    expect(missingRef.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     await expect(promoteWebsiteProduction({
       api: new ProviderApiFixture({
