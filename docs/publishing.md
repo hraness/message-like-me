@@ -126,10 +126,12 @@ immutable, asset-free, and Latest before it considers the production ref.
 If `website-production` still precedes the release commit, recovery performs
 the same checked non-force fast-forward and requires one new provider outcome.
 If the ref is already exact, recovery does not write it. It accepts only the
-unique latest exact-SHA successful Production deployment in the stable baseline
-that postdates the immutable Release, then repeats the terminal authority
-readbacks. A missing ref is a hard failure and must not be recreated by the
-workflow.
+unique latest exact-SHA Production deployment in the stable baseline that
+postdates the immutable Release. That newest attempt itself must be
+provider-accepted. A newer terminal failure, error, or inactive attempt blocks
+recovery instead of allowing an older success to be reused. Recovery then
+repeats the terminal authority readbacks. A missing ref is a hard failure and
+must not be recreated by the workflow.
 
 When a run fails after the immutable Release exists, preserve its evidence,
 correct only the failed control, and use this recovery path. Do not retag,

@@ -1489,17 +1489,14 @@ async function observeCandidate(api, baseline, promotion, pinnedCandidateId) {
     ) {
       fail("a concurrent Production deployment appeared during recovery verification");
     }
-    const successfulExactCandidates = deployments.filter(
-      (deployment) =>
-        deployment.sha === promotion.verifiedSha &&
-        deployment.latestStatus?.state === "SUCCESS" &&
-        ["ACTIVE", "SUCCESS"].includes(deployment.state),
+    const exactCandidates = deployments.filter(
+      (deployment) => deployment.sha === promotion.verifiedSha,
     );
-    candidate = successfulExactCandidates[0];
+    candidate = exactCandidates[0];
     if (candidate !== undefined) {
-      const second = successfulExactCandidates[1];
+      const second = exactCandidates[1];
       if (second !== undefined && second.createdAt === candidate.createdAt) {
-        fail("the latest successful exact-SHA Production deployment is ambiguous at second precision");
+        fail("the latest exact-SHA Production deployment is ambiguous at second precision");
       }
       const newerSuccessfulOtherSha = deployments.find(
         (deployment) =>
