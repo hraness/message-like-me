@@ -2410,7 +2410,7 @@ fi
     }
   });
 
-  test("fails recovery closed on stale success, latest ties, or newer deployments", async () => {
+  test("fails recovery closed on stale success, latest ties, exact-SHA retry failures, or newer deployments", async () => {
     const recovery = await providerReceipts("already-exact");
     const baselineDeployment = recovery.baselineDeployment;
 
@@ -2517,7 +2517,7 @@ fi
       pollIntervalMilliseconds: 0,
       promotionReceipt: tiedReceipts.promotion,
       sleep: async () => {},
-    })).rejects.toThrow("successful exact-SHA Production deployment is ambiguous at second precision");
+    })).rejects.toThrow("latest exact-SHA Production deployment is ambiguous at second precision");
 
     const olderVerified = providerDeployment(10, "2026-08-29T14:05:00Z");
     const newerWrongSha = providerDeployment(11, "2026-08-29T14:07:00Z", {
@@ -2591,7 +2591,7 @@ fi
         pollIntervalMilliseconds: 0,
         promotionReceipt: exactTerminalReceipts.promotion,
         sleep: async () => {},
-      })).resolves.toEqual({ deploymentId: 10, statusId: 100 });
+      })).rejects.toThrow(`candidate Production deployment ended in ${terminalState}`);
     }
 
     const concurrentApi = new ProviderApiFixture({
