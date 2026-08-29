@@ -4,6 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installSkill } from "./skill-install.ts";
 
+const ENSOUL_BUN_SCRIPTS = [
+  "prepare-x-archive.ts",
+  "source-packet.ts",
+  "validate-source-packet.ts",
+  "x-zip-file.ts",
+] as const;
+
+async function expectEnsoulBunScripts(skillRoot: string): Promise<void> {
+  for (const script of ENSOUL_BUN_SCRIPTS) {
+    expect((await lstat(join(skillRoot, "scripts", script))).isFile()).toBe(true);
+  }
+}
+
 describe("skill installation", () => {
   test("installs both bundled skills and refuses accidental replacement", async () => {
     const project = await mkdtemp(join(tmpdir(), "message-like-me-skill-"));
@@ -15,6 +28,7 @@ describe("skill installation", () => {
       });
       expect((await lstat(join(destinations.messageLikeMe, "SKILL.md"))).isFile()).toBe(true);
       expect((await lstat(join(destinations.ensoul, "SKILL.md"))).isFile()).toBe(true);
+      await expectEnsoulBunScripts(destinations.ensoul);
       await expect(installSkill({
         target: "agents",
         scope: "project",
@@ -28,6 +42,7 @@ describe("skill installation", () => {
       });
       expect((await lstat(join(replaced.messageLikeMe, "SKILL.md"))).isFile()).toBe(true);
       expect((await lstat(join(replaced.ensoul, "SKILL.md"))).isFile()).toBe(true);
+      await expectEnsoulBunScripts(replaced.ensoul);
     } finally {
       await rm(project, { recursive: true, force: true });
     }

@@ -16,6 +16,23 @@ import { basename, extname, join, relative, resolve, sep } from "node:path";
 const PACKAGE_NAME = "@hraness/message-like-me";
 const PACKAGE_ROOT = resolve(import.meta.dir, "..");
 const TYPESCRIPT_CLI = join(PACKAGE_ROOT, "node_modules", "typescript", "bin", "tsc");
+const NON_BUN_SCRIPT_EXTENSIONS = new Set(["." + "p" + "y", "." + "p" + "yc", "." + "p" + "yo"]);
+const NON_BUN_CACHE_DIRECTORY = ["__", "py", "cache__"].join("");
+const EXPECTED_ENSOUL_FILES = [
+  "LICENSE",
+  "NOTICE.md",
+  "SKILL.md",
+  "VENDORED_FROM.md",
+  "agents/openai.yaml",
+  "references/ensoul-source-packet-v1.schema.json",
+  "references/evidence-method.md",
+  "references/output-blueprint.md",
+  "references/source-packets.md",
+  "scripts/prepare-x-archive.ts",
+  "scripts/source-packet.ts",
+  "scripts/validate-source-packet.ts",
+  "scripts/x-zip-file.ts",
+] as const;
 const TEXT_EXTENSIONS = new Set([
   ".cjs",
   ".css",
@@ -24,7 +41,6 @@ const TEXT_EXTENSIONS = new Set([
   ".json",
   ".md",
   ".mjs",
-  ".py",
   ".sh",
   ".toml",
   ".ts",
@@ -80,6 +96,9 @@ async function scanPackedPackage(root: string): Promise<void> {
       return;
     }
     if (info.isDirectory()) {
+      if (basename(path) === NON_BUN_CACHE_DIRECTORY) {
+        problems.push(`${packagePath} is a legacy non-Bun script artifact directory`);
+      }
       const entries = await readdir(path, { withFileTypes: true });
       for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
         await visit(join(path, entry.name));
@@ -90,10 +109,14 @@ async function scanPackedPackage(root: string): Promise<void> {
       problems.push(`${packagePath} is not a regular file`);
       return;
     }
-    if (DATABASE_EXTENSIONS.has(extname(path).toLowerCase()) || await startsWithSqliteHeader(path)) {
+    const extension = extname(path).toLowerCase();
+    if (NON_BUN_SCRIPT_EXTENSIONS.has(extension)) {
+      problems.push(`${packagePath} is a legacy non-Bun script artifact`);
+    }
+    if (DATABASE_EXTENSIONS.has(extension) || await startsWithSqliteHeader(path)) {
       problems.push(`${packagePath} contains a database artifact`);
     }
-    if (!TEXT_EXTENSIONS.has(extname(path).toLowerCase()) && basename(path) !== "LICENSE") return;
+    if (!TEXT_EXTENSIONS.has(extension) && basename(path) !== "LICENSE") return;
     const source = await readFile(path, "utf8");
     for (const rule of FORBIDDEN_PACKAGE_TEXT) {
       if (rule.pattern.test(source)) problems.push(`${packagePath} contains ${rule.label}`);
@@ -102,6 +125,35 @@ async function scanPackedPackage(root: string): Promise<void> {
   await visit(root);
   if (problems.length > 0) {
     throw new Error(`Packed standalone boundary failed:\n${[...new Set(problems)].sort().join("\n")}`);
+  }
+}
+
+async function fileInventory(root: string, path: string = root): Promise<string[]> {
+  const info = await lstat(path);
+  if (info.isSymbolicLink()) {
+    throw new Error(`Packed skill inventory contains a symlink: ${relative(root, path)}`);
+  }
+  if (info.isFile()) return [relative(root, path).split(sep).join("/")];
+  if (!info.isDirectory()) {
+    throw new Error(`Packed skill inventory contains a non-file entry: ${relative(root, path)}`);
+  }
+  const files: string[] = [];
+  const entries = await readdir(path, { withFileTypes: true });
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    files.push(...await fileInventory(root, join(path, entry.name)));
+  }
+  return files;
+}
+
+async function assertEnsoulInventory(root: string, label: string): Promise<void> {
+  const actual = (await fileInventory(root)).sort();
+  const expected = [...EXPECTED_ENSOUL_FILES].sort();
+  if (actual.join("\n") !== expected.join("\n")) {
+    throw new Error([
+      `${label} Ensoul inventory does not match the approved v0.3.0 copy.`,
+      `Expected: ${expected.join(", ")}`,
+      `Received: ${actual.join(", ")}`,
+    ].join("\n"));
   }
 }
 
@@ -304,15 +356,7 @@ export async function packageSmoke(): Promise<void> {
     if (!isWithin(installedPackage, installedEnsoulSkill)) {
       throw new Error("Packed Ensoul skill resolved outside its install");
     }
-    await Promise.all([
-      access(join(installedEnsoulSkill, "SKILL.md")),
-      access(join(installedEnsoulSkill, "LICENSE")),
-      access(join(installedEnsoulSkill, "NOTICE.md")),
-      access(join(installedEnsoulSkill, "VENDORED_FROM.md")),
-      access(join(installedEnsoulSkill, "references", "ensoul-source-packet-v1.schema.json")),
-      access(join(installedEnsoulSkill, "scripts", "prepare_x_archive.py")),
-      access(join(installedEnsoulSkill, "scripts", "validate_source_packet.py")),
-    ]);
+    await assertEnsoulInventory(installedEnsoulSkill, "Packed");
     const installReceipt = record(
       JSON.parse(await run([
         binary,
@@ -335,18 +379,11 @@ export async function packageSmoke(): Promise<void> {
     if (installReceipt.destination !== destinations.messageLikeMe) {
       throw new Error("Packed dual-skill install receipt broke the legacy destination field");
     }
-    await Promise.all([
-      access(join(consumer, ".agents", "skills", "message-like-me", "SKILL.md")),
-      access(join(consumer, ".agents", "skills", "ensoul", "SKILL.md")),
-      access(join(
-        consumer,
-        ".agents",
-        "skills",
-        "ensoul",
-        "scripts",
-        "validate_source_packet.py",
-      )),
-    ]);
+    await access(join(consumer, ".agents", "skills", "message-like-me", "SKILL.md"));
+    await assertEnsoulInventory(
+      join(consumer, ".agents", "skills", "ensoul"),
+      "Installed",
+    );
     const schema = record(
       JSON.parse(
         await readFile(join(installedPackage, "schema", "style-profile-v1.schema.json"), "utf8"),

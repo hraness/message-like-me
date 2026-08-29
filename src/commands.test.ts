@@ -266,8 +266,8 @@ describe("messagelikeme CLI", () => {
       expect(futurePacket.scope.limits.before).toBe("2027-01-01T00:00:00.000Z");
       expect(futurePacket.scope.sourceCutoff).toBe("2026-08-21T11:01:00.000Z");
       const validator = Bun.spawn([
-        "python3",
-        join(import.meta.dir, "../skills/ensoul/scripts/validate_source_packet.py"),
+        process.execPath,
+        join(import.meta.dir, "../skills/ensoul/scripts/validate-source-packet.ts"),
         futureBoundOutput,
       ], { stderr: "pipe", stdout: "pipe" });
       const [validatorExit, validatorStderr] = await Promise.all([

@@ -18,6 +18,4 @@ coverage/
 *.study-packet.json
 *.ensoul-source.json
 *.person-model.json
-__pycache__/
-*.py[cod]
 /.message-like-me/

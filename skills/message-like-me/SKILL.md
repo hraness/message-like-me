@@ -80,7 +80,7 @@ message entries in agent context, call X, or fetch media. The Message Like Me
 CLI owns that strict offline parsing and preserves exact archive provenance.
 This source covers archive direct messages, not X Chat. A separate, bounded
 public-post evidence workflow is available through `$ensoul`'s shipped
-`scripts/prepare_x_archive.py`; that allowlisted adapter opens only authored
+`bun scripts/prepare-x-archive.ts`; that allowlisted adapter opens only authored
 public-post members and must not be used to inspect direct-message data.
 
 If the same X account is already represented by a Beeper source, inspect the

@@ -1,5 +1,7 @@
 # Message Like Me
 
+[![skills.sh](https://skills.sh/b/hraness/message-like-me)](https://skills.sh/hraness/message-like-me)
+
 **A local-first CLI and Agent Skill for studying private messaging history and
 drafting messages that sound like you.**
 

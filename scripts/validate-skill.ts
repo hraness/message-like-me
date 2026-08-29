@@ -13,20 +13,36 @@ const REQUIRED_REFERENCES = [
   "references/privacy.md",
   "references/profile-schema.md",
 ] as const;
-const REQUIRED_ENSOUL_FILES = [
+const EXPECTED_ENSOUL_FILES = [
   "LICENSE",
   "NOTICE.md",
+  "SKILL.md",
   "VENDORED_FROM.md",
+  "agents/openai.yaml",
   "references/ensoul-source-packet-v1.schema.json",
   "references/evidence-method.md",
   "references/output-blueprint.md",
   "references/source-packets.md",
-  "scripts/prepare_x_archive.py",
-  "scripts/validate_source_packet.py",
+  "scripts/prepare-x-archive.ts",
+  "scripts/source-packet.ts",
+  "scripts/validate-source-packet.ts",
+  "scripts/x-zip-file.ts",
 ] as const;
+const ENSOUL_SOURCE_COMMIT = "e8308cb3f89fd38377d68196b1d75a64675d2c6b";
+const ENSOUL_SOURCE_VERSION = "0.3.0";
 
 const PLACEHOLDER = /(?:\b(?:change[ -]?me|coming soon|fixme|lorem ipsum|placeholder|tbd|todo)\b|<[^>\n]*(?:placeholder|todo)[^>\n]*>)/iu;
-const SKILL_TEXT_EXTENSIONS = new Set([".json", ".md", ".py", ".txt", ".yaml", ".yml"]);
+const SKILL_TEXT_EXTENSIONS = new Set([".json", ".md", ".ts", ".txt", ".yaml", ".yml"]);
+const LEGACY_NON_BUN_REFERENCE = new RegExp([
+  String.raw`\bpy`,
+  String.raw`thon3?\b`,
+  String.raw`|prepare_`,
+  String.raw`x_archive\.p`,
+  "y",
+  String.raw`|validate_`,
+  String.raw`source_packet\.p`,
+  "y",
+].join(""), "u");
 
 type StringRecord = Record<string, string>;
 
@@ -107,6 +123,12 @@ function assertFinished(value: string, label: string): void {
   if (PLACEHOLDER.test(value)) throw new Error(`${label} contains placeholder text`);
 }
 
+function assertBunOnlyReference(value: string, label: string): void {
+  if (LEGACY_NON_BUN_REFERENCE.test(value)) {
+    throw new Error(`${label} contains a legacy non-Bun Ensoul script reference`);
+  }
+}
+
 async function collectSkillFiles(path: string): Promise<string[]> {
   const metadata = await lstat(path);
   if (metadata.isSymbolicLink()) {
@@ -154,10 +176,10 @@ export async function validateSkill(): Promise<void> {
   const skillFiles = await collectSkillFiles(SKILL_ROOT);
   for (const path of skillFiles) {
     if (!SKILL_TEXT_EXTENSIONS.has(extname(path).toLowerCase())) continue;
-    assertFinished(
-      await readFile(path, "utf8"),
-      relative(PACKAGE_ROOT, path),
-    );
+    const source = await readFile(path, "utf8");
+    const label = relative(PACKAGE_ROOT, path);
+    assertFinished(source, label);
+    assertBunOnlyReference(source, label);
   }
   const skill = await readFile(SKILL_PATH, "utf8");
   const frontmatter = parseSkillFrontmatter(skill);
@@ -210,9 +232,23 @@ export async function validateSkill(): Promise<void> {
 
 export async function validateEnsoulSkill(): Promise<void> {
   const skillFiles = await collectSkillFiles(ENSOUL_SKILL_ROOT);
+  const actualFiles = skillFiles.map((path) =>
+    relative(ENSOUL_SKILL_ROOT, path).split(sep).join("/")
+  ).sort();
+  const expectedFiles = [...EXPECTED_ENSOUL_FILES].sort();
+  if (actualFiles.join("\n") !== expectedFiles.join("\n")) {
+    throw new Error([
+      "Ensoul vendored inventory must exactly match the approved v0.3.0 copy.",
+      `Expected: ${expectedFiles.join(", ")}`,
+      `Received: ${actualFiles.join(", ")}`,
+    ].join("\n"));
+  }
   for (const path of skillFiles) {
     if (!SKILL_TEXT_EXTENSIONS.has(extname(path).toLowerCase())) continue;
-    assertFinished(await readFile(path, "utf8"), relative(PACKAGE_ROOT, path));
+    const source = await readFile(path, "utf8");
+    const label = relative(PACKAGE_ROOT, path);
+    assertFinished(source, label);
+    assertBunOnlyReference(source, label);
   }
   const skill = await readFile(join(ENSOUL_SKILL_ROOT, "SKILL.md"), "utf8");
   const frontmatter = parseSkillFrontmatter(skill);
@@ -223,12 +259,10 @@ export async function validateEnsoulSkill(): Promise<void> {
     throw new Error("Ensoul skill description must contain 40-1024 characters");
   }
   assertFinished(description, "Ensoul skill description");
-  for (const relativePath of REQUIRED_ENSOUL_FILES) {
-    try {
-      await access(join(ENSOUL_SKILL_ROOT, relativePath));
-    } catch {
-      throw new Error(`Ensoul skill is missing ${relativePath}`);
-    }
+  const provenance = await readFile(join(ENSOUL_SKILL_ROOT, "VENDORED_FROM.md"), "utf8");
+  const expectedProvenance = `commit \`${ENSOUL_SOURCE_COMMIT}\` (version \`${ENSOUL_SOURCE_VERSION}\`)`;
+  if (!provenance.includes(expectedProvenance)) {
+    throw new Error(`Ensoul provenance must identify ${expectedProvenance}`);
   }
   const ui = parseOpenAiInterface(await readFile(
     join(ENSOUL_SKILL_ROOT, "agents", "openai.yaml"),
