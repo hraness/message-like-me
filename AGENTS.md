@@ -33,6 +33,10 @@
   you.”
 - Follow `STYLE.md` for public site, documentation, README, release, and
   Agent Skill prose.
+- Follow the shared [Hraness README guidelines](https://github.com/hraness/.github/blob/main/README_GUIDELINES.md).
+  Keep the durable definition, mechanism-backed rationale, shortest verified
+  first task, observable behavior, boundaries, verification, and task-oriented
+  documentation path current.
 - Keep the public repository independently buildable. Do not reference another
   source repository, private packages, sibling paths, private fixtures, or
   publication mechanics.
