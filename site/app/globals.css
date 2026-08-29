@@ -217,109 +217,11 @@ h1 em { color: var(--muted); font-weight: 400; }
   background: var(--ink);
   border-radius: 3px;
   color: var(--acid);
+  display: block;
   flex: 0 0 auto;
   height: 48px;
-  position: relative;
+  shape-rendering: geometricPrecision;
   width: 48px;
-}
-.source-icon > span,
-.source-icon::before,
-.source-icon::after { box-sizing: border-box; content: ""; position: absolute; }
-.source-icon-messages > span {
-  border: 2px solid currentColor;
-  border-radius: 2px;
-  height: 17px;
-  left: 11px;
-  top: 12px;
-  width: 26px;
-}
-.source-icon-messages > span::after {
-  border-bottom: 2px solid currentColor;
-  border-left: 2px solid currentColor;
-  bottom: -5px;
-  content: "";
-  height: 7px;
-  left: 5px;
-  position: absolute;
-  transform: rotate(-35deg);
-  width: 7px;
-}
-.source-icon-wrench > span {
-  background: currentColor;
-  border-radius: 3px;
-  height: 5px;
-  left: 11px;
-  top: 22px;
-  transform: rotate(-45deg);
-  width: 27px;
-}
-.source-icon-wrench::before {
-  border: 3px solid currentColor;
-  border-radius: 50%;
-  height: 12px;
-  left: 8px;
-  top: 27px;
-  width: 12px;
-}
-.source-icon-wrench::after {
-  border: 3px solid currentColor;
-  border-radius: 50%;
-  height: 14px;
-  right: 7px;
-  top: 7px;
-  width: 14px;
-}
-.source-icon-archive > span {
-  border: 2px solid currentColor;
-  height: 19px;
-  left: 10px;
-  top: 19px;
-  width: 28px;
-}
-.source-icon-archive::before {
-  border: 2px solid currentColor;
-  height: 7px;
-  left: 8px;
-  top: 11px;
-  width: 32px;
-}
-.source-icon-archive::after {
-  border-top: 2px solid currentColor;
-  left: 18px;
-  top: 25px;
-  width: 12px;
-}
-.source-icon-contacts::before {
-  border: 2px solid currentColor;
-  border-radius: 2px;
-  inset: 8px;
-}
-.source-icon-contacts > span {
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  height: 10px;
-  left: 13px;
-  top: 13px;
-  width: 10px;
-}
-.source-icon-contacts > span::after {
-  border: 2px solid currentColor;
-  border-bottom: 0;
-  border-radius: 9px 9px 0 0;
-  content: "";
-  height: 8px;
-  left: -4px;
-  position: absolute;
-  top: 11px;
-  width: 14px;
-}
-.source-icon-contacts::after {
-  border-bottom: 2px solid currentColor;
-  border-top: 2px solid currentColor;
-  height: 8px;
-  right: 12px;
-  top: 16px;
-  width: 8px;
 }
 .source-kind {
   color: var(--muted);
@@ -862,6 +764,14 @@ footer nav { font-size: 12px; gap: 22px; }
   .source-card + .source-card { border-top: 0; }
   .source-links { align-items: flex-start; flex-direction: column; gap: 18px; }
   .command-stack code { font-size: 10px; }
+}
+@media (forced-colors: active) {
+  .source-icon {
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: none;
+    outline: 1px solid CanvasText;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
