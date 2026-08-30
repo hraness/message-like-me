@@ -1,0 +1,45 @@
+import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { scanPackedPackage } from "./package-smoke";
+
+async function fixture(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "message-like-me-packed-privacy-"));
+  await mkdir(join(root, "dist"));
+  await writeFile(join(root, "LICENSE"), "MIT\n");
+  await writeFile(join(root, "package.json"), "{}\n");
+  await writeFile(join(root, "dist", "index.js"), "export {};\n");
+  return root;
+}
+
+describe("packed public privacy boundary", () => {
+  test("accepts only the reviewed finite UTF-8 package surface", async () => {
+    const root = await fixture();
+    try {
+      await expect(scanPackedPackage(root)).resolves.toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects unknown binary and extensionless artifacts instead of skipping them", async () => {
+    for (const [name, bytes] of [
+      ["private.pem", "secret"],
+      ["archive.zip", "PK"],
+      ["credentials", "secret"],
+      ["invalid.md", Buffer.from([0xff, 0xfe])],
+    ] as const) {
+      const root = await fixture();
+      try {
+        await writeFile(join(root, name), bytes);
+        await expect(scanPackedPackage(root)).rejects.toThrow(
+          name === "invalid.md" ? "canonical UTF-8" : "unapproved public-package file type",
+        );
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    }
+  });
+});

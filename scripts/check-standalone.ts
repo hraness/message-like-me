@@ -65,6 +65,10 @@ const SELF_SCANNERS = new Set([
   "scripts/check-standalone.test.ts",
   "scripts/package-smoke.ts",
 ]);
+const NPM_TRUSTED_PUBLISHER_IDENTITY_FILES = new Set([
+  "scripts/release-distribution-policy.test.ts",
+  "scripts/release-distribution-policy.ts",
+]);
 const EXPECTED_ENSOUL_FILES = [
   "LICENSE",
   "NOTICE.md",
@@ -299,6 +303,10 @@ function checkEmailAddresses(path: string, source: string): string[] {
     if (
       ["example.com", "example.net", "example.org"].includes(domain)
       || [".example", ".invalid", ".localhost", ".test"].some((suffix) => domain.endsWith(suffix))
+      || (
+        address === "npm-oidc-no-reply@github.com"
+        && NPM_TRUSTED_PUBLISHER_IDENTITY_FILES.has(path)
+      )
       || /^[1-9][0-9]{4,14}@s\.whatsapp\.net$/u.test(address)
       || /^[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us$/u.test(address)
     ) continue;

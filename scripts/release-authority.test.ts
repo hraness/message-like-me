@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { revalidateReleaseAuthority } from "./release-provider-outcome.mjs";
+import {
+  exactPublishedRelease,
+  revalidateReleaseAuthority,
+} from "./release-provider-outcome.mjs";
 
 const repository = "hraness/message-like-me";
 const tag = "v0.8.0";
@@ -10,11 +13,16 @@ const tagResolutionFixture = JSON.parse(readFileSync(
   "utf8",
 )) as Readonly<{
   resolvedCommit: Readonly<Record<string, unknown> & { sha: string }>;
-  resolvedCommitEndpoint: string;
   tag: string;
-  tagRef: Readonly<Record<string, unknown>>;
+  tagRef: Readonly<{
+    object: Readonly<{ sha: string; type: string; url: string }>;
+    ref: string;
+  }>;
 }>;
 const sha = tagResolutionFixture.resolvedCommit.sha;
+const tagObjectSha = tagResolutionFixture.tagRef.object.sha;
+const workflowSha = "2".repeat(40);
+const currentMainSha = "3".repeat(40);
 
 type ApiValue = unknown | readonly unknown[];
 
@@ -43,6 +51,27 @@ function ref(branch: string, commit: string) {
   return { object: { sha: commit, type: "commit" }, ref: `refs/heads/${branch}` };
 }
 
+function tagObject(overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    object: { sha, type: "commit" },
+    sha: tagObjectSha,
+    tag,
+    ...overrides,
+  };
+}
+
+function compare(base: string, head: string, overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    ahead_by: 1,
+    base_commit: { sha: base },
+    behind_by: 0,
+    head_commit: { sha: head },
+    merge_base_commit: { sha: base },
+    status: "ahead",
+    ...overrides,
+  };
+}
+
 function release(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
     assets: [],
@@ -52,8 +81,19 @@ function release(overrides: Readonly<Record<string, unknown>> = {}) {
     prerelease: false,
     published_at: "2026-08-29T20:00:00Z",
     tag_name: tag,
-    target_commitish: sha,
     ...overrides,
+  };
+}
+
+function releaseAsset(releaseTag: string, name: string, id: number) {
+  return {
+    browser_download_url:
+      `https://github.com/hraness/message-like-me/releases/download/${releaseTag}/${name}`,
+    digest: `sha256:${"a".repeat(64)}`,
+    id,
+    name,
+    size: id,
+    state: "uploaded",
   };
 }
 
@@ -61,11 +101,29 @@ function authorityApi(overrides: Readonly<Record<string, ApiValue>> = {}) {
   return apiFrom({
     [`/repos/${repository}`]: [{ default_branch: "main" }, { default_branch: "main" },
       { default_branch: "main" }, { default_branch: "main" }],
-    [`/repos/${repository}/git/ref/heads/main`]: [ref("main", sha), ref("main", sha)],
-    [tagResolutionFixture.resolvedCommitEndpoint]: [
-      tagResolutionFixture.resolvedCommit,
-      tagResolutionFixture.resolvedCommit,
+    [`/repos/${repository}/git/ref/heads/main`]: [
+      ref("main", currentMainSha),
+      ref("main", currentMainSha),
+      ref("main", currentMainSha),
+      ref("main", currentMainSha),
     ],
+    [`/repos/${repository}/compare/${workflowSha}...${currentMainSha}`]: [
+      compare(workflowSha, currentMainSha),
+      compare(workflowSha, currentMainSha),
+      compare(workflowSha, currentMainSha),
+      compare(workflowSha, currentMainSha),
+    ],
+    [`/repos/${repository}/compare/${sha}...${currentMainSha}`]: [
+      compare(sha, currentMainSha),
+      compare(sha, currentMainSha),
+      compare(sha, currentMainSha),
+      compare(sha, currentMainSha),
+    ],
+    [`/repos/${repository}/git/ref/tags/${tag}`]: [
+      tagResolutionFixture.tagRef,
+      tagResolutionFixture.tagRef,
+    ],
+    [`/repos/${repository}/git/tags/${tagObjectSha}`]: [tagObject(), tagObject()],
     [`/repos/${repository}/releases/tags/${tag}`]: [release(), release()],
     [`/repos/${repository}/releases/latest`]: [{ tag_name: tag }, { tag_name: tag }],
     ...overrides,
@@ -77,7 +135,7 @@ function verify(api: ReturnType<typeof authorityApi>["api"], input = {}) {
     api,
     defaultBranch: "main",
     eventName: "workflow_dispatch",
-    recoveryWorkflowSha: sha,
+    recoveryWorkflowSha: workflowSha,
     repository,
     verifiedSha: sha,
     verifiedTag: tag,
@@ -86,55 +144,78 @@ function verify(api: ReturnType<typeof authorityApi>["api"], input = {}) {
 }
 
 describe("promotion authority revalidation", () => {
-  test("sandwiches exact main, tag, immutable release, and Latest reads", async () => {
+  test("sandwiches annotated-tag authority and both reviewed-main ancestors", async () => {
     const fixture = authorityApi();
     await verify(fixture.api);
 
+    const workflowPhase = [
+      `/repos/${repository}`,
+      `/repos/${repository}/git/ref/heads/main`,
+      `/repos/${repository}/compare/${workflowSha}...${currentMainSha}`,
+      `/repos/${repository}/compare/${sha}...${currentMainSha}`,
+    ];
+    const releasePhase = [
+      `/repos/${repository}/git/ref/tags/${tag}`,
+      `/repos/${repository}/git/tags/${tagObjectSha}`,
+      `/repos/${repository}/releases/tags/${tag}`,
+      `/repos/${repository}/releases/latest`,
+    ];
     expect(fixture.calls).toEqual([
-      `/repos/${repository}`,
-      `/repos/${repository}/git/ref/heads/main`,
-      `/repos/${repository}`,
-      tagResolutionFixture.resolvedCommitEndpoint,
-      `/repos/${repository}/releases/tags/${tag}`,
-      `/repos/${repository}/releases/latest`,
-      `/repos/${repository}`,
-      `/repos/${repository}/git/ref/heads/main`,
-      `/repos/${repository}`,
-      tagResolutionFixture.resolvedCommitEndpoint,
-      `/repos/${repository}/releases/tags/${tag}`,
-      `/repos/${repository}/releases/latest`,
+      ...workflowPhase,
+      ...workflowPhase,
+      ...releasePhase,
+      ...workflowPhase,
+      ...workflowPhase,
+      ...releasePhase,
     ]);
   });
 
-  test("requires a dispatch whose exact current main is the release commit", async () => {
+  test("requires one reviewed-main recovery workflow and rejects non-ancestors", async () => {
     const fixture = authorityApi();
     await expect(verify(fixture.api, { eventName: "push" })).rejects.toThrow(
-      "must be an exact current-main release workflow",
+      "site promotion authority must be one reviewed-main workflow run",
     );
-    await expect(verify(fixture.api, { recoveryWorkflowSha: "2".repeat(40) })).rejects.toThrow(
-      "must be an exact current-main release workflow",
+    await expect(verify(fixture.api, { recoveryWorkflowSha: "" })).rejects.toThrow(
+      "site promotion authority must be one reviewed-main workflow run",
     );
     expect(fixture.calls).toEqual([]);
 
-    const moved = authorityApi({
-      [`/repos/${repository}/git/ref/heads/main`]: [ref("main", "2".repeat(40))],
+    const nonAncestor = authorityApi({
+      [`/repos/${repository}/compare/${workflowSha}...${currentMainSha}`]: [
+        compare(workflowSha, currentMainSha, { status: "diverged" }),
+      ],
     });
-    await expect(verify(moved.api)).rejects.toThrow("no longer current main");
+    await expect(verify(nonAncestor.api)).rejects.toThrow(
+      `${workflowSha} is not a reviewed ancestor of current main ${currentMainSha}`,
+    );
   });
 
-  test("rejects moved tags, mutable or asset-bearing releases, and a non-Latest tag", async () => {
-    const movedTag = authorityApi({
-      [tagResolutionFixture.resolvedCommitEndpoint]: [{
-        ...tagResolutionFixture.resolvedCommit,
-        sha: "2".repeat(40),
+  test("rejects lightweight or moved tags, malformed releases, and a non-Latest tag", async () => {
+    const lightweightTag = authorityApi({
+      [`/repos/${repository}/git/ref/tags/${tag}`]: [{
+        object: { sha, type: "commit", url: tagResolutionFixture.tagRef.object.url },
+        ref: `refs/tags/${tag}`,
       }],
     });
-    await expect(verify(movedTag.api)).rejects.toThrow("moved from the verified release commit");
+    await expect(verify(lightweightTag.api)).rejects.toThrow("is not one exact annotated tag ref");
+
+    const movedTag = authorityApi({
+      [`/repos/${repository}/git/tags/${tagObjectSha}`]: [tagObject({
+        object: { sha: "4".repeat(40), type: "commit" },
+      })],
+    });
+    await expect(verify(movedTag.api)).rejects.toThrow(
+      "does not bind the exact annotated tag object to the verified release commit",
+    );
 
     const assets = authorityApi({
-      [`/repos/${repository}/releases/tags/${tag}`]: [release({ assets: [{ id: 1 }] })],
+      [`/repos/${repository}/releases/tags/${tag}`]: [release({
+        assets: [releaseAsset(tag, "unexpected.tgz", 1)],
+      })],
     });
-    await expect(verify(assets.api)).rejects.toThrow("not exact, published, immutable, and asset-free");
+    await expect(verify(assets.api)).rejects.toThrow(
+      "not exact, published, immutable, and artifact-complete",
+    );
 
     const latest = authorityApi({
       [`/repos/${repository}/releases/latest`]: [{ tag_name: "v0.7.0" }],
@@ -142,12 +223,7 @@ describe("promotion authority revalidation", () => {
     await expect(verify(latest.api)).rejects.toThrow("Latest Release is not v0.8.0");
   });
 
-  test("rejects a changed or indirectly targeted release on the terminal readback", async () => {
-    const indirect = authorityApi({
-      [`/repos/${repository}/releases/tags/${tag}`]: [release({ target_commitish: "main" })],
-    });
-    await expect(verify(indirect.api)).rejects.toThrow("target_commitish is not the verified release commit");
-
+  test("rejects changed immutable release identity on the terminal readback", async () => {
     const changed = authorityApi({
       [`/repos/${repository}/releases/tags/${tag}`]: [
         release(),
@@ -155,5 +231,30 @@ describe("promotion authority revalidation", () => {
       ],
     });
     await expect(verify(changed.api)).rejects.toThrow("changed during authority verification");
+  });
+
+  test("grandfathers only asset-free v0.8.0 and requires the exact artifact pair later", () => {
+    expect(() => exactPublishedRelease(release(), tag)).not.toThrow();
+
+    const futureTag = "v0.8.1";
+    const archiveName = "hraness-message-like-me-0.8.1.tgz";
+    const futureRelease = release({
+      assets: [
+        releaseAsset(futureTag, archiveName, 1),
+        releaseAsset(futureTag, "SHA256SUMS", 2),
+      ],
+      tag_name: futureTag,
+    });
+    expect(() => exactPublishedRelease(futureRelease, futureTag)).not.toThrow();
+    expect(() => exactPublishedRelease(release({ tag_name: futureTag }), futureTag)).toThrow(
+      "not exact, published, immutable, and artifact-complete",
+    );
+    expect(() => exactPublishedRelease({
+      ...futureRelease,
+      assets: [
+        releaseAsset(futureTag, archiveName, 1),
+        { ...releaseAsset(futureTag, "SHA256SUMS", 2), digest: "sha256:invalid" },
+      ],
+    }, futureTag)).toThrow("not one exact uploaded immutable artifact");
   });
 });

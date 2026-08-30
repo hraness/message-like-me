@@ -1,10 +1,14 @@
 # Publish Message Like Me
 
-Message Like Me publishes an immutable, asset-free GitHub Release before its
-informational site can enter Vercel Production. The tag workflow never receives
-the production-ref writer key. A separate current-`main` workflow advances the
-production source after the Release succeeds, using a short-lived token from a
-dedicated private Hraness GitHub App.
+Message Like Me builds one exact public package tarball, validates those bytes
+on macOS and Linux, and publishes the same tarball plus `SHA256SUMS` to an
+immutable GitHub Release. Only then does it publish that tarball to npm through
+trusted publishing. Its informational site can enter Vercel Production only
+after both public coordinates pass admission. The tag workflow never receives
+the production-ref writer key. A separate current-`main` workflow admits the
+external npm and GitHub artifacts, then advances the production source after
+the Release succeeds using a short-lived token from a dedicated private Hraness
+GitHub App.
 
 No personal access token, deploy key, Vercel token, or repository-administration
 permission belongs in either workflow.
@@ -79,6 +83,31 @@ for this rollout and do not create a replacement Sites project.
    review for `/.github/workflows/**`, the exact CI checks used by this
    repository, and protection from deletion and non-fast-forward updates. Keep
    bypasses empty.
+8. Keep active no-bypass ruleset `Immutable version tags` scoped exactly to
+   `refs/tags/v*`, with only update and deletion restrictions. It allows a new
+   stable tag to be created but prevents an existing release tag from moving or
+   disappearing. Read back `current_user_can_bypass=never` before release.
+9. Enable immutable releases for the repository. Immediately before creating
+   each version tag, use owner-admin access out of band to require the repository
+   immutable-releases endpoint to report `enabled=true`; record whether owner
+   policy also reports `enforced_by_owner`. The Actions token cannot perform
+   this administrative read. The workflow must still prove the resulting
+   published Release reports `immutable=true` before npm can run.
+10. Ensure `@hraness/message-like-me` exists publicly under the Hraness npm
+   scope, then configure its sole trusted publisher as GitHub Actions repository
+   `hraness/message-like-me`, workflow file `release.yml`, with `npm publish`
+   permission. The one-time registry bootstrap may publish only the exact
+   already-reviewed `v0.8.0` package bytes under a non-Latest `legacy` dist-tag;
+   every later release must use OIDC from the checked workflow. Once trusted
+   publishing is proven, disallow traditional token publication for the
+   package. This manual `v0.8.0` registry seed is historical bootstrap only: it
+   remains outside Latest and is not expected to acquire trusted-publisher
+   metadata retroactively. Do not rerun its tag or invoke the automated Release
+   workflow for `v0.8.0`. After the version-neutral control change merges,
+   prepare a separate product pull request for a version newer than `0.8.0`;
+   that new version is the first automated OIDC release and becomes Latest.
+   Never retag or reuse `v0.8.0`. The public repository and package must retain
+   automatic npm provenance for every automated release.
 
 After setup, use owner-admin access out of band to read back the exact Vercel
 production branch, environment, variables, secret names, complete App
@@ -93,6 +122,9 @@ assertions together:
   active;
 - the no-bypass ruleset contains only creation, deletion, and
   non-fast-forward protection for that exact ref;
+- the stable-tag ruleset targets only `refs/tags/v*`, contains only update and
+  deletion restrictions, has no bypass actors, and reports
+  `current_user_can_bypass=never`;
 - the update ruleset contains only the update restriction for that exact ref,
   has the dedicated App's numeric ID as its sole `Integration` `always` bypass,
   and reports `update_allows_fetch_and_merge=false`;
@@ -149,40 +181,84 @@ controls. This separation keeps the reviewed control lineage intact.
 
 Prepare one stable version commit through a pull request. The root package,
 site package, source version, README install target, and generated site content
-must agree. The version commit must be the current `main` head when its exact
-`v<version>` tag is pushed, and that tag must be the newest stable semantic
-version.
+must agree. Create its exact annotated `v<version>` tag only after that commit
+has passed review and entered `main`; the tag commit must remain an ancestor of
+current `main`, and the tag must be the newest stable semantic version. Later
+reviewed `main` descendants do not invalidate the immutable release authority.
+The first automated trusted-publisher version must be newer than the manual
+non-Latest `v0.8.0` bootstrap coordinate.
 
 The tag-triggered Release workflow:
 
-1. checks out the exact tag, proves it is the current merged `main` head, and
-   runs the complete root, site, generated-file, packed-package, and synthetic
-   macOS gates with read-only permissions; and
-2. uses only the job-scoped GitHub Actions token in its short publish job to
-   create and read back the exact immutable, asset-free Latest GitHub Release.
+1. checks out the complete annotated tag, proves its exact tag object targets
+   the checked commit and that commit is a reviewed ancestor of current `main`,
+   then runs the complete root, site, generated-file,
+   packed-package, and synthetic macOS gates with read-only permissions;
+2. creates one npm tarball and `SHA256SUMS`, preserves those exact bytes as a
+   30-day workflow artifact, preserves a separate numeric-ID-bound artifact
+   containing only the reviewed dependency-free npm writer, and installs the
+   unchanged tarball on macOS and Linux;
+3. gives only the dependency-free GitHub writer `contents: write`. That writer
+   revalidates the remote annotated tag object and reviewed-`main` ancestry,
+   creates or safely resumes one deterministic draft, uploads only the tarball
+   and checksum, publishes it as Latest, and requires the Release to read back
+   immutable with exact names, sizes, digests, and bytes. An ambiguous or
+   non-exact residual draft fails closed;
+4. uses a separate read-only job with pinned Sigstore dependencies to prove the
+   immutable Latest GitHub Release and workflow artifact are byte-identical.
+   It records its actual run ID and attempt. If the npm version already exists,
+   it must contain those exact bytes and its SLSA invocation plus Fulcio
+   extension `.21` must bind the same workflow run ID at a positive attempt no
+   later than that preflight attempt; and
+5. gives only the no-checkout, dependency-free npm writer `id-token: write`.
+   Any later positive attempt of the same run may publish a still-absent
+   version. If an earlier attempt made the exact version visible before its job
+   completed, a later writer performs no mutation and defers acceptance to the
+   final read-only provenance gate. A same-attempt absent-to-existing race fails
+   closed. The writer records whether it published or observed existing bytes,
+   plus its actual run ID and attempt. Final admission requires that exact
+   attempt for a publication, or the same run at a positive attempt no later
+   than the bounded observation attempt. It also verifies exact npm version and
+   Latest integrity, MIT license, SHA-1, SHA-512, GitHub byte parity, and the
+   Sigstore bundle's exact repository, workflow, tag, commit, run ID, attempt,
+   Fulcio subject, certificate extensions, transparency log, and certificate
+   transparency evidence.
+
+The immutable annotated tag object—not mutable Release branch-hint metadata—is
+the release authority. Re-running or completing a failed workflow never retags,
+deletes an immutable Release, changes tarball bytes, or accepts provenance from
+another run. GitHub publication always precedes npm, preventing a mutable or
+incomplete repository Release from stranding an npm version.
 
 The tag workflow has no environment, App credential, provider baseline,
 production-ref mutation, or provider-outcome job. A tag cannot enter
 `production-ref-writer-key` because that environment admits only `main`.
 
-After the immutable Release succeeds on its first run attempt, its completed
+After the full Release succeeds on any positive run attempt, its completed
 `workflow_run` starts `Promote website production` from current default-branch
 code. Treat the entire upstream payload as untrusted. Require the exact
 repository, checked numeric Release workflow ID, workflow name and path,
-upstream event `push`, first attempt, successful conclusion, stable tag, head
-SHA, downstream workflow SHA, and current `main` to agree. A manual
-`workflow_dispatch` with an untrusted release-tag input exists only for
+upstream event `push`, positive run ID and attempt, successful conclusion,
+stable tag, annotated-tag target, downstream workflow SHA, and reviewed `main`
+ancestry to agree. The current workflow source must still be exact current
+`main`; the immutable release commit may be an earlier reviewed ancestor. A
+manual `workflow_dispatch` with an untrusted release-tag input exists only for
 recovery. Both paths use the same checks. That workflow:
 
 1. proves its workflow file, `GITHUB_REF`, `GITHUB_SHA`, current default branch,
-   tag, root and site versions, immutable asset-free Latest Release, and
-   release target all resolve to the same current `main` commit;
+   annotated tag object, reviewed ancestry, root and site versions, exact npm
+   version and Latest integrity, provenance, immutable artifact-complete Latest
+   Release, checksum, and release authority all resolve to the same immutable
+   release commit and tarball;
 2. takes two stable, exhaustive GraphQL snapshots of at most 500 current
    `Production` deployments, including each deployment's current state and
    `latestStatus`, bracketed by authenticated GitHub server time and exact
    `website-production` ref reads;
 3. enters `production-ref-writer-key` with `deployment:false` only when the
-   baseline proves that the ref must advance. A checked local helper signs a
+   baseline and a separate read-only preflight prove that the ref must advance.
+   The fresh secret-bearing job installs no dependencies; immediately before
+   reading the key it verifies hard-coded SHA-256 pins for the three reviewed
+   built-in `.mjs` helpers. A checked local helper signs a
    bounded RS256 App JWT, authenticates the exact App ID, client ID, slug, and
    organization owner, then reads the checked installation ID and requires its
    selected `hraness` account plus exact `contents:write` and `metadata:read`
@@ -194,8 +270,9 @@ recovery. Both paths use the same checks. That workflow:
    masks the token before use, keeps it out of workflow outputs, and revokes it
    through `DELETE /installation/token` in the same operation's `finally`
    boundary. A mutation failure and a revocation failure are both retained;
-5. sandwiches the mutation with immutable Release, Latest, tag, current-`main`,
-   and workflow-source readbacks; proves `website-production` can fast-forward;
+5. sandwiches the fresh writer job with separate read-only immutable Release,
+   Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
+   admissions; proves `website-production` can fast-forward;
    then uses authenticated Git over a fixed HTTPS remote to push exactly
    `<verified-sha>:refs/heads/website-production` with
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>`. The
@@ -216,12 +293,20 @@ Any ambiguity, concurrent production deployment, missing or changed baseline
 item, provider error, terminal failure, identity mismatch, ref race, status
 mutation, or timeout fails the promotion closed.
 
+Public npm and GitHub artifact admission, including the cryptographic npm
+provenance audit, is repeated before the provider baseline, immediately before
+and after either production-ref path, and before and after the terminal provider
+outcome. A moved npm Latest tag, missing provenance, changed registry integrity,
+changed immutable Release coordinate, or byte mismatch fails the current phase
+closed.
+
 ## Recover provider verification
 
 Recovery uses the same `Promote website production` workflow dispatch from the
-exact release commit while that commit is still current `main`. It requires the
-exact existing immutable Latest Release. It never creates, replaces, or edits a
-GitHub Release.
+current reviewed `main` workflow source while the exact annotated release
+commit remains in `main` history. It requires the
+exact existing npm version and immutable artifact-complete Latest Release. It
+never creates, replaces, or edits an npm version or GitHub Release.
 
 If `website-production` still precedes the release commit, recovery performs
 the same checked explicit-lease fast-forward and requires one new provider outcome.
@@ -234,7 +319,14 @@ attempt blocks recovery instead of allowing an older success to be reused.
 Recovery then repeats the terminal authority readbacks. A missing ref is a hard
 failure and must not be recreated by the workflow.
 
-When a run fails after the immutable Release exists, preserve its evidence,
-correct only the failed control, and use this recovery path. Do not retag,
-delete the immutable Release, manually move `website-production`, redeploy from
-Vercel, or weaken a ruleset to make the run pass.
+When a tag run fails after its exact draft or immutable Release exists, preserve
+its evidence and rerun that same workflow. Re-running only failed jobs is
+supported: successful preflight or publisher outputs retain their own actual
+attempt coordinate, while a later writer may only publish still-absent bytes or
+observe exact existing bytes without mutation. The run may safely complete only
+the same tag, commit, deterministic draft, and tarball; npm provenance must bind
+the same run ID and an allowed actual positive attempt. Correct only the failed
+control and use the website recovery path after public admission succeeds. Do
+not retag, delete the immutable Release or exact residual draft, manually move
+`website-production`, redeploy from Vercel, or weaken a ruleset to make the run
+pass.

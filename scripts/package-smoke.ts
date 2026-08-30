@@ -13,6 +13,8 @@ import {
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 
+import { publicReleaseEnvironment } from "./release-process-environment";
+
 const PACKAGE_NAME = "@hraness/message-like-me";
 const PACKAGE_ROOT = resolve(import.meta.dir, "..");
 const TYPESCRIPT_CLI = join(PACKAGE_ROOT, "node_modules", "typescript", "bin", "tsc");
@@ -50,6 +52,10 @@ const TEXT_EXTENSIONS = new Set([
   ".yml",
 ]);
 const DATABASE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
+const MAXIMUM_PACKED_FILE_COUNT = 256;
+const MAXIMUM_PACKED_FILE_BYTES = 4 * 1_024 * 1_024;
+const MAXIMUM_PACKED_TOTAL_BYTES = 16 * 1_024 * 1_024;
+const MAXIMUM_COMMAND_OUTPUT_BYTES = 4 * 1_024 * 1_024;
 const FORBIDDEN_PACKAGE_TEXT = [
   { label: "private package name", pattern: /@jungle\//u },
   { label: "private source-repository name", pattern: /\bJungle\b/u },
@@ -86,8 +92,10 @@ async function startsWithSqliteHeader(path: string): Promise<boolean> {
   }
 }
 
-async function scanPackedPackage(root: string): Promise<void> {
+export async function scanPackedPackage(root: string): Promise<void> {
   const problems: string[] = [];
+  let fileCount = 0;
+  let totalBytes = 0;
   async function visit(path: string): Promise<void> {
     const info = await lstat(path);
     const packagePath = relative(root, path).split(sep).join("/") || ".";
@@ -109,6 +117,19 @@ async function scanPackedPackage(root: string): Promise<void> {
       problems.push(`${packagePath} is not a regular file`);
       return;
     }
+    fileCount += 1;
+    totalBytes += info.size;
+    if (fileCount > MAXIMUM_PACKED_FILE_COUNT) {
+      problems.push(`package contains more than ${String(MAXIMUM_PACKED_FILE_COUNT)} regular files`);
+    }
+    if (info.size > MAXIMUM_PACKED_FILE_BYTES) {
+      problems.push(`${packagePath} exceeds the per-file byte bound`);
+      return;
+    }
+    if (totalBytes > MAXIMUM_PACKED_TOTAL_BYTES) {
+      problems.push(`package exceeds the ${String(MAXIMUM_PACKED_TOTAL_BYTES)}-byte total bound`);
+      return;
+    }
     const extension = extname(path).toLowerCase();
     if (NON_BUN_SCRIPT_EXTENSIONS.has(extension)) {
       problems.push(`${packagePath} is a legacy non-Bun script artifact`);
@@ -116,8 +137,17 @@ async function scanPackedPackage(root: string): Promise<void> {
     if (DATABASE_EXTENSIONS.has(extension) || await startsWithSqliteHeader(path)) {
       problems.push(`${packagePath} contains a database artifact`);
     }
-    if (!TEXT_EXTENSIONS.has(extension) && basename(path) !== "LICENSE") return;
-    const source = await readFile(path, "utf8");
+    if (!TEXT_EXTENSIONS.has(extension) && basename(path) !== "LICENSE") {
+      problems.push(`${packagePath} has an unapproved public-package file type`);
+      return;
+    }
+    let source: string;
+    try {
+      source = new TextDecoder("utf-8", { fatal: true }).decode(await readFile(path));
+    } catch {
+      problems.push(`${packagePath} is not canonical UTF-8 text`);
+      return;
+    }
     for (const rule of FORBIDDEN_PACKAGE_TEXT) {
       if (rule.pattern.test(source)) problems.push(`${packagePath} contains ${rule.label}`);
     }
@@ -126,6 +156,30 @@ async function scanPackedPackage(root: string): Promise<void> {
   if (problems.length > 0) {
     throw new Error(`Packed standalone boundary failed:\n${[...new Set(problems)].sort().join("\n")}`);
   }
+}
+
+async function readBoundedCommandOutput(
+  stream: ReadableStream<Uint8Array>,
+  kill: () => void,
+): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const item = await reader.read();
+      if (item.done) break;
+      length += item.value.byteLength;
+      if (length > MAXIMUM_COMMAND_OUTPUT_BYTES) {
+        kill();
+        throw new Error("Packed-package command output exceeded its byte bound.");
+      }
+      chunks.push(item.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, length);
 }
 
 async function fileInventory(root: string, path: string = root): Promise<string[]> {
@@ -164,22 +218,33 @@ async function run(
 ): Promise<string> {
   const child = Bun.spawn([...command], {
     cwd,
-    stderr: options.capture === true ? "pipe" : "inherit",
-    stdout: options.capture === true ? "pipe" : "inherit",
+    env: publicReleaseEnvironment({ CI: "true", NO_COLOR: "1" }),
+    stderr: "pipe",
+    stdout: "pipe",
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    options.capture === true ? new Response(child.stdout).text() : Promise.resolve(""),
-    options.capture === true ? new Response(child.stderr).text() : Promise.resolve(""),
-  ]);
-  if (exitCode !== 0) {
-    throw new Error([
-      `Command failed (${String(exitCode)}): ${command.join(" ")}`,
-      stdout.trim(),
-      stderr.trim(),
-    ].filter((line) => line !== "").join("\n"));
+  const kill = () => child.kill(9);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    kill();
+  }, 120_000);
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      readBoundedCommandOutput(child.stdout, kill),
+      readBoundedCommandOutput(child.stderr, kill),
+    ]);
+    if (timedOut) throw new Error("Packed-package command exceeded its two-minute bound.");
+    if (exitCode !== 0) {
+      const diagnosticState = stderr.byteLength === 0
+        ? "without diagnostic output"
+        : "with redacted diagnostic output";
+      throw new Error(`Packed-package command failed (${String(exitCode)}) ${diagnosticState}.`);
+    }
+    return options.capture === true ? stdout.toString("utf8") : "";
+  } finally {
+    clearTimeout(timer);
   }
-  return stdout;
 }
 
 function packagePaths(value: unknown, label: string): string[] {
@@ -213,22 +278,26 @@ async function requirePublishedPaths(packageRoot: string, manifest: JsonRecord):
   }
 }
 
-export async function packageSmoke(): Promise<void> {
+export async function packageSmoke(suppliedArchive?: string): Promise<void> {
   const work = await mkdtemp(join(tmpdir(), "message-like-me-package-"));
   try {
-    const archive = join(work, "package.tgz");
+    const archive = suppliedArchive === undefined
+      ? join(work, "package.tgz")
+      : resolve(suppliedArchive);
     const cache = join(work, "cache");
     const consumer = join(work, "consumer");
     await Promise.all([mkdir(cache), mkdir(consumer)]);
-    await run([
-      process.execPath,
-      "pm",
-      "pack",
-      "--filename",
-      archive,
-      "--ignore-scripts",
-      "--quiet",
-    ], PACKAGE_ROOT);
+    if (suppliedArchive === undefined) {
+      await run([
+        process.execPath,
+        "pm",
+        "pack",
+        "--filename",
+        archive,
+        "--ignore-scripts",
+        "--quiet",
+      ], PACKAGE_ROOT);
+    }
     await writeFile(
       join(consumer, "package.json"),
       `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
@@ -256,6 +325,14 @@ export async function packageSmoke(): Promise<void> {
     );
     if (manifest.name !== PACKAGE_NAME) {
       throw new Error(`Packed package name is ${JSON.stringify(manifest.name)}, expected ${PACKAGE_NAME}`);
+    }
+    const publishConfig = record(manifest.publishConfig, "installed package.json publishConfig");
+    if (
+      publishConfig.access !== "public"
+      || publishConfig.provenance !== true
+      || publishConfig.registry !== "https://registry.npmjs.org"
+    ) {
+      throw new Error("Packed package does not require public npm provenance.");
     }
     await requirePublishedPaths(installedPackage, manifest);
     await run([process.execPath, "-e", `await import(${JSON.stringify(PACKAGE_NAME)})`], consumer);
@@ -344,6 +421,33 @@ export async function packageSmoke(): Promise<void> {
       throw new Error(
         `Packed CLI reports version ${JSON.stringify(reportedVersion)}, expected ${JSON.stringify(manifest.version)}`,
       );
+    }
+    const dataDirectory = join(work, "private-data");
+    const initialized = record(
+      JSON.parse(await run([
+        binary,
+        "--data-dir",
+        dataDirectory,
+        "init",
+        "--json",
+      ], consumer, { capture: true })) as unknown,
+      "packed initialization receipt",
+    );
+    if (initialized.initialized !== true) {
+      throw new Error("Packed CLI did not initialize one isolated private store");
+    }
+    const doctor = record(
+      JSON.parse(await run([
+        binary,
+        "--data-dir",
+        dataDirectory,
+        "doctor",
+        "--json",
+      ], consumer, { capture: true })) as unknown,
+      "packed doctor receipt",
+    );
+    if (doctor.ok !== true) {
+      throw new Error("Packed CLI doctor did not verify the isolated private store");
     }
     const reportedSkill = (await run([binary, "skill", "path"], consumer, { capture: true })).trim();
     const installedSkill = await realpath(reportedSkill);
@@ -444,6 +548,6 @@ export async function packageSmoke(): Promise<void> {
 }
 
 if (import.meta.main) {
-  await packageSmoke();
+  await packageSmoke(process.argv[2]);
   console.log("Packed install, consumer types, library import, CLI identity, and both bundled skills verified.");
 }
