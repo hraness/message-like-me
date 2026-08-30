@@ -26,4 +26,23 @@ describe("release identity", () => {
       `https://github.com/hraness/message-like-me/releases/tag/v${packageRelease}`,
     );
   });
+
+  test("routes installation through the exact public npm release", async () => {
+    const siteRoot = resolve(import.meta.dir, "..");
+    const repositoryRoot = resolve(siteRoot, "..");
+    const packageRelease = await packageVersion(resolve(repositoryRoot, "package.json"));
+    const exactInstall = `bun add --global @hraness/message-like-me@${packageRelease}`;
+    const [readme, page] = await Promise.all([
+      Bun.file(resolve(repositoryRoot, "README.md")).text(),
+      Bun.file(resolve(siteRoot, "app", "page.tsx")).text(),
+    ]);
+
+    expect(readme).toContain(exactInstall);
+    expect(page).toContain(
+      "bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}",
+    );
+    expect(readme).not.toContain("github:hraness/message-like-me#");
+    expect(page).not.toContain("github:hraness/message-like-me#");
+    expect(readme).not.toContain("is not published to npm");
+  });
 });

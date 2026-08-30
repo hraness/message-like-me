@@ -33,11 +33,11 @@ historical style.
 
 ## Install and first run
 
-Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
-release from GitHub, then install both bundled Agent Skills:
+Message Like Me requires Bun 1.3.14 or newer. Install the exact public npm
+package, then install both bundled Agent Skills:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.8.1
+bun add --global @hraness/message-like-me@0.8.1
 messagelikeme skill install
 ```
 
@@ -53,8 +53,9 @@ messagelikeme skill install --target agents --scope project
 messagelikeme skill path
 ```
 
-Message Like Me is distributed directly through GitHub and is not published to
-npm.
+The npm tarball and the immutable GitHub Release artifact are the same reviewed
+bytes. Neither distribution includes private messages, contacts, profiles,
+packets, drafts, or a network-backed runtime.
 
 Initialize an empty private store, then inspect it without reading any messaging
 source:

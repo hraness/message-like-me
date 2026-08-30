@@ -204,7 +204,7 @@ export default function Home() {
           <a href={RELEASE_URL}>View the immutable release ↗</a>
         </div>
         <div className="command-stack" aria-label="Installation commands">
-          <p><span>1</span><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></p>
+          <p><span>1</span><code>bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}</code></p>
           <p><span>2</span><code>messagelikeme skill install</code></p>
           <p><span>3</span><code>messagelikeme ingest imessage</code></p>
           <p><span>4</span><code>messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;</code></p>
