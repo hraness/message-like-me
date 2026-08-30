@@ -198,20 +198,26 @@ The tag-triggered Release workflow:
    30-day workflow artifact, preserves a separate numeric-ID-bound artifact
    containing only the reviewed dependency-free npm writer, and installs the
    unchanged tarball on macOS and Linux;
-3. gives only the dependency-free GitHub writer `contents: write`. That writer
-   revalidates the remote annotated tag object and reviewed-`main` ancestry,
-   creates or safely resumes one deterministic draft, uploads only the tarball
-   and checksum, publishes it as Latest, and requires the Release to read back
-   immutable with exact names, sizes, digests, and bytes. An ambiguous or
-   non-exact residual draft fails closed;
+3. gives only the GitHub publication job `contents: write`. Its SHA-pinned
+   checkout, Bun setup, and numeric-ID artifact download are part of the
+   privileged TCB, but the GitHub token is scoped only to the final
+   dependency-free publisher step. That publisher revalidates the remote
+   annotated tag object and reviewed-`main` ancestry, creates or safely resumes
+   one deterministic draft, uploads only the tarball and checksum, publishes it
+   as Latest, and requires the Release to read back immutable with exact names,
+   sizes, digests, and bytes. An ambiguous or non-exact residual draft fails
+   closed;
 4. uses a separate read-only job with pinned Sigstore dependencies to prove the
    immutable Latest GitHub Release and workflow artifact are byte-identical.
    It records its actual run ID and attempt. If the npm version already exists,
    it must contain those exact bytes and its SLSA invocation plus Fulcio
    extension `.21` must bind the same workflow run ID at a positive attempt no
    later than that preflight attempt; and
-5. gives only the no-checkout, dependency-free npm writer `id-token: write`.
-   Any later positive attempt of the same run may publish a still-absent
+5. gives only the no-checkout npm publication job `id-token: write`. Its
+   SHA-pinned Bun, Node, and numeric-ID artifact actions are part of the
+   privileged TCB; it installs no repository dependencies before invoking the
+   reviewed dependency-free writer. Any later positive attempt of the same run
+   may publish a still-absent
    version. If an earlier attempt made the exact version visible before its job
    completed, a later writer performs no mutation and defers acceptance to the
    final read-only provenance gate. A same-attempt absent-to-existing race fails

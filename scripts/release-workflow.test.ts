@@ -207,6 +207,10 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(githubWriter).toContain("contents: write");
   expect(githubWriter).not.toContain("id-token: write");
   expect(githubWriter).not.toContain("bun install");
+  expect(githubWriter).not.toContain("    env:\n      GH_TOKEN:");
+  expect(githubWriter).toContain(
+    "Create and prove the immutable GitHub Release from exact bytes\n        env:\n          GH_TOKEN: ${{ github.token }}",
+  );
   expect(npmWriter).toContain("contents: none");
   expect(npmWriter).toContain("id-token: write");
   expect(npmWriter).not.toContain("actions/checkout");
@@ -497,10 +501,12 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "The tag workflow has no environment, App credential",
     "one npm tarball and `SHA256SUMS`",
     "installs the\n   unchanged tarball on macOS and Linux",
-    "dependency-free GitHub writer `contents: write`",
-    "no-checkout, dependency-free npm writer `id-token: write`",
+    "GitHub publication job `contents: write`",
+    "no-checkout npm publication job `id-token: write`",
+    "part of the\n   privileged TCB",
+    "GitHub token is scoped only to the final\n   dependency-free publisher step",
     "publish that tarball to npm through\ntrusted publishing",
-    "uploads only the tarball\n   and checksum",
+    "uploads only the tarball and checksum",
     "Fulcio subject",
     "certificate extensions",
     "exact npm\n   version and Latest integrity",

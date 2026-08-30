@@ -124,9 +124,11 @@
   publishing before the separate current-`main` promotion workflow
   fast-forwards the established `website-production` ref with its dedicated
   release App and exact expected-old lease. Keep the tag workflow's write scope
-  split: only the dependency-free GitHub writer gets `contents: write`, only
-  the dependency-free npm writer gets `id-token: write`, and a separate
-  read-only job admits exact bytes and provenance. Keep the App private key
+  split: only the GitHub publication job gets `contents: write`, only the npm
+  publication job gets `id-token: write`, and a separate read-only job admits
+  exact bytes and provenance. Treat every SHA-pinned setup and artifact action
+  in those jobs as part of the privileged release TCB. Keep the GitHub token
+  scoped to the dependency-free publisher step. Keep the App private key
   inside the main-only `production-ref-writer-key` environment and expose it
   only to a fresh dependency-free, hash-pinned writer job; mint the numeric
   one-repository token only when the ref must advance, and require the bounded
