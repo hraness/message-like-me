@@ -223,6 +223,14 @@ async function findDraft(): Promise<ExactDraft | null> {
   return matches.length === 0 ? null : exactDraft(matches[0]);
 }
 
+async function readDraftById(id: number): Promise<ExactDraft> {
+  const draft = exactDraft(await readJson([
+    "gh", "api", `/repos/${publicRepository}/releases/${String(id)}`,
+  ]));
+  if (draft.id !== id) throw new Error(`Residual draft ${tagArgument} changed provider identifiers.`);
+  return draft;
+}
+
 async function verifyDraftAssets(draft: ExactDraft): Promise<readonly string[]> {
   const missing: string[] = [];
   for (const source of [tarball, checksum]) {
@@ -249,6 +257,24 @@ async function verifyDraftAssets(draft: ExactDraft): Promise<readonly string[]> 
     }
   }
   return Object.freeze(missing);
+}
+
+async function completeDraftAssets(draft: ExactDraft): Promise<ExactDraft> {
+  let current = await readDraftById(draft.id);
+  for (const source of [tarball, checksum]) {
+    const missing = await verifyDraftAssets(current);
+    if (!missing.includes(source)) continue;
+    await run([
+      "gh", "api", "--method", "POST",
+      "-H", "Accept: application/vnd.github+json",
+      "-H", "Content-Type: application/octet-stream",
+      "--input", source,
+      `https://uploads.github.com/repos/${publicRepository}/releases/${String(current.id)}/assets?name=${encodeURIComponent(basename(source))}`,
+    ]);
+    current = await readDraftById(draft.id);
+    await verifyDraftAssets(current);
+  }
+  return current;
 }
 
 async function verifyPublishedRelease(): Promise<void> {
@@ -294,12 +320,8 @@ const existingResponse = parseGitHubIncludedJsonResponse(existing.stdout);
 if (existing.exitCode === 0 && existingResponse.status === 200) {
   if (existingResponse.body.draft === true) {
     const draft = exactDraft(existingResponse.body);
-    const missing = await verifyDraftAssets(draft);
-    if (missing.length > 0) await run([
-      "gh", "release", "upload", tagArgument, ...missing, "--repo", publicRepository,
-    ]);
-    const completeDraft = await findDraft();
-    if (completeDraft === null || (await verifyDraftAssets(completeDraft)).length !== 0) {
+    const completeDraft = await completeDraftAssets(draft);
+    if ((await verifyDraftAssets(completeDraft)).length !== 0) {
       throw new Error(`Residual draft ${tagArgument} could not be completed exactly.`);
     }
     await run([
@@ -340,12 +362,8 @@ if (existing.exitCode === 0 && existingResponse.status === 200) {
     draft = await findDraft();
     if (draft === null) throw new Error(`GitHub did not create the exact draft for ${tagArgument}.`);
   }
-  const missing = await verifyDraftAssets(draft);
-  if (missing.length > 0) await run([
-    "gh", "release", "upload", tagArgument, ...missing, "--repo", publicRepository,
-  ]);
-  const completeDraft = await findDraft();
-  if (completeDraft === null || (await verifyDraftAssets(completeDraft)).length !== 0) {
+  const completeDraft = await completeDraftAssets(draft);
+  if ((await verifyDraftAssets(completeDraft)).length !== 0) {
     throw new Error(`GitHub Release draft ${tagArgument} did not acquire the exact artifacts.`);
   }
   await run([
