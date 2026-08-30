@@ -267,6 +267,17 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(githubPublisher).toContain('"--draft"');
   expect(githubPublisher).toContain("exactDraft");
   expect(githubPublisher).toContain("verifyDraftAssets");
+  expect(githubPublisher).toContain("readDraftById");
+  expect(githubPublisher).toContain(
+    [
+      '      "--input", source,',
+      '      `https://uploads.github.com/repos/${publicRepository}/releases/${String(current.id)}/assets?name=${encodeURIComponent(basename(source))}`,',
+      "    ]);",
+      "    current = await readDraftById(draft.id);",
+      "    await verifyDraftAssets(current);",
+    ].join("\n"),
+  );
+  expect(githubPublisher).not.toContain('"gh", "release", "upload"');
   expect(githubPublisher).toContain('"-F", "draft=false"');
   expect(githubPublisher).not.toContain("--target");
   expect(githubPublisher).not.toContain("target_commitish");
