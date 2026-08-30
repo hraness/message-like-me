@@ -1,0 +1,156 @@
+import { describe, expect, test } from "bun:test";
+
+import { parseVerifiedNpmProvenance } from "./npm-provenance-verification";
+
+const version = "0.8.1";
+const verifiedTag = `v${version}`;
+const verifiedSha = "b".repeat(40);
+const sha512 = "a".repeat(128);
+
+function audit(
+  overrides: Readonly<Record<string, unknown>> = {},
+  invocation = "https://github.com/hraness/message-like-me/actions/runs/123/attempts/3",
+): unknown {
+  const statement = {
+    _type: "https://in-toto.io/Statement/v1",
+    predicateType: "https://slsa.dev/provenance/v1",
+    subject: [{
+      digest: { sha512 },
+      name: `pkg:npm/%40hraness/message-like-me@${version}`,
+    }],
+    predicate: {
+      buildDefinition: {
+        buildType: "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+        externalParameters: {
+          workflow: {
+            path: ".github/workflows/release.yml",
+            ref: `refs/tags/${verifiedTag}`,
+            repository: "https://github.com/hraness/message-like-me",
+          },
+        },
+        internalParameters: {
+          github: {
+            event_name: "push",
+            repository_id: "1342143606",
+          },
+        },
+        resolvedDependencies: [{
+          digest: { gitCommit: verifiedSha },
+          uri: `git+https://github.com/hraness/message-like-me@refs/tags/${verifiedTag}`,
+        }],
+      },
+      runDetails: {
+        builder: { id: "https://github.com/actions/runner/github-hosted" },
+        metadata: {
+          invocationId: invocation,
+        },
+      },
+    },
+    ...overrides,
+  };
+  return {
+    invalid: [],
+    missing: [],
+    verified: [{
+      name: "@hraness/message-like-me",
+      version,
+      location: "node_modules/@hraness/message-like-me",
+      registry: "https://registry.npmjs.org/",
+      attestations: {
+        url: `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fmessage-like-me@${version}`,
+        provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+      },
+      attestationBundles: [{
+        predicateType: "https://slsa.dev/provenance/v1",
+        bundle: {
+          mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+          dsseEnvelope: {
+            payload: Buffer.from(JSON.stringify(statement), "utf8").toString("base64"),
+            payloadType: "application/vnd.in-toto+json",
+            signatures: [{ sig: "verified-by-npm" }],
+          },
+        },
+      }],
+    }],
+  };
+}
+
+const coordinate = Object.freeze({ sha512, verifiedSha, verifiedTag, version });
+
+describe("npm provenance verification policy", () => {
+  test("binds npm's verified Sigstore result to the exact workflow, tag, commit, and tarball", () => {
+    expect(() => parseVerifiedNpmProvenance(audit(), coordinate)).not.toThrow();
+    expect(() => parseVerifiedNpmProvenance(audit(), {
+      ...coordinate,
+      maximumAttempt: 4,
+      requiredRunId: "123",
+    })).not.toThrow();
+    expect(() => parseVerifiedNpmProvenance(audit(), {
+      ...coordinate,
+      requiredAttempt: 3,
+      requiredRunId: "123",
+    })).not.toThrow();
+  });
+
+  test("rejects a different run or a provenance attempt outside the admitted retry window", () => {
+    expect(() => parseVerifiedNpmProvenance(audit(), {
+      ...coordinate,
+      maximumAttempt: 2,
+      requiredRunId: "123",
+    })).toThrow("allowed workflow run attempt");
+    expect(() => parseVerifiedNpmProvenance(audit(), {
+      ...coordinate,
+      maximumAttempt: 3,
+      requiredRunId: "999",
+    })).toThrow("allowed workflow run attempt");
+    expect(() => parseVerifiedNpmProvenance(audit(), {
+      ...coordinate,
+      requiredAttempt: 2,
+      requiredRunId: "123",
+    })).toThrow("allowed workflow run attempt");
+    expect(() => parseVerifiedNpmProvenance(
+      audit({}, "https://github.com/hraness/message-like-me/actions/runs/123/attempts/0"),
+      coordinate,
+    )).toThrow("invocation");
+  });
+
+  test("rejects a different source commit or release workflow", () => {
+    const wrongCommit = audit({
+      predicate: {
+        buildDefinition: {
+          buildType: "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+          externalParameters: {
+            workflow: {
+              path: ".github/workflows/release.yml",
+              ref: `refs/tags/${verifiedTag}`,
+              repository: "https://github.com/hraness/message-like-me",
+            },
+          },
+          internalParameters: { github: { event_name: "push", repository_id: "1342143606" } },
+          resolvedDependencies: [{
+            digest: { gitCommit: "c".repeat(40) },
+            uri: `git+https://github.com/hraness/message-like-me@refs/tags/${verifiedTag}`,
+          }],
+        },
+        runDetails: {
+          builder: { id: "https://github.com/actions/runner/github-hosted" },
+          metadata: {
+            invocationId: "https://github.com/hraness/message-like-me/actions/runs/123/attempts/3",
+          },
+        },
+      },
+    });
+    expect(() => parseVerifiedNpmProvenance(wrongCommit, coordinate)).toThrow("reviewed Git commit");
+  });
+
+  test("rejects missing, invalid, or ambiguous npm verification results", () => {
+    expect(() => parseVerifiedNpmProvenance({
+      ...(audit() as Record<string, unknown>),
+      missing: [{ name: "@hraness/message-like-me" }],
+    }, coordinate)).toThrow("exactly one provenance-bearing package");
+    expect(() => parseVerifiedNpmProvenance({
+      ...(audit() as Record<string, unknown>),
+      verified: [],
+    }, coordinate)).toThrow("exactly one provenance-bearing package");
+  });
+});

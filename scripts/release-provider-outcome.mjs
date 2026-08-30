@@ -29,6 +29,7 @@ const GRAPHQL_ID = /^[\x21-\x7e]{1,512}$/u;
 const VERCEL_PRODUCTION_URL = /^https:\/\/messagelikeme-[a-z0-9]+-hraness\.vercel\.app$/u;
 const STABLE_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const SHA = /^[0-9a-f]{40}$/u;
+const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SECOND_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$/u;
 const RECEIPT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const HTTP_DATE = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/u;
@@ -129,7 +130,8 @@ const PRODUCTION_DEPLOYMENTS_QUERY = `query MessageLikeMeProductionDeployments(
 }`;
 
 const BASELINE_REST_REQUESTS = 2;
-const PROMOTION_REST_REQUESTS = 14;
+const PROMOTION_REST_REQUESTS = 17;
+const OUTCOME_ANNOTATED_TAG_OBJECT_REQUESTS = 7;
 const OUTCOME_REST_REQUESTS =
   6 +
   MAX_PROVIDER_POLLS * (2 + PAGINATED_READ_REQUESTS) +
@@ -138,7 +140,8 @@ const OUTCOME_REST_REQUESTS =
   PAGINATED_READ_REQUESTS +
   7 +
   PAGINATED_READ_REQUESTS +
-  7;
+  7 +
+  OUTCOME_ANNOTATED_TAG_OBJECT_REQUESTS;
 const SURROUNDING_RELEASE_REST_REQUESTS =
   1 +
   1 +
@@ -911,6 +914,34 @@ function exactProductionRef(value) {
   return exactCommitRef(value, PRODUCTION_REF, "website-production ref");
 }
 
+function exactAnnotatedTagRef(value, repository, tag, label) {
+  const record = expectRecord(value, label);
+  const object = expectRecord(record.object, `${label} object`);
+  const objectSha = expectSha(object.sha, `${label} object SHA`);
+  const expectedUrl = `https://api.github.com/repos/${repository}/git/tags/${objectSha}`;
+  if (
+    record.ref !== `refs/tags/${tag}` ||
+    object.type !== "tag" ||
+    object.url !== expectedUrl
+  ) {
+    fail(`${label} is not one exact annotated tag ref`);
+  }
+  return Object.freeze({ objectSha, url: expectedUrl });
+}
+
+function exactAnnotatedTagObject(value, tag, verifiedSha, objectSha, label) {
+  const record = expectRecord(value, label);
+  const object = expectRecord(record.object, `${label} object`);
+  if (
+    record.sha !== objectSha ||
+    record.tag !== tag ||
+    object.type !== "commit" ||
+    object.sha !== verifiedSha
+  ) {
+    fail(`${label} does not bind the exact annotated tag object to the verified release commit`);
+  }
+}
+
 async function readProductionRef(api, repository) {
   return exactProductionRef(
     await api.get(`/repos/${repository}/git/ref/heads/website-production`),
@@ -947,7 +978,7 @@ function expectBranch(value, label) {
 async function revalidateWorkflowSource(
   api,
   repository,
-  { defaultBranch, eventName, recoveryWorkflowSha },
+  { defaultBranch, eventName, recoveryWorkflowSha, verifiedSha },
 ) {
   const branch = expectBranch(defaultBranch, "default branch");
   const event = expectString(eventName, "release event name");
@@ -959,30 +990,55 @@ async function revalidateWorkflowSource(
   if (event !== "workflow_dispatch" && event !== "workflow_run") {
     fail("provider wait received an unsupported release event");
   }
-  const sha = expectSha(recovery, "recovery workflow SHA");
-  const repositoryState = expectRecord(
-    await api.get(`/repos/${repository}`),
-    "release workflow repository",
-  );
-  if (expectBranch(repositoryState.default_branch, "current default branch") !== branch) {
-    fail("release recovery default branch changed after workflow verification");
+  const workflowSha = expectSha(recovery, "recovery workflow SHA");
+  const releaseSha = verifiedSha === undefined
+    ? undefined
+    : expectSha(verifiedSha, "verified release SHA");
+  const reviewed = releaseSha === undefined || releaseSha === workflowSha
+    ? [workflowSha]
+    : [workflowSha, releaseSha];
+
+  for (const phase of ["initial", "terminal"]) {
+    const repositoryState = expectRecord(
+      await api.get(`/repos/${repository}`),
+      `${phase} release workflow repository`,
+    );
+    if (expectBranch(repositoryState.default_branch, `${phase} current default branch`) !== branch) {
+      fail("release recovery default branch changed after workflow verification");
+    }
+    const current = exactCommitRef(
+      await api.get(`/repos/${repository}/git/ref/heads/${branch}`),
+      `refs/heads/${branch}`,
+      `${phase} release workflow source ref`,
+    );
+    for (const ancestor of reviewed) {
+      await assertReviewedMainAncestor(api, repository, ancestor, current);
+    }
   }
-  const expectedRef = `refs/heads/${branch}`;
-  const current = exactCommitRef(
-    await api.get(`/repos/${repository}/git/ref/heads/${branch}`),
-    expectedRef,
-    "release workflow source ref",
+}
+
+async function assertReviewedMainAncestor(api, repository, reviewedSha, currentMainSha) {
+  if (reviewedSha === currentMainSha) return;
+  const comparison = expectRecord(
+    await api.get(`/repos/${repository}/compare/${reviewedSha}...${currentMainSha}`),
+    "reviewed-main ancestry comparison",
   );
-  if (current !== sha) fail("release recovery workflow source is no longer current main");
-  const terminalRepositoryState = expectRecord(
-    await api.get(`/repos/${repository}`),
-    "terminal release workflow repository",
+  const base = expectRecord(comparison.base_commit, "reviewed-main comparison.base_commit");
+  const head = expectRecord(comparison.head_commit, "reviewed-main comparison.head_commit");
+  const mergeBase = expectRecord(
+    comparison.merge_base_commit,
+    "reviewed-main comparison.merge_base_commit",
   );
   if (
-    expectBranch(terminalRepositoryState.default_branch, "terminal current default branch") !==
-    branch
+    comparison.status !== "ahead" ||
+    !Number.isSafeInteger(comparison.ahead_by) ||
+    comparison.ahead_by <= 0 ||
+    comparison.behind_by !== 0 ||
+    base.sha !== reviewedSha ||
+    mergeBase.sha !== reviewedSha ||
+    head.sha !== currentMainSha
   ) {
-    fail("release recovery default branch moved during source verification");
+    fail(`${reviewedSha} is not a reviewed ancestor of current main ${currentMainSha}`);
   }
 }
 
@@ -1100,12 +1156,19 @@ async function readLatestRelease(api, repository, tag) {
 }
 
 async function readVerifiedTagCommit(api, repository, tag, verifiedSha) {
-  const value = expectRecord(
-    await api.get(`/repos/${repository}/commits/refs%2Ftags%2F${tag}`),
-    `tag ${tag}`,
+  const tagRef = exactAnnotatedTagRef(
+    await api.get(`/repos/${repository}/git/ref/tags/${tag}`),
+    repository,
+    tag,
+    `tag ref ${tag}`,
   );
-  const tagSha = expectSha(value.sha, `tag ${tag} SHA`);
-  if (tagSha !== verifiedSha) fail(`tag ${tag} moved from the verified release commit`);
+  exactAnnotatedTagObject(
+    await api.get(`/repos/${repository}/git/tags/${tagRef.objectSha}`),
+    tag,
+    verifiedSha,
+    tagRef.objectSha,
+    `annotated tag ${tag}`,
+  );
 }
 
 export async function revalidateReleaseAuthority({
@@ -1120,12 +1183,17 @@ export async function revalidateReleaseAuthority({
   const coordinate = expectRepository(repository);
   const sha = expectSha(verifiedSha, "verified SHA");
   const tag = expectStableTag(verifiedTag, "verified tag");
-  const workflowSource = Object.freeze({ defaultBranch, eventName, recoveryWorkflowSha });
+  const workflowSource = Object.freeze({
+    defaultBranch,
+    eventName,
+    recoveryWorkflowSha,
+    verifiedSha: sha,
+  });
   if (
     (eventName !== "workflow_dispatch" && eventName !== "workflow_run") ||
-    recoveryWorkflowSha !== sha
+    !SHA.test(recoveryWorkflowSha)
   ) {
-    fail("site promotion authority must be an exact current-main release workflow");
+    fail("site promotion authority must be one reviewed-main workflow run");
   }
 
   await revalidateWorkflowSource(api, coordinate, workflowSource);
@@ -1135,9 +1203,6 @@ export async function revalidateReleaseAuthority({
     tag,
     `Release ${tag}`,
   );
-  if (firstRelease.target_commitish !== sha) {
-    fail(`Release ${tag} target_commitish is not the verified release commit`);
-  }
   await readLatestRelease(api, coordinate, tag);
 
   await revalidateWorkflowSource(api, coordinate, workflowSource);
@@ -1147,14 +1212,10 @@ export async function revalidateReleaseAuthority({
     tag,
     `terminal Release ${tag}`,
   );
-  if (secondRelease.target_commitish !== sha) {
-    fail(`terminal Release ${tag} target_commitish is not the verified release commit`);
-  }
   await readLatestRelease(api, coordinate, tag);
   if (
     firstRelease.id !== secondRelease.id ||
-    firstRelease.published_at !== secondRelease.published_at ||
-    firstRelease.target_commitish !== secondRelease.target_commitish
+    firstRelease.published_at !== secondRelease.published_at
   ) {
     fail(`Release ${tag} changed during authority verification`);
   }
@@ -1164,14 +1225,35 @@ export function exactPublishedRelease(value, tag, label = "published Release") {
   const stableTag = expectStableTag(tag, "published Release tag");
   const release = expectRecord(value, label);
   const assets = expectArray(release.assets, `${label}.assets`);
+  const version = stableTag.slice(1);
+  const legacyAssetFreeRelease = version === "0.8.0";
+  const expectedAssetNames = legacyAssetFreeRelease
+    ? []
+    : ["SHA256SUMS", `hraness-message-like-me-${version}.tgz`];
+  const actualAssetNames = assets.map((asset, index) => {
+    const item = expectRecord(asset, `${label}.assets[${String(index)}]`);
+    const name = expectString(item.name, `${label}.assets[${String(index)}].name`);
+    if (
+      item.state !== "uploaded"
+      || !SHA256_DIGEST.test(expectString(item.digest, `${label}.${name}.digest`))
+      || !Number.isSafeInteger(item.id)
+      || item.id <= 0
+      || !Number.isSafeInteger(item.size)
+      || item.size <= 0
+      || item.browser_download_url !== `https://github.com/hraness/message-like-me/releases/download/${stableTag}/${name}`
+    ) {
+      fail(`Release ${stableTag} asset ${name} is not one exact uploaded immutable artifact`);
+    }
+    return name;
+  }).sort();
   if (
     release.tag_name !== stableTag ||
     release.draft !== false ||
     release.prerelease !== false ||
     release.immutable !== true ||
-    assets.length !== 0
+    JSON.stringify(actualAssetNames) !== JSON.stringify(expectedAssetNames)
   ) {
-    fail(`Release ${stableTag} is not exact, published, immutable, and asset-free`);
+    fail(`Release ${stableTag} is not exact, published, immutable, and artifact-complete`);
   }
   parseSecondTimestamp(release.published_at, `${label}.published_at`);
   return release;
@@ -1384,7 +1466,12 @@ export async function promoteWebsiteProduction({
   const sha = expectSha(verifiedSha, "verified SHA");
   const tag = expectStableTag(verifiedTag, "verified tag");
   const baseline = parseBaselineReceipt(baselineReceipt);
-  const workflowSource = Object.freeze({ defaultBranch, eventName, recoveryWorkflowSha });
+  const workflowSource = Object.freeze({
+    defaultBranch,
+    eventName,
+    recoveryWorkflowSha,
+    verifiedSha: sha,
+  });
   const baselineValue = baselineReceiptValue(baseline);
   if (baseline.repository !== coordinate || baseline.verifiedSha !== sha) {
     fail("baseline receipt does not bind the verified release coordinate");
@@ -1776,7 +1863,12 @@ export async function waitForProviderOutcome({
     promotionReceipt,
     { repository, verifiedSha, verifiedTag },
   );
-  const workflowSource = Object.freeze({ defaultBranch, eventName, recoveryWorkflowSha });
+  const workflowSource = Object.freeze({
+    defaultBranch,
+    eventName,
+    recoveryWorkflowSha,
+    verifiedSha: promotion.verifiedSha,
+  });
   await readVerifiedTagCommit(
     api,
     promotion.repository,
@@ -2010,6 +2102,7 @@ async function main() {
       defaultBranch: process.env.DEFAULT_BRANCH,
       eventName: process.env.EVENT_NAME,
       recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA,
+      verifiedSha: process.env.VERIFIED_SHA,
     });
     return;
   }

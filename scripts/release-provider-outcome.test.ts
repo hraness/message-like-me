@@ -69,9 +69,13 @@ const tagResolutionFixture = JSON.parse(await readFile(
   "utf8",
 )) as Readonly<{
   resolvedCommit: Readonly<Record<string, ProviderJson> & { sha: string }>;
-  resolvedCommitEndpoint: string;
+  tagRef: Readonly<{
+    object: Readonly<{ sha: string; type: string; url: string }>;
+    ref: string;
+  }>;
 }>;
 const providerVerifiedSha = tagResolutionFixture.resolvedCommit.sha;
+const providerTagObjectSha = tagResolutionFixture.tagRef.object.sha;
 const providerReleasePublishedAt = "2026-08-29T14:00:00Z";
 const providerBaselineServerDate = "2026-08-29T15:00:00.000Z";
 const providerPromotionServerDate = "2026-08-29T15:01:00.000Z";
@@ -265,8 +269,21 @@ function providerRef(sha: string, branch = "website-production"): ProviderJson {
   return { object: { sha, type: "commit" }, ref: `refs/heads/${branch}` };
 }
 
+function providerAnnotatedTagObject(
+  commit = providerVerifiedSha,
+  overrides: Readonly<Record<string, ProviderJson>> = {},
+): ProviderJson {
+  return {
+    object: { sha: commit, type: "commit" },
+    sha: providerTagObjectSha,
+    tag: providerTag,
+    ...overrides,
+  };
+}
+
 function providerRelease(overrides: Readonly<Record<string, ProviderJson>> = {}): ProviderJson {
   return {
+    assets: [],
     draft: false,
     immutable: true,
     prerelease: false,
@@ -292,6 +309,22 @@ function providerCompare(overrides: Readonly<Record<string, ProviderJson>> = {})
   };
 }
 
+function providerReviewedMainCompare(
+  base: string,
+  head: string,
+  overrides: Readonly<Record<string, ProviderJson>> = {},
+): ProviderJson {
+  return {
+    ahead_by: 1,
+    base_commit: { sha: base },
+    behind_by: 0,
+    head_commit: { sha: head },
+    merge_base_commit: { sha: base },
+    status: "ahead",
+    ...overrides,
+  };
+}
+
 class ProviderApiFixture {
   readonly calls: string[] = [];
   readonly graphqlCalls: string[] = [];
@@ -307,6 +340,7 @@ class ProviderApiFixture {
   readonly statusSnapshots: Map<number, ProviderJson[][]>;
   compare: ProviderJson = providerCompare();
   compareHook: (() => void) | undefined;
+  readonly reviewedCompare: ProviderJson | undefined;
   deploymentDetailError: Error | undefined;
   advanceError: Error | undefined;
   refSha: string;
@@ -345,6 +379,7 @@ class ProviderApiFixture {
     refSha = providerPreviousSha,
     refValues = [],
     releaseSnapshots = [],
+    reviewedCompare,
     serverDates = [providerPromotionServerDate],
     statuses = new Map<number, ProviderJson[][]>(),
     tagSnapshots = [],
@@ -360,6 +395,7 @@ class ProviderApiFixture {
     refSha?: string;
     refValues?: readonly ProviderJson[];
     releaseSnapshots?: readonly ProviderJson[];
+    reviewedCompare?: ProviderJson;
     serverDates?: readonly string[];
     statuses?: Map<number, ProviderJson[][]>;
     tagSnapshots?: readonly string[];
@@ -375,6 +411,7 @@ class ProviderApiFixture {
     this.refSnapshots = refSnapshots;
     this.refValues = refValues;
     this.releaseSnapshots = releaseSnapshots;
+    this.reviewedCompare = reviewedCompare;
     this.serverDates = serverDates;
     this.statusSnapshots = statuses;
     this.tagSnapshots = tagSnapshots;
@@ -467,10 +504,13 @@ class ProviderApiFixture {
       this.#latestRead += 1;
       return snapshot ?? this.latest;
     }
-    if (endpoint === tagResolutionFixture.resolvedCommitEndpoint) {
+    if (endpoint === `/repos/${providerRepository}/git/ref/tags/${providerTag}`) {
+      return tagResolutionFixture.tagRef as ProviderJson;
+    }
+    if (endpoint === `/repos/${providerRepository}/git/tags/${providerTagObjectSha}`) {
       const snapshot = this.tagSnapshots[Math.min(this.#tagRead, this.tagSnapshots.length - 1)];
       this.#tagRead += 1;
-      return { ...tagResolutionFixture.resolvedCommit, sha: snapshot ?? providerVerifiedSha };
+      return providerAnnotatedTagObject(snapshot ?? providerVerifiedSha);
     }
     if (
       endpoint ===
@@ -478,6 +518,15 @@ class ProviderApiFixture {
     ) {
       this.compareHook?.();
       return this.compare;
+    }
+    const reviewedComparison = new RegExp(
+      `^/repos/${providerRepository}/compare/([0-9a-f]{40})\\.\\.\\.([0-9a-f]{40})$`,
+      "u",
+    ).exec(endpoint);
+    if (reviewedComparison !== null) {
+      const base = reviewedComparison[1] as string;
+      const head = reviewedComparison[2] as string;
+      return this.reviewedCompare ?? providerReviewedMainCompare(base, head);
     }
     const deploymentPage = new RegExp(
       `^/repos/${providerRepository}/deployments\\?environment=Production&task=deploy&per_page=100&page=([1-6])$`,
@@ -653,14 +702,15 @@ describe("release-bound site control", () => {
     }
   });
 
-  test("binds workflow-run and recovery requests to the checked Release run and exact current main", async () => {
+  test("binds successful Release attempts to a reviewed-main workflow source", async () => {
     const workflow = await readFile(productionWorkflowUrl, "utf8");
-    const script = workflowStepScript(workflow, "Bind dispatch to exact current main");
+    const script = workflowStepScript(workflow, "Bind request to reviewed main ancestry");
     const directory = await mkdtemp(join(tmpdir(), "message-like-me-site-request-"));
     const bin = join(directory, "bin");
     const output = join(directory, "github-output.txt");
     const gh = join(bin, "gh");
-    const sha = "2".repeat(40);
+    const workflowSha = "2".repeat(40);
+    const releaseSha = "1".repeat(40);
 
     await mkdir(bin);
     await writeFile(gh, `#!/bin/sh
@@ -679,7 +729,7 @@ esac
       EVENT_NAME: "workflow_run",
       EVENT_REF: "refs/heads/main",
       EVENT_REPOSITORY: providerRepository,
-      EVENT_SHA: sha,
+      EVENT_SHA: workflowSha,
       EXPECTED_RELEASE_WORKFLOW_ID: "12345",
       GH_TOKEN: "read-only-test-token",
       GITHUB_OUTPUT: output,
@@ -687,14 +737,15 @@ esac
       INPUT_RELEASE_TAG: "",
       PATH: `${bin}:/usr/bin:/bin`,
       STUB_DEFAULT_BRANCH: "main",
-      STUB_MAIN_SHA: sha,
+      STUB_MAIN_SHA: workflowSha,
       UPSTREAM_CONCLUSION: "success",
       UPSTREAM_EVENT: "push",
       UPSTREAM_HEAD_BRANCH: "v0.8.0",
       UPSTREAM_HEAD_REPOSITORY: providerRepository,
-      UPSTREAM_HEAD_SHA: sha,
+      UPSTREAM_HEAD_SHA: releaseSha,
       UPSTREAM_PATH: ".github/workflows/release.yml",
-      UPSTREAM_RUN_ATTEMPT: "1",
+      UPSTREAM_RUN_ATTEMPT: "2",
+      UPSTREAM_RUN_ID: "67890",
       UPSTREAM_WORKFLOW_ID: "12345",
       UPSTREAM_WORKFLOW_NAME: "Release",
     });
@@ -708,7 +759,9 @@ esac
     try {
       const workflowRun = await runCase({});
       expect(workflowRun.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toBe(`sha=${sha}\ntag=v0.8.0\n`);
+      expect(await readFile(output, "utf8")).toBe(
+        `release_run_attempt=2\nrelease_run_id=67890\nrequested_tag=v0.8.0\nupstream_sha=${releaseSha}\nworkflow_sha=${workflowSha}\n`,
+      );
 
       const recovery = await runCase({
         EVENT_NAME: "workflow_dispatch",
@@ -720,11 +773,14 @@ esac
         UPSTREAM_HEAD_SHA: "",
         UPSTREAM_PATH: "",
         UPSTREAM_RUN_ATTEMPT: "",
+        UPSTREAM_RUN_ID: "",
         UPSTREAM_WORKFLOW_ID: "",
         UPSTREAM_WORKFLOW_NAME: "",
       });
       expect(recovery.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toBe(`sha=${sha}\ntag=v0.8.0\n`);
+      expect(await readFile(output, "utf8")).toBe(
+        `release_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
+      );
 
       for (const rejectedEnvironment of [
         { DEFAULT_BRANCH: "trunk" },
@@ -736,10 +792,11 @@ esac
         { UPSTREAM_WORKFLOW_NAME: "Release copy" },
         { UPSTREAM_PATH: ".github/workflows/copied-release.yml" },
         { UPSTREAM_EVENT: "workflow_dispatch" },
-        { UPSTREAM_RUN_ATTEMPT: "2" },
+        { UPSTREAM_RUN_ATTEMPT: "0" },
+        { UPSTREAM_RUN_ID: "0" },
         { UPSTREAM_CONCLUSION: "failure" },
         { UPSTREAM_HEAD_REPOSITORY: "attacker/message-like-me" },
-        { UPSTREAM_HEAD_SHA: "3".repeat(40) },
+        { UPSTREAM_HEAD_SHA: "not-a-commit" },
         { UPSTREAM_HEAD_BRANCH: "main" },
         { STUB_DEFAULT_BRANCH: "trunk" },
         { STUB_MAIN_SHA: "3".repeat(40) },
@@ -810,7 +867,7 @@ esac
     }
   });
 
-  test("separates immutable Release publication from the privileged site writer", async () => {
+  test("separates exact npm and GitHub publication from the privileged site writer", async () => {
     const [releaseWorkflow, productionWorkflow] = await Promise.all([
       readFile(releaseWorkflowUrl, "utf8"),
       readFile(productionWorkflowUrl, "utf8"),
@@ -821,15 +878,67 @@ esac
     expect(releaseWorkflow).not.toContain("create-github-app-token");
     expect(releaseWorkflow).not.toContain("production-ref-writer-key");
     expect(releaseWorkflow).not.toContain("release-provider-outcome.mjs promote");
-    expect(releaseWorkflow).toContain("Publish immutable GitHub Release");
+    const job = (workflow: string, name: string): string => {
+      const start = workflow.indexOf(`\n  ${name}:\n`);
+      if (start < 0) throw new Error(`Workflow job not found: ${name}`);
+      const nextJob = /\n  [a-z][a-z_]*:\n/gu;
+      nextJob.lastIndex = start + `\n  ${name}:\n`.length;
+      const next = nextJob.exec(workflow)?.index ?? -1;
+      return workflow.slice(start, next < 0 ? undefined : next);
+    };
+    const githubWriter = job(releaseWorkflow, "publish_github");
+    const npmPreflight = job(releaseWorkflow, "pre_npm");
+    const npmWriter = job(releaseWorkflow, "publish_npm");
+    const finalAdmission = job(releaseWorkflow, "admit");
+    expect(releaseWorkflow.indexOf("\n  publish_github:\n"))
+      .toBeLessThan(releaseWorkflow.indexOf("\n  pre_npm:\n"));
+    expect(releaseWorkflow.indexOf("\n  pre_npm:\n"))
+      .toBeLessThan(releaseWorkflow.indexOf("\n  publish_npm:\n"));
+    expect(releaseWorkflow.indexOf("\n  publish_npm:\n"))
+      .toBeLessThan(releaseWorkflow.indexOf("\n  admit:\n"));
+    expect(githubWriter).toContain("contents: write");
+    expect(githubWriter).not.toContain("id-token: write");
+    expect(githubWriter).not.toContain("bun install");
+    expect(githubWriter).toContain("publish-github-release.ts");
+    expect(npmPreflight).toContain("Prove immutable Latest GitHub Release exact-byte parity");
+    expect(npmPreflight).toContain("check-npm-retry-state.ts");
+    expect(npmWriter).toContain("contents: none");
+    expect(npmWriter).toContain("id-token: write");
+    expect(npmWriter).not.toContain("actions/checkout@");
+    expect(npmWriter).not.toContain("bun install");
+    expect(npmWriter).toContain("artifact-ids: ${{ needs.verify.outputs.writer_artifact_id }}");
+    expect(npmWriter).toContain("publish-npm-release.ts artifacts/*.tgz");
+    expect(finalAdmission).toContain("contents: read");
+    expect(finalAdmission).not.toContain("contents: write");
+    expect(finalAdmission).not.toContain("id-token: write");
+    expect(finalAdmission).toContain("check-public-release.ts");
 
     expect(productionWorkflow).toContain("workflow_run:");
     expect(productionWorkflow).toContain("workflow_dispatch:");
     expect(productionWorkflow).toContain("environment: { name: production-ref-writer-key, deployment: false }");
     expect(productionWorkflow).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(productionWorkflow).toContain("check-public-release.ts");
     expect(productionWorkflow).toContain("release-provider-outcome.mjs promote");
     expect(productionWorkflow).not.toContain("--method POST");
     expect(productionWorkflow).not.toContain('"/repos/$GITHUB_REPOSITORY/releases"');
+
+    const appPreflight = job(productionWorkflow, "advance_production_ref_preflight");
+    const appWriter = job(productionWorkflow, "write_production_ref");
+    const appPostflight = job(productionWorkflow, "advance_production_ref");
+    expect(appPreflight).toContain("check-public-release.ts");
+    expect(appPreflight).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(appPreflight).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY");
+    expect(appWriter).toContain("environment: { name: production-ref-writer-key, deployment: false }");
+    expect(appWriter).toContain("Pin the only secret-bearing writer code to reviewed hashes");
+    expect(appWriter).toMatch(/APP_TOKEN_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toMatch(/PROVIDER_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toMatch(/REF_WRITER_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).not.toContain("setup-bun");
+    expect(appWriter).not.toContain("bun install");
+    expect(appWriter).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(appPostflight).toContain("check-public-release.ts");
+    expect(appPostflight).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(appPostflight).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY");
   });
 
   test("uses workflow dispatch only to recover an existing immutable release", async () => {
@@ -860,7 +969,9 @@ esac
       return workflow.slice(start, next < 0 ? undefined : next);
     };
     const baselineJob = job("provider_baseline");
-    const advanceJob = job("advance_production_ref");
+    const preflightJob = job("advance_production_ref_preflight");
+    const writerJob = job("write_production_ref");
+    const postflightJob = job("advance_production_ref");
     const existingJob = job("confirm_existing_production_ref");
     const selectJob = job("select_promotion");
     const providerJob = job("provider_outcome");
@@ -870,12 +981,25 @@ esac
       return match[1].trim().split("\n").map((line) => line.trim()).sort();
     };
 
-    for (const exactNodeJob of [baselineJob, advanceJob, existingJob, providerJob]) {
+    for (const exactNodeJob of [
+      baselineJob,
+      preflightJob,
+      postflightJob,
+      existingJob,
+      providerJob,
+    ]) {
+      expect(exactNodeJob).toContain(
+        "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+      );
       expect(exactNodeJob).toContain("node-version: \"24.19.0\"");
-      expect(exactNodeJob).toContain("package-manager-cache: false");
+      expect(exactNodeJob).not.toContain("package-manager-cache:");
     }
 
     expect(workflow.indexOf("\n  provider_baseline:\n"))
+      .toBeLessThan(workflow.indexOf("\n  advance_production_ref_preflight:\n"));
+    expect(workflow.indexOf("\n  advance_production_ref_preflight:\n"))
+      .toBeLessThan(workflow.indexOf("\n  write_production_ref:\n"));
+    expect(workflow.indexOf("\n  write_production_ref:\n"))
       .toBeLessThan(workflow.indexOf("\n  advance_production_ref:\n"));
     expect(workflow.indexOf("\n  advance_production_ref:\n"))
       .toBeLessThan(workflow.indexOf("\n  select_promotion:\n"));
@@ -883,18 +1007,30 @@ esac
       .toBeLessThan(workflow.indexOf("\n  select_promotion:\n"));
     expect(workflow.indexOf("\n  select_promotion:\n"))
       .toBeLessThan(workflow.indexOf("\n  provider_outcome:\n"));
-    expect(baselineJob).toContain("needs: verify");
+    expect(baselineJob).toContain("- verify");
+    expect(baselineJob).toContain("- public_admission");
     expect(permissions(baselineJob)).toEqual(["contents: read", "deployments: read"]);
     expect(baselineJob).not.toContain("contents: write");
     expect(baselineJob).toContain("release-provider-outcome.mjs baseline");
     expect(baselineJob).toContain("advance_required:");
-    expect(advanceJob).toContain("- provider_baseline");
-    expect(permissions(advanceJob)).toEqual(["contents: read"]);
-    expect(advanceJob).toContain("PROMOTION_EXPECTED_MODE: advanced");
-    expect(advanceJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
-    expect(advanceJob).toContain("release-provider-outcome.mjs promote");
-    expect(advanceJob).not.toContain("release-provider-outcome.mjs wait");
-    expect(advanceJob).not.toContain("/statuses?");
+    expect(preflightJob).toContain("- provider_baseline");
+    expect(permissions(preflightJob)).toEqual(["contents: read"]);
+    expect(preflightJob).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(preflightJob).toContain("check-public-release.ts");
+    expect(preflightJob).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(permissions(writerJob)).toEqual(["contents: read"]);
+    expect(writerJob).toContain("PROMOTION_EXPECTED_MODE: advanced");
+    expect(writerJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(writerJob).toContain("release-provider-outcome.mjs promote");
+    expect(writerJob).not.toContain("setup-bun");
+    expect(writerJob).not.toContain("bun install");
+    expect(writerJob).not.toContain("release-provider-outcome.mjs wait");
+    expect(writerJob).not.toContain("/statuses?");
+    expect(postflightJob).toContain("- write_production_ref");
+    expect(permissions(postflightJob)).toEqual(["contents: read"]);
+    expect(postflightJob).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(postflightJob).toContain("check-public-release.ts");
+    expect(postflightJob).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
     expect(existingJob).toContain("PROMOTION_EXPECTED_MODE: already-exact");
     expect(existingJob).not.toContain("environment:");
     expect(existingJob).not.toContain("MLM_RELEASE_APP_");
@@ -903,7 +1039,7 @@ esac
     expect(selectJob).toContain("ADVANCE_RESULT");
     expect(selectJob).toContain("EXISTING_RESULT");
     expect(providerJob).toContain("- select_promotion");
-    expect(providerJob).toContain("timeout-minutes: 20");
+    expect(providerJob).toContain("timeout-minutes: 40");
     expect(permissions(providerJob)).toEqual(["contents: read", "deployments: read"]);
     expect(providerJob).not.toContain("contents: write");
     expect(providerJob).not.toContain("continue-on-error");
@@ -921,7 +1057,7 @@ esac
     expect(helper).toContain("recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA");
     expect(workflow.match(
       /ref: \$\{\{ needs\.verify\.outputs\.workflow_sha \}\}/gu,
-    )).toHaveLength(4);
+    )).toHaveLength(7);
     expect(workflow).not.toContain("VERCEL_TOKEN");
     expect(workflow).not.toContain("projectSettings");
     expect(workflow).not.toContain("redeploy");
@@ -949,14 +1085,14 @@ esac
     expect(helper).not.toContain('["--method", "POST"');
     expect(releaseRestRequestBudget).toEqual({
       githubTokenLimit: 1_000,
-      headroom: 812,
+      headroom: 802,
       maxPolls: 15,
       pollIntervalMilliseconds: 60_000,
       providerBaseline: 2,
-      providerOutcome: 157,
-      providerPromotion: 14,
+      providerOutcome: 164,
+      providerPromotion: 17,
       surroundingRelease: 15,
-      total: 188,
+      total: 198,
     });
     expect(releaseGraphqlRequestBudget).toEqual({
       githubPointLimit: 1_000,
@@ -1623,6 +1759,9 @@ esac
     const movedBeforePatch = new ProviderApiFixture({
       defaultBranchShaSnapshots: ["3".repeat(40)],
       deployments: [[baselineDeployment]],
+      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
+        status: "diverged",
+      }),
       statuses: terminalBaselineStatus(),
     });
     await expect(promoteWebsiteProduction({
@@ -1634,12 +1773,15 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("workflow source is no longer current main");
+    })).rejects.toThrow("is not a reviewed ancestor of current main");
     expect(movedBeforePatch.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const movedAfterPatch = new ProviderApiFixture({
-      defaultBranchShaSnapshots: [providerVerifiedSha, "3".repeat(40)],
+      defaultBranchShaSnapshots: [providerVerifiedSha, providerVerifiedSha, "3".repeat(40)],
       deployments: [[baselineDeployment]],
+      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
+        status: "diverged",
+      }),
       statuses: terminalBaselineStatus(),
     });
     await expect(promoteWebsiteProduction({
@@ -1651,13 +1793,16 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("workflow source is no longer current main");
+    })).rejects.toThrow("is not a reviewed ancestor of current main");
     expect(movedAfterPatch.calls.filter((call) => call.startsWith("GIT PUSH "))).toHaveLength(1);
 
     const alreadyExact = await providerReceipts("already-exact");
     const alreadyExactSourceDrift = new ProviderApiFixture({
       defaultBranchShaSnapshots: ["3".repeat(40)],
       refSha: providerVerifiedSha,
+      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
+        status: "diverged",
+      }),
       serverDates: [providerPromotionServerDate],
     });
     await expect(promoteWebsiteProduction({
@@ -1669,7 +1814,7 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("workflow source is no longer current main");
+    })).rejects.toThrow("is not a reviewed ancestor of current main");
     const alreadyExactTerminalRefRead = alreadyExactSourceDrift.calls.lastIndexOf(
       `GET /repos/${providerRepository}/git/ref/heads/website-production`,
     );
@@ -2163,7 +2308,9 @@ esac
       [],
       [providerVerifiedSha, providerVerifiedSha, providerVerifiedSha, "3".repeat(40)],
     );
-    await expect(run(finalTagRace)).rejects.toThrow("tag v0.8.0 moved");
+    await expect(run(finalTagRace)).rejects.toThrow(
+      "annotated tag v0.8.0 does not bind the exact annotated tag object",
+    );
 
     const finalReleaseRace = waitCase(
       providerDeployment(20, candidateAt),
@@ -2283,12 +2430,15 @@ esac
       recoveryWorkflowSha: providerVerifiedSha,
       sleep: async () => {},
       ...providerAuthority,
-    })).rejects.toThrow("default branch moved during source verification");
+    })).rejects.toThrow("release recovery default branch changed after workflow verification");
 
     const recoverySourceShaRace = new ProviderApiFixture({
       defaultBranchShaSnapshots: [providerVerifiedSha, "3".repeat(40)],
       deployments: [[providerDeployment(20, candidateAt), baselineDeployment]],
       refSha: providerVerifiedSha,
+      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
+        status: "diverged",
+      }),
       statuses: new Map([
         [10, [[providerStatus(100, "success", "2026-08-29T13:01:00Z")]]],
         [20, [
@@ -2309,7 +2459,7 @@ esac
       recoveryWorkflowSha: providerVerifiedSha,
       sleep: async () => {},
       ...providerAuthority,
-    })).rejects.toThrow("workflow source is no longer current main");
+    })).rejects.toThrow("is not a reviewed ancestor of current main");
 
     const wrongMode = {
       ...(promotion as Readonly<Record<string, ProviderJson>>),

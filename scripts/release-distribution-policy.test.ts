@@ -1,0 +1,156 @@
+import { createHash } from "node:crypto";
+import { describe, expect, test } from "bun:test";
+
+import {
+  assertReleaseAssetBytes,
+  parseGitHubRelease,
+  parseNpmRelease,
+  releaseArchiveName,
+} from "./release-distribution-policy";
+
+const version = "0.8.1";
+const tarball = new TextEncoder().encode("exact package bytes");
+const tarballDigest = createHash("sha256").update(tarball).digest("hex");
+const checksum = new TextEncoder().encode(`${tarballDigest}  ${releaseArchiveName(version)}\n`);
+const checksumDigest = createHash("sha256").update(checksum).digest("hex");
+const npmUser = {
+  email: "npm-oidc-no-reply@github.com",
+  name: "GitHub Actions",
+  trustedPublisher: {
+    id: "github",
+    oidcConfigId: "oidc:12345678-1234-1234-1234-123456789abc",
+  },
+};
+
+function release(overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    assets: [
+      {
+        browser_download_url: `https://github.com/hraness/message-like-me/releases/download/v${version}/${releaseArchiveName(version)}`,
+        digest: `sha256:${tarballDigest}`,
+        id: 1,
+        name: releaseArchiveName(version),
+        size: tarball.byteLength,
+        state: "uploaded",
+      },
+      {
+        browser_download_url: `https://github.com/hraness/message-like-me/releases/download/v${version}/SHA256SUMS`,
+        digest: `sha256:${checksumDigest}`,
+        id: 2,
+        name: "SHA256SUMS",
+        size: checksum.byteLength,
+        state: "uploaded",
+      },
+    ],
+    draft: false,
+    body: `Automated public release of @hraness/message-like-me@${version} from v${version}.`,
+    immutable: true,
+    name: `Message Like Me v${version}`,
+    prerelease: false,
+    tag_name: `v${version}`,
+    ...overrides,
+  };
+}
+
+describe("public release distribution policy", () => {
+  test("derives the exact scoped npm pack filename", () => {
+    expect(releaseArchiveName(version)).toBe("hraness-message-like-me-0.8.1.tgz");
+    expect(() => releaseArchiveName("latest")).toThrow("release version");
+  });
+
+  test("requires MIT npm identity and public-repository provenance", () => {
+    const parsed = parseNpmRelease({
+      _npmUser: npmUser,
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        attestations: {
+          provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+          url: `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fmessage-like-me@${version}`,
+        },
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    }, version);
+    expect(parsed.integrity).toBe("sha512-QUJDRA==");
+    expect(() => parseNpmRelease({
+      _npmUser: npmUser,
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    }, version)).toThrow("attestations");
+    expect(() => parseNpmRelease({
+      _npmUser: npmUser,
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        attestations: {
+          provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+          url: `https://registry.npmjs.org/-/npm/v1/attestations/@attacker%2fmessage-like-me@${version}`,
+        },
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    }, version)).toThrow("provenance");
+    expect(() => parseNpmRelease({
+      _npmUser: {
+        ...npmUser,
+        trustedPublisher: { id: "github", oidcConfigId: "not-a-uuid" },
+      },
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        attestations: {
+          provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+          url: `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fmessage-like-me@${version}`,
+        },
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    }, version)).toThrow("trusted-publisher provenance");
+    const exactRelease = {
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        attestations: {
+          provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+          url: `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fmessage-like-me@${version}`,
+        },
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    };
+    for (const badUser of [
+      undefined,
+      { ...npmUser, name: "token publisher" },
+      { ...npmUser, email: "publisher@example.invalid" },
+      { ...npmUser, trustedPublisher: { ...npmUser.trustedPublisher, id: "other" } },
+    ]) {
+      expect(() => parseNpmRelease({ ...exactRelease, _npmUser: badUser }, version)).toThrow();
+    }
+  });
+
+  test("requires two exact immutable GitHub artifacts and their bytes", () => {
+    const parsed = parseGitHubRelease(release(), version);
+    expect(() => assertReleaseAssetBytes(
+      parsed,
+      tarball,
+      checksum,
+      (bytes) => createHash("sha256").update(bytes).digest("hex"),
+    )).not.toThrow();
+    expect(() => parseGitHubRelease(release({ assets: [] }), version)).toThrow("exactly two");
+  });
+});

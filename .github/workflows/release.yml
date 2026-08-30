@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
+      release_artifact_digest: ${{ steps.release_artifact.outputs.artifact-digest }}
+      release_artifact_id: ${{ steps.release_artifact.outputs.artifact-id }}
+      writer_artifact_digest: ${{ steps.writer_artifact.outputs.artifact-digest }}
+      writer_artifact_id: ${{ steps.writer_artifact.outputs.artifact-id }}
       verified_sha: ${{ steps.identity.outputs.sha }}
       verified_tag: ${{ steps.identity.outputs.tag }}
     steps:
@@ -41,7 +45,7 @@ jobs:
             exit 1
           fi
           printf 'tag=%s\n' "$EVENT_REF_NAME" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -49,10 +53,10 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.3.14"
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
       - name: Verify exact release identity
         id: identity
         env:
@@ -60,6 +64,13 @@ jobs:
           REQUESTED_TAG: ${{ steps.request.outputs.tag }}
         run: |
           set -euo pipefail
+          git fetch --force --tags origin
+          git fetch --force origin "refs/tags/$REQUESTED_TAG:refs/tags/$REQUESTED_TAG"
+          git fetch --no-tags origin "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          if [[ "$(git cat-file -t "$REQUESTED_TAG")" != "tag" ]]; then
+            echo "::error::Release tag $REQUESTED_TAG is not annotated"
+            exit 1
+          fi
           package_version="$(bun -e 'const value = await Bun.file("package.json").json(); if (typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
           site_version="$(bun -e 'const value = await Bun.file("site/package.json").json(); if (typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
           if [[ ! "$package_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -82,8 +93,8 @@ jobs:
             exit 1
           fi
           default_head="$(git rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}")"
-          if [[ "$default_head" != "$tag_commit" ]]; then
-            echo "::error::Tag release commit $tag_commit is not current $DEFAULT_BRANCH head $default_head"
+          if ! git merge-base --is-ancestor "$tag_commit" "$default_head"; then
+            echo "::error::Tag release commit $tag_commit is not a reviewed ancestor of current $DEFAULT_BRANCH"
             exit 1
           fi
           newest_stable_tag="$(git tag --list 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | LC_ALL=C sort -V | tail -n 1)"
@@ -115,7 +126,38 @@ jobs:
             printf '%s\n' "$generated_status"
             exit 1
           fi
-      - run: bun pm pack --dry-run --ignore-scripts
+      - name: Create the one exact release tarball and checksum
+        run: |
+          mkdir -p artifacts
+          npm pack --ignore-scripts --pack-destination artifacts .
+          bun run ./scripts/release-artifact-checksum.ts write artifacts/*.tgz artifacts/SHA256SUMS
+      - name: Preserve the exact release bytes
+        id: release_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: message-like-me-release-${{ github.run_attempt }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Stage the dependency-free npm writer from reviewed source
+        run: |
+          set -euo pipefail
+          mkdir -p release-writer/scripts
+          cp package.json release-writer/package.json
+          cp scripts/check-npm-trusted-publishing.ts release-writer/scripts/
+          cp scripts/npm-release-policy.ts release-writer/scripts/
+          cp scripts/publish-npm-release.ts release-writer/scripts/
+          cp scripts/release-artifact-checksum.ts release-writer/scripts/
+          cp scripts/release-distribution-policy.ts release-writer/scripts/
+          cp scripts/release-process-environment.ts release-writer/scripts/
+      - name: Preserve the reviewed dependency-free npm writer
+        id: writer_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: message-like-me-release-writer-${{ github.run_attempt }}
+          path: release-writer/
+          if-no-files-found: error
+          retention-days: 30
 
   macos_fixtures:
     name: macOS synthetic Messages and Contacts fixtures
@@ -125,7 +167,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ needs.verify.outputs.verified_sha }}
@@ -141,100 +183,245 @@ jobs:
           mkdir -p "$HOME"
           bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts
 
-  publish:
+  exact_artifact:
+    name: Exact tarball install (${{ matrix.os }})
+    needs: verify
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.verified_sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Download the exact release bytes
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}
+          merge-multiple: true
+          path: artifacts
+      - name: Bind the immutable workflow artifact
+        env:
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.verify.outputs.release_artifact_digest }}
+          RELEASE_ARTIFACT_ID: ${{ needs.verify.outputs.release_artifact_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ || ! "$RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Release artifact has no exact immutable identity"
+            exit 1
+          fi
+      - name: Verify checksum and the installed public boundary
+        run: |
+          bun run ./scripts/release-artifact-checksum.ts check artifacts/*.tgz artifacts/SHA256SUMS
+          bun run ./scripts/package-smoke.ts artifacts/*.tgz
+
+  publish_github:
     name: Publish immutable GitHub Release
     needs:
       - verify
       - macos_fixtures
+      - exact_artifact
     permissions:
       contents: write
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-      GH_REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
       VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
       VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check out only the verified writer source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ needs.verify.outputs.verified_sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - name: Install Bun without installing repository dependencies
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: "24.19.0"
-          package-manager-cache: false
-      - name: Publish verified GitHub Release
+          bun-version: "1.3.14"
+      - name: Download the validated release bytes by numeric artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}
+          merge-multiple: true
+          path: artifacts
+      - name: Bind the immutable workflow artifact
+        env:
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.verify.outputs.release_artifact_digest }}
+          RELEASE_ARTIFACT_ID: ${{ needs.verify.outputs.release_artifact_id }}
         run: |
           set -euo pipefail
-          if [[ ! "$VERIFIED_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Publish request has no verified stable release tag"
+          if [[ ! "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ || ! "$RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Release artifact has no exact immutable identity"
             exit 1
           fi
-          if [[ ! "$VERIFIED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Publish request has no verified release commit"
+      - name: Create and prove the immutable GitHub Release from exact bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bun run ./scripts/release-artifact-checksum.ts check artifacts/*.tgz artifacts/SHA256SUMS
+          bun run ./scripts/publish-github-release.ts "$VERIFIED_TAG" artifacts/*.tgz artifacts/SHA256SUMS
+
+  pre_npm:
+    name: Admit immutable GitHub bytes and npm retry state
+    needs:
+      - verify
+      - publish_github
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      npm_state: ${{ steps.npm_state.outputs.npm_state }}
+      preflight_run_attempt: ${{ steps.npm_state.outputs.preflight_run_attempt }}
+      preflight_run_id: ${{ steps.npm_state.outputs.preflight_run_id }}
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ github.token }}
+      VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+      VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+    steps:
+      - name: Check out the verified read-only admission source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.verified_sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Install the pinned Sigstore verifier
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Download exact release bytes by numeric artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}
+          merge-multiple: true
+          path: artifacts
+      - name: Prove immutable Latest GitHub Release exact-byte parity
+        run: bun run ./scripts/check-github-release.ts artifacts/*.tgz artifacts/SHA256SUMS
+      - name: Admit absent or exact same-run npm state
+        id: npm_state
+        run: |
+          set -euo pipefail
+          bun run ./scripts/check-npm-retry-state.ts artifacts/*.tgz
+          printf 'preflight_run_id=%s\n' "$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          printf 'preflight_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+  publish_npm:
+    name: Publish exact npm package through OIDC only
+    needs:
+      - verify
+      - pre_npm
+    permissions:
+      contents: none
+      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      npm_completion: ${{ steps.npm_publish.outputs.npm_completion }}
+      npm_completion_run_attempt: ${{ steps.npm_publish.outputs.npm_completion_run_attempt }}
+      npm_completion_run_id: ${{ steps.npm_publish.outputs.npm_completion_run_id }}
+    env:
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      PRE_NPM_STATE: ${{ needs.pre_npm.outputs.npm_state }}
+      PRE_NPM_RUN_ATTEMPT: ${{ needs.pre_npm.outputs.preflight_run_attempt }}
+      PRE_NPM_RUN_ID: ${{ needs.pre_npm.outputs.preflight_run_id }}
+      VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+      VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+    steps:
+      - name: Install Bun without checking out repository source
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - name: Install Node.js for npm trusted publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+          registry-url: https://registry.npmjs.org
+      - name: Download the validated release bytes by numeric artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}
+          merge-multiple: true
+          path: artifacts
+      - name: Download the reviewed dependency-free npm writer by numeric artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.writer_artifact_id }}
+          merge-multiple: true
+          path: writer
+      - name: Bind both immutable workflow artifacts
+        env:
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.verify.outputs.release_artifact_digest }}
+          RELEASE_ARTIFACT_ID: ${{ needs.verify.outputs.release_artifact_id }}
+          WRITER_ARTIFACT_DIGEST: ${{ needs.verify.outputs.writer_artifact_digest }}
+          WRITER_ARTIFACT_ID: ${{ needs.verify.outputs.writer_artifact_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ || ! "$WRITER_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Release writer has no exact numeric artifact identity"
             exit 1
           fi
-          remote_tag_sha="$(gh api "/repos/$GITHUB_REPOSITORY/commits/refs%2Ftags%2F$VERIFIED_TAG" --jq '.sha')"
-          current_main_sha="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
-          if [[ "$remote_tag_sha" != "$VERIFIED_SHA" || "$current_main_sha" != "$VERIFIED_SHA" ]]; then
-            echo "::error::Remote tag or current main moved from $VERIFIED_SHA"
+          if [[ ! "$RELEASE_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ || ! "$WRITER_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Release writer has no exact immutable artifact digest"
             exit 1
           fi
-          release_endpoint="/repos/$GITHUB_REPOSITORY/releases/tags/$VERIFIED_TAG"
-          release_lookup_stderr="$(mktemp)"
-          trap 'rm -f "$release_lookup_stderr"' EXIT
-          set +e
-          release_lookup="$(gh api --include "$release_endpoint" 2>"$release_lookup_stderr")"
-          release_lookup_exit="$?"
-          set -e
-          release_lookup_state="$(printf '%s' "$release_lookup" | node ./scripts/release-provider-outcome.mjs inspect-release-response)"
-          case "$release_lookup_state" in
-            found)
-              if [[ "$release_lookup_exit" -ne 0 ]]; then
-                echo "::error::Exact Release lookup returned a Release with exit $release_lookup_exit"
-                exit 1
-              fi
-              ;;
-            missing)
-              if [[ "$release_lookup_exit" -ne 1 ]]; then
-                echo "::error::Exact Release absence returned unexpected exit $release_lookup_exit"
-                exit 1
-              fi
-              ;;
-            *)
-              echo "::error::Exact Release lookup returned an unsupported state"
-              exit 1
-              ;;
-          esac
-          if [[ "$release_lookup_state" == "missing" ]]; then
-            node ./scripts/release-provider-outcome.mjs release-order
-            current_main_sha="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
-            remote_tag_sha="$(gh api "/repos/$GITHUB_REPOSITORY/commits/refs%2Ftags%2F$VERIFIED_TAG" --jq '.sha')"
-            if [[ "$current_main_sha" != "$VERIFIED_SHA" || "$remote_tag_sha" != "$VERIFIED_SHA" ]]; then
-              echo "::error::Release authority moved before publication"
-              exit 1
-            fi
-            created_release="$(gh api \
-              --method POST \
-              "/repos/$GITHUB_REPOSITORY/releases" \
-              -F draft=false \
-              -F generate_release_notes=true \
-              -f make_latest=true \
-              -f name="Message Like Me $VERIFIED_TAG" \
-              -F prerelease=false \
-              -f tag_name="$VERIFIED_TAG" \
-              -f target_commitish="$VERIFIED_SHA")"
-            printf '%s' "$created_release" | node ./scripts/release-provider-outcome.mjs validate-release
-          fi
-          release_readback="$(gh api "$release_endpoint")"
-          printf '%s' "$release_readback" | node ./scripts/release-provider-outcome.mjs validate-release
-          latest_tag="$(gh api "/repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
-          terminal_tag_sha="$(gh api "/repos/$GITHUB_REPOSITORY/commits/refs%2Ftags%2F$VERIFIED_TAG" --jq '.sha')"
-          terminal_main_sha="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
-          if [[ "$latest_tag" != "$VERIFIED_TAG" || "$terminal_tag_sha" != "$VERIFIED_SHA" || "$terminal_main_sha" != "$VERIFIED_SHA" ]]; then
-            echo "::error::Release authority changed during publication"
-            exit 1
-          fi
+      - name: Require a trusted-publishing-capable npm client
+        run: bun run ./writer/scripts/check-npm-trusted-publishing.ts
+      - name: Recheck exact checksum with the reviewed writer
+        run: bun run ./writer/scripts/release-artifact-checksum.ts check artifacts/*.tgz artifacts/SHA256SUMS
+      - name: Publish exact tarball through npm trusted publishing
+        id: npm_publish
+        run: bun run ./writer/scripts/publish-npm-release.ts artifacts/*.tgz
+
+  admit:
+    name: Admit exact public npm and GitHub distributions
+    needs:
+      - verify
+      - pre_npm
+      - publish_npm
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ github.token }}
+      NPM_WRITER_RESULT: ${{ needs.publish_npm.outputs.npm_completion }}
+      NPM_WRITER_RESULT_REQUIRED: "true"
+      NPM_COMPLETION_RUN_ATTEMPT: ${{ needs.publish_npm.outputs.npm_completion_run_attempt }}
+      NPM_COMPLETION_RUN_ID: ${{ needs.publish_npm.outputs.npm_completion_run_id }}
+      VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+      VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+    steps:
+      - name: Check out the verified read-only admission source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.verified_sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Install the pinned Sigstore verifier
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify exact registry, repository, tag, ancestry, bytes, and provenance
+        run: bun run ./scripts/check-public-release.ts

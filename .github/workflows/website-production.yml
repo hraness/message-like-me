@@ -20,17 +20,19 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify immutable release and workflow source
+    name: Verify annotated release authority and reviewed ancestry
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     outputs:
+      release_run_attempt: ${{ steps.request.outputs.release_run_attempt }}
+      release_run_id: ${{ steps.request.outputs.release_run_id }}
       verified_sha: ${{ steps.identity.outputs.sha }}
       verified_tag: ${{ steps.identity.outputs.tag }}
-      workflow_sha: ${{ steps.request.outputs.sha }}
+      workflow_sha: ${{ steps.request.outputs.workflow_sha }}
     steps:
-      - name: Bind dispatch to exact current main
+      - name: Bind request to reviewed main ancestry
         id: request
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -48,18 +50,22 @@ jobs:
           UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           UPSTREAM_PATH: ${{ github.event.workflow_run.path }}
           UPSTREAM_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
           UPSTREAM_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
           UPSTREAM_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
         run: |
           set -euo pipefail
           if [[ "$DEFAULT_BRANCH" != "main" || "$EVENT_REF" != "refs/heads/main" || "$EVENT_REPOSITORY" != "$GITHUB_REPOSITORY" ]]; then
-            echo "::error::Website production promotion must run from exact current main"
+            echo "::error::Website production promotion must run from the reviewed main workflow"
             exit 1
           fi
           if [[ ! "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Promotion workflow has no exact source commit"
             exit 1
           fi
+          release_sha=""
+          release_run_id=""
+          release_run_attempt=""
           case "$EVENT_NAME" in
             workflow_run)
               if [[ ! "$EXPECTED_RELEASE_WORKFLOW_ID" =~ ^[1-9][0-9]*$ || "$UPSTREAM_WORKFLOW_ID" != "$EXPECTED_RELEASE_WORKFLOW_ID" ]]; then
@@ -70,8 +76,8 @@ jobs:
                 echo "::error::Upstream run is not the exact tag Release workflow"
                 exit 1
               fi
-              if [[ "$UPSTREAM_RUN_ATTEMPT" != "1" || "$UPSTREAM_CONCLUSION" != "success" ]]; then
-                echo "::error::Upstream Release must succeed on its first attempt"
+              if [[ ! "$UPSTREAM_RUN_ID" =~ ^[1-9][0-9]*$ || ! "$UPSTREAM_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ || "$UPSTREAM_CONCLUSION" != "success" ]]; then
+                echo "::error::Upstream Release must be one successful positive run attempt"
                 exit 1
               fi
               if [[ "$UPSTREAM_HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" || ! "$UPSTREAM_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -80,10 +86,11 @@ jobs:
               fi
               requested_tag="$UPSTREAM_HEAD_BRANCH"
               release_sha="$UPSTREAM_HEAD_SHA"
+              release_run_id="$UPSTREAM_RUN_ID"
+              release_run_attempt="$UPSTREAM_RUN_ATTEMPT"
               ;;
             workflow_dispatch)
               requested_tag="$INPUT_RELEASE_TAG"
-              release_sha="$EVENT_SHA"
               ;;
             *)
               echo "::error::Unsupported website production trigger $EVENT_NAME"
@@ -96,41 +103,53 @@ jobs:
           fi
           repository_default="$(gh api "/repos/$GITHUB_REPOSITORY" --jq '.default_branch')"
           current_main_sha="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          if [[ "$repository_default" != "main" || "$current_main_sha" != "$EVENT_SHA" || "$release_sha" != "$EVENT_SHA" ]]; then
-            echo "::error::Promotion workflow source $EVENT_SHA is not exact current main $current_main_sha"
+          if [[ "$repository_default" != "main" || "$current_main_sha" != "$EVENT_SHA" ]]; then
+            echo "::error::Promotion workflow source $EVENT_SHA is not the checked current main $current_main_sha"
             exit 1
           fi
-          printf 'sha=%s\n' "$EVENT_SHA" >> "$GITHUB_OUTPUT"
-          printf 'tag=%s\n' "$requested_tag" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+          printf 'release_run_attempt=%s\n' "$release_run_attempt" >> "$GITHUB_OUTPUT"
+          printf 'release_run_id=%s\n' "$release_run_id" >> "$GITHUB_OUTPUT"
+          printf 'requested_tag=%s\n' "$requested_tag" >> "$GITHUB_OUTPUT"
+          printf 'upstream_sha=%s\n' "$release_sha" >> "$GITHUB_OUTPUT"
+          printf 'workflow_sha=%s\n' "$EVENT_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ steps.request.outputs.sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+          ref: ${{ steps.request.outputs.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
-      - name: Verify exact immutable release coordinate
+      - name: Verify exact annotated release coordinate
         id: identity
         env:
           DEFAULT_BRANCH: main
           EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
-          RECOVERY_WORKFLOW_SHA: ${{ steps.request.outputs.sha }}
-          REQUESTED_TAG: ${{ steps.request.outputs.tag }}
+          RECOVERY_WORKFLOW_SHA: ${{ steps.request.outputs.workflow_sha }}
+          REQUESTED_TAG: ${{ steps.request.outputs.requested_tag }}
+          UPSTREAM_SHA: ${{ steps.request.outputs.upstream_sha }}
         run: |
           set -euo pipefail
-          package_version="$(node -e 'const value = require("./package.json"); if (typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
-          site_version="$(node -e 'const value = require("./site/package.json"); if (typeof value.version !== "string") process.exit(1); process.stdout.write(value.version)')"
-          if [[ "$REQUESTED_TAG" != "v$package_version" || "$site_version" != "$package_version" ]]; then
-            echo "::error::Promotion tag, package, and site versions do not agree"
+          workflow_commit="$(git rev-parse --verify 'HEAD^{commit}')"
+          tag_type="$(git cat-file -t "refs/tags/$REQUESTED_TAG")"
+          tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"
+          if [[ "$workflow_commit" != "$RECOVERY_WORKFLOW_SHA" || "$tag_type" != "tag" || ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Promotion workflow or annotated tag identity is not exact"
             exit 1
           fi
-          head_commit="$(git rev-parse --verify 'HEAD^{commit}')"
-          tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"
-          if [[ "$head_commit" != "$RECOVERY_WORKFLOW_SHA" || "$tag_commit" != "$head_commit" ]]; then
-            echo "::error::Promotion workflow, main, and tag do not resolve to one commit"
+          if [[ -n "$UPSTREAM_SHA" && "$UPSTREAM_SHA" != "$tag_commit" ]]; then
+            echo "::error::Successful Release run and annotated tag target different commits"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$tag_commit" "$workflow_commit"; then
+            echo "::error::Release commit is not in the reviewed main history used by this workflow"
+            exit 1
+          fi
+          package_version="$(git show "$tag_commit:package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
+          site_version="$(git show "$tag_commit:site/package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
+          if [[ "$REQUESTED_TAG" != "v$package_version" || "$site_version" != "$package_version" ]]; then
+            echo "::error::Promotion tag, release package, and release site versions do not agree"
             exit 1
           fi
           newest_stable_tag="$(git tag --list 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | LC_ALL=C sort -V | tail -n 1)"
@@ -138,32 +157,63 @@ jobs:
             echo "::error::Promotion tag is not the newest stable tag ($newest_stable_tag)"
             exit 1
           fi
-          printf 'sha=%s\n' "$head_commit" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\n' "$tag_commit" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
-          VERIFIED_SHA="$head_commit" VERIFIED_TAG="$REQUESTED_TAG" \
+          VERIFIED_SHA="$tag_commit" VERIFIED_TAG="$REQUESTED_TAG" \
             node ./scripts/release-provider-outcome.mjs revalidate-authority
+
+  public_admission:
+    name: Admit exact public artifacts before provider work
+    needs: verify
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.verified_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Admit the exact public npm and GitHub artifacts
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
 
   provider_baseline:
     name: Snapshot provider baseline
-    needs: verify
+    needs:
+      - verify
+      - public_admission
     permissions:
       contents: read
       deployments: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     outputs:
       advance_required: ${{ steps.baseline.outputs.advance_required }}
       receipt: ${{ steps.baseline.outputs.receipt }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
       - name: Revalidate authority before provider baseline
         env:
           DEFAULT_BRANCH: main
@@ -180,29 +230,29 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
         run: node ./scripts/release-provider-outcome.mjs baseline
 
-  advance_production_ref:
-    name: Advance website-production with the dedicated release App
+  advance_production_ref_preflight:
+    name: Re-admit authority before the production-ref writer
     needs:
       - verify
       - provider_baseline
     if: needs.provider_baseline.outputs.advance_required == 'true'
     permissions:
       contents: read
-    environment: { name: production-ref-writer-key, deployment: false }
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      receipt: ${{ steps.promotion.outputs.receipt }}
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Revalidate authority before production-ref mutation
         env:
           DEFAULT_BRANCH: main
@@ -212,6 +262,46 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Revalidate public artifacts before production-ref mutation
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
+
+  write_production_ref:
+    name: Advance website-production with the dedicated release App
+    needs:
+      - verify
+      - provider_baseline
+      - advance_production_ref_preflight
+    if: needs.provider_baseline.outputs.advance_required == 'true'
+    permissions:
+      contents: read
+    environment: { name: production-ref-writer-key, deployment: false }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      receipt: ${{ steps.promotion.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.workflow_sha }}
+      - name: Pin the only secret-bearing writer code to reviewed hashes
+        env:
+          APP_TOKEN_SHA256: 7de86680f81cbfafdb9123c9fa63c5a3298c3048eeeaf35d78f5663cca37a114
+          PROVIDER_SHA256: 613972cf9b3fc15bd728f87fdc0fc2ccf0e401e5c97cb869530fcb69934d2746
+          REF_WRITER_SHA256: 741ea9018459d4e3fd240097a64b3beeb5bfbb958c993206c7bf052fae7975c0
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
       - name: Promote verified website production source
         id: promotion
         env:
@@ -232,6 +322,33 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs promote
+
+  advance_production_ref:
+    name: Re-admit authority after the production-ref writer
+    needs:
+      - verify
+      - provider_baseline
+      - write_production_ref
+    if: needs.provider_baseline.outputs.advance_required == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      receipt: ${{ needs.write_production_ref.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Revalidate authority after production-ref mutation
         env:
           DEFAULT_BRANCH: main
@@ -241,6 +358,15 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Revalidate public artifacts after production-ref mutation
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
 
   confirm_existing_production_ref:
     name: Confirm already-exact website production
@@ -251,19 +377,22 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 25
     outputs:
       receipt: ${{ steps.promotion.outputs.receipt }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Revalidate authority before no-write recovery
         env:
           DEFAULT_BRANCH: main
@@ -273,6 +402,15 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Revalidate public artifacts before no-write recovery
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
       - name: Confirm verified website production source
         id: promotion
         env:
@@ -294,6 +432,15 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Revalidate public artifacts after no-write recovery
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
 
   select_promotion:
     name: Select the exact promotion receipt
@@ -349,27 +496,81 @@ jobs:
           fi
           printf 'receipt=%s\n' "$receipt" >> "$GITHUB_OUTPUT"
 
+  post_promotion_admission:
+    name: Re-admit authority and public bytes after the selected promotion path
+    needs:
+      - verify
+      - select_promotion
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Revalidate authority after the selected promotion path
+        env:
+          DEFAULT_BRANCH: main
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Revalidate public artifacts after the selected promotion path
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
+
   provider_outcome:
     name: Verify provider outcome
     needs:
       - verify
       - provider_baseline
       - select_promotion
+      - post_promotion_admission
     permissions:
       contents: read
       deployments: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Revalidate public artifacts before provider outcome
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
       - name: Verify exact Vercel Production outcome
         env:
           BASELINE_RECEIPT: ${{ needs.provider_baseline.outputs.receipt }}
@@ -381,3 +582,44 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs wait
+      - name: Revalidate public artifacts after provider outcome
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts
+
+  final_public_admission:
+    name: Re-admit exact public artifacts after provider success
+    needs:
+      - verify
+      - provider_outcome
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.verified_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Re-admit the exact public npm and GitHub artifacts
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_RELEASE_RUN_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          EXPECTED_RELEASE_RUN_ID: ${{ needs.verify.outputs.release_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: bun run ./scripts/check-public-release.ts

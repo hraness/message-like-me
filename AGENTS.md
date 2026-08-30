@@ -114,17 +114,28 @@
   install both complete skills for Codex, Claude, and generic Agent Skill
   targets at user or project scope without leaving a partial pair.
 - Follow `docs/publishing.md` for the one-time production controls, stable
-  release, and current-`main` recovery procedure. Treat a stable `v*` tag
-  matching every checked version identity at the current `main` head as a
+  release, and reviewed-`main` recovery procedure. Treat an immutable annotated
+  stable `v*` tag matching every checked version identity at a reviewed commit
+  in current `main` history as a
   release request. Publish only after the complete root, site, packed-consumer,
-  and synthetic macOS gates pass. Publish the immutable, asset-free Latest
-  GitHub Release before the separate current-`main` promotion workflow
+  synthetic macOS gate, and exact-tarball macOS/Linux gates pass. Build the
+  package once, publish the immutable Latest GitHub Release with that tarball
+  plus `SHA256SUMS` first, then publish the same tarball through npm trusted
+  publishing before the separate current-`main` promotion workflow
   fast-forwards the established `website-production` ref with its dedicated
   release App and exact expected-old lease. Keep the tag workflow's write scope
-  limited to Release publication. Keep the App private key inside the
-  main-only `production-ref-writer-key` environment, mint the numeric
+  split: only the GitHub publication job gets `contents: write`, only the npm
+  publication job gets `id-token: write`, and a separate read-only job admits
+  exact bytes and provenance. Treat every SHA-pinned setup and artifact action
+  in those jobs as part of the privileged release TCB. Keep the GitHub token
+  scoped to the dependency-free publisher step. Keep the App private key
+  inside the main-only `production-ref-writer-key` environment and expose it
+  only to a fresh dependency-free, hash-pinned writer job; mint the numeric
   one-repository token only when the ref must advance, and require the bounded
   read-only provider outcome gate to finish. Already-exact recovery must not
   enter the key environment. Recovery may revalidate only an existing
-  immutable Latest Release and must never create one. Keep Vercel Production
+  immutable, artifact-complete Latest Release and exact npm version and must
+  never create either one. A later positive attempt may finish the same exact
+  tag, commit, and tarball only when Sigstore binds the actual run ID and an
+  allowed positive attempt. Keep Vercel Production
   Branch on `website-production`; `main` and pull requests are preview sources.
