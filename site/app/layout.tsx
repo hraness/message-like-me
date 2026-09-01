@@ -11,6 +11,7 @@ import {
   SOFTWARE_VERSION,
 } from './_lib/site';
 import '@hraness/design-kit/fonts.css';
+import '@hraness/design-kit/product-marketing.css';
 import './globals.css';
 
 export const metadata: Metadata = {

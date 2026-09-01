@@ -9,6 +9,14 @@
   --muted: #68685f;
   --acid: #dfff4f;
   --line: rgba(23, 24, 20, 0.18);
+  --foreground: var(--ink);
+  --surface: var(--paper);
+  --inverse: var(--ink);
+  --inverse-foreground: #ffffff;
+  --primary: var(--ink);
+  --font-text: "Nebula Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: Iowan Old Style, Baskerville, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -371,6 +379,99 @@ h1 em { color: var(--muted); font-weight: 400; }
 }
 .section-number { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; margin: 4px 0 0; }
 h2 { font-size: clamp(42px, 5.2vw, 76px); line-height: 0.98; }
+
+.mlm-marketing-hero,
+.mlm-marketing-install,
+.mlm-marketing-interfaces,
+.mlm-marketing-trust,
+.mlm-marketing-questions,
+.mlm-marketing-cta {
+  --hraness-marketing-measure: 90rem;
+  --hraness-marketing-copy-measure: 72ch;
+  --hraness-marketing-action-radius: 999px;
+}
+
+.mlm-marketing-hero {
+  min-height: 720px;
+  padding: clamp(68px, 9vw, 126px) clamp(22px, 4vw, 64px) 86px;
+}
+.mlm-marketing-hero .hraness-marketing-hero__copy { padding-right: clamp(12px, 2vw, 30px); }
+.mlm-marketing-hero .hraness-marketing-hero__eyebrow { color: var(--muted); }
+.mlm-marketing-hero .hraness-marketing-hero__name { font-weight: 760; letter-spacing: -0.04em; }
+.mlm-marketing-hero .hraness-marketing-hero__heading {
+  font-size: clamp(64px, 7.2vw, 112px);
+  font-weight: 500;
+  line-height: 0.86;
+  max-inline-size: 9.5ch;
+}
+.mlm-marketing-hero .hraness-marketing-hero__summary { color: var(--ink); }
+.mlm-marketing-hero .hraness-marketing-hero__boundary { color: var(--muted); }
+.mlm-marketing-hero .hraness-marketing-proof {
+  border-color: var(--ink);
+  border-radius: 4px;
+  box-shadow: 12px 12px 0 var(--acid);
+}
+.mlm-marketing-hero .hraness-marketing-proof__heading { color: white; font-weight: 500; }
+.mlm-marketing-hero .hraness-marketing-flow__code { color: var(--acid); }
+.mlm-marketing-hero .hraness-marketing-facts { margin-top: clamp(32px, 5vw, 62px); }
+
+.mlm-marketing-install {
+  margin-bottom: clamp(80px, 9vw, 126px);
+  padding: clamp(34px, 5vw, 64px);
+}
+.mlm-marketing-install .hraness-marketing-install__heading {
+  font-size: clamp(32px, 3.8vw, 52px);
+  font-weight: 500;
+}
+.mlm-marketing-install .hraness-marketing-install__commands { align-self: end; }
+.mlm-install-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 18px 0 0;
+}
+.mlm-install-note a { color: var(--ink); font-weight: 720; text-decoration: underline; text-underline-offset: 4px; }
+
+.mlm-marketing-interfaces,
+.mlm-marketing-questions {
+  padding-inline: clamp(22px, 4vw, 64px);
+}
+.mlm-marketing-interfaces .hraness-marketing-interfaces__heading,
+.mlm-marketing-questions .hraness-marketing-questions__heading,
+.mlm-marketing-trust .hraness-marketing-trust__heading {
+  font-size: clamp(38px, 4.8vw, 66px);
+  font-weight: 500;
+}
+.mlm-marketing-interface pre {
+  background: #252620;
+  color: #f6f1e7;
+  padding: 18px;
+}
+.mlm-marketing-interface code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mlm-marketing-trust {
+  --hraness-marketing-ink: #ffffff;
+  --hraness-marketing-muted: rgba(255, 255, 255, 0.7);
+  --hraness-marketing-line: rgba(255, 255, 255, 0.22);
+  --hraness-marketing-surface: #22231e;
+  --hraness-marketing-accent: var(--acid);
+  background: var(--ink);
+  color: white;
+  padding: 120px clamp(22px, 4vw, 64px);
+}
+.mlm-marketing-trust .hraness-marketing-trust__label { color: var(--acid); }
+.mlm-marketing-trust .hraness-marketing-trust__heading { color: white; max-inline-size: 16ch; }
+.mlm-marketing-trust .hraness-marketing-trust-item dt { color: white; }
+
+.mlm-marketing-questions .hraness-marketing-question summary { font-size: 16px; }
+.mlm-marketing-questions .hraness-marketing-question__answer { font-size: 15px; line-height: 1.65; }
+.mlm-marketing-cta { margin-bottom: clamp(40px, 6vw, 90px); }
+.mlm-marketing-cta .hraness-marketing-cta__heading { font-size: clamp(46px, 6vw, 82px); font-weight: 500; }
 
 .process-section,
 .sources-section,
@@ -830,6 +931,8 @@ footer nav { font-size: 12px; gap: 22px; }
   .hero { grid-template-columns: 1fr; gap: 70px; }
   .hero-copy { padding-right: 0; }
   .hero-visual { min-height: 540px; }
+  .mlm-marketing-hero { min-height: 0; }
+  .mlm-marketing-hero .hraness-marketing-hero__copy { padding-right: 0; }
   .promise-strip { grid-template-columns: 1fr; }
   .promise-strip p + p { border-left: 0; border-top: 1px solid var(--line); }
   .process-grid { grid-template-columns: 1fr; }
@@ -852,6 +955,8 @@ footer nav { font-size: 12px; gap: 22px; }
   .hero { padding-top: 58px; }
   h1 { font-size: clamp(54px, 17vw, 78px); }
   .button { width: 100%; }
+  .mlm-marketing-hero .hraness-marketing-action,
+  .mlm-marketing-cta .hraness-marketing-action { width: 100%; }
   .hero-visual { box-shadow: 7px 7px 0 var(--acid); min-height: 500px; padding: 25px 20px; }
   .message-stage { margin-block: 58px 40px; }
   .signal-grid { grid-template-columns: 1fr; }

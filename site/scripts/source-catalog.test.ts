@@ -86,13 +86,17 @@ describe('supported source presentation', () => {
         source('docs/local-message-bundle-v2.md'),
       ]);
 
-    expect(home).toMatch(/native WhatsApp evidence exported through Wrench/u);
-    expect(home).toContain(
-      '<a className="button button-primary" href="#install">',
+    expect(home).toMatch(
+      /native WhatsApp bundles exported through compatible Wrench releases/u,
     );
+    expect(home).toContain('<ProductHero');
+    expect(home).toContain("{ href: '#install', label: `Install v${SOFTWARE_VERSION}` }");
     expect(home).toContain('<SourceCard');
-    expect(renderedHomePage).toContain('</span> wrench whatsapp export-message-like-me');
-    expect(renderedHomePage).toContain('</span> messagelikeme ingest bundle');
+    expect(renderedHomePage).toContain('data-hraness-marketing="hero"');
+    expect(renderedHomePage).toContain('messagelikeme ingest imessage --json');
+    expect(renderedHomePage).toContain(
+      'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
+    );
     expect(sourcesPage).toContain('Beeper via Wrench');
     expect(sourcesPage).toMatch(/Message Like\s+Me invokes none of them/u);
     expect(renderedSourcesPage).toContain('Beeper CLI v0.6.2 and publishes');

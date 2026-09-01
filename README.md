@@ -68,6 +68,23 @@ The JSON response reports the initialized state, exact local paths, and store
 integrity checks. This is the shortest complete product check; no message body,
 contact, account, or provider credential is involved.
 
+The first proof is intentionally data-free. It shows where Message Like Me will
+work and whether its private store is healthy before you choose a source or
+open evidence in an agent environment.
+
+## Three deliberate interfaces
+
+| Surface | What it owns | First useful action |
+| --- | --- | --- |
+| CLI | Read-only ingestion, deterministic measurement, private artifacts, validation, and redacted machine-readable output | `messagelikeme doctor --json` |
+| Agent Skill | Evidence-calibrated interpretation and unsent drafting inside the agent environment you already chose | Invoke `$message-like-me` after preparing an explicit bounded packet |
+| TypeScript library | Versioned public types, strict bundle parsers, canonical JSON, digest helpers, and pure packet builders | Import from `@hraness/message-like-me` or a versioned subpath |
+
+The artifact is the seam between these surfaces. Deterministic code produces
+and validates it; an authorized agent may interpret it; typed consumers can
+verify it. Importing the library does not inspect a source, open a private
+packet, access a network, or start the CLI.
+
 ## What becomes observable
 
 After you add a source, ordinary commands expose pseudonymous contacts, source
