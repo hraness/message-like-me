@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -17,6 +18,7 @@ const NPM_RETRY = join(import.meta.dir, "check-npm-retry-state.ts");
 const PUBLIC_ADMISSION = join(import.meta.dir, "check-public-release.ts");
 const GITHUB_ADMISSION = join(import.meta.dir, "check-github-release.ts");
 const GITHUB_PUBLISHER = join(import.meta.dir, "publish-github-release.ts");
+const REF_AUTHORITY = join(import.meta.dir, "release-ref-authority.ts");
 const SIGNER_VERIFIER = join(import.meta.dir, "verify-npm-provenance-signer.mjs");
 const PACKAGE_MANIFEST = join(import.meta.dir, "..", "package.json");
 
@@ -89,6 +91,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     publicAdmission,
     githubAdmission,
     githubPublisher,
+    refAuthority,
     signerVerifier,
     packageManifest,
   ] = await Promise.all([
@@ -99,6 +102,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     readFile(PUBLIC_ADMISSION, "utf8"),
     readFile(GITHUB_ADMISSION, "utf8"),
     readFile(GITHUB_PUBLISHER, "utf8"),
+    readFile(REF_AUTHORITY, "utf8"),
     readFile(SIGNER_VERIFIER, "utf8"),
     readFile(PACKAGE_MANIFEST, "utf8"),
   ]);
@@ -108,18 +112,13 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     "permissions:\n  contents: read",
     "group: stable-release",
     "cancel-in-progress: false",
-    "fetch-depth: 0",
+    "fetch-depth: 1",
+    "fetch-tags: false",
     "persist-credentials: false",
     "ref: refs/tags/${{ steps.request.outputs.tag }}",
+    'node --experimental-strip-types ./scripts/release-ref-authority.ts release "$REQUESTED_TAG"',
     'site_version="$(bun -e',
     "Site version $site_version does not match package version $package_version",
-    'tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"',
-    'head_commit="$(git rev-parse --verify "HEAD^{commit}")"',
-    'default_head="$(git rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}")"',
-    'git merge-base --is-ancestor "$tag_commit" "$default_head"',
-    "not a reviewed ancestor of current $DEFAULT_BRANCH",
-    "newest_stable_tag=\"$(git tag --list",
-    'if [[ "$(git cat-file -t "$REQUESTED_TAG")" != "tag" ]]',
     "bun run check",
     "working-directory: site",
     "bun run sync:readme",
@@ -191,6 +190,12 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(workflow).not.toContain("VERCEL_TOKEN");
   expect(workflow).not.toContain("/commits/tags/");
   expect(workflow).not.toContain("--clobber");
+  expect(workflow).not.toContain("fetch-depth: 0");
+  expect(workflow).not.toContain("git fetch --force");
+  expect(workflow).not.toContain("git tag --list");
+  expect(workflow.match(/fetch-depth: 1/gu)).toHaveLength(6);
+  expect(workflow.match(/fetch-tags: false/gu)).toHaveLength(6);
+  expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(6);
   expect(workflow.match(/contents: write/gu)).toHaveLength(1);
   expect(workflow.match(/id-token: write/gu)).toHaveLength(1);
   expect(workflow.match(/name: message-like-me-release-\$\{\{ github\.run_attempt \}\}/gu)).toHaveLength(1);
@@ -281,6 +286,30 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(githubPublisher).toContain('"-F", "draft=false"');
   expect(githubPublisher).not.toContain("--target");
   expect(githubPublisher).not.toContain("target_commitish");
+  for (const source of [githubPublisher, githubAdmission, publicAdmission]) {
+    expect(source).not.toContain(".head_commit");
+  }
+  for (const required of [
+    "https://github.com/hraness/message-like-me.git",
+    '"ls-remote", "--refs"',
+    '"refs/tags/v*"',
+    '"--no-tags"',
+    '"--no-write-fetch-head"',
+    '"--no-recurse-submodules"',
+    '"--unshallow"',
+    "MAXIMUM_SNAPSHOT_BYTES = 128 * 1_024",
+    "MAXIMUM_SNAPSHOT_ROWS = 500",
+    "Private release-ref namespace",
+    "Remote release-ref inventory changed during verification",
+  ] as const) expect(refAuthority).toContain(required);
+  for (const forbidden of [
+    '"fetch", "--tags"',
+    '"fetch", "--force"',
+    '"tag", "--list"',
+    '"origin"',
+    '"--refmap"',
+    "refs/remotes/origin",
+  ] as const) expect(refAuthority).not.toContain(forbidden);
   expect(githubPublisher).not.toContain("spawnSync");
   expect(githubPublisher).not.toContain("exists.\\n${failure}");
   expect(signerVerifier).toContain('certificateIssuer: GITHUB_OIDC_ISSUER');
@@ -300,10 +329,11 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
 });
 
 test("site promotion accepts reviewed release ancestry and isolates a fresh App-key writer", async () => {
-  const [workflow, appTokenHelper, providerHelper] = await Promise.all([
+  const [workflow, appTokenHelper, providerHelper, publicAdmission] = await Promise.all([
     readFile(join(WORKFLOWS, "website-production.yml"), "utf8"),
     readFile(APP_TOKEN_HELPER, "utf8"),
     readFile(PROVIDER_HELPER, "utf8"),
+    readFile(PUBLIC_ADMISSION, "utf8"),
   ]);
 
   for (const required of [
@@ -329,8 +359,8 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
     'current_main_sha="$(gh api',
     "Promotion workflow source $EVENT_SHA is not the checked current main",
     "Verify exact annotated release coordinate",
-    'tag_type="$(git cat-file -t "refs/tags/$REQUESTED_TAG")"',
-    'git merge-base --is-ancestor "$tag_commit" "$workflow_commit"',
+    'node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$REQUESTED_TAG" "$RECOVERY_WORKFLOW_SHA" "$UPSTREAM_SHA"',
+    "refs/message-like-me-release-authority/requested-tag^{commit}",
     "release-provider-outcome.mjs revalidate-authority",
     "Admit the exact public npm and GitHub artifacts",
     "check-public-release.ts",
@@ -379,12 +409,25 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(workflow).not.toContain("/releases\"");
   expect(workflow).not.toContain("Integration `15368`");
   expect(workflow).not.toContain("actions/create-github-app-token");
+  expect(workflow).not.toContain("fetch-depth: 0");
+  expect(workflow).not.toContain("git tag --list");
+  expect(workflow.match(/fetch-depth: 1/gu)).toHaveLength(10);
+  expect(workflow.match(/fetch-tags: false/gu)).toHaveLength(10);
+  expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(10);
+  expect(workflow.match(/ref: \$\{\{ needs\.verify\.outputs\.workflow_sha \}\}/gu)).toHaveLength(9);
+  expect(workflow).not.toContain("ref: ${{ needs.verify.outputs.verified_sha }}");
+  expect(publicAdmission).toContain("releaseVersionForCurrentAdmission(");
   expect(appTokenHelper).toContain("repository_ids");
   expect(appTokenHelper).toContain("MESSAGE_LIKE_ME_REPOSITORY_ID = 1_342_143_606");
   expect(appTokenHelper).toContain("/app/installations/${String(input.installationId)}");
   expect(appTokenHelper).toContain('method: "DELETE"');
   expect(appTokenHelper).toContain("/installation/token");
   expect(providerHelper).toContain('key.startsWith("MLM_RELEASE_APP_")');
+  expect(providerHelper).not.toContain(".head_commit");
+  expect(providerHelper).not.toContain('event === "push"');
+  expect(/PROVIDER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(providerHelper).digest("hex"),
+  );
   expect(workflow.match(/release-provider-outcome\.mjs revalidate-authority/gu)?.length).toBeGreaterThanOrEqual(6);
   expect(workflow.match(/check-public-release\.ts/gu)?.length).toBeGreaterThanOrEqual(8);
   expect(workflow.match(/timeout-minutes: 15/gu)?.length).toBeGreaterThanOrEqual(3);

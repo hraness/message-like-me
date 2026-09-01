@@ -130,7 +130,7 @@ const PRODUCTION_DEPLOYMENTS_QUERY = `query MessageLikeMeProductionDeployments(
 }`;
 
 const BASELINE_REST_REQUESTS = 2;
-const PROMOTION_REST_REQUESTS = 17;
+const PROMOTION_REST_REQUESTS = 27;
 const OUTCOME_ANNOTATED_TAG_OBJECT_REQUESTS = 7;
 const OUTCOME_REST_REQUESTS =
   6 +
@@ -983,20 +983,13 @@ async function revalidateWorkflowSource(
   const branch = expectBranch(defaultBranch, "default branch");
   const event = expectString(eventName, "release event name");
   const recovery = expectString(recoveryWorkflowSha, "recovery workflow SHA");
-  if (event === "push") {
-    if (recovery !== "") fail("tag release unexpectedly carried a recovery workflow source");
-    return;
-  }
   if (event !== "workflow_dispatch" && event !== "workflow_run") {
-    fail("provider wait received an unsupported release event");
+    fail("release provider authority received an unsupported workflow event");
   }
   const workflowSha = expectSha(recovery, "recovery workflow SHA");
   const releaseSha = verifiedSha === undefined
     ? undefined
     : expectSha(verifiedSha, "verified release SHA");
-  const reviewed = releaseSha === undefined || releaseSha === workflowSha
-    ? [workflowSha]
-    : [workflowSha, releaseSha];
 
   for (const phase of ["initial", "terminal"]) {
     const repositoryState = expectRecord(
@@ -1011,8 +1004,11 @@ async function revalidateWorkflowSource(
       `refs/heads/${branch}`,
       `${phase} release workflow source ref`,
     );
-    for (const ancestor of reviewed) {
-      await assertReviewedMainAncestor(api, repository, ancestor, current);
+    if (current !== workflowSha) {
+      fail("release recovery workflow source is not exact current main");
+    }
+    if (releaseSha !== undefined) {
+      await assertReviewedMainAncestor(api, repository, releaseSha, current);
     }
   }
 }
@@ -1024,10 +1020,14 @@ async function assertReviewedMainAncestor(api, repository, reviewedSha, currentM
     "reviewed-main ancestry comparison",
   );
   const base = expectRecord(comparison.base_commit, "reviewed-main comparison.base_commit");
-  const head = expectRecord(comparison.head_commit, "reviewed-main comparison.head_commit");
   const mergeBase = expectRecord(
     comparison.merge_base_commit,
     "reviewed-main comparison.merge_base_commit",
+  );
+  const commits = expectArray(comparison.commits, "reviewed-main comparison.commits");
+  const terminal = expectRecord(
+    commits.at(-1),
+    "reviewed-main comparison terminal commit",
   );
   if (
     comparison.status !== "ahead" ||
@@ -1036,7 +1036,7 @@ async function assertReviewedMainAncestor(api, repository, reviewedSha, currentM
     comparison.behind_by !== 0 ||
     base.sha !== reviewedSha ||
     mergeBase.sha !== reviewedSha ||
-    head.sha !== currentMainSha
+    terminal.sha !== currentMainSha
   ) {
     fail(`${reviewedSha} is not a reviewed ancestor of current main ${currentMainSha}`);
   }
@@ -1455,9 +1455,9 @@ export async function createProviderBaseline({ api, repository, verifiedSha }) {
 export async function promoteWebsiteProduction({
   api,
   baselineReceipt,
-  defaultBranch = "main",
-  eventName = "push",
-  recoveryWorkflowSha = "",
+  defaultBranch,
+  eventName,
+  recoveryWorkflowSha,
   repository,
   verifiedSha,
   verifiedTag,
@@ -1476,6 +1476,8 @@ export async function promoteWebsiteProduction({
   if (baseline.repository !== coordinate || baseline.verifiedSha !== sha) {
     fail("baseline receipt does not bind the verified release coordinate");
   }
+
+  await revalidateWorkflowSource(api, coordinate, workflowSource);
 
   await readVerifiedTagCommit(api, coordinate, tag, sha);
   const release = await readImmutableRelease(api, coordinate, tag);

@@ -108,9 +108,9 @@ export function createProviderBaseline(input: Readonly<{
 export function promoteWebsiteProduction(input: Readonly<{
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
-  defaultBranch?: string;
-  eventName?: string;
-  recoveryWorkflowSha?: string;
+  defaultBranch: string;
+  eventName: string;
+  recoveryWorkflowSha: string;
   repository: string;
   verifiedSha: string;
   verifiedTag: string;
@@ -119,12 +119,12 @@ export function promoteWebsiteProduction(input: Readonly<{
 export function waitForProviderOutcome(input: Readonly<{
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
-  defaultBranch?: string;
-  eventName?: string;
+  defaultBranch: string;
+  eventName: string;
   maxPolls?: number;
   pollIntervalMilliseconds?: number;
   promotionReceipt: unknown;
-  recoveryWorkflowSha?: string;
+  recoveryWorkflowSha: string;
   repository?: string;
   sleep?: (milliseconds: number) => Promise<void>;
   verifiedSha?: string;

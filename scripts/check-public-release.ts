@@ -8,8 +8,10 @@ import {
   parseNpmRelease,
   publicPackageName,
   publicRepository,
+  releaseVersionForCurrentAdmission,
 } from "./release-distribution-policy";
 import { verifyNpmProvenance } from "./npm-provenance-verification";
+import { assertReviewedMainComparison } from "./release-ref-authority";
 
 const maximumJsonBytes = 512 * 1_024;
 const maximumArtifactBytes = 32 * 1_024 * 1_024;
@@ -91,27 +93,20 @@ if (repository !== publicRepository) throw new Error(`Public release admission m
 const token = requireEnvironment("GITHUB_TOKEN");
 const verifiedSha = requireEnvironment("VERIFIED_SHA", /^[0-9a-f]{40}$/u);
 const verifiedTag = requireEnvironment("VERIFIED_TAG", /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u);
-const manifest = JSON.parse(await readFile(resolve(import.meta.dir, "..", "package.json"), "utf8")) as Readonly<{
-  license?: unknown;
-  name?: unknown;
-  version?: unknown;
-}>;
-if (
-  manifest.name !== publicPackageName
-  || manifest.license !== "MIT"
-  || typeof manifest.version !== "string"
-  || verifiedTag !== `v${manifest.version}`
-) throw new Error("Public package, license, version, and release tag do not agree.");
+const releaseVersion = releaseVersionForCurrentAdmission(
+  JSON.parse(await readFile(resolve(import.meta.dir, "..", "package.json"), "utf8")),
+  verifiedTag,
+);
 
 const encodedPackage = encodeURIComponent(publicPackageName);
 const registryBase = `https://registry.npmjs.org/${encodedPackage}`;
 const versionPayload = await fetchJson(
-  `${registryBase}/${encodeURIComponent(manifest.version)}`,
+  `${registryBase}/${encodeURIComponent(releaseVersion)}`,
   "npm exact version",
 );
 const latestPayload = await fetchJson(`${registryBase}/latest`, "npm latest version");
-const npmVersion = parseNpmRelease(versionPayload, manifest.version);
-const npmLatest = parseNpmRelease(latestPayload, manifest.version);
+const npmVersion = parseNpmRelease(versionPayload, releaseVersion);
+const npmLatest = parseNpmRelease(latestPayload, releaseVersion);
 if (npmLatest.integrity !== npmVersion.integrity || npmLatest.shasum !== npmVersion.shasum) {
   throw new Error("npm latest does not resolve to the exact verified version bytes.");
 }
@@ -182,7 +177,7 @@ await verifyNpmProvenance(npmTarball, {
     : {}),
   verifiedSha,
   verifiedTag,
-  version: manifest.version,
+  version: releaseVersion,
 });
 
 const githubHeaders = {
@@ -218,24 +213,30 @@ const branchRef = await fetchJson(
   githubHeaders,
 ) as Readonly<{ object?: Readonly<{ sha?: unknown; type?: unknown }> }>;
 const branchSha = branchRef.object?.sha;
+if (branchRef.object?.type !== "commit" || typeof branchSha !== "string") {
+  throw new Error(`Current ${branch} ref is not one exact commit.`);
+}
 const comparison = await fetchJson(
-  `${apiBase}/compare/${verifiedSha}...${encodeURIComponent(branch)}`,
+  `${apiBase}/compare/${verifiedSha}...${branchSha}`,
   "GitHub reviewed-main ancestry",
   githubHeaders,
 ) as Readonly<{
-  base_commit?: Readonly<{ sha?: unknown }>;
-  head_commit?: Readonly<{ sha?: unknown }>;
-  merge_base_commit?: Readonly<{ sha?: unknown }>;
-  status?: unknown;
+  [key: string]: unknown;
 }>;
-if (
-  branchRef.object?.type !== "commit"
-  || typeof branchSha !== "string"
-  || !["ahead", "identical"].includes(String(comparison.status))
-  || comparison.base_commit?.sha !== verifiedSha
-  || comparison.merge_base_commit?.sha !== verifiedSha
-  || comparison.head_commit?.sha !== branchSha
-) throw new Error(`Reviewed release commit is not an ancestor of current ${branch}.`);
+assertReviewedMainComparison(
+  comparison,
+  verifiedSha,
+  branchSha,
+  `Reviewed release ancestry to current ${branch}`,
+);
+const terminalBranchRef = await fetchJson(
+  `${apiBase}/git/ref/heads/${encodeURIComponent(branch)}`,
+  "terminal GitHub default branch",
+  githubHeaders,
+) as Readonly<{ object?: Readonly<{ sha?: unknown; type?: unknown }> }>;
+if (terminalBranchRef.object?.type !== "commit" || terminalBranchRef.object.sha !== branchSha) {
+  throw new Error(`Current ${branch} ref changed during reviewed release ancestry verification.`);
+}
 const [releasePayload, githubLatestPayload] = await Promise.all([
   fetchJson(
     `${apiBase}/releases/tags/${encodeURIComponent(verifiedTag)}`,
@@ -247,7 +248,7 @@ const [releasePayload, githubLatestPayload] = await Promise.all([
 if ((githubLatestPayload as Readonly<{ tag_name?: unknown }>).tag_name !== verifiedTag) {
   throw new Error("Latest GitHub Release does not match the admitted annotated tag.");
 }
-const release = parseGitHubRelease(releasePayload, manifest.version);
+const release = parseGitHubRelease(releasePayload, releaseVersion);
 const [githubTarball, githubChecksum] = await Promise.all([
   fetchArtifact(release.tarball.browserDownloadUrl, "GitHub Release tarball"),
   fetchArtifact(release.checksum.browserDownloadUrl, "GitHub Release checksum"),
@@ -262,6 +263,6 @@ if (!Buffer.from(githubTarball).equals(Buffer.from(npmTarball))) {
   throw new Error("npm and GitHub do not expose the same exact release tarball bytes.");
 }
 
-console.log(`Public release admission passed for ${publicPackageName}@${manifest.version}.`);
+console.log(`Public release admission passed for ${publicPackageName}@${releaseVersion}.`);
 console.log("- npm latest: exact MIT package, cryptographically verified trusted-publisher provenance, SHA-1 and SHA-512 integrity");
 console.log("- GitHub Release: exact annotated tag, commit, tarball, SHA256SUMS, sizes, and SHA-256 digests");

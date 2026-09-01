@@ -9,6 +9,7 @@ import {
   publicRepository,
   releaseArchiveName,
 } from "./release-distribution-policy";
+import { assertReviewedMainComparison } from "./release-ref-authority";
 
 const maximumJsonBytes = 512 * 1_024;
 const maximumArtifactBytes = 32 * 1_024 * 1_024;
@@ -158,24 +159,30 @@ const branchRef = await fetchJson(
   headers,
 ) as Readonly<{ object?: Readonly<{ sha?: unknown; type?: unknown }> }>;
 const branchSha = branchRef.object?.sha;
+if (branchRef.object?.type !== "commit" || typeof branchSha !== "string") {
+  throw new Error(`Current ${branch} ref is not one exact commit.`);
+}
 const comparison = await fetchJson(
-  `${apiBase}/compare/${verifiedSha}...${encodeURIComponent(branch)}`,
+  `${apiBase}/compare/${verifiedSha}...${branchSha}`,
   "GitHub reviewed-main ancestry",
   headers,
 ) as Readonly<{
-  base_commit?: Readonly<{ sha?: unknown }>;
-  head_commit?: Readonly<{ sha?: unknown }>;
-  merge_base_commit?: Readonly<{ sha?: unknown }>;
-  status?: unknown;
+  [key: string]: unknown;
 }>;
-if (
-  branchRef.object?.type !== "commit"
-  || typeof branchSha !== "string"
-  || !["ahead", "identical"].includes(String(comparison.status))
-  || comparison.base_commit?.sha !== verifiedSha
-  || comparison.merge_base_commit?.sha !== verifiedSha
-  || comparison.head_commit?.sha !== branchSha
-) throw new Error(`Reviewed release commit is not an ancestor of current ${branch}.`);
+assertReviewedMainComparison(
+  comparison,
+  verifiedSha,
+  branchSha,
+  `Reviewed release ancestry to current ${branch}`,
+);
+const terminalBranchRef = await fetchJson(
+  `${apiBase}/git/ref/heads/${encodeURIComponent(branch)}`,
+  "terminal GitHub default branch",
+  headers,
+) as Readonly<{ object?: Readonly<{ sha?: unknown; type?: unknown }> }>;
+if (terminalBranchRef.object?.type !== "commit" || terminalBranchRef.object.sha !== branchSha) {
+  throw new Error(`Current ${branch} ref changed during reviewed release ancestry verification.`);
+}
 
 const [releasePayload, latestPayload] = await Promise.all([
   fetchJson(`${apiBase}/releases/tags/${encodeURIComponent(verifiedTag)}`, "GitHub Release", headers),

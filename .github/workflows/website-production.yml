@@ -114,7 +114,8 @@ jobs:
           printf 'workflow_sha=%s\n' "$EVENT_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ steps.request.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -131,34 +132,16 @@ jobs:
           UPSTREAM_SHA: ${{ steps.request.outputs.upstream_sha }}
         run: |
           set -euo pipefail
+          authority_output="$(node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$REQUESTED_TAG" "$RECOVERY_WORKFLOW_SHA" "$UPSTREAM_SHA")"
+          printf '%s\n' "$authority_output" >> "$GITHUB_OUTPUT"
           workflow_commit="$(git rev-parse --verify 'HEAD^{commit}')"
-          tag_type="$(git cat-file -t "refs/tags/$REQUESTED_TAG")"
-          tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"
-          if [[ "$workflow_commit" != "$RECOVERY_WORKFLOW_SHA" || "$tag_type" != "tag" || ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Promotion workflow or annotated tag identity is not exact"
-            exit 1
-          fi
-          if [[ -n "$UPSTREAM_SHA" && "$UPSTREAM_SHA" != "$tag_commit" ]]; then
-            echo "::error::Successful Release run and annotated tag target different commits"
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$tag_commit" "$workflow_commit"; then
-            echo "::error::Release commit is not in the reviewed main history used by this workflow"
-            exit 1
-          fi
+          tag_commit="$(git rev-parse --verify 'refs/message-like-me-release-authority/requested-tag^{commit}')"
           package_version="$(git show "$tag_commit:package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
           site_version="$(git show "$tag_commit:site/package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
           if [[ "$REQUESTED_TAG" != "v$package_version" || "$site_version" != "$package_version" ]]; then
             echo "::error::Promotion tag, release package, and release site versions do not agree"
             exit 1
           fi
-          newest_stable_tag="$(git tag --list 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | LC_ALL=C sort -V | tail -n 1)"
-          if [[ "$newest_stable_tag" != "$REQUESTED_TAG" ]]; then
-            echo "::error::Promotion tag is not the newest stable tag ($newest_stable_tag)"
-            exit 1
-          fi
-          printf 'sha=%s\n' "$tag_commit" >> "$GITHUB_OUTPUT"
-          printf 'tag=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
           VERIFIED_SHA="$tag_commit" VERIFIED_TAG="$REQUESTED_TAG" \
             node ./scripts/release-provider-outcome.mjs revalidate-authority
 
@@ -172,9 +155,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
-          ref: ${{ needs.verify.outputs.verified_sha }}
+          ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
@@ -209,6 +193,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -244,6 +229,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -290,12 +276,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - name: Pin the only secret-bearing writer code to reviewed hashes
         env:
           APP_TOKEN_SHA256: 7de86680f81cbfafdb9123c9fa63c5a3298c3048eeeaf35d78f5663cca37a114
-          PROVIDER_SHA256: 613972cf9b3fc15bd728f87fdc0fc2ccf0e401e5c97cb869530fcb69934d2746
+          PROVIDER_SHA256: 5ccc1d842ca1e42cd3971cbea6fe74fe565d82ebe1ea78ce1bd2d8bff5c0cf02
           REF_WRITER_SHA256: 741ea9018459d4e3fd240097a64b3beeb5bfbb958c993206c7bf052fae7975c0
         run: |
           set -euo pipefail
@@ -340,6 +327,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -384,6 +372,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -509,6 +498,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -553,6 +543,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -604,9 +595,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tags: false
           persist-credentials: false
-          ref: ${{ needs.verify.outputs.verified_sha }}
+          ref: ${{ needs.verify.outputs.workflow_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"

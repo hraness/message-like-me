@@ -12,7 +12,7 @@ import {
   decodeProviderReceipt,
   encodeProviderReceipt,
   parseIncludedGitHubResponse,
-  promoteWebsiteProduction,
+  promoteWebsiteProduction as promoteWebsiteProductionRaw,
   releaseGraphqlRequestBudget,
   releaseRestRequestBudget,
   waitForProviderOutcome as waitForProviderOutcomeRaw,
@@ -79,19 +79,35 @@ const providerTagObjectSha = tagResolutionFixture.tagRef.object.sha;
 const providerReleasePublishedAt = "2026-08-29T14:00:00Z";
 const providerBaselineServerDate = "2026-08-29T15:00:00.000Z";
 const providerPromotionServerDate = "2026-08-29T15:01:00.000Z";
+const providerCurrentMainSha = "3".repeat(40);
 const providerAuthority = Object.freeze({
   repository: providerRepository,
   verifiedSha: providerVerifiedSha,
   verifiedTag: providerTag,
 });
 
+type ProviderOutcomeInput = Parameters<typeof waitForProviderOutcomeRaw>[0];
+type ProviderPromotionInput = Parameters<typeof promoteWebsiteProductionRaw>[0];
+type AuthorityDefaults = "defaultBranch" | "eventName" | "recoveryWorkflowSha";
+
 const waitForProviderOutcome = (
-  options: Parameters<typeof waitForProviderOutcomeRaw>[0],
+  options: Omit<ProviderOutcomeInput, AuthorityDefaults> &
+    Partial<Pick<ProviderOutcomeInput, AuthorityDefaults>>,
 ): ReturnType<typeof waitForProviderOutcomeRaw> => waitForProviderOutcomeRaw({
   defaultBranch: "main",
-  eventName: "push",
-  recoveryWorkflowSha: "",
+  eventName: "workflow_dispatch",
+  recoveryWorkflowSha: providerVerifiedSha,
   ...providerAuthority,
+  ...options,
+});
+
+const promoteWebsiteProduction = (
+  options: Omit<ProviderPromotionInput, AuthorityDefaults> &
+    Partial<Pick<ProviderPromotionInput, AuthorityDefaults>>,
+): ReturnType<typeof promoteWebsiteProductionRaw> => promoteWebsiteProductionRaw({
+  defaultBranch: "main",
+  eventName: "workflow_dispatch",
+  recoveryWorkflowSha: providerVerifiedSha,
   ...options,
 });
 
@@ -318,7 +334,7 @@ function providerReviewedMainCompare(
     ahead_by: 1,
     base_commit: { sha: base },
     behind_by: 0,
-    head_commit: { sha: head },
+    commits: [{ sha: head }],
     merge_base_commit: { sha: base },
     status: "ahead",
     ...overrides,
@@ -1057,7 +1073,7 @@ esac
     expect(helper).toContain("recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA");
     expect(workflow.match(
       /ref: \$\{\{ needs\.verify\.outputs\.workflow_sha \}\}/gu,
-    )).toHaveLength(7);
+    )).toHaveLength(9);
     expect(workflow).not.toContain("VERCEL_TOKEN");
     expect(workflow).not.toContain("projectSettings");
     expect(workflow).not.toContain("redeploy");
@@ -1085,14 +1101,14 @@ esac
     expect(helper).not.toContain('["--method", "POST"');
     expect(releaseRestRequestBudget).toEqual({
       githubTokenLimit: 1_000,
-      headroom: 802,
+      headroom: 792,
       maxPolls: 15,
       pollIntervalMilliseconds: 60_000,
       providerBaseline: 2,
       providerOutcome: 164,
-      providerPromotion: 17,
+      providerPromotion: 27,
       surroundingRelease: 15,
-      total: 198,
+      total: 208,
     });
     expect(releaseGraphqlRequestBudget).toEqual({
       githubPointLimit: 1_000,
@@ -1103,7 +1119,7 @@ esac
       providerOutcome: 85,
       totalRequests: 95,
     });
-    expect(releaseRestRequestBudget.total).toBeLessThan(200);
+    expect(releaseRestRequestBudget.total).toBeLessThan(250);
     expect(releaseGraphqlRequestBudget.maxPoints).toBeLessThan(200);
   });
 
@@ -1575,6 +1591,7 @@ esac
     expect(maxBaselineApi.calls).toHaveLength(releaseRestRequestBudget.providerBaseline);
     expect(maxBaselineApi.graphqlCalls).toHaveLength(releaseGraphqlRequestBudget.providerBaseline);
     const maxPromotionApi = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 6 }, () => providerCurrentMainSha),
       refSha: providerPreviousSha,
       serverDates: [providerPromotionServerDate],
     });
@@ -1583,7 +1600,7 @@ esac
       baselineReceipt: maxBaseline,
       defaultBranch: "main",
       eventName: "workflow_dispatch",
-      recoveryWorkflowSha: providerVerifiedSha,
+      recoveryWorkflowSha: providerCurrentMainSha,
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
@@ -1769,7 +1786,7 @@ esac
       baselineReceipt: baseline,
       defaultBranch: "main",
       eventName: "workflow_dispatch",
-      recoveryWorkflowSha: providerVerifiedSha,
+      recoveryWorkflowSha: "3".repeat(40),
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
@@ -1777,7 +1794,13 @@ esac
     expect(movedBeforePatch.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const movedAfterPatch = new ProviderApiFixture({
-      defaultBranchShaSnapshots: [providerVerifiedSha, providerVerifiedSha, "3".repeat(40)],
+      defaultBranchShaSnapshots: [
+        providerVerifiedSha,
+        providerVerifiedSha,
+        providerVerifiedSha,
+        providerVerifiedSha,
+        "3".repeat(40),
+      ],
       deployments: [[baselineDeployment]],
       reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
         status: "diverged",
@@ -1793,12 +1816,17 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("is not a reviewed ancestor of current main");
+    })).rejects.toThrow("release recovery workflow source is not exact current main");
     expect(movedAfterPatch.calls.filter((call) => call.startsWith("GIT PUSH "))).toHaveLength(1);
 
     const alreadyExact = await providerReceipts("already-exact");
     const alreadyExactSourceDrift = new ProviderApiFixture({
-      defaultBranchShaSnapshots: ["3".repeat(40)],
+      defaultBranchShaSnapshots: [
+        providerVerifiedSha,
+        providerVerifiedSha,
+        providerVerifiedSha,
+        "3".repeat(40),
+      ],
       refSha: providerVerifiedSha,
       reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
         status: "diverged",
@@ -1814,11 +1842,11 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
-    })).rejects.toThrow("is not a reviewed ancestor of current main");
+    })).rejects.toThrow("release recovery workflow source is not exact current main");
     const alreadyExactTerminalRefRead = alreadyExactSourceDrift.calls.lastIndexOf(
       `GET /repos/${providerRepository}/git/ref/heads/website-production`,
     );
-    const alreadyExactSourceRead = alreadyExactSourceDrift.calls.indexOf(
+    const alreadyExactSourceRead = alreadyExactSourceDrift.calls.lastIndexOf(
       `GET /repos/${providerRepository}`,
     );
     expect(alreadyExactTerminalRefRead).toBeGreaterThanOrEqual(0);
@@ -2433,7 +2461,12 @@ esac
     })).rejects.toThrow("release recovery default branch changed after workflow verification");
 
     const recoverySourceShaRace = new ProviderApiFixture({
-      defaultBranchShaSnapshots: [providerVerifiedSha, "3".repeat(40)],
+      defaultBranchShaSnapshots: [
+        providerVerifiedSha,
+        providerVerifiedSha,
+        providerVerifiedSha,
+        "3".repeat(40),
+      ],
       deployments: [[providerDeployment(20, candidateAt), baselineDeployment]],
       refSha: providerVerifiedSha,
       reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, "3".repeat(40), {
@@ -2459,7 +2492,7 @@ esac
       recoveryWorkflowSha: providerVerifiedSha,
       sleep: async () => {},
       ...providerAuthority,
-    })).rejects.toThrow("is not a reviewed ancestor of current main");
+    })).rejects.toThrow("release recovery workflow source is not exact current main");
 
     const wrongMode = {
       ...(promotion as Readonly<Record<string, ProviderJson>>),
@@ -2495,9 +2528,12 @@ esac
       await expect(waitForProviderOutcomeRaw({
         api,
         baselineReceipt: baseline,
+        defaultBranch: "main",
+        eventName: "workflow_dispatch",
         maxPolls: 1,
         pollIntervalMilliseconds: 0,
         promotionReceipt: promotion,
+        recoveryWorkflowSha: providerVerifiedSha,
         sleep: async () => {},
         ...authority,
       })).rejects.toThrow("authoritative release inputs");

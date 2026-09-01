@@ -21,8 +21,8 @@ const tagResolutionFixture = JSON.parse(readFileSync(
 }>;
 const sha = tagResolutionFixture.resolvedCommit.sha;
 const tagObjectSha = tagResolutionFixture.tagRef.object.sha;
-const workflowSha = "2".repeat(40);
 const currentMainSha = "3".repeat(40);
+const workflowSha = currentMainSha;
 
 type ApiValue = unknown | readonly unknown[];
 
@@ -65,7 +65,7 @@ function compare(base: string, head: string, overrides: Readonly<Record<string, 
     ahead_by: 1,
     base_commit: { sha: base },
     behind_by: 0,
-    head_commit: { sha: head },
+    commits: [{ sha: head }],
     merge_base_commit: { sha: base },
     status: "ahead",
     ...overrides,
@@ -107,12 +107,6 @@ function authorityApi(overrides: Readonly<Record<string, ApiValue>> = {}) {
       ref("main", currentMainSha),
       ref("main", currentMainSha),
     ],
-    [`/repos/${repository}/compare/${workflowSha}...${currentMainSha}`]: [
-      compare(workflowSha, currentMainSha),
-      compare(workflowSha, currentMainSha),
-      compare(workflowSha, currentMainSha),
-      compare(workflowSha, currentMainSha),
-    ],
     [`/repos/${repository}/compare/${sha}...${currentMainSha}`]: [
       compare(sha, currentMainSha),
       compare(sha, currentMainSha),
@@ -144,14 +138,13 @@ function verify(api: ReturnType<typeof authorityApi>["api"], input = {}) {
 }
 
 describe("promotion authority revalidation", () => {
-  test("sandwiches annotated-tag authority and both reviewed-main ancestors", async () => {
+  test("sandwiches exact current-main workflow source and annotated-tag ancestry", async () => {
     const fixture = authorityApi();
     await verify(fixture.api);
 
     const workflowPhase = [
       `/repos/${repository}`,
       `/repos/${repository}/git/ref/heads/main`,
-      `/repos/${repository}/compare/${workflowSha}...${currentMainSha}`,
       `/repos/${repository}/compare/${sha}...${currentMainSha}`,
     ];
     const releasePhase = [
@@ -170,7 +163,7 @@ describe("promotion authority revalidation", () => {
     ]);
   });
 
-  test("requires one reviewed-main recovery workflow and rejects non-ancestors", async () => {
+  test("requires exact current-main workflow source and rejects non-ancestor releases", async () => {
     const fixture = authorityApi();
     await expect(verify(fixture.api, { eventName: "push" })).rejects.toThrow(
       "site promotion authority must be one reviewed-main workflow run",
@@ -180,14 +173,32 @@ describe("promotion authority revalidation", () => {
     );
     expect(fixture.calls).toEqual([]);
 
+    const movedMain = "4".repeat(40);
+    const staleWorkflow = authorityApi({
+      [`/repos/${repository}/git/ref/heads/main`]: [ref("main", movedMain)],
+    });
+    await expect(verify(staleWorkflow.api)).rejects.toThrow(
+      "release recovery workflow source is not exact current main",
+    );
+
     const nonAncestor = authorityApi({
-      [`/repos/${repository}/compare/${workflowSha}...${currentMainSha}`]: [
-        compare(workflowSha, currentMainSha, { status: "diverged" }),
+      [`/repos/${repository}/compare/${sha}...${currentMainSha}`]: [
+        compare(sha, currentMainSha, { status: "diverged" }),
       ],
     });
     await expect(verify(nonAncestor.api)).rejects.toThrow(
-      `${workflowSha} is not a reviewed ancestor of current main ${currentMainSha}`,
+      `${sha} is not a reviewed ancestor of current main ${currentMainSha}`,
     );
+  });
+
+  test("ignores Release.target_commitish after exact tag authority is proven", async () => {
+    const conflicting = authorityApi({
+      [`/repos/${repository}/releases/tags/${tag}`]: [
+        release({ target_commitish: "definitely-not-authority" }),
+        release({ target_commitish: "also-not-authority" }),
+      ],
+    });
+    await expect(verify(conflicting.api)).resolves.toBeUndefined();
   });
 
   test("rejects lightweight or moved tags, malformed releases, and a non-Latest tag", async () => {

@@ -190,9 +190,21 @@ non-Latest `v0.8.0` bootstrap coordinate.
 
 The tag-triggered Release workflow:
 
-1. checks out the complete annotated tag, proves its exact tag object targets
-   the checked commit and that commit is a reviewed ancestor of current `main`,
-   then runs the complete root, site, generated-file,
+1. checks out the requested tag at depth one with tags and persisted credentials
+   disabled. A dependency-free helper reads two identical, bounded
+   `git ls-remote --refs` snapshots from the fixed repository URL. Each snapshot
+   contains exact `refs/heads/main` plus canonical `refs/tags/v*` rows, is at
+   most 128 KiB and 500 rows, and rejects malformed, duplicate, or unexpected
+   refs. Historical lightweight stable tags participate in newest-version
+   ordering, but the requested tag itself must be one direct annotated tag
+   object whose embedded name is exact and whose target is the checked commit.
+   The helper removes stale `FETCH_HEAD`, imports only the fully qualified main
+   and requested tag into an initially empty private namespace with `--no-tags`,
+   no configured refspec, no force, and no `FETCH_HEAD` write, then proves that
+   namespace contains exactly those two advertised objects. It rejects
+   tag-of-tag and lightweight requested tags and proves the release commit is a
+   reviewed ancestor of exact advertised current `main`. The workflow then runs
+   the complete root, site, generated-file,
    packed-package, and synthetic macOS gates with read-only permissions;
 2. creates one npm tarball and `SHA256SUMS`, preserves those exact bytes as a
    30-day workflow artifact, preserves a separate numeric-ID-bound artifact
@@ -230,8 +242,14 @@ The tag-triggered Release workflow:
    Fulcio subject, certificate extensions, transparency log, and certificate
    transparency evidence.
 
-The immutable annotated tag object—not mutable Release branch-hint metadata—is
-the release authority. Re-running or completing a failed workflow never retags,
+The immutable annotated tag object, not mutable Release `target_commitish`
+metadata or another branch hint, is the release authority once the tag exists.
+Every reviewed-main comparison binds the exact base commit, merge base,
+`status`, canonical integer `ahead_by` (zero only for identical, positive for
+ahead), zero `behind_by`, and terminal `commits[-1].sha` for an ahead response
+to a branch ref that is read before and after the comparison.
+The workflow never treats an optional `head_commit` response field as authority.
+Re-running or completing a failed workflow never retags,
 deletes an immutable Release, changes tarball bytes, or accepts provenance from
 another run. GitHub publication always precedes npm, preventing a mutable or
 incomplete repository Release from stranding an npm version.
@@ -242,7 +260,11 @@ production-ref mutation, or provider-outcome job. A tag cannot enter
 
 After the full Release succeeds on any positive run attempt, its completed
 `workflow_run` starts `Promote website production` from current default-branch
-code. Treat the entire upstream payload as untrusted. Require the exact
+code. Every promotion checkout uses the exact current-main workflow SHA at
+depth one with tags and persisted credentials disabled. Release content is
+read from the separately imported and verified annotated-tag commit; tagged
+workflow or helper code never executes. Treat the entire upstream payload as
+untrusted. Require the exact
 repository, checked numeric Release workflow ID, workflow name and path,
 upstream event `push`, positive run ID and attempt, successful conclusion,
 stable tag, annotated-tag target, downstream workflow SHA, and reviewed `main`
@@ -251,8 +273,13 @@ ancestry to agree. The current workflow source must still be exact current
 manual `workflow_dispatch` with an untrusted release-tag input exists only for
 recovery. Both paths use the same checks. That workflow:
 
-1. proves its workflow file, `GITHUB_REF`, `GITHUB_SHA`, current default branch,
-   annotated tag object, reviewed ancestry, root and site versions, exact npm
+1. runs the same fixed-URL, bounded, double-snapshot ref helper from exact
+   current `main`. The helper imports only exact main and the requested tag into
+   its private namespace, requires `GITHUB_SHA` to equal advertised current
+   main, and separately binds the peeled release commit to the successful
+   Release run. It then proves the workflow file, `GITHUB_REF`, current default
+   branch, annotated tag object, reviewed ancestry, root and site versions,
+   exact npm
    version and Latest integrity, provenance, immutable artifact-complete Latest
    Release, checksum, and release authority all resolve to the same immutable
    release commit and tarball;
@@ -309,8 +336,10 @@ closed.
 ## Recover provider verification
 
 Recovery uses the same `Promote website production` workflow dispatch from the
-current reviewed `main` workflow source while the exact annotated release
-commit remains in `main` history. It requires the
+exact current reviewed `main` workflow source while the separately peeled
+annotated release commit remains in `main` history. Current-main source and
+release bytes are revalidated independently before and after provider work. It
+requires the
 exact existing npm version and immutable artifact-complete Latest Release. It
 never creates, replaces, or edits an npm version or GitHub Release.
 
