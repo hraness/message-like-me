@@ -204,7 +204,7 @@ async function assertEnsoulInventory(root: string, label: string): Promise<void>
   const expected = [...EXPECTED_ENSOUL_FILES].sort();
   if (actual.join("\n") !== expected.join("\n")) {
     throw new Error([
-      `${label} Ensoul inventory does not match the approved v0.3.0 copy.`,
+      `${label} Ensoul inventory does not match the approved v0.3.1 copy.`,
       `Expected: ${expected.join(", ")}`,
       `Received: ${actual.join(", ")}`,
     ].join("\n"));

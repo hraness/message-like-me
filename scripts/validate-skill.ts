@@ -28,8 +28,8 @@ const EXPECTED_ENSOUL_FILES = [
   "scripts/validate-source-packet.ts",
   "scripts/x-zip-file.ts",
 ] as const;
-const ENSOUL_SOURCE_COMMIT = "e8308cb3f89fd38377d68196b1d75a64675d2c6b";
-const ENSOUL_SOURCE_VERSION = "0.3.0";
+const ENSOUL_SOURCE_COMMIT = "46c8b14d03fecdfe8d75e5a61d5f7bfcc255e674";
+const ENSOUL_SOURCE_VERSION = "0.3.1";
 
 const PLACEHOLDER = /(?:\b(?:change[ -]?me|coming soon|fixme|lorem ipsum|placeholder|tbd|todo)\b|<[^>\n]*(?:placeholder|todo)[^>\n]*>)/iu;
 const SKILL_TEXT_EXTENSIONS = new Set([".json", ".md", ".ts", ".txt", ".yaml", ".yml"]);
@@ -238,7 +238,7 @@ export async function validateEnsoulSkill(): Promise<void> {
   const expectedFiles = [...EXPECTED_ENSOUL_FILES].sort();
   if (actualFiles.join("\n") !== expectedFiles.join("\n")) {
     throw new Error([
-      "Ensoul vendored inventory must exactly match the approved v0.3.0 copy.",
+      "Ensoul vendored inventory must exactly match the approved v0.3.1 copy.",
       `Expected: ${expectedFiles.join(", ")}`,
       `Received: ${actualFiles.join(", ")}`,
     ].join("\n"));

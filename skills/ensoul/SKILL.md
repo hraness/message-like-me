@@ -1,11 +1,11 @@
 ---
 name: ensoul
-description: Build a dated, evidence-calibrated, explicitly partial and revisable whole-person working model from a user-authorized corpus. Use when Codex is asked to understand, capture, or reconstruct a person; create a personal operating manual, master document, digital-twin or proxy bootstrap; extract worldview, values, taste, communication style, decisions, tensions, or tacit patterns; enrich a person with public research; or combine structured Ensoul source packets from Peopleblade or Message Like Me with notes, messages, posts, documents, repositories, and other evidence.
+description: Turn a user-authorized corpus into a dated, evidence-calibrated, explicitly partial and revisable whole-person working model. Use when Codex is asked to understand, capture, or reconstruct a person; create a personal operating manual, master document, digital-twin or proxy bootstrap; extract worldview, values, taste, communication style, decisions, tensions, or tacit patterns; enrich a person with public research; or combine structured Ensoul source packets from Peopleblade or Message Like Me with notes, messages, posts, documents, repositories, and other evidence.
 ---
 
 # Ensoul
 
-Create a dated, standalone working model of a person from only the evidence the user authorizes. Recover explicit facts and tacit patterns without flattening the subject into a resume, work persona, archetype, personality score, or supposedly complete identity record.
+Turn only the evidence the user authorizes into a dated, standalone working model of a person. Recover explicit facts and tacit patterns without flattening the subject into a resume, work persona, archetype, personality score, or supposedly complete identity record.
 
 The result should help a thoughtful collaborator understand the subject and let an assistant reason, write, prioritize, and collaborate in a way that resembles their demonstrated patterns. It must also say where resemblance would be unsafe or unsupported.
 
