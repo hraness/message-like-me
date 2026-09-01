@@ -420,7 +420,7 @@ export async function standaloneProblems(): Promise<string[]> {
   const expectedEnsoulFiles = [...EXPECTED_ENSOUL_FILES].sort();
   if (actualEnsoulFiles.join("\n") !== expectedEnsoulFiles.join("\n")) {
     problems.push([
-      "skills/ensoul inventory must exactly match the approved v0.3.0 copy.",
+      "skills/ensoul inventory must exactly match the approved v0.3.1 copy.",
       `Expected: ${expectedEnsoulFiles.join(", ")}`,
       `Received: ${actualEnsoulFiles.join(", ")}`,
     ].join("\n"));
