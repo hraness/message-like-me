@@ -2,6 +2,11 @@ export interface ReleaseAppTokenEnvironment {
   readonly [key: string]: string | undefined;
 }
 
+export type ReleaseAppFetch = (
+  input: URL | RequestInfo,
+  init?: RequestInit,
+) => Promise<Response>;
+
 export interface ReleaseAppTokenReceipt {
   readonly appId: number;
   readonly appSlug: string;
@@ -11,7 +16,26 @@ export interface ReleaseAppTokenReceipt {
   readonly repositoryId: number;
 }
 
+export interface ReleaseAppTokenRevocationReceipt {
+  readonly converged: true;
+  readonly observationCount: number;
+  readonly propagationObserved: boolean;
+  readonly stableDenials: 2;
+}
+
 export const MESSAGE_LIKE_ME_REPOSITORY_ID: 1342143606;
+export const RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS: readonly [
+  0,
+  250,
+  500,
+  1000,
+  2000,
+  4000,
+  8000,
+  16000,
+  24000,
+  29000,
+];
 
 export function parseReleaseAppConfiguration(environment: ReleaseAppTokenEnvironment): Readonly<{
   apiUrl: URL;
@@ -68,10 +92,26 @@ export function withReleaseAppToken<Result>(options: Readonly<{
     jwt: string;
   }>): Promise<Readonly<{ body: unknown; serverDate: unknown }>>;
   nowMilliseconds(): number;
-  revoke(input: Readonly<{ apiUrl: URL; token: string }>): Promise<void>;
+  onRevoked?(receipt: ReleaseAppTokenRevocationReceipt): void | Promise<void>;
+  revoke(input: Readonly<{
+    apiUrl: URL;
+    expiresAt: unknown;
+    token: string;
+  }>): Promise<unknown>;
 }>, operation: (token: string, receipt: ReleaseAppTokenReceipt) => Promise<Result>): Promise<Result>;
+
+export function revokeReleaseAppTokenWithConvergence(input: Readonly<{
+  apiUrl: URL;
+  createTimeoutSignal?(milliseconds: number): AbortSignal;
+  expiresAt: unknown;
+  fetchImplementation?: ReleaseAppFetch;
+  now?(): number;
+  sleep?(milliseconds: number): Promise<void>;
+  token: string;
+}>): Promise<ReleaseAppTokenRevocationReceipt>;
 
 export function withReleaseAppTokenFromEnvironment<Result>(
   environment: ReleaseAppTokenEnvironment,
   operation: (token: string, receipt: ReleaseAppTokenReceipt) => Promise<Result>,
+  onRevoked?: (receipt: ReleaseAppTokenRevocationReceipt) => void | Promise<void>,
 ): Promise<Result>;

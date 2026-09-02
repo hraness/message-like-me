@@ -6,6 +6,7 @@ import {
   parseGitHubRelease,
   parseNpmRelease,
   releaseArchiveName,
+  releaseVersionForCurrentAdmission,
 } from "./release-distribution-policy";
 
 const version = "0.8.1";
@@ -53,6 +54,22 @@ function release(overrides: Readonly<Record<string, unknown>> = {}) {
 }
 
 describe("public release distribution policy", () => {
+  test("derives an older admitted release from its tag instead of newer current-main version metadata", () => {
+    expect(releaseVersionForCurrentAdmission({
+      license: "MIT",
+      name: "@hraness/message-like-me",
+      version: "9.9.9",
+    }, "v0.8.1")).toBe("0.8.1");
+    expect(() => releaseVersionForCurrentAdmission({
+      license: "MIT",
+      name: "@hraness/not-message-like-me",
+    }, "v0.8.1")).toThrow("wrong public package");
+    expect(() => releaseVersionForCurrentAdmission({
+      license: "MIT",
+      name: "@hraness/message-like-me",
+    }, "latest")).toThrow("canonical stable version");
+  });
+
   test("derives the exact scoped npm pack filename", () => {
     expect(releaseArchiveName(version)).toBe("hraness-message-like-me-0.8.1.tgz");
     expect(() => releaseArchiveName("latest")).toThrow("release version");

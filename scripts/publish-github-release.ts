@@ -8,9 +8,10 @@ import {
   parseGitHubRelease,
   publicRepository,
   releaseArchiveName,
-} from "./release-distribution-policy";
-import { parseGitHubIncludedJsonResponse } from "./release-included-response";
-import { publicReleaseEnvironment } from "./release-process-environment";
+} from "./release-distribution-policy.ts";
+import { parseGitHubIncludedJsonResponse } from "./release-included-response.ts";
+import { publicReleaseEnvironment } from "./release-process-environment.ts";
+import { assertReviewedMainComparison } from "./release-ref-authority.ts";
 
 const [tagArgument, tarballArgument, checksumArgument] = process.argv.slice(2);
 if (tagArgument === undefined || tarballArgument === undefined || checksumArgument === undefined) {
@@ -19,14 +20,16 @@ if (tagArgument === undefined || tarballArgument === undefined || checksumArgume
 if (process.env.GITHUB_REPOSITORY !== publicRepository) {
   throw new Error(`GitHub Release publication must run in ${publicRepository}.`);
 }
-const verifiedSha = process.env.VERIFIED_SHA;
-if (verifiedSha === undefined || !/^[0-9a-f]{40}$/u.test(verifiedSha)) {
+const verifiedShaValue = process.env.VERIFIED_SHA;
+if (verifiedShaValue === undefined || !/^[0-9a-f]{40}$/u.test(verifiedShaValue)) {
   throw new Error("GitHub Release publication requires one verified release commit.");
 }
-const defaultBranch = process.env.DEFAULT_BRANCH;
-if (defaultBranch === undefined || !/^[A-Za-z0-9._/-]+$/u.test(defaultBranch)) {
+const verifiedSha: string = verifiedShaValue;
+const defaultBranchValue = process.env.DEFAULT_BRANCH;
+if (defaultBranchValue === undefined || !/^[A-Za-z0-9._/-]+$/u.test(defaultBranchValue)) {
   throw new Error("GitHub Release publication requires one verified default branch.");
 }
+const defaultBranch: string = defaultBranchValue;
 
 const manifest = JSON.parse(readFileSync(resolve(import.meta.dir, "..", "package.json"), "utf8")) as Readonly<{
   name?: unknown;
@@ -151,28 +154,33 @@ async function verifyRemoteAnnotatedTag(): Promise<void> {
     || target.type !== "commit"
     || target.sha !== verifiedSha
   ) throw new Error(`Remote annotated tag ${tagArgument} does not target ${verifiedSha}.`);
-  const head = await readJson([
-    "gh", "api", `/repos/${publicRepository}/git/ref/heads/${defaultBranch}`,
-  ]);
-  const headObject = record(head.object, `Remote ${defaultBranch} ref object`);
-  if (
-    head.ref !== `refs/heads/${defaultBranch}`
-    || headObject.type !== "commit"
-    || typeof headObject.sha !== "string"
-    || !/^[0-9a-f]{40}$/u.test(headObject.sha)
-  ) throw new Error(`Remote ${defaultBranch} ref is invalid.`);
+  const readDefaultHead = async (): Promise<string> => {
+    const head = await readJson([
+      "gh", "api", `/repos/${publicRepository}/git/ref/heads/${defaultBranch}`,
+    ]);
+    const headObject = record(head.object, `Remote ${defaultBranch} ref object`);
+    const headSha = headObject.sha;
+    if (
+      head.ref !== `refs/heads/${defaultBranch}`
+      || headObject.type !== "commit"
+      || typeof headSha !== "string"
+      || !/^[0-9a-f]{40}$/u.test(headSha)
+    ) throw new Error(`Remote ${defaultBranch} ref is invalid.`);
+    return headSha;
+  };
+  const headSha = await readDefaultHead();
   const comparison = await readJson([
-    "gh", "api", `/repos/${publicRepository}/compare/${verifiedSha}...${defaultBranch}`,
+    "gh", "api", `/repos/${publicRepository}/compare/${verifiedSha}...${headSha}`,
   ]);
-  const base = record(comparison.base_commit, "Reviewed-main comparison base");
-  const mergeBase = record(comparison.merge_base_commit, "Reviewed-main merge base");
-  const comparisonHead = record(comparison.head_commit, "Reviewed-main comparison head");
-  if (
-    !["ahead", "identical"].includes(String(comparison.status))
-    || base.sha !== verifiedSha
-    || mergeBase.sha !== verifiedSha
-    || comparisonHead.sha !== headObject.sha
-  ) throw new Error(`Reviewed release commit is not an ancestor of current ${defaultBranch}.`);
+  assertReviewedMainComparison(
+    comparison,
+    verifiedSha,
+    headSha,
+    `Reviewed release ancestry to current ${defaultBranch}`,
+  );
+  if (await readDefaultHead() !== headSha) {
+    throw new Error(`Remote ${defaultBranch} changed during reviewed release ancestry verification.`);
+  }
 }
 
 async function readRelease(): Promise<unknown> {

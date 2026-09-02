@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -11,12 +12,14 @@ const CODEOWNERS = join(import.meta.dir, "..", ".github", "CODEOWNERS");
 const PUBLISHING_GUIDE = join(import.meta.dir, "..", "docs", "publishing.md");
 const APP_TOKEN_HELPER = join(import.meta.dir, "release-app-token.mjs");
 const PROVIDER_HELPER = join(import.meta.dir, "release-provider-outcome.mjs");
+const REF_WRITER_HELPER = join(import.meta.dir, "release-ref-writer.mjs");
 const NPM_PUBLISHER = join(import.meta.dir, "publish-npm-release.ts");
 const NPM_PROVENANCE = join(import.meta.dir, "npm-provenance-verification.ts");
 const NPM_RETRY = join(import.meta.dir, "check-npm-retry-state.ts");
 const PUBLIC_ADMISSION = join(import.meta.dir, "check-public-release.ts");
 const GITHUB_ADMISSION = join(import.meta.dir, "check-github-release.ts");
 const GITHUB_PUBLISHER = join(import.meta.dir, "publish-github-release.ts");
+const REF_AUTHORITY = join(import.meta.dir, "release-ref-authority.ts");
 const SIGNER_VERIFIER = join(import.meta.dir, "verify-npm-provenance-signer.mjs");
 const PACKAGE_MANIFEST = join(import.meta.dir, "..", "package.json");
 
@@ -89,6 +92,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     publicAdmission,
     githubAdmission,
     githubPublisher,
+    refAuthority,
     signerVerifier,
     packageManifest,
   ] = await Promise.all([
@@ -99,6 +103,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     readFile(PUBLIC_ADMISSION, "utf8"),
     readFile(GITHUB_ADMISSION, "utf8"),
     readFile(GITHUB_PUBLISHER, "utf8"),
+    readFile(REF_AUTHORITY, "utf8"),
     readFile(SIGNER_VERIFIER, "utf8"),
     readFile(PACKAGE_MANIFEST, "utf8"),
   ]);
@@ -108,18 +113,13 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     "permissions:\n  contents: read",
     "group: stable-release",
     "cancel-in-progress: false",
-    "fetch-depth: 0",
+    "fetch-depth: 1",
+    "fetch-tags: false",
     "persist-credentials: false",
     "ref: refs/tags/${{ steps.request.outputs.tag }}",
+    'node --experimental-strip-types ./scripts/release-ref-authority.ts release "$REQUESTED_TAG"',
     'site_version="$(bun -e',
     "Site version $site_version does not match package version $package_version",
-    'tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"',
-    'head_commit="$(git rev-parse --verify "HEAD^{commit}")"',
-    'default_head="$(git rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}")"',
-    'git merge-base --is-ancestor "$tag_commit" "$default_head"',
-    "not a reviewed ancestor of current $DEFAULT_BRANCH",
-    "newest_stable_tag=\"$(git tag --list",
-    'if [[ "$(git cat-file -t "$REQUESTED_TAG")" != "tag" ]]',
     "bun run check",
     "working-directory: site",
     "bun run sync:readme",
@@ -135,10 +135,20 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     "name: message-like-me-release-${{ github.run_attempt }}",
     "release_artifact_digest: ${{ steps.release_artifact.outputs.artifact-digest }}",
     "release_artifact_id: ${{ steps.release_artifact.outputs.artifact-id }}",
+    "github_writer_artifact_digest: ${{ steps.github_writer_artifact.outputs.artifact-digest }}",
+    "github_writer_artifact_id: ${{ steps.github_writer_artifact.outputs.artifact-id }}",
     "writer_artifact_digest: ${{ steps.writer_artifact.outputs.artifact-digest }}",
     "writer_artifact_id: ${{ steps.writer_artifact.outputs.artifact-id }}",
     "retention-days: 30",
-    "Stage the dependency-free npm writer from reviewed source",
+    "Stage exact dependency-free release writers from reviewed source",
+    'npm_writer_root="$(mktemp -d "$RUNNER_TEMP/message-like-me-npm-writer.XXXXXX")"',
+    'github_writer_root="$(mktemp -d "$RUNNER_TEMP/message-like-me-github-writer.XXXXXX")"',
+    "copy_regular_source",
+    '[[ ! -f "$source" || -L "$source" ]]',
+    "Release writer closure is not the exact regular-file allowlist",
+    "path: ${{ steps.writer_roots.outputs.npm_path }}",
+    "path: ${{ steps.writer_roots.outputs.github_path }}",
+    "name: message-like-me-github-release-writer-${{ github.run_attempt }}",
     "artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}",
     "merge-multiple: true",
     "Release artifact has no exact immutable identity",
@@ -149,6 +159,8 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     "package-smoke.ts artifacts/*.tgz",
     "publish_github:",
     "name: Publish immutable GitHub Release",
+    "Download the reviewed GitHub Release writer by numeric artifact ID",
+    "artifact-ids: ${{ needs.verify.outputs.github_writer_artifact_id }}",
     "pre_npm:",
     "name: Admit immutable GitHub bytes and npm retry state",
     "publish_npm:",
@@ -173,7 +185,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
     "NPM_COMPLETION_RUN_ATTEMPT: ${{ needs.publish_npm.outputs.npm_completion_run_attempt }}",
     "PRE_NPM_STATE: ${{ needs.pre_npm.outputs.npm_state }}",
     "writer/scripts/publish-npm-release.ts artifacts/*.tgz",
-    "publish-github-release.ts \"$VERIFIED_TAG\" artifacts/*.tgz artifacts/SHA256SUMS",
+    "github-release-writer/scripts/publish-github-release.ts \"$VERIFIED_TAG\" artifacts/*.tgz artifacts/SHA256SUMS",
     "Install the pinned Sigstore verifier",
   ] as const) {
     expect(workflow).toContain(required);
@@ -191,10 +203,23 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(workflow).not.toContain("VERCEL_TOKEN");
   expect(workflow).not.toContain("/commits/tags/");
   expect(workflow).not.toContain("--clobber");
+  expect(workflow).not.toContain("fetch-depth: 0");
+  expect(workflow).not.toContain("git fetch --force");
+  expect(workflow).not.toContain("git tag --list");
+  expect(workflow).not.toContain("mkdir -p release-writer");
+  expect(workflow).not.toContain("mkdir -p github-release-writer");
+  expect(workflow.match(/fetch-depth: 1/gu)).toHaveLength(5);
+  expect(workflow.match(/fetch-tags: false/gu)).toHaveLength(5);
+  expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(5);
   expect(workflow.match(/contents: write/gu)).toHaveLength(1);
   expect(workflow.match(/id-token: write/gu)).toHaveLength(1);
   expect(workflow.match(/name: message-like-me-release-\$\{\{ github\.run_attempt \}\}/gu)).toHaveLength(1);
   expect(workflow.match(/artifact-ids: \$\{\{ needs\.verify\.outputs\.release_artifact_id \}\}/gu)?.length).toBeGreaterThanOrEqual(4);
+  const writerStageIndex = workflow.indexOf("Stage exact dependency-free release writers from reviewed source");
+  expect(writerStageIndex).toBeGreaterThan(0);
+  expect(writerStageIndex).toBeLessThan(workflow.indexOf("oven-sh/setup-bun"));
+  expect(writerStageIndex).toBeLessThan(workflow.indexOf("Verify exact release identity"));
+  expect(writerStageIndex).toBeLessThan(workflow.indexOf("bun install --frozen-lockfile"));
   const githubWriter = workflow.slice(
     workflow.indexOf("\n  publish_github:\n"),
     workflow.indexOf("\n  pre_npm:\n"),
@@ -206,11 +231,22 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   const finalAdmission = workflow.slice(workflow.indexOf("\n  admit:\n"));
   expect(githubWriter).toContain("contents: write");
   expect(githubWriter).not.toContain("id-token: write");
+  expect(githubWriter).not.toContain("actions/checkout");
   expect(githubWriter).not.toContain("bun install");
+  expect(githubWriter).not.toContain("release-ref-authority.ts checkout");
   expect(githubWriter).not.toContain("    env:\n      GH_TOKEN:");
   expect(githubWriter).toContain(
     "Create and prove the immutable GitHub Release from exact bytes\n        env:\n          GH_TOKEN: ${{ github.token }}",
   );
+  expect(githubPublisher).toContain('from "./release-distribution-policy.ts"');
+  expect(githubPublisher).toContain('from "./release-included-response.ts"');
+  expect(githubPublisher).toContain('from "./release-process-environment.ts"');
+  expect(githubPublisher).toContain('from "./release-ref-authority.ts"');
+  expect(githubPublisher).not.toMatch(/from "\.\/[^".]+"/u);
+  expect(npmPublisher).toContain('from "./npm-release-policy.ts"');
+  expect(npmPublisher).toContain('from "./release-distribution-policy.ts"');
+  expect(npmPublisher).toContain('from "./release-process-environment.ts"');
+  expect(npmPublisher).not.toMatch(/from "\.\/[^".]+"/u);
   expect(npmWriter).toContain("contents: none");
   expect(npmWriter).toContain("id-token: write");
   expect(npmWriter).not.toContain("actions/checkout");
@@ -281,6 +317,39 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(githubPublisher).toContain('"-F", "draft=false"');
   expect(githubPublisher).not.toContain("--target");
   expect(githubPublisher).not.toContain("target_commitish");
+  expect(githubPublisher).toContain("existingResponse.status !== 404");
+  expect(githubPublisher).toContain('existingResponse.body.message !== "Not Found"');
+  expect(githubPublisher).toContain('existingResponse.body.status !== "404"');
+  for (const source of [githubPublisher, githubAdmission, publicAdmission]) {
+    expect(source).not.toContain(".head_commit");
+  }
+  for (const required of [
+    "https://github.com/hraness/message-like-me.git",
+    '["ls-remote", "--refs", REPOSITORY_URL, MAIN_REF]',
+    '["ls-remote", "--refs", "--tags", REPOSITORY_URL, "refs/tags/v*"]',
+    '"refs/tags/v*"',
+    '`${MAIN_REF}:${LOCAL_MAIN_REF}`',
+    '`${localTagRef}:${localTagRef}`',
+    '"--no-tags"',
+    '"--no-write-fetch-head"',
+    '"--no-recurse-submodules"',
+    '"--unshallow"',
+    "MAXIMUM_SNAPSHOT_BYTES = 64 * 1_024",
+    "MAXIMUM_SNAPSHOT_ROWS = 500",
+    "parseGovernedRemoteSnapshot",
+    "Combined governed remote ref inventory exceeds its byte bound",
+    "Combined governed remote ref inventory exceeds its row bound",
+    'input.mode === "release" ? [localTagRef] : []',
+    "[LOCAL_MAIN_REF, localTagRef]",
+    "Remote release-ref inventory changed during verification",
+  ] as const) expect(refAuthority).toContain(required);
+  for (const forbidden of [
+    '"fetch", "--tags"',
+    '"fetch", "--force"',
+    '"tag", "--list"',
+    '"--refmap"',
+    "refs/message-like-me-release-authority",
+  ] as const) expect(refAuthority).not.toContain(forbidden);
   expect(githubPublisher).not.toContain("spawnSync");
   expect(githubPublisher).not.toContain("exists.\\n${failure}");
   expect(signerVerifier).toContain('certificateIssuer: GITHUB_OIDC_ISSUER');
@@ -300,10 +369,12 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
 });
 
 test("site promotion accepts reviewed release ancestry and isolates a fresh App-key writer", async () => {
-  const [workflow, appTokenHelper, providerHelper] = await Promise.all([
+  const [workflow, appTokenHelper, providerHelper, refWriterHelper, publicAdmission] = await Promise.all([
     readFile(join(WORKFLOWS, "website-production.yml"), "utf8"),
     readFile(APP_TOKEN_HELPER, "utf8"),
     readFile(PROVIDER_HELPER, "utf8"),
+    readFile(REF_WRITER_HELPER, "utf8"),
+    readFile(PUBLIC_ADMISSION, "utf8"),
   ]);
 
   for (const required of [
@@ -329,8 +400,8 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
     'current_main_sha="$(gh api',
     "Promotion workflow source $EVENT_SHA is not the checked current main",
     "Verify exact annotated release coordinate",
-    'tag_type="$(git cat-file -t "refs/tags/$REQUESTED_TAG")"',
-    'git merge-base --is-ancestor "$tag_commit" "$workflow_commit"',
+    'node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$REQUESTED_TAG" "$RECOVERY_WORKFLOW_SHA" "$UPSTREAM_SHA"',
+    'refs/tags/$REQUESTED_TAG^{commit}',
     "release-provider-outcome.mjs revalidate-authority",
     "Admit the exact public npm and GitHub artifacts",
     "check-public-release.ts",
@@ -379,12 +450,41 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(workflow).not.toContain("/releases\"");
   expect(workflow).not.toContain("Integration `15368`");
   expect(workflow).not.toContain("actions/create-github-app-token");
+  expect(workflow).not.toContain("fetch-depth: 0");
+  expect(workflow).not.toContain("git tag --list");
+  expect(workflow.match(/fetch-depth: 1/gu)).toHaveLength(10);
+  expect(workflow.match(/fetch-tags: false/gu)).toHaveLength(10);
+  expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(10);
+  expect(workflow.match(/ref: \$\{\{ needs\.verify\.outputs\.workflow_sha \}\}/gu)).toHaveLength(9);
+  expect(workflow).not.toContain("ref: ${{ needs.verify.outputs.verified_sha }}");
+  expect(publicAdmission).toContain("releaseVersionForCurrentAdmission(");
   expect(appTokenHelper).toContain("repository_ids");
   expect(appTokenHelper).toContain("MESSAGE_LIKE_ME_REPOSITORY_ID = 1_342_143_606");
   expect(appTokenHelper).toContain("/app/installations/${String(input.installationId)}");
   expect(appTokenHelper).toContain('method: "DELETE"');
   expect(appTokenHelper).toContain("/installation/token");
+  expect(appTokenHelper).toContain("/installation/repositories");
+  expect(appTokenHelper).toContain("performance.now()");
+  expect(appTokenHelper).toContain("RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS");
   expect(providerHelper).toContain('key.startsWith("MLM_RELEASE_APP_")');
+  expect(providerHelper).not.toContain(".head_commit");
+  expect(providerHelper).not.toContain('event === "push"');
+  expect(providerHelper).toContain("writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+  expect(providerHelper).toContain("exactSanitizedRevocationReceipt(revocationReceipt)");
+  expect(providerHelper).toContain("advanceWithRevokedReleaseAppToken(process.env, operation)");
+  expect(providerHelper).toContain("return operation(Object.freeze({");
+  expect(providerHelper).not.toContain("operation(new GitHubApi");
+  expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
+  expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
+  expect(refWriterHelper).toContain('`refs/tags/${tag}`');
+  expect(refWriterHelper).toContain("GIT_LFS_SKIP_SMUDGE");
+  expect(refWriterHelper).toContain("verifiedTag: input.verifiedTag");
+  expect(/PROVIDER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(providerHelper).digest("hex"),
+  );
+  expect(/REF_WRITER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(refWriterHelper).digest("hex"),
+  );
   expect(workflow.match(/release-provider-outcome\.mjs revalidate-authority/gu)?.length).toBeGreaterThanOrEqual(6);
   expect(workflow.match(/check-public-release\.ts/gu)?.length).toBeGreaterThanOrEqual(8);
   expect(workflow.match(/timeout-minutes: 15/gu)?.length).toBeGreaterThanOrEqual(3);
@@ -505,13 +605,26 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "repository ID `1342143606`",
     "repository_ids: [1342143606]",
     "DELETE /installation/token",
+    "two stable HTTP 401 responses",
+    "30-second half-open\nrequest-start window",
+    "bodies are streamed under a 1 MiB cap and scrubbed",
+    "Message Like Me\noperational ceiling, not a claim about GitHub's revocation-propagation SLA",
+    "full App path is capped at fourteen REST requests",
+    "exact production-ref post-read cannot begin until convergence",
+    "token-scoped callback ends immediately after the one leased Git push",
+    "An indeterminate revocation\n   therefore prevents every post-read",
+    "`refs/tags/<verified-tag>`",
+    "`FETCH_HEAD^{commit}`",
+    "submodule recursion disabled",
     "skips the\nentire `production-ref-writer-key` job, and mints no App token",
     "a later `main` push creates no Vercel Production deployment",
     "product pull request must not change\n`.github/workflows/`, `.github/CODEOWNERS`",
     "No personal access token, deploy key, Vercel token",
     "The tag workflow has no environment, App credential",
     "one npm tarball and `SHA256SUMS`",
-    "installs the\n   unchanged tarball on macOS and Linux",
+    "writer closures. Both closures are copied from regular non-symlink files",
+    "checked against exact file inventories before\n   any repository code or dependency executes",
+    "Every local writer import names its\n   `.ts` source explicitly",
     "GitHub publication job `contents: write`",
     "no-checkout npm publication job `id-token: write`",
     "part of the\n   privileged TCB",

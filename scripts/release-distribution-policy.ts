@@ -4,10 +4,24 @@ const SHA1 = /^[0-9a-f]{40}$/u;
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SHA512_INTEGRITY = /^sha512-[A-Za-z0-9+/]+={0,2}$/u;
 const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
+const STABLE_TAG = /^v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;
 const OIDC_CONFIG_ID = /^oidc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 export const publicPackageName = "@hraness/message-like-me";
 export const publicRepository = "hraness/message-like-me";
+
+export function releaseVersionForCurrentAdmission(
+  manifestValue: unknown,
+  verifiedTag: string,
+): string {
+  const manifest = record(manifestValue, "current-main release admission manifest");
+  if (manifest.name !== publicPackageName || manifest.license !== "MIT") {
+    throw new Error("Current-main release admission code has the wrong public package or license identity.");
+  }
+  const match = STABLE_TAG.exec(verifiedTag);
+  if (match?.[1] === undefined) throw new Error("Verified release tag is not one canonical stable version.");
+  return match[1];
+}
 
 function record(value: unknown, label: string): JsonRecord {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {

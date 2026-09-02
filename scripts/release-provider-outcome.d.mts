@@ -3,6 +3,7 @@ export interface ReleaseProviderApi {
     repository: string,
     expectedOldSha: string,
     verifiedSha: string,
+    verifiedTag: string,
   ): Promise<void>;
   get?(endpoint: string): Promise<unknown>;
   getWithServerDate?(endpoint: string): Promise<unknown>;
@@ -12,6 +13,15 @@ export interface ReleaseProviderApi {
     owner: string;
     query: string;
   }>): Promise<unknown>;
+}
+
+export interface ReleaseProviderWriter {
+  advanceRef(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+    verifiedTag: string,
+  ): Promise<void>;
 }
 
 export interface ProductionDeployment {
@@ -106,11 +116,19 @@ export function createProviderBaseline(input: Readonly<{
 }>): Promise<unknown>;
 
 export function promoteWebsiteProduction(input: Readonly<{
+  advanceWithRevocation?(
+    operation: (writer: ReleaseProviderWriter) => Promise<void>,
+  ): Promise<Readonly<{
+    converged: true;
+    observationCount: number;
+    propagationObserved: boolean;
+    stableDenials: 2;
+  }>>;
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
-  defaultBranch?: string;
-  eventName?: string;
-  recoveryWorkflowSha?: string;
+  defaultBranch: string;
+  eventName: string;
+  recoveryWorkflowSha: string;
   repository: string;
   verifiedSha: string;
   verifiedTag: string;
@@ -119,12 +137,12 @@ export function promoteWebsiteProduction(input: Readonly<{
 export function waitForProviderOutcome(input: Readonly<{
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
-  defaultBranch?: string;
-  eventName?: string;
+  defaultBranch: string;
+  eventName: string;
   maxPolls?: number;
   pollIntervalMilliseconds?: number;
   promotionReceipt: unknown;
-  recoveryWorkflowSha?: string;
+  recoveryWorkflowSha: string;
   repository?: string;
   sleep?: (milliseconds: number) => Promise<void>;
   verifiedSha?: string;

@@ -190,18 +190,41 @@ non-Latest `v0.8.0` bootstrap coordinate.
 
 The tag-triggered Release workflow:
 
-1. checks out the complete annotated tag, proves its exact tag object targets
-   the checked commit and that commit is a reviewed ancestor of current `main`,
-   then runs the complete root, site, generated-file,
+1. checks out only the requested tag at depth one with tags and persisted
+   credentials disabled. Before importing anything else, the checkout must
+   contain exactly that local tag ref. A dependency-free helper takes separate
+   fixed-URL snapshots of exact `refs/heads/main` and canonical
+   `git ls-remote --refs --tags ... refs/tags/v*` output. The combined governed
+   inventory is at most 64 KiB and 500 rows and rejects malformed object IDs, non-fully-qualified
+   or unexpected refs, duplicate rows, and noncanonical order. Historical
+   lightweight stable tags participate in newest-version ordering, but the
+   requested tag itself must be one direct annotated tag object whose embedded
+   name is exact and whose target is the checked commit. The helper removes
+   stale `FETCH_HEAD`, then fetches only fully qualified current `main` into
+   `refs/remotes/origin/main` and the requested tag into its same-name local tag
+   with `--no-tags`, no configured refspec, no force, no submodules, and no
+   `FETCH_HEAD` write. A shallow checkout is unshallowed through only those two
+   governed refspecs. The post-import ref set must be exactly those two names and
+   both objects must equal the first remote advertisement. The helper rejects
+   tag-of-tag and lightweight requested tags, proves the release commit is a
+   reviewed ancestor of exact advertised current `main`, and requires an
+   identical terminal remote snapshot. The workflow then runs
+   the complete root, site, generated-file,
    packed-package, and synthetic macOS gates with read-only permissions;
 2. creates one npm tarball and `SHA256SUMS`, preserves those exact bytes as a
-   30-day workflow artifact, preserves a separate numeric-ID-bound artifact
-   containing only the reviewed dependency-free npm writer, and installs the
-   unchanged tarball on macOS and Linux;
-3. gives only the GitHub publication job `contents: write`. Its SHA-pinned
-   checkout, Bun setup, and numeric-ID artifact download are part of the
-   privileged TCB, but the GitHub token is scoped only to the final
-   dependency-free publisher step. That publisher revalidates the remote
+   30-day workflow artifact, preserves separate numeric-ID-bound artifacts
+   containing only the reviewed dependency-free npm writer and GitHub Release
+   writer closures. Both closures are copied from regular non-symlink files into
+   fresh runner-temporary roots and checked against exact file inventories before
+   any repository code or dependency executes. Every local writer import names its
+   `.ts` source explicitly. The workflow also installs the unchanged tarball on
+   macOS and Linux;
+3. gives only the GitHub publication job `contents: write`. That job performs no
+   repository checkout or dependency install. Its SHA-pinned Bun and numeric-ID
+   artifact actions are part of the privileged TCB. The GitHub token is scoped only to the final
+   dependency-free publisher step. The writer artifact
+   was assembled from the verified release source by the read-only verification
+   job and is bound by its numeric ID and digest. That publisher revalidates the remote
    annotated tag object and reviewed-`main` ancestry, creates or safely resumes
    one deterministic draft, uploads only the tarball and checksum, publishes it
    as Latest, and requires the Release to read back immutable with exact names,
@@ -230,8 +253,14 @@ The tag-triggered Release workflow:
    Fulcio subject, certificate extensions, transparency log, and certificate
    transparency evidence.
 
-The immutable annotated tag object—not mutable Release branch-hint metadata—is
-the release authority. Re-running or completing a failed workflow never retags,
+The immutable annotated tag object, not mutable Release `target_commitish`
+metadata or another branch hint, is the release authority once the tag exists.
+Every reviewed-main comparison binds the exact base commit, merge base,
+`status`, canonical integer `ahead_by` (zero only for identical, positive for
+ahead), zero `behind_by`, and terminal `commits[-1].sha` for an ahead response
+to a branch ref that is read before and after the comparison.
+The workflow never treats an optional `head_commit` response field as authority.
+Re-running or completing a failed workflow never retags,
 deletes an immutable Release, changes tarball bytes, or accepts provenance from
 another run. GitHub publication always precedes npm, preventing a mutable or
 incomplete repository Release from stranding an npm version.
@@ -242,7 +271,11 @@ production-ref mutation, or provider-outcome job. A tag cannot enter
 
 After the full Release succeeds on any positive run attempt, its completed
 `workflow_run` starts `Promote website production` from current default-branch
-code. Treat the entire upstream payload as untrusted. Require the exact
+code. Every promotion checkout uses the exact current-main workflow SHA at
+depth one with tags and persisted credentials disabled. Release content is
+read from the separately imported and verified annotated-tag commit; tagged
+workflow or helper code never executes. Treat the entire upstream payload as
+untrusted. Require the exact
 repository, checked numeric Release workflow ID, workflow name and path,
 upstream event `push`, positive run ID and attempt, successful conclusion,
 stable tag, annotated-tag target, downstream workflow SHA, and reviewed `main`
@@ -251,8 +284,16 @@ ancestry to agree. The current workflow source must still be exact current
 manual `workflow_dispatch` with an untrusted release-tag input exists only for
 recovery. Both paths use the same checks. That workflow:
 
-1. proves its workflow file, `GITHUB_REF`, `GITHUB_SHA`, current default branch,
-   annotated tag object, reviewed ancestry, root and site versions, exact npm
+1. runs the same fixed-URL, bounded, double-snapshot ref helper from an exact,
+   depth-one, no-tag, no-credential current-`main` checkout whose initial local
+   ref set is empty. The helper imports only exact main into
+   `refs/remotes/origin/main` and the requested tag into its same-name local tag,
+   requires `GITHUB_SHA` to equal advertised current main, and separately binds
+   the direct annotated tag's peeled release commit to the successful Release
+   run. Its post-import ref set must be exactly those two governed refs. It then
+   proves the workflow file, `GITHUB_REF`, current default
+   branch, annotated tag object, reviewed ancestry, root and site versions,
+   exact npm
    version and Latest integrity, provenance, immutable artifact-complete Latest
    Release, checksum, and release authority all resolve to the same immutable
    release commit and tarball;
@@ -273,20 +314,32 @@ recovery. Both paths use the same checks. That workflow:
 4. fails closed unless the mint response contains exactly that numeric
    repository, selected-repository scope, those two permissions, and a
    canonical expiry within the authenticated one-hour response window. It
-   masks the token before use, keeps it out of workflow outputs, and revokes it
-   through `DELETE /installation/token` in the same operation's `finally`
-   boundary. A mutation failure and a revocation failure are both retained;
+   masks the token before use and keeps it out of workflow outputs. The
+   token-scoped callback ends immediately after the one leased Git push. After
+   that callback it sends exactly one nonredirecting `DELETE /installation/token`,
+   requires an HTTP 204 with absent or canonical-zero `Content-Length` and zero
+   body bytes, and then observes the exact selected-repository authority until
+   two stable HTTP 401 responses prove convergence. A mutation failure and a
+   revocation or convergence failure are both retained;
 5. sandwiches the fresh writer job with separate read-only immutable Release,
    Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
-   admissions; proves `website-production` can fast-forward;
-   then uses authenticated Git over a fixed HTTPS remote to push exactly
+   admissions; proves `website-production` can fast-forward; then fetches only
+   `refs/tags/<verified-tag>` from the fixed HTTPS repository at depth one,
+   with tag following and submodule recursion disabled. It peels
+   `FETCH_HEAD^{commit}` without checking out or executing tagged code and
+   requires the result to equal `verified_sha` before using authenticated Git
+   to push exactly
    `<verified-sha>:refs/heads/website-production` with
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>`. The
    token stays out of URLs, argv, and Git config behind a bounded temporary
    `GIT_ASKPASS` helper, prompting is disabled, global and system configuration
    are disabled, hooks and tags are disabled, cleanup is trapped, and a stale
-   lease fails without mutation. Read-only singular REST ref reads before and
-   after the push use the job's read-only GitHub Actions token; and
+   lease fails without mutation. Read-only singular REST ref reads before the
+   push use the job's read-only GitHub Actions token. The exact post-push ref
+   read and independent current-`main` workflow-source revalidation do not
+   begin until the App-token wrapper returns after its `onRevoked` callback has
+   accepted the sanitized convergence receipt. An indeterminate revocation
+   therefore prevents every post-read; and
 6. uses a separate read-only job, bounded to 20 minutes, to require exactly one
    new Vercel Production deployment. The deployment and its exhaustive status
    history must bind Vercel bot `35613825`, the exact release SHA, task
@@ -294,6 +347,29 @@ recovery. Both paths use the same checks. That workflow:
    `messagelikeme-<deployment>-hraness.vercel.app` URL. Stable terminal tag,
    Release, Latest, workflow-source, ref, inventory, and status readbacks close
    the workflow.
+
+The successful DELETE and every accepted HTTP 200 or 401 observation require a
+canonical GitHub `Date` strictly before the minted token's exact `expires_at`.
+The monotonic completion of the DELETE anchors a separate 30-second half-open
+request-start window `[start, deadline)`: a response completing exactly at the
+deadline remains eligible, while a later completion fails. The helper may read
+`/installation/repositories` at no more than the ten absolute offsets 0, 250,
+500, 1,000, 2,000, 4,000, 8,000, 16,000, 24,000, and 29,000 milliseconds. A
+missed slot is skipped rather than retried or shifted, and request, body, and
+sleep latency all consume the same window. App identity, installation, mint,
+DELETE, and observation bodies are streamed under a 1 MiB cap and scrubbed
+after parsing. Every HTTP 200 must still describe
+the exact singleton selected `hraness/message-like-me` repository with ID
+`1342143606`. Acceptance requires two distinct scheduled HTTP 401 reads. A 200
+after a 401, only one 401, any other status, a redirect, malformed or oversized
+body, transport or timing ambiguity, or failure to converge within the window
+fails closed. `propagationObserved=false` means the first two probes were the
+stable denial pair; `true` means one or more exact authorized 200 responses
+preceded the final two denials. This 30-second bound is a Message Like Me
+operational ceiling, not a claim about GitHub's revocation-propagation SLA. The
+action is never retried, the full App path is capped at fourteen REST requests,
+and the exact production-ref post-read cannot begin until convergence has been
+reported through the sanitized revocation receipt.
 
 Any ambiguity, concurrent production deployment, missing or changed baseline
 item, provider error, terminal failure, identity mismatch, ref race, status
@@ -309,8 +385,10 @@ closed.
 ## Recover provider verification
 
 Recovery uses the same `Promote website production` workflow dispatch from the
-current reviewed `main` workflow source while the exact annotated release
-commit remains in `main` history. It requires the
+exact current reviewed `main` workflow source while the separately peeled
+annotated release commit remains in `main` history. Current-main source and
+release bytes are revalidated independently before and after provider work. It
+requires the
 exact existing npm version and immutable artifact-complete Latest Release. It
 never creates, replaces, or edits an npm version or GitHub Release.
 

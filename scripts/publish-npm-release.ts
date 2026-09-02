@@ -13,14 +13,14 @@ import { basename, join, resolve } from "node:path";
 import {
   registryVersionMetadata,
   registryVersionUrl,
-} from "./npm-release-policy";
+} from "./npm-release-policy.ts";
 import {
   type NpmReleaseCoordinate,
   parseNpmRelease,
   publicPackageName,
   releaseArchiveName,
-} from "./release-distribution-policy";
-import { trustedPublishingEnvironment } from "./release-process-environment";
+} from "./release-distribution-policy.ts";
+import { trustedPublishingEnvironment } from "./release-process-environment.ts";
 
 export type NpmWriterTransition = "observe_existing" | "publish";
 
