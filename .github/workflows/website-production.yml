@@ -281,7 +281,7 @@ jobs:
           ref: ${{ needs.verify.outputs.workflow_sha }}
       - name: Pin the only secret-bearing writer code to reviewed hashes
         env:
-          APP_TOKEN_SHA256: a95704ebc4145542a31c63ca15e20f6ecadf4e88845983f3a9ab71f0b6d88a00
+          APP_TOKEN_SHA256: 70182b80b35129910bd6993f2e5bfd7cd5a2934ac1ea54e490b2cd73363891b3
           PROVIDER_SHA256: 0693b9e48ddf5466bca9929f427e519232855f15a488d5a13f85e689a5f1bc4e
           REF_WRITER_SHA256: 41c136d48e562d5c9e3ea3cb894fca8752aa2481e56fb01ebb0481b14f92687f
         run: |

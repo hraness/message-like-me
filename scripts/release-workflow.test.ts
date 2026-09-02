@@ -479,6 +479,9 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
   expect(refWriterHelper).toContain("GIT_LFS_SKIP_SMUDGE");
   expect(refWriterHelper).toContain("verifiedTag: input.verifiedTag");
+  expect(/APP_TOKEN_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(appTokenHelper).digest("hex"),
+  );
   expect(/PROVIDER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
     createHash("sha256").update(providerHelper).digest("hex"),
   );
