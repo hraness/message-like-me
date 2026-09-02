@@ -190,30 +190,41 @@ non-Latest `v0.8.0` bootstrap coordinate.
 
 The tag-triggered Release workflow:
 
-1. checks out the requested tag at depth one with tags and persisted credentials
-   disabled. A dependency-free helper reads two identical, bounded
-   `git ls-remote --refs` snapshots from the fixed repository URL. Each snapshot
-   contains exact `refs/heads/main` plus canonical `refs/tags/v*` rows, is at
-   most 128 KiB and 500 rows, and rejects malformed, duplicate, or unexpected
-   refs. Historical lightweight stable tags participate in newest-version
-   ordering, but the requested tag itself must be one direct annotated tag
-   object whose embedded name is exact and whose target is the checked commit.
-   The helper removes stale `FETCH_HEAD`, imports only the fully qualified main
-   and requested tag into an initially empty private namespace with `--no-tags`,
-   no configured refspec, no force, and no `FETCH_HEAD` write, then proves that
-   namespace contains exactly those two advertised objects. It rejects
-   tag-of-tag and lightweight requested tags and proves the release commit is a
-   reviewed ancestor of exact advertised current `main`. The workflow then runs
+1. checks out only the requested tag at depth one with tags and persisted
+   credentials disabled. Before importing anything else, the checkout must
+   contain exactly that local tag ref. A dependency-free helper takes separate
+   fixed-URL snapshots of exact `refs/heads/main` and canonical
+   `git ls-remote --refs --tags ... refs/tags/v*` output. The combined governed
+   inventory is at most 64 KiB and 500 rows and rejects malformed object IDs, non-fully-qualified
+   or unexpected refs, duplicate rows, and noncanonical order. Historical
+   lightweight stable tags participate in newest-version ordering, but the
+   requested tag itself must be one direct annotated tag object whose embedded
+   name is exact and whose target is the checked commit. The helper removes
+   stale `FETCH_HEAD`, then fetches only fully qualified current `main` into
+   `refs/remotes/origin/main` and the requested tag into its same-name local tag
+   with `--no-tags`, no configured refspec, no force, no submodules, and no
+   `FETCH_HEAD` write. A shallow checkout is unshallowed through only those two
+   governed refspecs. The post-import ref set must be exactly those two names and
+   both objects must equal the first remote advertisement. The helper rejects
+   tag-of-tag and lightweight requested tags, proves the release commit is a
+   reviewed ancestor of exact advertised current `main`, and requires an
+   identical terminal remote snapshot. The workflow then runs
    the complete root, site, generated-file,
    packed-package, and synthetic macOS gates with read-only permissions;
 2. creates one npm tarball and `SHA256SUMS`, preserves those exact bytes as a
-   30-day workflow artifact, preserves a separate numeric-ID-bound artifact
-   containing only the reviewed dependency-free npm writer, and installs the
-   unchanged tarball on macOS and Linux;
-3. gives only the GitHub publication job `contents: write`. Its SHA-pinned
-   checkout, Bun setup, and numeric-ID artifact download are part of the
-   privileged TCB, but the GitHub token is scoped only to the final
-   dependency-free publisher step. That publisher revalidates the remote
+   30-day workflow artifact, preserves separate numeric-ID-bound artifacts
+   containing only the reviewed dependency-free npm writer and GitHub Release
+   writer closures. Both closures are copied from regular non-symlink files into
+   fresh runner-temporary roots and checked against exact file inventories before
+   any repository code or dependency executes. Every local writer import names its
+   `.ts` source explicitly. The workflow also installs the unchanged tarball on
+   macOS and Linux;
+3. gives only the GitHub publication job `contents: write`. That job performs no
+   repository checkout or dependency install. Its SHA-pinned Bun and numeric-ID
+   artifact actions are part of the privileged TCB. The GitHub token is scoped only to the final
+   dependency-free publisher step. The writer artifact
+   was assembled from the verified release source by the read-only verification
+   job and is bound by its numeric ID and digest. That publisher revalidates the remote
    annotated tag object and reviewed-`main` ancestry, creates or safely resumes
    one deterministic draft, uploads only the tarball and checksum, publishes it
    as Latest, and requires the Release to read back immutable with exact names,
@@ -273,11 +284,14 @@ ancestry to agree. The current workflow source must still be exact current
 manual `workflow_dispatch` with an untrusted release-tag input exists only for
 recovery. Both paths use the same checks. That workflow:
 
-1. runs the same fixed-URL, bounded, double-snapshot ref helper from exact
-   current `main`. The helper imports only exact main and the requested tag into
-   its private namespace, requires `GITHUB_SHA` to equal advertised current
-   main, and separately binds the peeled release commit to the successful
-   Release run. It then proves the workflow file, `GITHUB_REF`, current default
+1. runs the same fixed-URL, bounded, double-snapshot ref helper from an exact,
+   depth-one, no-tag, no-credential current-`main` checkout whose initial local
+   ref set is empty. The helper imports only exact main into
+   `refs/remotes/origin/main` and the requested tag into its same-name local tag,
+   requires `GITHUB_SHA` to equal advertised current main, and separately binds
+   the direct annotated tag's peeled release commit to the successful Release
+   run. Its post-import ref set must be exactly those two governed refs. It then
+   proves the workflow file, `GITHUB_REF`, current default
    branch, annotated tag object, reviewed ancestry, root and site versions,
    exact npm
    version and Latest integrity, provenance, immutable artifact-complete Latest

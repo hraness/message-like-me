@@ -6,10 +6,8 @@ import { join, resolve } from "node:path";
 const REPOSITORY_URL = "https://github.com/hraness/message-like-me.git";
 const MAIN_BRANCH = "main";
 const MAIN_REF = `refs/heads/${MAIN_BRANCH}`;
-const PRIVATE_NAMESPACE = "refs/message-like-me-release-authority";
-const PRIVATE_MAIN_REF = `${PRIVATE_NAMESPACE}/main`;
-const PRIVATE_TAG_REF = `${PRIVATE_NAMESPACE}/requested-tag`;
-const MAXIMUM_SNAPSHOT_BYTES = 128 * 1_024;
+const LOCAL_MAIN_REF = `refs/remotes/origin/${MAIN_BRANCH}`;
+const MAXIMUM_SNAPSHOT_BYTES = 64 * 1_024;
 const MAXIMUM_SNAPSHOT_ROWS = 500;
 const MAXIMUM_GIT_OUTPUT_BYTES = 256 * 1_024;
 const GIT_TIMEOUT_MILLISECONDS = 120_000;
@@ -33,6 +31,11 @@ type RemoteRef = Readonly<{
 export type RemoteSnapshot = Readonly<{
   canonical: string;
   entries: readonly RemoteRef[];
+  requestedTagOid: string;
+}>;
+
+type GovernedRemoteSnapshot = Readonly<{
+  canonical: string;
   mainOid: string;
   requestedTagOid: string;
 }>;
@@ -66,6 +69,15 @@ function decode(bytes: Uint8Array, label: string): string {
 
 function bytes(value: string): Uint8Array {
   return new TextEncoder().encode(value);
+}
+
+function inventoryRowCountBeforeParsing(value: Uint8Array | string): number {
+  const inputBytes = typeof value === "string" ? bytes(value) : value;
+  let rows = 0;
+  for (const byte of inputBytes) {
+    if (byte === 0x0a) rows += 1;
+  }
+  return rows;
 }
 
 function createDefaultGitRunner(workingDirectory: string): GitCommandRunner {
@@ -151,50 +163,74 @@ function compareVersions(
   return 0;
 }
 
-export function parseRemoteSnapshot(
+function parseInventoryRows(
   value: Uint8Array | string,
-  requestedTag: string,
-): RemoteSnapshot {
-  const requestedVersion = stableVersion(requestedTag);
-  if (requestedVersion === undefined) fail("Requested release tag is not one canonical stable version.");
+  label: string,
+): Readonly<{ canonical: string; entries: readonly RemoteRef[] }> {
   const inputBytes = typeof value === "string" ? bytes(value) : value;
   if (inputBytes.byteLength === 0 || inputBytes.byteLength > MAXIMUM_SNAPSHOT_BYTES) {
-    fail("Remote ref inventory is empty or exceeds its byte bound.");
+    fail(`${label} is empty or exceeds its byte bound.`);
   }
-  const input = typeof value === "string" ? value : decode(value, "Remote ref inventory");
+  const input = typeof value === "string" ? value : decode(value, label);
   if (input.includes("\0") || input.includes("\r") || !input.endsWith("\n")) {
-    fail("Remote ref inventory is not canonical line-oriented output.");
+    fail(`${label} is not canonical line-oriented output.`);
   }
   const lines = input.slice(0, -1).split("\n");
   if (lines.length === 0 || lines.length > MAXIMUM_SNAPSHOT_ROWS || lines.some((line) => line.length === 0)) {
-    fail("Remote ref inventory has an invalid row count.");
+    fail(`${label} has an invalid row count.`);
   }
 
   const entries: RemoteRef[] = [];
   const byRef = new Map<string, string>();
   for (const line of lines) {
     const fields = line.split("\t");
-    if (fields.length !== 2) fail("Remote ref inventory row is malformed.");
+    if (fields.length !== 2) fail(`${label} row is malformed.`);
     const [oid, ref] = fields;
     if (oid === undefined || ref === undefined || !SHA.test(oid)) {
-      fail("Remote ref inventory row has a malformed object ID.");
+      fail(`${label} row has a malformed object ID.`);
     }
-    if (ref !== MAIN_REF && !validTagRef(ref)) {
-      fail(`Remote ref inventory contains unexpected ref ${ref}.`);
-    }
-    if (byRef.has(ref)) fail(`Remote ref inventory contains duplicate ref ${ref}.`);
+    if (byRef.has(ref)) fail(`${label} contains duplicate ref ${ref}.`);
     byRef.set(ref, oid);
     entries.push(Object.freeze({ oid, ref }));
   }
 
-  const mainOid = byRef.get(MAIN_REF);
-  const requestedTagOid = byRef.get(`refs/tags/${requestedTag}`);
-  if (mainOid === undefined) fail(`Remote ref inventory is missing ${MAIN_REF}.`);
-  if (requestedTagOid === undefined) fail(`Remote ref inventory is missing refs/tags/${requestedTag}.`);
+  const canonical = entries
+    .toSorted((left, right) => left.ref < right.ref ? -1 : left.ref > right.ref ? 1 : 0)
+    .map((entry) => `${entry.oid}\t${entry.ref}\n`)
+    .join("");
+  if (canonical !== input) fail(`${label} is not in canonical ref order.`);
+  return Object.freeze({ canonical, entries: Object.freeze(entries) });
+}
+
+export function parseRemoteMainSnapshot(value: Uint8Array | string): string {
+  const parsed = parseInventoryRows(value, "Remote main-ref inventory");
+  if (parsed.entries.length !== 1 || parsed.entries[0]?.ref !== MAIN_REF) {
+    fail(`Remote main-ref inventory must contain exactly ${MAIN_REF}.`);
+  }
+  const mainOid = parsed.entries[0].oid;
+  if (!SHA.test(mainOid)) fail("Remote main-ref inventory has no exact commit.");
+  return mainOid;
+}
+
+export function parseRemoteSnapshot(
+  value: Uint8Array | string,
+  requestedTag: string,
+): RemoteSnapshot {
+  const requestedVersion = stableVersion(requestedTag);
+  if (requestedVersion === undefined) fail("Requested release tag is not one canonical stable version.");
+  const parsed = parseInventoryRows(value, "Remote tag inventory");
+  for (const entry of parsed.entries) {
+    if (!validTagRef(entry.ref)) fail(`Remote tag inventory contains unexpected ref ${entry.ref}.`);
+  }
+
+  const requestedTagOid = parsed.entries.find(
+    (entry) => entry.ref === `refs/tags/${requestedTag}`,
+  )?.oid;
+  if (requestedTagOid === undefined) fail(`Remote tag inventory is missing refs/tags/${requestedTag}.`);
 
   let newestTag: string | undefined;
   let newestVersion: readonly [bigint, bigint, bigint] | undefined;
-  for (const entry of entries) {
+  for (const entry of parsed.entries) {
     if (!entry.ref.startsWith("refs/tags/")) continue;
     const tag = entry.ref.slice("refs/tags/".length);
     const version = stableVersion(tag);
@@ -208,33 +244,58 @@ export function parseRemoteSnapshot(
     fail(`Requested release tag is not the newest advertised stable tag (${newestTag ?? "none"}).`);
   }
 
-  const canonical = entries
-    .toSorted((left, right) => left.ref < right.ref ? -1 : left.ref > right.ref ? 1 : 0)
-    .map((entry) => `${entry.oid}\t${entry.ref}\n`)
-    .join("");
   return Object.freeze({
-    canonical,
-    entries: Object.freeze(entries),
-    mainOid,
+    canonical: parsed.canonical,
+    entries: parsed.entries,
     requestedTagOid,
   });
 }
 
-function readSnapshot(runner: GitCommandRunner, requestedTag: string): RemoteSnapshot {
-  return parseRemoteSnapshot(command(
-    runner,
-    ["ls-remote", "--refs", REPOSITORY_URL, MAIN_REF, "refs/tags/v*"],
-    "Remote ref inventory",
-  ), requestedTag);
+export function parseGovernedRemoteSnapshot(
+  mainValue: Uint8Array | string,
+  tagValue: Uint8Array | string,
+  requestedTag: string,
+): GovernedRemoteSnapshot {
+  const mainBytes = typeof mainValue === "string" ? bytes(mainValue) : mainValue;
+  const tagBytes = typeof tagValue === "string" ? bytes(tagValue) : tagValue;
+  if (mainBytes.byteLength + tagBytes.byteLength > MAXIMUM_SNAPSHOT_BYTES) {
+    fail("Combined governed remote ref inventory exceeds its byte bound.");
+  }
+  if (
+    inventoryRowCountBeforeParsing(mainValue) + inventoryRowCountBeforeParsing(tagValue)
+    > MAXIMUM_SNAPSHOT_ROWS
+  ) {
+    fail("Combined governed remote ref inventory exceeds its row bound.");
+  }
+  const main = parseInventoryRows(mainValue, "Remote main-ref inventory");
+  const tags = parseRemoteSnapshot(tagValue, requestedTag);
+  if (main.entries.length + tags.entries.length > MAXIMUM_SNAPSHOT_ROWS) {
+    fail("Combined governed remote ref inventory exceeds its row bound.");
+  }
+  if (main.entries.length !== 1 || main.entries[0]?.ref !== MAIN_REF) {
+    fail(`Remote main-ref inventory must contain exactly ${MAIN_REF}.`);
+  }
+  const mainOid = main.entries[0].oid;
+  if (!SHA.test(mainOid)) fail("Remote main-ref inventory has no exact commit.");
+  return Object.freeze({
+    canonical: `${main.canonical}${tags.canonical}`,
+    mainOid,
+    requestedTagOid: tags.requestedTagOid,
+  });
 }
 
-function expectEmptyNamespace(runner: GitCommandRunner): void {
-  const value = decode(command(
+function readSnapshot(runner: GitCommandRunner, requestedTag: string): GovernedRemoteSnapshot {
+  const main = command(
     runner,
-    ["for-each-ref", "--format=%(refname)", `${PRIVATE_NAMESPACE}/`],
-    "Private release-ref namespace preflight",
-  ), "Private release-ref namespace preflight");
-  if (value !== "") fail("Private release-ref namespace was not empty before import.");
+    ["ls-remote", "--refs", REPOSITORY_URL, MAIN_REF],
+    "Remote main-ref inventory",
+  );
+  const tags = command(
+    runner,
+    ["ls-remote", "--refs", "--tags", REPOSITORY_URL, "refs/tags/v*"],
+    "Remote tag inventory",
+  );
+  return parseGovernedRemoteSnapshot(main, tags, requestedTag);
 }
 
 function removeStaleFetchHead(runner: GitCommandRunner): string {
@@ -274,22 +335,22 @@ type LocalRef = Readonly<{
   ref: string;
 }>;
 
-function readPrivateRefs(runner: GitCommandRunner): readonly LocalRef[] {
+function readLocalRefs(runner: GitCommandRunner): readonly LocalRef[] {
   const value = decode(command(
     runner,
     [
       "for-each-ref",
       "--format=%(refname)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)",
-      `${PRIVATE_NAMESPACE}/`,
     ],
-    "Private release-ref namespace inventory",
-  ), "Private release-ref namespace inventory");
+    "Local ref inventory",
+  ), "Local ref inventory");
+  if (value === "") return Object.freeze([]);
   if (value.includes("\r") || !value.endsWith("\n")) {
-    fail("Private release-ref namespace inventory is malformed.");
+    fail("Local ref inventory is malformed.");
   }
   return Object.freeze(value.slice(0, -1).split("\n").map((line) => {
     const fields = line.split("\0");
-    if (fields.length !== 5) fail("Private release-ref namespace record is malformed.");
+    if (fields.length !== 5) fail("Local ref inventory record is malformed.");
     const [ref, objectName, objectType, peeledName, peeledType] = fields;
     if (
       ref === undefined
@@ -297,9 +358,24 @@ function readPrivateRefs(runner: GitCommandRunner): readonly LocalRef[] {
       || objectType === undefined
       || peeledName === undefined
       || peeledType === undefined
-    ) fail("Private release-ref namespace record is incomplete.");
+      || ref.length === 0
+      || !SHA.test(objectName)
+    ) fail("Local ref inventory record is incomplete.");
     return Object.freeze({ objectName, objectType, peeledName, peeledType, ref });
   }));
+}
+
+function expectExactLocalRefNames(
+  runner: GitCommandRunner,
+  expected: readonly string[],
+  label: string,
+): readonly LocalRef[] {
+  const refs = readLocalRefs(runner);
+  const names = refs.map((entry) => entry.ref);
+  if (names.length !== expected.length || names.some((name, index) => name !== expected[index])) {
+    fail(`${label} does not contain the exact governed ref set.`);
+  }
+  return refs;
 }
 
 function parseAnnotatedTag(
@@ -398,7 +474,12 @@ export function verifyReleaseRefAuthority(input: ReleaseRefAuthorityInput): Rele
   }
 
   const first = readSnapshot(runner, requestedTag);
-  expectEmptyNamespace(runner);
+  const localTagRef = `refs/tags/${requestedTag}`;
+  expectExactLocalRefNames(
+    runner,
+    input.mode === "release" ? [localTagRef] : [],
+    "Local release-ref preflight",
+  );
   const fetchHead = removeStaleFetchHead(runner);
   const shallow = decode(command(
     runner,
@@ -415,17 +496,18 @@ export function verifyReleaseRefAuthority(input: ReleaseRefAuthorityInput): Rele
       "--no-recurse-submodules",
       ...(shallow === "true" ? ["--unshallow"] : []),
       REPOSITORY_URL,
-      `${MAIN_REF}:${PRIVATE_MAIN_REF}`,
-      `refs/tags/${requestedTag}:${PRIVATE_TAG_REF}`,
+      `${MAIN_REF}:${LOCAL_MAIN_REF}`,
+      `${localTagRef}:${localTagRef}`,
     ],
     "Exact governed release-ref import",
   );
   if (existsSync(fetchHead)) fail("Exact governed import wrote forbidden FETCH_HEAD state.");
 
-  const refs = readPrivateRefs(runner);
-  if (refs.length !== 2 || refs[0]?.ref !== PRIVATE_MAIN_REF || refs[1]?.ref !== PRIVATE_TAG_REF) {
-    fail("Private release-ref namespace does not contain exactly the governed main and requested tag refs.");
-  }
+  const refs = expectExactLocalRefNames(
+    runner,
+    [LOCAL_MAIN_REF, localTagRef],
+    "Local release-ref post-import inventory",
+  );
   const main = refs[0];
   const tag = refs[1];
   if (
@@ -444,7 +526,7 @@ export function verifyReleaseRefAuthority(input: ReleaseRefAuthorityInput): Rele
   ) fail("Imported requested ref is not the advertised direct annotated tag.");
   parseAnnotatedTag(command(
     runner,
-    ["cat-file", "tag", PRIVATE_TAG_REF],
+    ["cat-file", "tag", localTagRef],
     "Requested annotated tag object read",
   ), requestedTag, tag.peeledName);
 
@@ -465,7 +547,7 @@ export function verifyReleaseRefAuthority(input: ReleaseRefAuthorityInput): Rele
     }
   }
 
-  const ancestry = runner(["merge-base", "--is-ancestor", tag.peeledName, PRIVATE_MAIN_REF]);
+  const ancestry = runner(["merge-base", "--is-ancestor", tag.peeledName, LOCAL_MAIN_REF]);
   if (ancestry.exitCode !== 0) fail("Verified release commit is not an ancestor of exact advertised main.");
   const second = readSnapshot(runner, requestedTag);
   if (second.canonical !== first.canonical) fail("Remote release-ref inventory changed during verification.");

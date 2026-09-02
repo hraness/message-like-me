@@ -8,10 +8,10 @@ import {
   parseGitHubRelease,
   publicRepository,
   releaseArchiveName,
-} from "./release-distribution-policy";
-import { parseGitHubIncludedJsonResponse } from "./release-included-response";
-import { publicReleaseEnvironment } from "./release-process-environment";
-import { assertReviewedMainComparison } from "./release-ref-authority";
+} from "./release-distribution-policy.ts";
+import { parseGitHubIncludedJsonResponse } from "./release-included-response.ts";
+import { publicReleaseEnvironment } from "./release-process-environment.ts";
+import { assertReviewedMainComparison } from "./release-ref-authority.ts";
 
 const [tagArgument, tarballArgument, checksumArgument] = process.argv.slice(2);
 if (tagArgument === undefined || tarballArgument === undefined || checksumArgument === undefined) {

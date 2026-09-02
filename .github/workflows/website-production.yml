@@ -135,7 +135,7 @@ jobs:
           authority_output="$(node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$REQUESTED_TAG" "$RECOVERY_WORKFLOW_SHA" "$UPSTREAM_SHA")"
           printf '%s\n' "$authority_output" >> "$GITHUB_OUTPUT"
           workflow_commit="$(git rev-parse --verify 'HEAD^{commit}')"
-          tag_commit="$(git rev-parse --verify 'refs/message-like-me-release-authority/requested-tag^{commit}')"
+          tag_commit="$(git rev-parse --verify "refs/tags/$REQUESTED_TAG^{commit}")"
           package_version="$(git show "$tag_commit:package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
           site_version="$(git show "$tag_commit:site/package.json" | node -e 'let value=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(value); if (typeof parsed.version !== "string") process.exit(1); process.stdout.write(parsed.version); });')"
           if [[ "$REQUESTED_TAG" != "v$package_version" || "$site_version" != "$package_version" ]]; then

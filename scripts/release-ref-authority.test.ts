@@ -8,6 +8,8 @@ import {
   assertReviewedMainComparison,
   type GitCommandResult,
   type GitCommandRunner,
+  parseGovernedRemoteSnapshot,
+  parseRemoteMainSnapshot,
   parseRemoteSnapshot,
   verifyReleaseRefAuthority,
 } from "./release-ref-authority";
@@ -34,6 +36,23 @@ function git(cwd: string, arguments_: readonly string[]): Uint8Array {
   return new Uint8Array(result.stdout);
 }
 
+function preparePromotionCheckout(input: Fixture): void {
+  git(input.work, ["update-ref", "-d", "refs/tags/v1.0.0"]);
+  checkoutMain(input);
+}
+
+function checkoutMain(input: Fixture): void {
+  git(input.work, [
+    "fetch",
+    "--depth",
+    "1",
+    "--no-tags",
+    input.remote,
+    "refs/heads/main",
+  ]);
+  git(input.work, ["checkout", "--detach", "FETCH_HEAD"]);
+}
+
 function text(cwd: string, arguments_: readonly string[]): string {
   return new TextDecoder().decode(git(cwd, arguments_)).trim();
 }
@@ -55,57 +74,68 @@ function fixture(options: Readonly<{
 }> = {}): Fixture {
   const root = mkdtempSync(join(tmpdir(), "mlm-release-ref-authority-"));
   temporaryRoots.push(root);
+  const source = join(root, "source");
   const work = join(root, "work");
   const remote = join(root, "remote.git");
-  git(root, ["init", "--initial-branch=main", work]);
-  git(work, ["config", "user.email", "release-ref-authority@example.invalid"]);
-  git(work, ["config", "user.name", "Release Ref Authority Fixture"]);
-  writeFileSync(join(work, "fixture.txt"), "release\n", "utf8");
-  git(work, ["add", "fixture.txt"]);
-  git(work, ["commit", "--no-gpg-sign", "-m", "release"]);
-  const releaseBase = text(work, ["rev-parse", "HEAD"]);
+  git(root, ["init", "--initial-branch=main", source]);
+  git(source, ["config", "user.email", "release-ref-authority@example.invalid"]);
+  git(source, ["config", "user.name", "Release Ref Authority Fixture"]);
+  writeFileSync(join(source, "fixture.txt"), "release\n", "utf8");
+  git(source, ["add", "fixture.txt"]);
+  git(source, ["commit", "--no-gpg-sign", "-m", "release"]);
+  const releaseBase = text(source, ["rev-parse", "HEAD"]);
 
   let releaseSha = releaseBase;
   if (options.divergent === true) {
-    git(work, ["switch", "--create", "release-side"]);
-    writeFileSync(join(work, "side.txt"), "side\n", "utf8");
-    git(work, ["add", "side.txt"]);
-    git(work, ["commit", "--no-gpg-sign", "-m", "side"]);
-    releaseSha = text(work, ["rev-parse", "HEAD"]);
-    git(work, ["switch", "main"]);
+    git(source, ["switch", "--create", "release-side"]);
+    writeFileSync(join(source, "side.txt"), "side\n", "utf8");
+    git(source, ["add", "side.txt"]);
+    git(source, ["commit", "--no-gpg-sign", "-m", "side"]);
+    releaseSha = text(source, ["rev-parse", "HEAD"]);
+    git(source, ["switch", "main"]);
   }
 
   const kind = options.tagKind ?? "annotated";
   if (kind === "lightweight") {
-    git(work, ["tag", "v1.0.0", releaseSha]);
+    git(source, ["tag", "v1.0.0", releaseSha]);
   } else if (kind === "tag-of-tag") {
-    git(work, ["tag", "--annotate", "inner-v1.0.0", "--message", "inner", releaseSha]);
-    git(work, ["tag", "--annotate", "v1.0.0", "--message", "outer", "inner-v1.0.0"]);
+    git(source, ["tag", "--annotate", "inner-v1.0.0", "--message", "inner", releaseSha]);
+    git(source, ["tag", "--annotate", "v1.0.0", "--message", "outer", "inner-v1.0.0"]);
   } else {
-    git(work, ["tag", "--annotate", "v1.0.0", "--message", "release", releaseSha]);
+    git(source, ["tag", "--annotate", "v1.0.0", "--message", "release", releaseSha]);
   }
-  if (options.higherLightweight === true) git(work, ["tag", "v1.0.1", releaseSha]);
-  if (options.nonstable === true) git(work, ["tag", "v1.0.1-rc.1", releaseSha]);
+  if (options.higherLightweight === true) git(source, ["tag", "v1.0.1", releaseSha]);
+  if (options.nonstable === true) git(source, ["tag", "v1.0.1-rc.1", releaseSha]);
 
-  writeFileSync(join(work, "fixture.txt"), "main\n", "utf8");
-  git(work, ["add", "fixture.txt"]);
-  git(work, ["commit", "--no-gpg-sign", "-m", "main"]);
-  const mainSha = text(work, ["rev-parse", "HEAD"]);
+  writeFileSync(join(source, "fixture.txt"), "main\n", "utf8");
+  git(source, ["add", "fixture.txt"]);
+  git(source, ["commit", "--no-gpg-sign", "-m", "main"]);
+  const mainSha = text(source, ["rev-parse", "HEAD"]);
   git(root, ["init", "--bare", remote]);
-  git(work, ["remote", "add", "fixture-origin", remote]);
-  git(work, ["push", "fixture-origin", "refs/heads/main:refs/heads/main"]);
+  git(source, ["remote", "add", "fixture-origin", remote]);
+  git(source, ["push", "fixture-origin", "refs/heads/main:refs/heads/main"]);
   for (const tag of ["inner-v1.0.0", "v1.0.0", "v1.0.1", "v1.0.1-rc.1"]) {
-    if (spawnSync("git", ["show-ref", "--verify", `refs/tags/${tag}`], { cwd: work }).status === 0) {
-      git(work, ["push", "fixture-origin", `refs/tags/${tag}:refs/tags/${tag}`]);
+    if (spawnSync("git", ["show-ref", "--verify", `refs/tags/${tag}`], { cwd: source }).status === 0) {
+      git(source, ["push", "fixture-origin", `refs/tags/${tag}:refs/tags/${tag}`]);
     }
   }
-  git(work, ["checkout", "--detach", releaseSha]);
+  const tagObjectSha = text(source, ["rev-parse", "refs/tags/v1.0.0"]);
+  git(root, ["init", work]);
+  git(work, [
+    "fetch",
+    "--depth",
+    "1",
+    "--no-tags",
+    remote,
+    "refs/tags/v1.0.0:refs/tags/v1.0.0",
+  ]);
+  git(work, ["checkout", "--detach", "refs/tags/v1.0.0^{commit}"]);
   return Object.freeze({
     mainSha,
     releaseSha,
     remote,
     root,
-    tagObjectSha: text(work, ["rev-parse", "refs/tags/v1.0.0"]),
+    tagObjectSha,
     work,
   });
 }
@@ -156,32 +186,38 @@ describe("bounded remote ref inventory", () => {
   const main = "1".repeat(40);
   const tag = "2".repeat(40);
 
-  test("accepts exact main plus stable and nonstable v* tags", () => {
+  test("accepts one exact main and canonical stable plus nonstable v* tags", () => {
+    expect(parseRemoteMainSnapshot(inventory([main, "refs/heads/main"]))).toBe(main);
     const parsed = parseRemoteSnapshot(inventory(
-      [main, "refs/heads/main"],
       [tag, "refs/tags/v1.2.3"],
       [tag, "refs/tags/v1.2.4-rc.1"],
     ), "v1.2.3");
-    expect(parsed.mainOid).toBe(main);
     expect(parsed.requestedTagOid).toBe(tag);
-    expect(parsed.entries).toHaveLength(3);
+    expect(parsed.entries).toHaveLength(2);
   });
 
   test("fails missing, duplicate, malformed, noncanonical, and unexpected rows closed", () => {
     for (const value of [
       "",
-      inventory([main, "refs/heads/main"]),
-      inventory([main, "refs/heads/main"], [tag, "refs/tags/v1.2.3"], [tag, "refs/tags/v1.2.3"]),
-      `${main} refs/heads/main\n${tag}\trefs/tags/v1.2.3\n`,
-      inventory(["z".repeat(40), "refs/heads/main"], [tag, "refs/tags/v1.2.3"]),
-      inventory([main, "refs/heads/main"], [tag, "refs/tags/v1..2.3"]),
-      inventory([main, "refs/heads/other"], [tag, "refs/tags/v1.2.3"]),
-      inventory([main, "refs/heads/main"], [tag, "refs/tags/v1.2.3^{}"]),
-      `${main}\trefs/heads/main\r\n${tag}\trefs/tags/v1.2.3\r\n`,
-      `${main}\trefs/heads/main\n${tag}\trefs/tags/v1.2.3`,
+      inventory([tag, "refs/tags/v1.2.2"]),
+      inventory([tag, "refs/tags/v1.2.3"], [tag, "refs/tags/v1.2.3"]),
+      `${tag} refs/tags/v1.2.3\n`,
+      inventory(["z".repeat(40), "refs/tags/v1.2.3"]),
+      inventory([tag, "refs/tags/v1..2.3"]),
+      inventory([main, "refs/heads/main"], [tag, "refs/tags/v1.2.3"]),
+      inventory([tag, "refs/tags/v1.2.3^{}"]),
+      `${tag}\trefs/tags/v1.2.3\r\n`,
+      `${tag}\trefs/tags/v1.2.3`,
+      inventory([tag, "refs/tags/v1.2.4"], [tag, "refs/tags/v1.2.3"]),
     ]) expect(() => parseRemoteSnapshot(value, "v1.2.3")).toThrow();
     expect(() => parseRemoteSnapshot(new Uint8Array([0xff]), "v1.2.3"))
       .toThrow("valid UTF-8");
+    for (const value of [
+      "",
+      inventory([main, "refs/heads/other"]),
+      inventory([main, "refs/heads/main"], [main, "refs/heads/main"]),
+      inventory(["z".repeat(40), "refs/heads/main"]),
+    ]) expect(() => parseRemoteMainSnapshot(value)).toThrow();
   });
 
   test("fails bounded inventory and a newer lightweight stable tag", () => {
@@ -189,15 +225,51 @@ describe("bounded remote ref inventory", () => {
       tag,
       `refs/tags/v1.2.${String(index)}`,
     ] as const);
-    expect(() => parseRemoteSnapshot(inventory([main, "refs/heads/main"], ...tooMany), "v1.2.500"))
+    expect(() => parseRemoteSnapshot(inventory(...tooMany), "v1.2.500"))
       .toThrow("row count");
-    expect(() => parseRemoteSnapshot("x".repeat(128 * 1_024 + 1), "v1.2.3"))
+    expect(() => parseRemoteSnapshot("x".repeat(64 * 1_024 + 1), "v1.2.3"))
       .toThrow("byte bound");
     expect(() => parseRemoteSnapshot(inventory(
-      [main, "refs/heads/main"],
       [tag, "refs/tags/v1.2.3"],
       [tag, "refs/tags/v1.2.4"],
     ), "v1.2.3")).toThrow("newest advertised stable tag");
+  });
+
+  test("bounds the combined main and tag inventory", () => {
+    const mainInventory = inventory([main, "refs/heads/main"]);
+    const maximumTags = [
+      [tag, "refs/tags/v1.2.3"],
+      ...Array.from({ length: 498 }, (_, index) => [
+        tag,
+        `refs/tags/v1.2.3-a${String(index).padStart(3, "0")}`,
+      ] as const),
+    ] as const;
+    expect(() => parseGovernedRemoteSnapshot(
+      mainInventory,
+      inventory(...maximumTags),
+      "v1.2.3",
+    )).not.toThrow();
+    expect(() => parseGovernedRemoteSnapshot(
+      mainInventory,
+      inventory(
+        ...maximumTags,
+        [tag, "refs/tags/v1.2.3-z999"],
+      ),
+      "v1.2.3",
+    )).toThrow("row bound");
+
+    const longTags = inventory(
+      [tag, "refs/tags/v1.2.3"],
+      ...Array.from({ length: 363 }, (_, index) => [
+        tag,
+        `refs/tags/v9${String(index).padStart(3, "0")}${"a".repeat(123)}`,
+      ] as const),
+      [tag, "refs/tags/vzz-a"],
+      [tag, "refs/tags/vzz-b"],
+    );
+    expect(() => parseRemoteSnapshot(longTags, "v1.2.3")).not.toThrow();
+    expect(() => parseGovernedRemoteSnapshot(mainInventory, longTags, "v1.2.3"))
+      .toThrow("byte bound");
   });
 });
 
@@ -213,8 +285,10 @@ describe("exact Git release-ref authority", () => {
 
     const snapshots = local.calls.filter((call) => call[0] === "ls-remote");
     expect(snapshots).toEqual([
-      ["ls-remote", "--refs", repositoryUrl, "refs/heads/main", "refs/tags/v*"],
-      ["ls-remote", "--refs", repositoryUrl, "refs/heads/main", "refs/tags/v*"],
+      ["ls-remote", "--refs", repositoryUrl, "refs/heads/main"],
+      ["ls-remote", "--refs", "--tags", repositoryUrl, "refs/tags/v*"],
+      ["ls-remote", "--refs", repositoryUrl, "refs/heads/main"],
+      ["ls-remote", "--refs", "--tags", repositoryUrl, "refs/tags/v*"],
     ]);
     const fetch = local.calls.find((call) => call[0] === "fetch");
     expect(fetch).toEqual([
@@ -222,16 +296,20 @@ describe("exact Git release-ref authority", () => {
       "--no-tags",
       "--no-write-fetch-head",
       "--no-recurse-submodules",
+      "--unshallow",
       repositoryUrl,
-      "refs/heads/main:refs/message-like-me-release-authority/main",
-      "refs/tags/v1.0.0:refs/message-like-me-release-authority/requested-tag",
+      "refs/heads/main:refs/remotes/origin/main",
+      "refs/tags/v1.0.0:refs/tags/v1.0.0",
     ]);
     expect(fetch?.some((argument) => argument === "--force" || argument.startsWith("+"))).toBe(false);
+    expect(text(input.work, ["for-each-ref", "--format=%(refname)"]))
+      .toBe("refs/remotes/origin/main\nrefs/tags/v1.0.0");
   });
 
   test("keeps current-main workflow code separate from the verified release commit", () => {
     const input = fixture();
-    git(input.work, ["checkout", "--detach", input.mainSha]);
+    expect(input.mainSha).not.toBe(input.releaseSha);
+    preparePromotionCheckout(input);
     const local = runnerFor(input);
     expect(verifyReleaseRefAuthority({
       expectedReleaseSha: input.releaseSha,
@@ -242,7 +320,7 @@ describe("exact Git release-ref authority", () => {
     })).toEqual({ mainSha: input.mainSha, sha: input.releaseSha, tag: "v1.0.0" });
 
     const wrongWorkflow = fixture();
-    git(wrongWorkflow.work, ["checkout", "--detach", wrongWorkflow.mainSha]);
+    preparePromotionCheckout(wrongWorkflow);
     expect(() => verifyReleaseRefAuthority({
       expectedReleaseSha: wrongWorkflow.releaseSha,
       mode: "promotion",
@@ -252,7 +330,7 @@ describe("exact Git release-ref authority", () => {
     })).toThrow("exact advertised current main");
 
     const wrongUpstream = fixture();
-    git(wrongUpstream.work, ["checkout", "--detach", wrongUpstream.mainSha]);
+    preparePromotionCheckout(wrongUpstream);
     expect(() => verifyReleaseRefAuthority({
       expectedReleaseSha: "f".repeat(40),
       mode: "promotion",
@@ -262,27 +340,27 @@ describe("exact Git release-ref authority", () => {
     })).toThrow("Successful Release run and annotated tag target different commits");
 
     const wrongReleaseCheckout = fixture();
-    git(wrongReleaseCheckout.work, ["checkout", "--detach", wrongReleaseCheckout.mainSha]);
+    checkoutMain(wrongReleaseCheckout);
     expect(() => verifyReleaseRefAuthority({
       mode: "release",
       requestedTag: "v1.0.0",
       runner: runnerFor(wrongReleaseCheckout).runner,
     })).toThrow("Release checkout does not equal the verified tag commit");
-  });
+  }, 15_000);
 
   test("conditionally unshallows exact refs and removes stale FETCH_HEAD authority", () => {
     const input = fixture();
     const shallowWork = join(input.root, "shallow");
-    git(input.root, [
-      "clone",
+    git(input.root, ["init", shallowWork]);
+    git(shallowWork, [
+      "fetch",
       "--depth",
       "1",
       "--no-tags",
-      "--branch",
-      "main",
       `file://${input.remote}`,
-      shallowWork,
+      "refs/heads/main",
     ]);
+    git(shallowWork, ["checkout", "--detach", "FETCH_HEAD"]);
     const shallowInput = Object.freeze({ ...input, work: shallowWork });
     const fetchHeadValue = text(shallowWork, ["rev-parse", "--git-path", "FETCH_HEAD"]);
     const fetchHead = resolve(shallowWork, fetchHeadValue);
@@ -327,7 +405,7 @@ describe("exact Git release-ref authority", () => {
     })).toThrow("newest advertised stable tag");
   });
 
-  test("rejects tag/main divergence and an unexpected preexisting private ref", () => {
+  test("rejects tag/main divergence and an unexpected preexisting local ref", () => {
     const divergent = fixture({ divergent: true });
     expect(() => verifyReleaseRefAuthority({
       mode: "release",
@@ -336,12 +414,27 @@ describe("exact Git release-ref authority", () => {
     })).toThrow("not an ancestor");
 
     const contaminated = fixture();
-    git(contaminated.work, ["update-ref", "refs/message-like-me-release-authority/unexpected", contaminated.mainSha]);
+    git(contaminated.work, ["update-ref", "refs/heads/unexpected", contaminated.releaseSha]);
     expect(() => verifyReleaseRefAuthority({
       mode: "release",
       requestedTag: "v1.0.0",
       runner: runnerFor(contaminated).runner,
-    })).toThrow("was not empty before import");
+    })).toThrow("does not contain the exact governed ref set");
+
+    const postImport = fixture();
+    const injectedRunner = runnerFor(postImport, {
+      mutateResult: (arguments_, _invocation, result) => {
+        if (arguments_[0] === "fetch" && result.exitCode === 0) {
+          git(postImport.work, ["update-ref", "refs/heads/injected", postImport.releaseSha]);
+        }
+        return result;
+      },
+    });
+    expect(() => verifyReleaseRefAuthority({
+      mode: "release",
+      requestedTag: "v1.0.0",
+      runner: injectedRunner.runner,
+    })).toThrow("post-import inventory does not contain the exact governed ref set");
   });
 
   test("rejects advertised/fetched OID drift and a changed terminal inventory", () => {
@@ -349,7 +442,7 @@ describe("exact Git release-ref authority", () => {
     let snapshots = 0;
     const driftRunner = runnerFor(advertisedDrift, {
       mutateResult: (arguments_, _invocation, result) => {
-        if (arguments_[0] !== "ls-remote") return result;
+        if (arguments_[0] !== "ls-remote" || !arguments_.includes("--tags")) return result;
         snapshots += 1;
         if (snapshots !== 1) return result;
         const output = new TextDecoder().decode(result.stdout)
@@ -367,7 +460,7 @@ describe("exact Git release-ref authority", () => {
     let reads = 0;
     const terminalRunner = runnerFor(terminalDrift, {
       mutateResult: (arguments_, _invocation, result) => {
-        if (arguments_[0] !== "ls-remote") return result;
+        if (arguments_[0] !== "ls-remote" || arguments_.includes("--tags")) return result;
         reads += 1;
         if (reads !== 2) return result;
         const output = new TextDecoder().decode(result.stdout)
