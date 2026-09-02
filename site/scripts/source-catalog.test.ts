@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import HomePage from '../app/page.tsx';
 import SourcesPage from '../app/sources/page.tsx';
+import { SourceIcon } from '../app/_components/source-icon.tsx';
 import {
   BEEPER_COMPATIBILITY,
   MESSAGING_HISTORY_SOURCES,
@@ -31,9 +32,62 @@ describe('supported source presentation', () => {
       SUPPORTED_SOURCES.length,
     );
     expect(SUPPORTED_SOURCES.every((entry) => entry.status === 'Supported')).toBe(true);
+    expect(SUPPORTED_SOURCES.every((entry) => !('icon' in entry))).toBe(true);
     expect(MESSAGING_HISTORY_SOURCES).toHaveLength(4);
     expect(SUPPORTED_SOURCES.find((entry) => entry.id === 'macos-contacts')?.kind).toBe(
       'Label enrichment',
+    );
+  });
+
+  test('derives five unique decorative marks from the exact source IDs', async () => {
+    const sourceIds = SUPPORTED_SOURCES.map((entry) => entry.id);
+    const marks = sourceIds.map((sourceId) =>
+      renderToStaticMarkup(SourceIcon({ sourceId })),
+    );
+    const artwork = marks.map((mark) =>
+      mark.replace(/^<svg[^>]*>|<\/svg>$/gu, ''),
+    );
+    expect(sourceIds).toEqual([
+      'apple-messages',
+      'beeper-via-wrench',
+      'whatsapp-via-wrench',
+      'x-data-archive',
+      'macos-contacts',
+    ]);
+    expect(new Set(artwork).size).toBe(5);
+
+    for (const [index, sourceId] of sourceIds.entries()) {
+      const mark = marks[index];
+      expect(mark).toContain(`<svg aria-hidden="true" class="source-icon source-icon-${sourceId}"`);
+      expect(mark).toContain(`data-source-mark="${sourceId}"`);
+      expect(mark).toContain('focusable="false"');
+      expect(mark).toContain('stroke="currentColor"');
+      expect(mark).not.toContain('<title');
+      expect(mark.toLowerCase()).not.toContain('tabindex');
+    }
+
+    const beeperMark = marks[sourceIds.indexOf('beeper-via-wrench')];
+    const whatsappMark = marks[sourceIds.indexOf('whatsapp-via-wrench')];
+    expect(beeperMark).toContain('data-mark-provider="beeper"');
+    expect(beeperMark).toContain('data-mark-tool="wrench"');
+    expect(beeperMark).not.toContain('data-mark-provider="whatsapp"');
+    expect(whatsappMark).toContain('data-mark-provider="whatsapp"');
+    expect(whatsappMark).toContain('data-mark-tool="wrench"');
+    expect(whatsappMark).not.toContain('data-mark-provider="beeper"');
+    for (const sourceId of ['apple-messages', 'x-data-archive', 'macos-contacts'] as const) {
+      expect(marks[sourceIds.indexOf(sourceId)]).not.toContain(
+        'data-mark-tool="wrench"',
+      );
+    }
+
+    const [card, css] = await Promise.all([
+      source('site/app/_components/source-card.tsx'),
+      source('site/app/globals.css'),
+    ]);
+    expect(card).toContain('<SourceIcon sourceId={source.id} />');
+    expect(css).toContain('@media (forced-colors: active)');
+    expect(css).toMatch(
+      /\.source-icon\s*\{[^}]*background: Canvas;[^}]*color: CanvasText;[^}]*forced-color-adjust: none;[^}]*outline: 1px solid CanvasText;/u,
     );
   });
 
@@ -188,6 +242,10 @@ describe('supported source presentation', () => {
       );
     }
     expect(readme).toContain(`](${beeperCliReleaseUrl})`);
+    expect(readme).toContain(
+      '[built-in MCP server](https://developers.beeper.com/desktop-api/mcp/)',
+    );
+    expect(readme).not.toContain('github.com/beeper/desktop-api-mcp');
     const providerCliPattern = new RegExp(
       `Beeper CLI[^\\n]{0,80}${BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '\\.')}`,
       'u',
@@ -292,7 +350,9 @@ describe('supported source presentation', () => {
       source('site/app/layout.tsx'),
     ]);
     expect(icons).toContain('aria-hidden="true"');
-    expect(icons).not.toContain('<svg');
+    expect(icons).toContain('<svg');
+    expect(icons).toContain('focusable="false"');
+    expect(icons).toContain('stroke="currentColor"');
 
     const catalogCopy = SUPPORTED_SOURCES.flatMap((entry) => [
       entry.name,

@@ -9,6 +9,9 @@
   treating an empty artifact from this producer as unobservable reaction
   behavior, not evidence that no reactions occurred. Native WhatsApp overlap
   therefore cannot reconcile reaction state from this producer.
+- Give each supported source a distinct decorative SVG mark, preserve those
+  marks in forced-colors mode, and point the Beeper MCP note to Beeper's
+  official built-in server documentation.
 
 ## 0.8.0
 

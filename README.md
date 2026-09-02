@@ -213,13 +213,13 @@ heartbeats, and cumulative validated chat and message counts on stderr. It
 retains each private raw shard until it can atomically publish the complete
 mode-`0700` seven-file bundle with mode-`0600` files.
 
-The export does not use the separate
-[Beeper Desktop API MCP project](https://github.com/beeper/desktop-api-mcp).
-The CLI path supplies the bounded account snapshots and local files needed for
-hash validation, deterministic conversion, crash recovery, and atomic
-publication. Provider URLs and credentials are excluded. Message Like Me does
-not receive the Beeper credential or live session, start Wrench, invoke a
-Beeper operation, or send a message.
+Beeper Desktop also includes a
+[built-in MCP server](https://developers.beeper.com/desktop-api/mcp/), but this
+export path does not use it. The pinned CLI path supplies the bounded account
+snapshots and local files needed for hash validation, deterministic conversion,
+crash recovery, and atomic publication. Provider URLs and credentials are
+excluded. Message Like Me does not receive the Beeper credential or live
+session, start Wrench, invoke a Beeper operation, or send a message.
 
 Ingest the finished directory, then inspect its redacted source health:
 

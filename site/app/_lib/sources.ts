@@ -29,16 +29,16 @@ export const WHATSAPP_COMPATIBILITY = Object.freeze({
   reactionWarning: 'reaction-state-unproven',
 } as const);
 
-export type SourceIconName = 'archive' | 'contacts' | 'messages' | 'wrench';
 export type SourceKind = 'Messaging history' | 'Label enrichment';
+export type SupportedSourceId =
+  | 'apple-messages'
+  | 'beeper-via-wrench'
+  | 'whatsapp-via-wrench'
+  | 'x-data-archive'
+  | 'macos-contacts';
 
 export type SupportedSource = Readonly<{
-  id:
-    | 'apple-messages'
-    | 'beeper-via-wrench'
-    | 'whatsapp-via-wrench'
-    | 'x-data-archive'
-    | 'macos-contacts';
+  id: SupportedSourceId;
   name: string;
   kind: SourceKind;
   mode: string;
@@ -46,7 +46,6 @@ export type SupportedSource = Readonly<{
   summary: string;
   boundary: string;
   command: string;
-  icon: SourceIconName;
 }>;
 
 export const SUPPORTED_SOURCES = Object.freeze([
@@ -61,7 +60,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Message Like Me never modifies Messages, chat.db, or its transactional sidecars.',
     command: 'messagelikeme ingest imessage',
-    icon: 'messages',
   },
   {
     id: 'beeper-via-wrench',
@@ -74,7 +72,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Message Like Me owns zero Beeper operations, credentials, or live sessions; it never sends and does not claim complete history.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
-    icon: 'wrench',
   },
   {
     id: 'whatsapp-via-wrench',
@@ -87,7 +84,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Wrench omits reaction-shaped rows when Wacli cannot prove current state; Message Like Me verifies the finished bundle and never operates WhatsApp.',
     command: 'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
-    icon: 'wrench',
   },
   {
     id: 'x-data-archive',
@@ -100,7 +96,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'This path covers archive DMs, not X Chat, and never accesses X or downloads media.',
     command: 'messagelikeme ingest x-archive --input /absolute/private/archive.zip',
-    icon: 'archive',
   },
   {
     id: 'macos-contacts',
@@ -113,7 +108,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Contacts supplies labels only; it is not messaging history and ambiguous matches stay separate.',
     command: 'messagelikeme ingest contacts',
-    icon: 'contacts',
   },
 ] as const satisfies readonly SupportedSource[]);
 
