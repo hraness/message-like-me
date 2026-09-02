@@ -12,7 +12,7 @@ export function GET() {
     SITE_DESCRIPTION,
     '',
     'The website is informational. It never receives private message history, contacts, profiles, or drafts.',
-    'Supported sources are Apple Messages; X data archive DMs, not X Chat; Beeper via Wrench through a bounded v1 bundle; native WhatsApp via Wrench and official Wacli through a one-account v2 bundle; and macOS Contacts for optional label enrichment. Message Like Me never receives provider credentials or Wacli session state, invokes Wrench or provider operations, accesses a network, or sends messages.',
+    'Supported sources are Apple Messages; X data archive DMs, not X Chat; Beeper via Wrench v0.16.3 adapter beeper-local v2.3.0 and its internal bounded v1 export; native WhatsApp via Wrench and official Wacli through a one-account v2 bundle; and macOS Contacts for optional label enrichment. Wrench reviews 32 Beeper operations: 27 use its pinned CLI 0.6.2 executable and 5 use fixed Desktop reads. The tagged packages/cli/package.json value 0.6.1 is provenance only, not runtime authority. Message Like Me owns zero Beeper operations, provider credentials, or live sessions; it does not claim complete history, invoke Wrench or provider operations, access a network, or send messages.',
     '',
     '## Canonical pages',
     `- ${absoluteUrl('/')}`,

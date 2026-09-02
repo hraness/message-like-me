@@ -58,17 +58,33 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.1',
+      producerVersion: '0.16.3',
+      adapterId: 'beeper-local',
+      adapterVersion: '2.3.0',
+      reviewedOperationCount: 32,
+      pinnedCliOperationCount: 27,
+      fixedDesktopReadOperationCount: 5,
       providerCliVersion: '0.6.2',
+      providerCliSourcePackagePath: 'packages/cli/package.json',
+      providerCliSourceDeclaredVersion: '0.6.1',
       bundleSchemaVersion: '1',
       sourceId: 'beeper-local',
       sourceTransformVersion: '1.1.0',
+      exportBoundary: 'internal-bounded',
     });
+    expect(
+      BEEPER_COMPATIBILITY.pinnedCliOperationCount +
+        BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount,
+    ).toBe(
+      BEEPER_COMPATIBILITY.reviewedOperationCount,
+    );
 
     const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-wrench');
     expect(beeper?.name).toBe('Beeper via Wrench');
-    expect(beeper?.boundary).toContain('receives no Beeper credential');
+    expect(beeper?.boundary).toContain('owns zero Beeper operations');
+    expect(beeper?.boundary).toContain('credentials, or live sessions');
     expect(beeper?.boundary).toContain('never sends');
+    expect(beeper?.boundary).toContain('does not claim complete history');
   });
 
   test('publishes the catalog across human and machine discovery surfaces', async () => {
@@ -98,8 +114,31 @@ describe('supported source presentation', () => {
       'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
     );
     expect(sourcesPage).toContain('Beeper via Wrench');
-    expect(sourcesPage).toMatch(/Message Like\s+Me invokes none of them/u);
-    expect(renderedSourcesPage).toContain('Beeper CLI v0.6.2 and publishes');
+    expect(sourcesPage).toContain('Message Like Me owns zero');
+    expect(renderedSourcesPage).toContain(
+      'Wrench v0.16.3 uses beeper-local adapter v2.3.0',
+    );
+    expect(renderedSourcesPage).toContain(
+      '32 reviewed Beeper operations comprise 27 through the pinned Beeper CLI and 5 fixed Desktop reads',
+    );
+    expect(renderedSourcesPage).toContain(
+      'The pinned executable reports v0.6.2. At that tag, packages/cli/package.json declares v0.6.1',
+    );
+    expect(renderedSourcesPage).toContain(
+      'that source value is provenance only and never overrides the executable runtime identity',
+    );
+    expect(renderedSourcesPage).toContain(
+      'Message Like Me owns zero of Wrench’s 32 reviewed Beeper operations',
+    );
+    expect(renderedSourcesPage).toContain(
+      'no Beeper credential, live session, provider call, or send capability crosses the handoff',
+    );
+    expect(renderedSourcesPage).toContain(
+      'Wrench’s separate internal bounded export',
+    );
+    expect(renderedSourcesPage).toContain(
+      'does not expose Beeper’s raw export arguments or establish complete-history coverage',
+    );
     expect(renderedSourcesPage).toContain('Current support in v0.8.0');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
@@ -136,6 +175,26 @@ describe('supported source presentation', () => {
     for (const copy of [readme, bundleContract]) {
       expect(copy).toContain(`Wrench v${BEEPER_COMPATIBILITY.producerVersion}`);
       expect(copy).toMatch(providerCliPattern);
+      expect(copy).toContain(`beeper-local@${BEEPER_COMPATIBILITY.adapterVersion}`);
+      expect(copy).toContain(`${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations`);
+      expect(copy).toMatch(
+        new RegExp(
+          `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} use the pinned\\s+CLI`,
+          'u',
+        ),
+      );
+      expect(copy).toMatch(
+        new RegExp(
+          `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} use fixed Desktop`,
+          'u',
+        ),
+      );
+      expect(copy).toContain(BEEPER_COMPATIBILITY.providerCliSourcePackagePath);
+      expect(copy).toContain(`declares \`${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion}\``);
+      expect(copy).toMatch(/provenance\s+only/u);
+      expect(copy).toContain('executable runtime identity');
+      expect(copy).toMatch(/internal bounded\s+export/u);
+      expect(copy).toContain('Message Like Me owns');
       expect(copy).toContain(`source ID \`${BEEPER_COMPATIBILITY.sourceId}\``);
       expect(copy).toContain(
         `source-transform version \`${BEEPER_COMPATIBILITY.sourceTransformVersion}\``,
@@ -159,12 +218,24 @@ describe('supported source presentation', () => {
     }
     for (const coordinate of [
       `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
-      `Beeper CLI v${BEEPER_COMPATIBILITY.providerCliVersion}`,
+      `executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}`,
       `bundle schema ${BEEPER_COMPATIBILITY.bundleSchemaVersion}`,
       BEEPER_COMPATIBILITY.sourceId,
       BEEPER_COMPATIBILITY.sourceTransformVersion,
     ]) {
       expect(renderedSourcesPage).toContain(coordinate);
+    }
+    for (const coordinate of [
+      `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
+      `adapter ${BEEPER_COMPATIBILITY.adapterId} v${BEEPER_COMPATIBILITY.adapterVersion}`,
+      `${BEEPER_COMPATIBILITY.reviewedOperationCount} Beeper operations`,
+      `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} use its pinned CLI ${BEEPER_COMPATIBILITY.providerCliVersion} executable`,
+      `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} use fixed Desktop reads`,
+      `${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} value ${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion} is provenance only`,
+      'Message Like Me owns zero Beeper operations, provider credentials, or live sessions',
+      'does not claim complete history',
+    ]) {
+      expect(llms).toContain(coordinate);
     }
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
