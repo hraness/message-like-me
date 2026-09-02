@@ -424,6 +424,9 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(appTokenHelper).toContain("/app/installations/${String(input.installationId)}");
   expect(appTokenHelper).toContain('method: "DELETE"');
   expect(appTokenHelper).toContain("/installation/token");
+  expect(appTokenHelper).toContain("/installation/repositories");
+  expect(appTokenHelper).toContain("performance.now()");
+  expect(appTokenHelper).toContain("RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS");
   expect(providerHelper).toContain('key.startsWith("MLM_RELEASE_APP_")');
   expect(providerHelper).not.toContain(".head_commit");
   expect(providerHelper).not.toContain('event === "push"');
@@ -559,6 +562,12 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "repository ID `1342143606`",
     "repository_ids: [1342143606]",
     "DELETE /installation/token",
+    "two stable HTTP 401 responses",
+    "30-second half-open\nrequest-start window",
+    "bodies are streamed under a 1 MiB cap and scrubbed",
+    "Message Like Me\noperational ceiling, not a claim about GitHub's revocation-propagation SLA",
+    "full App path is capped at fourteen REST requests",
+    "exact production-ref post-read cannot begin until convergence",
     "`refs/tags/<verified-tag>`",
     "`FETCH_HEAD^{commit}`",
     "submodule recursion disabled",

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { generateKeyPairSync, verify } from "node:crypto";
+import { createHash, generateKeyPairSync, verify } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import {
   createReleaseAppJwt,
@@ -8,15 +9,26 @@ import {
   parseReleaseAppInstallation,
   parseReleaseAppConfiguration,
   parseReleaseAppTokenResponse,
+  RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS,
   releaseAppTokenRequestBody,
+  revokeReleaseAppTokenWithConvergence,
   withReleaseAppToken,
+  withReleaseAppTokenFromEnvironment,
 } from "./release-app-token.mjs";
+
+const releaseAppTokenHelperUrl = new URL("./release-app-token.mjs", import.meta.url);
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
 const token = "installation-token-for-exact-repository";
 const serverDate = "Sat, 29 Aug 2026 18:00:00 GMT";
 const expiresAt = "2026-08-29T19:00:00Z";
+const revocationReceipt = Object.freeze({
+  converged: true as const,
+  observationCount: 2,
+  propagationObserved: false,
+  stableDenials: 2 as const,
+});
 const environment = Object.freeze({
   GITHUB_API_URL: "https://api.github.com",
   GITHUB_REPOSITORY: "hraness/message-like-me",
@@ -67,6 +79,242 @@ function installationIdentity(overrides: Readonly<Record<string, unknown>> = {})
     target_type: "Organization",
     ...overrides,
   };
+}
+
+const repositoryBody = Object.freeze({
+  repositories: [{
+    full_name: "hraness/message-like-me",
+    id: MESSAGE_LIKE_ME_REPOSITORY_ID,
+    name: "message-like-me",
+    owner: { login: "hraness" },
+  }],
+  repository_selection: "selected",
+  total_count: 1,
+});
+
+type RevocationObservation = Readonly<{
+  body?: "binary" | "empty" | "invalid-json" | "json" | "overflow" | "pending" | "text" | "wrong-repo";
+  bodyLatencyMilliseconds?: number;
+  bodyText?: string;
+  contentLength?: string;
+  date?: string;
+  fetchLatencyMilliseconds?: number;
+  location?: string;
+  networkFailure?: "abort" | "pending" | true;
+  omitDate?: boolean;
+  redirected?: boolean;
+  status: number;
+}>;
+
+const observation = (
+  status: number,
+  overrides: Omit<RevocationObservation, "status"> = {},
+): RevocationObservation => Object.freeze({ status, ...overrides });
+
+const stableDenials = Object.freeze([
+  observation(401, { body: "empty" }),
+  observation(401, { body: "json" }),
+]);
+
+function createRevocationHarness(
+  observations: readonly RevocationObservation[],
+  overrides: Readonly<{
+    deleteObservation?: RevocationObservation;
+    initialClock?: number;
+    nowSamples?: readonly number[];
+    sleepMode?: "frozen" | "overflow" | "partial" | "regress" | "reject";
+  }> = {},
+) {
+  let clock = overrides.initialClock ?? 0;
+  let nowSampleIndex = 0;
+  let deleted = false;
+  let observationIndex = 0;
+  const calls: string[] = [];
+  const callTimes: number[] = [];
+  const sleepCalls: number[] = [];
+  const timeouts: number[] = [];
+  const sourceChunks: Uint8Array[] = [];
+  let cancelledBodies = 0;
+  const encoder = new TextEncoder();
+  const defaultDate = "Sat, 29 Aug 2026 18:00:01 GMT";
+
+  const responseFor = async (
+    item: RevocationObservation,
+    signal?: AbortSignal | null,
+  ): Promise<Response> => {
+    if (item.networkFailure === "abort") {
+      throw new DOMException(`aborted ${token}`, "AbortError");
+    }
+    if (item.networkFailure === "pending") {
+      await new Promise<never>((_resolve, reject) => {
+        const abort = () => reject(new DOMException(`aborted ${token}`, "AbortError"));
+        if (signal?.aborted === true) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      });
+    }
+    if (item.networkFailure === true) throw new Error(`network leaked ${token}`);
+    clock += item.fetchLatencyMilliseconds ?? 1;
+    let bytes: Uint8Array;
+    switch (item.body) {
+      case "empty":
+      case "pending":
+        bytes = new Uint8Array();
+        break;
+      case "text":
+        bytes = encoder.encode(item.bodyText ?? "denied");
+        break;
+      case "binary":
+        bytes = new Uint8Array([0xff, 0xfe, 0xfd]);
+        break;
+      case "invalid-json":
+        bytes = encoder.encode("{");
+        break;
+      case "overflow":
+        bytes = encoder.encode("bounded");
+        break;
+      case "json":
+        bytes = encoder.encode(JSON.stringify({ message: "Bad credentials" }));
+        break;
+      case "wrong-repo":
+        bytes = encoder.encode(JSON.stringify({
+          ...repositoryBody,
+          repositories: [{
+            ...repositoryBody.repositories[0],
+            full_name: "hraness/other",
+            id: 1,
+            name: "other",
+          }],
+        }));
+        break;
+      default:
+        bytes = item.status === 200
+          ? encoder.encode(JSON.stringify(repositoryBody))
+          : encoder.encode(JSON.stringify({ message: "Bad credentials" }));
+        break;
+    }
+    const headers: Record<string, string> = {};
+    if (item.omitDate !== true) headers.Date = item.date ?? defaultDate;
+    if (item.contentLength !== undefined) headers["Content-Length"] = item.contentLength;
+    else if (item.body === "overflow") headers["Content-Length"] = String(1024 * 1024 + 1);
+    if (item.location !== undefined) headers.Location = item.location;
+    const forbidden204Body = item.status === 204 && item.body !== undefined && item.body !== "empty";
+    const body = item.status === 204 && !forbidden204Body ? null : new ReadableStream<Uint8Array>({
+      cancel() { cancelledBodies += 1; },
+      start(controller) {
+        clock += item.bodyLatencyMilliseconds ?? 0;
+        if (item.body === "pending") {
+          const abort = () => controller.error(new DOMException(`aborted ${token}`, "AbortError"));
+          if (signal?.aborted === true) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+          return;
+        }
+        if (bytes.byteLength > 0) {
+          sourceChunks.push(bytes);
+          controller.enqueue(bytes);
+        }
+        controller.close();
+      },
+    });
+    const response = new Response(body, {
+      headers,
+      status: forbidden204Body ? 200 : item.status,
+    });
+    if (forbidden204Body) Object.defineProperty(response, "status", { value: 204 });
+    if (item.redirected === true) Object.defineProperty(response, "redirected", { value: true });
+    return response;
+  };
+
+  const fetchImplementation = async (request: URL | RequestInfo, init?: RequestInit) => {
+    expect(request).toBeInstanceOf(URL);
+    const url = new URL(String(request));
+    const method = init?.method ?? "GET";
+    const headers = init?.headers as Readonly<Record<string, string>> | undefined;
+    expect(url.href).toBe(`https://api.github.com${url.pathname}`);
+    expect(url.search).toBe("");
+    expect(url.hash).toBe("");
+    expect(init?.body).toBeUndefined();
+    expect(init?.redirect).toBe("error");
+    expect(headers).toEqual({
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "message-like-me-release-writer",
+      "X-GitHub-Api-Version": "2022-11-28",
+    });
+    calls.push(`${method} ${url.pathname}`);
+    callTimes.push(clock);
+    if (url.pathname === "/installation/token") {
+      expect(method).toBe("DELETE");
+      expect(deleted).toBe(false);
+      deleted = true;
+      return responseFor(
+        overrides.deleteObservation ?? observation(204, { body: "empty" }),
+        init?.signal,
+      );
+    }
+    expect(url.pathname).toBe("/installation/repositories");
+    expect(method).toBe("GET");
+    expect(deleted).toBe(true);
+    const item = observations[observationIndex];
+    observationIndex += 1;
+    if (item === undefined) throw new Error("revocation fixture exhausted");
+    return responseFor(item, init?.signal);
+  };
+
+  return Object.freeze({
+    advanceClock(milliseconds: number) { clock += milliseconds; },
+    calls,
+    callTimes,
+    cancelledBodies() { return cancelledBodies; },
+    createTimeoutSignal(milliseconds: number) {
+      timeouts.push(milliseconds);
+      return new AbortController().signal;
+    },
+    currentClock() { return clock; },
+    fetchImplementation,
+    now() {
+      const sample = overrides.nowSamples?.[nowSampleIndex];
+      nowSampleIndex += 1;
+      if (sample !== undefined) clock = sample;
+      return clock;
+    },
+    observationCount() { return observationIndex; },
+    async sleep(milliseconds: number) {
+      sleepCalls.push(milliseconds);
+      if (overrides.sleepMode === "reject") throw new Error(`sleep leaked ${token}`);
+      if (overrides.sleepMode === "frozen") return;
+      if (overrides.sleepMode === "regress") {
+        clock -= 1;
+        return;
+      }
+      if (overrides.sleepMode === "overflow") {
+        clock = Number.MAX_SAFE_INTEGER + 1;
+        return;
+      }
+      clock += overrides.sleepMode === "partial"
+        ? Math.max(1, Math.floor(milliseconds / 2))
+        : milliseconds;
+    },
+    sleepCalls,
+    sourceChunks,
+    timeouts,
+  });
+}
+
+async function runRevocationCase(
+  observations: readonly RevocationObservation[],
+  overrides: Parameters<typeof createRevocationHarness>[1] = {},
+) {
+  const harness = createRevocationHarness(observations, overrides);
+  const receipt = await revokeReleaseAppTokenWithConvergence({
+    apiUrl: new URL("https://api.github.com/"),
+    createTimeoutSignal: harness.createTimeoutSignal,
+    expiresAt,
+    fetchImplementation: harness.fetchImplementation,
+    now: harness.now,
+    sleep: harness.sleep,
+    token,
+  });
+  return Object.freeze({ harness, receipt });
 }
 
 describe("release App token transaction", () => {
@@ -149,8 +397,13 @@ describe("release App token transaction", () => {
       },
       nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
       async revoke(input) {
-        expect(input).toEqual({ apiUrl: new URL("https://api.github.com/"), token });
+        expect(input).toEqual({
+          apiUrl: new URL("https://api.github.com/"),
+          expiresAt,
+          token,
+        });
         calls.push("revoke");
+        return revocationReceipt;
       },
     }, async (value, receipt) => {
       expect(value).toBe(token);
@@ -196,7 +449,7 @@ describe("release App token transaction", () => {
         mask() { calls.push("mask"); },
         async mint() { calls.push("mint"); return { body: tokenResponse(), serverDate }; },
         nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
-        async revoke() { calls.push("revoke"); },
+        async revoke() { calls.push("revoke"); return revocationReceipt; },
       }, async () => {
         calls.push("operation");
       })).rejects.toThrow("installation identity or permission closure");
@@ -222,7 +475,7 @@ describe("release App token transaction", () => {
         mask() { calls.push("mask"); },
         async mint() { calls.push("mint"); return { body, serverDate }; },
         nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
-        async revoke() { calls.push("revoke"); },
+        async revoke() { calls.push("revoke"); return revocationReceipt; },
       }, async () => {
         calls.push("operation");
       })).rejects.toThrow();
@@ -243,7 +496,7 @@ describe("release App token transaction", () => {
         return { body: tokenResponse(), serverDate: null };
       },
       nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
-      async revoke() { missingDateCalls.push("revoke"); },
+      async revoke() { missingDateCalls.push("revoke"); return revocationReceipt; },
     }, async () => {
       missingDateCalls.push("operation");
     })).rejects.toThrow("response Date is not a string");
@@ -266,7 +519,7 @@ describe("release App token transaction", () => {
       mask() { calls.push("mask"); },
       async mint() { calls.push("mint"); return { body: tokenResponse(), serverDate }; },
       nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
-      async revoke() { calls.push("revoke"); },
+      async revoke() { calls.push("revoke"); return revocationReceipt; },
     }, async () => {
       calls.push("operation");
       throw new Error("leased push failed");
@@ -302,6 +555,537 @@ describe("release App token transaction", () => {
         "Error: operation failed",
         "Error: revoke failed",
       ]);
+    }
+  });
+
+  test("binds the complete helper and exercises the real three-argument environment wrapper", async () => {
+    const source = await readFile(releaseAppTokenHelperUrl, "utf8");
+    expect(createHash("sha256").update(source).digest("hex")).toBe(
+      "a95704ebc4145542a31c63ca15e20f6ecadf4e88845983f3a9ab71f0b6d88a00",
+    );
+    const implementationStart = source.indexOf("function revocationIndeterminate");
+    const implementationEnd = source.indexOf("\nasync function revokeWithFetch", implementationStart);
+    expect(implementationStart).toBeGreaterThan(0);
+    expect(implementationEnd).toBeGreaterThan(implementationStart);
+    expect(createHash("sha256").update(
+      source.slice(implementationStart, implementationEnd),
+    ).digest("hex")).toBe("ccc3a9f6a8fe665585d8c4b62942d1377c38d644ffec5822dcc8fe1260d6e492");
+    expect(withReleaseAppTokenFromEnvironment.length).toBe(3);
+    expect(source.slice(source.indexOf("export function withReleaseAppTokenFromEnvironment")).trimEnd())
+      .toBe(`export function withReleaseAppTokenFromEnvironment(environment, operation, onRevoked) {
+  return withReleaseAppToken({
+    environment,
+    inspect: inspectWithFetch,
+    inspectInstallation: inspectInstallationWithFetch,
+    mask(token) {
+      process.stdout.write(\`::add-mask::\${token}\\n\`);
+    },
+    mint: mintWithFetch,
+    nowMilliseconds: Date.now,
+    onRevoked,
+    revoke: revokeWithFetch,
+  }, operation);
+}`);
+
+    const events: string[] = [];
+    const originalFetch = globalThis.fetch;
+    const originalDateNow = Date.now;
+    const originalStdoutWrite = process.stdout.write;
+    let deniedReads = 0;
+    try {
+      Date.now = () => Date.parse("2026-08-29T18:00:00Z");
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        expect(String(chunk)).toBe(`::add-mask::${token}\n`);
+        events.push("mask");
+        return true;
+      }) as typeof process.stdout.write;
+      globalThis.fetch = (async (request: URL | RequestInfo, init?: RequestInit) => {
+        const url = new URL(String(request));
+        const method = init?.method ?? "GET";
+        events.push(`${method} ${url.pathname}`);
+        expect(url.origin).toBe("https://api.github.com");
+        expect(init?.redirect).toBe("error");
+        if (url.pathname === "/app") {
+          return new Response(JSON.stringify(appIdentity()), { status: 200 });
+        }
+        if (url.pathname === "/app/installations/13579") {
+          return new Response(JSON.stringify(installationIdentity()), { status: 200 });
+        }
+        if (url.pathname === "/app/installations/13579/access_tokens") {
+          expect(init?.body).toBe(JSON.stringify(releaseAppTokenRequestBody()));
+          return new Response(JSON.stringify(tokenResponse()), {
+            headers: { Date: serverDate },
+            status: 201,
+          });
+        }
+        if (url.pathname === "/installation/token") {
+          expect(method).toBe("DELETE");
+          return new Response(null, {
+            headers: { "Content-Length": "0", Date: "Sat, 29 Aug 2026 18:00:01 GMT" },
+            status: 204,
+          });
+        }
+        expect(url.pathname).toBe("/installation/repositories");
+        expect(method).toBe("GET");
+        deniedReads += 1;
+        return new Response(JSON.stringify({ message: "Bad credentials" }), {
+          headers: { Date: "Sat, 29 Aug 2026 18:00:01 GMT" },
+          status: 401,
+        });
+      }) as typeof fetch;
+      const value = await withReleaseAppTokenFromEnvironment(
+        environment,
+        async (leasedToken, receipt) => {
+          expect(leasedToken).toBe(token);
+          expect(receipt.expiresAt).toBe(expiresAt);
+          events.push("operation");
+          return "advanced";
+        },
+        async (receipt) => {
+          expect(receipt).toEqual(revocationReceipt);
+          events.push("revoked");
+        },
+      );
+      expect(value).toBe("advanced");
+    } finally {
+      globalThis.fetch = originalFetch;
+      Date.now = originalDateNow;
+      process.stdout.write = originalStdoutWrite;
+    }
+    expect(events).toEqual([
+      "GET /app",
+      "GET /app/installations/13579",
+      "POST /app/installations/13579/access_tokens",
+      "mask",
+      "operation",
+      "DELETE /installation/token",
+      "GET /installation/repositories",
+      "GET /installation/repositories",
+      "revoked",
+    ]);
+    expect(deniedReads).toBe(2);
+  });
+
+  test("requires exact repository authority and two stable post-delete denials", async () => {
+    const direct = await runRevocationCase(stableDenials);
+    expect(direct.receipt).toEqual(revocationReceipt);
+    expect(direct.harness.calls).toEqual([
+      "DELETE /installation/token",
+      "GET /installation/repositories",
+      "GET /installation/repositories",
+    ]);
+    expect(direct.harness.sourceChunks.every((chunk) =>
+      chunk.every((value) => value === 0))).toBe(true);
+
+    const propagated = await runRevocationCase([
+      observation(200),
+      observation(401, { body: "text" }),
+      observation(401, { body: "empty" }),
+    ], { sleepMode: "partial" });
+    expect(propagated.receipt).toEqual({
+      converged: true,
+      observationCount: 3,
+      propagationObserved: true,
+      stableDenials: 2,
+    });
+
+    const wrongRepository = createRevocationHarness([
+      observation(200, { body: "wrong-repo" }),
+    ]);
+    await expect(revokeReleaseAppTokenWithConvergence({
+      apiUrl: new URL("https://api.github.com/"),
+      createTimeoutSignal: wrongRepository.createTimeoutSignal,
+      expiresAt,
+      fetchImplementation: wrongRepository.fetchImplementation,
+      now: wrongRepository.now,
+      sleep: wrongRepository.sleep,
+      token,
+    })).rejects.toThrow("authorized revocation observation is malformed");
+    expect(wrongRepository.calls).toEqual([
+      "DELETE /installation/token",
+      "GET /installation/repositories",
+    ]);
+
+    const authorizationReturned = createRevocationHarness([
+      observation(401, { body: "empty" }),
+      observation(200),
+    ]);
+    await expect(revokeReleaseAppTokenWithConvergence({
+      apiUrl: new URL("https://api.github.com/"),
+      createTimeoutSignal: authorizationReturned.createTimeoutSignal,
+      expiresAt,
+      fetchImplementation: authorizationReturned.fetchImplementation,
+      now: authorizationReturned.now,
+      sleep: authorizationReturned.sleep,
+      token,
+    })).rejects.toThrow("authorization returned after a denial observation");
+    expect(authorizationReturned.calls.filter((value) =>
+      value === "DELETE /installation/token")).toHaveLength(1);
+  });
+
+  test("uses absolute monotonic slots and enforces the exact 30-second edges", async () => {
+    expect(RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS).toEqual([
+      0,
+      250,
+      500,
+      1_000,
+      2_000,
+      4_000,
+      8_000,
+      16_000,
+      24_000,
+      29_000,
+    ]);
+
+    const persistent = createRevocationHarness(
+      Array.from({ length: 10 }, () => observation(200)),
+    );
+    await expect(revokeReleaseAppTokenWithConvergence({
+      apiUrl: new URL("https://api.github.com/"),
+      createTimeoutSignal: persistent.createTimeoutSignal,
+      expiresAt,
+      fetchImplementation: persistent.fetchImplementation,
+      now: persistent.now,
+      sleep: persistent.sleep,
+      token,
+    })).rejects.toThrow("did not converge within the bounded operational window");
+    expect(persistent.calls).toEqual([
+      "DELETE /installation/token",
+      ...Array.from({ length: 10 }, () => "GET /installation/repositories"),
+    ]);
+    expect(persistent.timeouts.slice(1)).toEqual([
+      10_000,
+      10_000,
+      10_000,
+      10_000,
+      10_000,
+      10_000,
+      10_000,
+      10_000,
+      6_000,
+      1_000,
+    ]);
+
+    for (const authoritativeBegin of [250, 251] as const) {
+      const edge = createRevocationHarness(stableDenials, {
+        nowSamples: [0, 1, 2, authoritativeBegin, 30_002],
+      });
+      await expect(revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: edge.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: edge.fetchImplementation,
+        now: edge.now,
+        sleep: edge.sleep,
+        token,
+      })).rejects.toThrow("did not converge within the bounded operational window");
+      expect(edge.calls).toEqual(["DELETE /installation/token"]);
+    }
+
+    for (const authoritativeBegin of [30_000, 30_001] as const) {
+      const finalSlot = createRevocationHarness(stableDenials, {
+        nowSamples: [
+          0,
+          250,
+          500,
+          1_000,
+          2_000,
+          4_000,
+          8_000,
+          16_000,
+          24_000,
+          29_000,
+          29_000,
+          29_000,
+          authoritativeBegin,
+        ],
+      });
+      await expect(revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: finalSlot.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: finalSlot.fetchImplementation,
+        now: finalSlot.now,
+        sleep: finalSlot.sleep,
+        token,
+      })).rejects.toThrow("did not converge within the bounded operational window");
+      expect(finalSlot.calls).toEqual(["DELETE /installation/token"]);
+    }
+
+    for (const authoritativeBegin of [30_000, 30_001] as const) {
+      const nineObserved = createRevocationHarness(
+        Array.from({ length: 9 }, () => observation(200)),
+        { deleteObservation: observation(204, { body: "empty", fetchLatencyMilliseconds: 0 }) },
+      );
+      let finalSlotReads = 0;
+      const finalSlotNow = () => {
+        if (nineObserved.observationCount() === 9 && nineObserved.currentClock() === 29_000) {
+          finalSlotReads += 1;
+          if (finalSlotReads === 2) nineObserved.advanceClock(authoritativeBegin - 29_000);
+        }
+        return nineObserved.currentClock();
+      };
+      await expect(revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: nineObserved.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: nineObserved.fetchImplementation,
+        now: finalSlotNow,
+        sleep: nineObserved.sleep,
+        token,
+      })).rejects.toThrow("did not converge within the bounded operational window");
+      expect(nineObserved.observationCount()).toBe(9);
+      expect(nineObserved.calls.filter((value) =>
+        value === "DELETE /installation/token")).toHaveLength(1);
+    }
+
+    const acceptedBoundary = await runRevocationCase([
+      ...Array.from({ length: 8 }, () => observation(200)),
+      observation(401, { body: "text" }),
+      observation(401, { body: "empty", bodyLatencyMilliseconds: 1_000, fetchLatencyMilliseconds: 0 }),
+    ]);
+    expect(acceptedBoundary.receipt.observationCount).toBe(10);
+    await expect(runRevocationCase([
+      ...Array.from({ length: 8 }, () => observation(200)),
+      observation(401),
+      observation(401, { bodyLatencyMilliseconds: 1_001, fetchLatencyMilliseconds: 0 }),
+    ])).rejects.toThrow("completed outside its deadline");
+
+    const missedSlots = await runRevocationCase([
+      observation(200, { fetchLatencyMilliseconds: 9_000 }),
+      observation(401, { body: "empty" }),
+      observation(401, { body: "text" }),
+    ]);
+    expect(missedSlots.harness.callTimes.slice(1)).toEqual([1, 16_001, 24_001]);
+
+    for (const invalidClock of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      Number.MAX_SAFE_INTEGER + 1,
+    ] as const) {
+      const invalid = createRevocationHarness(stableDenials, { nowSamples: [invalidClock] });
+      await expect(revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: invalid.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: invalid.fetchImplementation,
+        now: invalid.now,
+        sleep: invalid.sleep,
+        token,
+      })).rejects.toThrow("clock is invalid");
+      expect(invalid.calls).toEqual(["DELETE /installation/token"]);
+    }
+    for (const sleepMode of ["frozen", "overflow", "regress", "reject"] as const) {
+      const invalidSleep = createRevocationHarness([
+        observation(200),
+        ...stableDenials,
+      ], { sleepMode });
+      await expect(revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: invalidSleep.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: invalidSleep.fetchImplementation,
+        now: invalidSleep.now,
+        sleep: invalidSleep.sleep,
+        token,
+      })).rejects.toThrow("indeterminate");
+      expect(invalidSleep.calls.filter((value) =>
+        value === "DELETE /installation/token")).toHaveLength(1);
+    }
+
+    const impreciseDeadline = createRevocationHarness(stableDenials, {
+      initialClock: Number.MAX_SAFE_INTEGER - 30_000,
+    });
+    await expect(revokeReleaseAppTokenWithConvergence({
+      apiUrl: new URL("https://api.github.com/"),
+      createTimeoutSignal: impreciseDeadline.createTimeoutSignal,
+      expiresAt,
+      fetchImplementation: impreciseDeadline.fetchImplementation,
+      now: impreciseDeadline.now,
+      sleep: impreciseDeadline.sleep,
+      token,
+    })).rejects.toThrow("outside the precise clock range");
+    expect(impreciseDeadline.calls).toEqual(["DELETE /installation/token"]);
+  });
+
+  test("streams bounded bodies and requires canonical authenticated time before expiry", async () => {
+    const oneSecondBeforeExpiry = "Sat, 29 Aug 2026 18:59:59 GMT";
+    const accepted = await runRevocationCase([
+      observation(200, { date: oneSecondBeforeExpiry }),
+      observation(401, { body: "empty", date: oneSecondBeforeExpiry }),
+      observation(401, { body: "text", date: oneSecondBeforeExpiry }),
+    ], {
+      deleteObservation: observation(204, { body: "empty", date: oneSecondBeforeExpiry }),
+    });
+    expect(accepted.receipt.propagationObserved).toBe(true);
+
+    for (const failureCase of [
+      {
+        expected: "revocation authority time proof is malformed",
+        observations: stableDenials,
+        overrides: {
+          deleteObservation: observation(204, {
+            body: "empty",
+            date: "Sat, 29 Aug 2026 19:00:00 GMT",
+          }),
+        },
+      },
+      {
+        expected: "authorized revocation observation is malformed",
+        observations: [observation(200, { date: "Sat, 29 Aug 2026 19:00:00 GMT" })],
+      },
+      {
+        expected: "denied revocation observation is malformed",
+        observations: [observation(401, {
+          body: "empty",
+          date: "Sat, 29 Aug 2026 19:00:00 GMT",
+        })],
+      },
+      {
+        expected: "authorized revocation observation is malformed",
+        observations: [observation(200, { body: "overflow" })],
+      },
+      {
+        expected: "denied revocation observation is malformed",
+        observations: [observation(401, { body: "overflow" })],
+      },
+    ] as const) {
+      const harness = createRevocationHarness(failureCase.observations, failureCase.overrides);
+      let caught: unknown;
+      try {
+        await revokeReleaseAppTokenWithConvergence({
+          apiUrl: new URL("https://api.github.com/"),
+          createTimeoutSignal: harness.createTimeoutSignal,
+          expiresAt,
+          fetchImplementation: harness.fetchImplementation,
+          now: harness.now,
+          sleep: harness.sleep,
+          token,
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(String(caught)).toContain(failureCase.expected);
+      expect(String(caught)).not.toContain(token);
+      expect(harness.calls.filter((value) =>
+        value === "DELETE /installation/token")).toHaveLength(1);
+      if (failureCase.observations.some((item) => item.body === "overflow")) {
+        expect(harness.cancelledBodies()).toBe(1);
+      }
+    }
+
+    const badDelete = createRevocationHarness(stableDenials, {
+      deleteObservation: observation(500, {
+        body: "text",
+        bodyText: "secret revocation response",
+      }),
+    });
+    let caught: unknown;
+    try {
+      await revokeReleaseAppTokenWithConvergence({
+        apiUrl: new URL("https://api.github.com/"),
+        createTimeoutSignal: badDelete.createTimeoutSignal,
+        expiresAt,
+        fetchImplementation: badDelete.fetchImplementation,
+        now: badDelete.now,
+        sleep: badDelete.sleep,
+        token,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(String(caught)).toContain("indeterminate");
+    expect(String(caught)).not.toContain("secret revocation response");
+    expect(badDelete.calls).toEqual(["DELETE /installation/token"]);
+
+    for (const pending of [
+      createRevocationHarness(stableDenials, {
+        deleteObservation: observation(204, { body: "empty", networkFailure: "pending" }),
+      }),
+      createRevocationHarness([
+        observation(401, { body: "pending" }),
+      ]),
+    ]) {
+      let pendingError: unknown;
+      try {
+        await revokeReleaseAppTokenWithConvergence({
+          apiUrl: new URL("https://api.github.com/"),
+          createTimeoutSignal: () => AbortSignal.timeout(1),
+          expiresAt,
+          fetchImplementation: pending.fetchImplementation,
+          now: pending.now,
+          sleep: pending.sleep,
+          token,
+        });
+      } catch (error) {
+        pendingError = error;
+      }
+      expect(String(pendingError)).toContain("indeterminate");
+      expect(String(pendingError)).not.toContain(token);
+      expect(pending.calls.filter((value) =>
+        value === "DELETE /installation/token")).toHaveLength(1);
+    }
+  });
+
+  test("never retries revocation and retains operation plus convergence failures", async () => {
+    const harness = createRevocationHarness(
+      Array.from({ length: 10 }, () => observation(200)),
+    );
+    let operationCount = 0;
+    try {
+      await withReleaseAppToken({
+        environment,
+        async inspect() { return appIdentity(); },
+        async inspectInstallation() { return installationIdentity(); },
+        mask() {},
+        async mint() { return { body: tokenResponse(), serverDate }; },
+        nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
+        async revoke(input) {
+          return revokeReleaseAppTokenWithConvergence({
+            ...input,
+            createTimeoutSignal: harness.createTimeoutSignal,
+            fetchImplementation: harness.fetchImplementation,
+            now: harness.now,
+            sleep: harness.sleep,
+          });
+        },
+      }, async () => {
+        operationCount += 1;
+        throw new Error("leased write failed");
+      });
+      throw new Error("combined failure unexpectedly succeeded");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors.map((item) => String(item))).toEqual([
+        "Error: leased write failed",
+        "Error: release App token revocation did not converge within the bounded operational window",
+      ]);
+    }
+    expect(operationCount).toBe(1);
+    expect(harness.calls.filter((value) =>
+      value === "DELETE /installation/token")).toHaveLength(1);
+    expect(3 + harness.calls.length).toBe(14);
+
+    for (const invalidReceipt of [
+      undefined,
+      { ...revocationReceipt, observationCount: 3 },
+      { ...revocationReceipt, observationCount: 2, propagationObserved: true },
+      { ...revocationReceipt, stableDenials: 1 },
+      { ...revocationReceipt, extra: true },
+    ] as const) {
+      let observerCalls = 0;
+      await expect(withReleaseAppToken({
+        environment,
+        async inspect() { return appIdentity(); },
+        async inspectInstallation() { return installationIdentity(); },
+        mask() {},
+        async mint() { return { body: tokenResponse(), serverDate }; },
+        nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
+        async onRevoked() { observerCalls += 1; },
+        async revoke() { return invalidReceipt; },
+      }, async () => "advanced")).rejects.toThrow("revocation receipt");
+      expect(observerCalls).toBe(0);
     }
   });
 

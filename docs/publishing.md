@@ -300,9 +300,12 @@ recovery. Both paths use the same checks. That workflow:
 4. fails closed unless the mint response contains exactly that numeric
    repository, selected-repository scope, those two permissions, and a
    canonical expiry within the authenticated one-hour response window. It
-   masks the token before use, keeps it out of workflow outputs, and revokes it
-   through `DELETE /installation/token` in the same operation's `finally`
-   boundary. A mutation failure and a revocation failure are both retained;
+   masks the token before use and keeps it out of workflow outputs. After the
+   operation it sends exactly one nonredirecting `DELETE /installation/token`,
+   requires an HTTP 204 with absent or canonical-zero `Content-Length` and zero
+   body bytes, and then observes the exact selected-repository authority until
+   two stable HTTP 401 responses prove convergence. A mutation failure and a
+   revocation or convergence failure are both retained;
 5. sandwiches the fresh writer job with separate read-only immutable Release,
    Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
    admissions; proves `website-production` can fast-forward; then fetches only
@@ -325,6 +328,29 @@ recovery. Both paths use the same checks. That workflow:
    `messagelikeme-<deployment>-hraness.vercel.app` URL. Stable terminal tag,
    Release, Latest, workflow-source, ref, inventory, and status readbacks close
    the workflow.
+
+The successful DELETE and every accepted HTTP 200 or 401 observation require a
+canonical GitHub `Date` strictly before the minted token's exact `expires_at`.
+The monotonic completion of the DELETE anchors a separate 30-second half-open
+request-start window `[start, deadline)`: a response completing exactly at the
+deadline remains eligible, while a later completion fails. The helper may read
+`/installation/repositories` at no more than the ten absolute offsets 0, 250,
+500, 1,000, 2,000, 4,000, 8,000, 16,000, 24,000, and 29,000 milliseconds. A
+missed slot is skipped rather than retried or shifted, and request, body, and
+sleep latency all consume the same window. App identity, installation, mint,
+DELETE, and observation bodies are streamed under a 1 MiB cap and scrubbed
+after parsing. Every HTTP 200 must still describe
+the exact singleton selected `hraness/message-like-me` repository with ID
+`1342143606`. Acceptance requires two distinct scheduled HTTP 401 reads. A 200
+after a 401, only one 401, any other status, a redirect, malformed or oversized
+body, transport or timing ambiguity, or failure to converge within the window
+fails closed. `propagationObserved=false` means the first two probes were the
+stable denial pair; `true` means one or more exact authorized 200 responses
+preceded the final two denials. This 30-second bound is a Message Like Me
+operational ceiling, not a claim about GitHub's revocation-propagation SLA. The
+action is never retried, the full App path is capped at fourteen REST requests,
+and the exact production-ref post-read cannot begin until convergence has been
+reported through the sanitized revocation receipt.
 
 Any ambiguity, concurrent production deployment, missing or changed baseline
 item, provider error, terminal failure, identity mismatch, ref race, status
