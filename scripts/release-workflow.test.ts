@@ -430,7 +430,11 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(providerHelper).toContain('key.startsWith("MLM_RELEASE_APP_")');
   expect(providerHelper).not.toContain(".head_commit");
   expect(providerHelper).not.toContain('event === "push"');
-  expect(providerHelper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+  expect(providerHelper).toContain("writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+  expect(providerHelper).toContain("exactSanitizedRevocationReceipt(revocationReceipt)");
+  expect(providerHelper).toContain("advanceWithRevokedReleaseAppToken(process.env, operation)");
+  expect(providerHelper).toContain("return operation(Object.freeze({");
+  expect(providerHelper).not.toContain("operation(new GitHubApi");
   expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
   expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
@@ -568,6 +572,8 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "Message Like Me\noperational ceiling, not a claim about GitHub's revocation-propagation SLA",
     "full App path is capped at fourteen REST requests",
     "exact production-ref post-read cannot begin until convergence",
+    "token-scoped callback ends immediately after the one leased Git push",
+    "An indeterminate revocation\n   therefore prevents every post-read",
     "`refs/tags/<verified-tag>`",
     "`FETCH_HEAD^{commit}`",
     "submodule recursion disabled",

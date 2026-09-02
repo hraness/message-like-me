@@ -300,8 +300,9 @@ recovery. Both paths use the same checks. That workflow:
 4. fails closed unless the mint response contains exactly that numeric
    repository, selected-repository scope, those two permissions, and a
    canonical expiry within the authenticated one-hour response window. It
-   masks the token before use and keeps it out of workflow outputs. After the
-   operation it sends exactly one nonredirecting `DELETE /installation/token`,
+   masks the token before use and keeps it out of workflow outputs. The
+   token-scoped callback ends immediately after the one leased Git push. After
+   that callback it sends exactly one nonredirecting `DELETE /installation/token`,
    requires an HTTP 204 with absent or canonical-zero `Content-Length` and zero
    body bytes, and then observes the exact selected-repository authority until
    two stable HTTP 401 responses prove convergence. A mutation failure and a
@@ -319,8 +320,12 @@ recovery. Both paths use the same checks. That workflow:
    token stays out of URLs, argv, and Git config behind a bounded temporary
    `GIT_ASKPASS` helper, prompting is disabled, global and system configuration
    are disabled, hooks and tags are disabled, cleanup is trapped, and a stale
-   lease fails without mutation. Read-only singular REST ref reads before and
-   after the push use the job's read-only GitHub Actions token; and
+   lease fails without mutation. Read-only singular REST ref reads before the
+   push use the job's read-only GitHub Actions token. The exact post-push ref
+   read and independent current-`main` workflow-source revalidation do not
+   begin until the App-token wrapper returns after its `onRevoked` callback has
+   accepted the sanitized convergence receipt. An indeterminate revocation
+   therefore prevents every post-read; and
 6. uses a separate read-only job, bounded to 20 minutes, to require exactly one
    new Vercel Production deployment. The deployment and its exhaustive status
    history must bind Vercel bot `35613825`, the exact release SHA, task

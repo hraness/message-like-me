@@ -15,6 +15,15 @@ export interface ReleaseProviderApi {
   }>): Promise<unknown>;
 }
 
+export interface ReleaseProviderWriter {
+  advanceRef(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+    verifiedTag: string,
+  ): Promise<void>;
+}
+
 export interface ProductionDeployment {
   readonly createdAt: string;
   readonly createdMilliseconds: number;
@@ -107,6 +116,14 @@ export function createProviderBaseline(input: Readonly<{
 }>): Promise<unknown>;
 
 export function promoteWebsiteProduction(input: Readonly<{
+  advanceWithRevocation?(
+    operation: (writer: ReleaseProviderWriter) => Promise<void>,
+  ): Promise<Readonly<{
+    converged: true;
+    observationCount: number;
+    propagationObserved: boolean;
+    stableDenials: 2;
+  }>>;
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
   defaultBranch: string;

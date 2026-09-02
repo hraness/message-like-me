@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { generateKeyPairSync } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +18,7 @@ import {
   releaseRestRequestBudget,
   waitForProviderOutcome as waitForProviderOutcomeRaw,
 } from "./release-provider-outcome.mjs";
+import { MESSAGE_LIKE_ME_REPOSITORY_ID, withReleaseAppToken } from "./release-app-token.mjs";
 
 const releaseWorkflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
 const productionWorkflowUrl = new URL("../.github/workflows/website-production.yml", import.meta.url);
@@ -80,6 +82,18 @@ const providerReleasePublishedAt = "2026-08-29T14:00:00Z";
 const providerBaselineServerDate = "2026-08-29T15:00:00.000Z";
 const providerPromotionServerDate = "2026-08-29T15:01:00.000Z";
 const providerCurrentMainSha = "3".repeat(40);
+type ProviderRevocationReceipt = Readonly<{
+  converged: true;
+  observationCount: number;
+  propagationObserved: boolean;
+  stableDenials: 2;
+}>;
+const providerRevocationReceipt: ProviderRevocationReceipt = Object.freeze({
+  converged: true as const,
+  observationCount: 2,
+  propagationObserved: false,
+  stableDenials: 2 as const,
+});
 const providerAuthority = Object.freeze({
   repository: providerRepository,
   verifiedSha: providerVerifiedSha,
@@ -105,6 +119,20 @@ const promoteWebsiteProduction = (
   options: Omit<ProviderPromotionInput, AuthorityDefaults> &
     Partial<Pick<ProviderPromotionInput, AuthorityDefaults>>,
 ): ReturnType<typeof promoteWebsiteProductionRaw> => promoteWebsiteProductionRaw({
+  advanceWithRevocation: async (operation) => {
+    const advanceRef = options.api.advanceRef;
+    if (advanceRef === undefined) throw new Error("test provider writer is missing");
+    await operation(Object.freeze({
+      advanceRef: (
+        repository: string,
+        expectedOldSha: string,
+        verifiedSha: string,
+        verifiedTag: string,
+      ) =>
+        advanceRef.call(options.api, repository, expectedOldSha, verifiedSha, verifiedTag),
+    }));
+    return providerRevocationReceipt;
+  },
   defaultBranch: "main",
   eventName: "workflow_dispatch",
   recoveryWorkflowSha: providerVerifiedSha,
@@ -1099,7 +1127,12 @@ esac
     expect(helper).toContain('mode = "already-exact"');
     expect(helper).toContain('mode = "advanced"');
     expect(helper).toContain("35613825");
-    expect(helper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+    expect(helper).toContain("writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+    expect(helper).toContain("exactSanitizedRevocationReceipt(revocationReceipt)");
+    expect(helper).toContain("advanceWithRevokedReleaseAppToken(process.env, operation)");
+    expect(helper).toContain("return operation(Object.freeze({");
+    expect(helper).not.toContain("operation(new GitHubApi");
+    expect(helper).toContain("async (receipt) => {");
     expect(helper).toContain("/git/ref/heads/website-production");
     expect(helper).not.toContain("/git/refs/heads/website-production");
     expect(helper).not.toContain("matching-refs");
@@ -1479,6 +1512,26 @@ esac
     const recovered = await providerReceipts("already-exact");
     expect((recovered.promotion as Readonly<Record<string, unknown>>).mode).toBe("already-exact");
     expect(recovered.promotionCalls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
+    let alreadyExactTokenLifecycles = 0;
+    const explicitKeylessRecovery = await promoteWebsiteProductionRaw({
+      advanceWithRevocation: async () => {
+        alreadyExactTokenLifecycles += 1;
+        throw new Error("already-exact recovery must not enter the App-token lifecycle");
+      },
+      api: new ProviderApiFixture({
+        refSha: providerVerifiedSha,
+        serverDates: [providerPromotionServerDate],
+      }),
+      baselineReceipt: recovered.baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+    });
+    expect(explicitKeylessRecovery).toMatchObject({ mode: "already-exact" });
+    expect(alreadyExactTokenLifecycles).toBe(0);
 
     const concurrent = providerDeployment(11, "2026-08-29T15:01:00Z");
     await expect(createProviderBaseline({
@@ -1708,8 +1761,261 @@ esac
     );
   });
 
+  test("orders the privileged write, token revocation convergence, and read-only post-read", async () => {
+    const baselineDeployment = providerDeployment(10, "2026-08-29T13:00:00Z", {
+      sha: providerPreviousSha,
+    });
+    const baseline = await createProviderBaseline({
+      api: new ProviderApiFixture({
+        deployments: [[baselineDeployment]],
+        refSha: providerPreviousSha,
+        serverDates: [providerBaselineServerDate, providerBaselineServerDate],
+        statuses: terminalBaselineStatus(),
+      }),
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+    });
+    const fixture = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerCurrentMainSha),
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, providerCurrentMainSha),
+      serverDates: [providerPromotionServerDate],
+      statuses: terminalBaselineStatus(),
+    });
+    const events: string[] = [];
+    const readApi = {
+      async get(endpoint: string): Promise<ProviderJson> {
+        events.push(`GET ${endpoint}`);
+        return fixture.get(endpoint);
+      },
+      async getWithServerDate(endpoint: string): Promise<ProviderJson> {
+        events.push(`GET with Date ${endpoint}`);
+        return fixture.getWithServerDate(endpoint);
+      },
+    };
+    const writerApi = {
+      async advanceRef(
+        coordinate: string,
+        expectedOldSha: string,
+        verifiedSha: string,
+        verifiedTag: string,
+      ): Promise<void> {
+        events.push(`GIT PUSH ${coordinate} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
+        await fixture.advanceRef(coordinate, expectedOldSha, verifiedSha, verifiedTag);
+      },
+    };
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const environment = Object.freeze({
+      GITHUB_API_URL: "https://api.github.com",
+      GITHUB_REPOSITORY: providerRepository,
+      GITHUB_REPOSITORY_ID: String(MESSAGE_LIKE_ME_REPOSITORY_ID),
+      GITHUB_REPOSITORY_OWNER: "hraness",
+      MLM_RELEASE_APP_CLIENT_ID: "Iv1.messageLikeMeRelease",
+      MLM_RELEASE_APP_ID: "24680",
+      MLM_RELEASE_APP_INSTALLATION_ID: "13579",
+      MLM_RELEASE_APP_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+      MLM_RELEASE_APP_SLUG: "message-like-me-release-writer",
+    });
+    const token = "installation-token-for-exact-provider-order";
+    let revokedReceipt: ProviderRevocationReceipt | undefined;
+
+    const promotion = await promoteWebsiteProductionRaw({
+      advanceWithRevocation: async (operation) => {
+        await withReleaseAppToken({
+          environment,
+          async inspect() {
+            events.push("GET /app");
+            return {
+              client_id: "Iv1.messageLikeMeRelease",
+              id: 24680,
+              owner: { login: "hraness", type: "Organization" },
+              permissions: { contents: "write", metadata: "read" },
+              slug: "message-like-me-release-writer",
+            };
+          },
+          async inspectInstallation() {
+            events.push("GET /app/installations/13579");
+            return {
+              account: { login: "hraness", type: "Organization" },
+              app_id: 24680,
+              app_slug: "message-like-me-release-writer",
+              id: 13579,
+              permissions: { contents: "write", metadata: "read" },
+              repository_selection: "selected",
+              target_type: "Organization",
+            };
+          },
+          mask() {
+            events.push("MASK APP TOKEN");
+          },
+          async mint() {
+            events.push("POST /app/installations/13579/access_tokens");
+            return {
+              body: {
+                expires_at: "2026-08-29T19:00:00Z",
+                permissions: { contents: "write", metadata: "read" },
+                repositories: [{
+                  full_name: providerRepository,
+                  id: MESSAGE_LIKE_ME_REPOSITORY_ID,
+                  name: "message-like-me",
+                  owner: { login: "hraness" },
+                }],
+                repository_selection: "selected",
+                token,
+              },
+              serverDate: "Sat, 29 Aug 2026 18:00:00 GMT",
+            };
+          },
+          nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
+          async onRevoked(receipt) {
+            revokedReceipt = receipt;
+            events.push("REVOCATION CONVERGED");
+          },
+          async revoke() {
+            events.push("DELETE /installation/token");
+            events.push("GET /installation/repositories 401");
+            events.push("GET /installation/repositories 401");
+            return providerRevocationReceipt;
+          },
+        }, async (leasedToken) => {
+          expect(leasedToken).toBe(token);
+          await operation(writerApi);
+        });
+        events.push("TOKEN WRAPPER RETURNED");
+        if (revokedReceipt === undefined) throw new Error("missing revocation receipt");
+        return revokedReceipt;
+      },
+      api: readApi,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerCurrentMainSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+    });
+
+    expect(promotion).toMatchObject({ mode: "advanced", verifiedSha: providerVerifiedSha });
+    const push = `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`;
+    expect(events.slice(events.indexOf(push))).toEqual([
+      push,
+      "DELETE /installation/token",
+      "GET /installation/repositories 401",
+      "GET /installation/repositories 401",
+      "REVOCATION CONVERGED",
+      "TOKEN WRAPPER RETURNED",
+      `GET /repos/${providerRepository}/git/ref/heads/website-production`,
+      `GET /repos/${providerRepository}`,
+      `GET /repos/${providerRepository}/git/ref/heads/main`,
+      `GET /repos/${providerRepository}/compare/${providerVerifiedSha}...${providerCurrentMainSha}`,
+      `GET /repos/${providerRepository}`,
+      `GET /repos/${providerRepository}/git/ref/heads/main`,
+      `GET /repos/${providerRepository}/compare/${providerVerifiedSha}...${providerCurrentMainSha}`,
+    ]);
+  });
+
+  test("does not post-read the advanced ref when token revocation is indeterminate", async () => {
+    const { baseline, baselineDeployment } = await providerReceipts("advanced");
+    const fixture = new ProviderApiFixture({
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      serverDates: [providerPromotionServerDate],
+      statuses: terminalBaselineStatus(),
+    });
+    const events: string[] = [];
+    const readApi = {
+      async get(endpoint: string): Promise<ProviderJson> {
+        events.push(`GET ${endpoint}`);
+        return fixture.get(endpoint);
+      },
+      async getWithServerDate(endpoint: string): Promise<ProviderJson> {
+        events.push(`GET with Date ${endpoint}`);
+        return fixture.getWithServerDate(endpoint);
+      },
+    };
+    const writerApi = {
+      async advanceRef(
+        coordinate: string,
+        expectedOldSha: string,
+        verifiedSha: string,
+        verifiedTag: string,
+      ): Promise<void> {
+        events.push(`GIT PUSH ${coordinate} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
+        await fixture.advanceRef(coordinate, expectedOldSha, verifiedSha, verifiedTag);
+      },
+    };
+
+    await expect(promoteWebsiteProductionRaw({
+      advanceWithRevocation: async (operation) => {
+        await operation(writerApi);
+        events.push("DELETE /installation/token");
+        events.push("GET /installation/repositories 401");
+        throw new Error("release App token revocation convergence is indeterminate");
+      },
+      api: readApi,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+    })).rejects.toThrow("release App token revocation convergence is indeterminate");
+
+    const push = `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`;
+    expect(events.slice(events.indexOf(push))).toEqual([
+      push,
+      "DELETE /installation/token",
+      "GET /installation/repositories 401",
+    ]);
+  });
+
   test("fails promotion closed on comparison, ref, and lease races", async () => {
     const { baseline, baselineDeployment } = await providerReceipts("advanced");
+    const missingLifecycle = new ProviderApiFixture({
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      statuses: terminalBaselineStatus(),
+    });
+    await expect(promoteWebsiteProductionRaw({
+      api: missingLifecycle,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+    })).rejects.toThrow("requires the bounded release App token lifecycle");
+    expect(missingLifecycle.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
+
+    const malformedRevocation = new ProviderApiFixture({
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      statuses: terminalBaselineStatus(),
+    });
+    await expect(promoteWebsiteProductionRaw({
+      advanceWithRevocation: async (operation) => {
+        await operation(malformedRevocation);
+        return {
+          ...providerRevocationReceipt,
+          observationCount: 3,
+        };
+      },
+      api: malformedRevocation,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+    })).rejects.toThrow("revocation receipt is malformed");
+    const malformedPush = malformedRevocation.calls.findIndex((call) => call.startsWith("GIT PUSH "));
+    expect(malformedPush).toBeGreaterThanOrEqual(0);
+    expect(malformedRevocation.calls.slice(malformedPush + 1)).toEqual([]);
+
     const staleLatest = new ProviderApiFixture({
       latestSnapshots: [providerLatest({ tag_name: "v0.7.9" })],
       refSha: providerPreviousSha,

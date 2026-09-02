@@ -5,7 +5,10 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { withReleaseAppTokenFromEnvironment } from "./release-app-token.mjs";
+import {
+  RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS,
+  withReleaseAppTokenFromEnvironment,
+} from "./release-app-token.mjs";
 import { advanceWebsiteProductionRefFromEnvironment } from "./release-ref-writer.mjs";
 
 const BASELINE_SCHEMA = "message-like-me-provider-baseline-v1";
@@ -1414,6 +1417,33 @@ function promotionReceiptValue(receipt) {
   });
 }
 
+function exactSanitizedRevocationReceipt(value) {
+  const receipt = expectRecord(value, "release App token revocation receipt");
+  expectExactKeys(
+    receipt,
+    ["converged", "observationCount", "propagationObserved", "stableDenials"],
+    "release App token revocation receipt",
+  );
+  if (
+    receipt.converged !== true ||
+    !Number.isSafeInteger(receipt.observationCount) ||
+    receipt.observationCount < 2 ||
+    receipt.observationCount > RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS.length ||
+    typeof receipt.propagationObserved !== "boolean" ||
+    (receipt.propagationObserved === false && receipt.observationCount !== 2) ||
+    (receipt.propagationObserved === true && receipt.observationCount < 3) ||
+    receipt.stableDenials !== 2
+  ) {
+    fail("release App token revocation receipt is malformed");
+  }
+  return Object.freeze({
+    converged: true,
+    observationCount: receipt.observationCount,
+    propagationObserved: receipt.propagationObserved,
+    stableDenials: 2,
+  });
+}
+
 export async function createProviderBaseline({ api, repository, verifiedSha }) {
   const coordinate = expectRepository(repository);
   const sha = expectSha(verifiedSha, "verified SHA");
@@ -1453,6 +1483,7 @@ export async function createProviderBaseline({ api, repository, verifiedSha }) {
 }
 
 export async function promoteWebsiteProduction({
+  advanceWithRevocation,
   api,
   baselineReceipt,
   defaultBranch,
@@ -1501,7 +1532,27 @@ export async function promoteWebsiteProduction({
     mode = "advanced";
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
-    await api.advanceRef(coordinate, prePatchRef.sha, sha, tag);
+    if (typeof advanceWithRevocation !== "function") {
+      fail("advanced promotion requires the bounded release App token lifecycle");
+    }
+    let advanceState = "pending";
+    const revocationReceipt = await advanceWithRevocation(async (writerApi) => {
+      if (advanceState !== "pending") fail("production ref advance was invoked more than once");
+      if (
+        writerApi === null ||
+        typeof writerApi !== "object" ||
+        typeof writerApi.advanceRef !== "function"
+      ) {
+        fail("release App writer cannot advance the production ref");
+      }
+      advanceState = "running";
+      await writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag);
+      advanceState = "completed";
+    });
+    if (advanceState !== "completed") {
+      fail("release App token lifecycle did not complete the production ref advance");
+    }
+    exactSanitizedRevocationReceipt(revocationReceipt);
   }
 
   const promotedSha = await readProductionRef(api, coordinate);
@@ -2039,6 +2090,31 @@ class GitHubApi {
   }
 }
 
+async function advanceWithRevokedReleaseAppToken(environment, operation) {
+  let revocationReceipt;
+  await withReleaseAppTokenFromEnvironment(
+    environment,
+    async (token) => {
+      const writerApi = new GitHubApi({
+        ...environment,
+        MLM_RELEASE_APP_TOKEN: token,
+      });
+      return operation(Object.freeze({
+        advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag) {
+          return writerApi.advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag);
+        },
+      }));
+    },
+    async (receipt) => {
+      revocationReceipt = receipt;
+    },
+  );
+  if (revocationReceipt === undefined) {
+    fail("release App token lifecycle ended without a revocation receipt");
+  }
+  return revocationReceipt;
+}
+
 function writeReceiptOutput(receipt) {
   const output = process.env.GITHUB_OUTPUT;
   if (typeof output !== "string" || output.length === 0) fail("GITHUB_OUTPUT is unavailable");
@@ -2126,8 +2202,11 @@ async function main() {
     if (expectedMode !== "advanced" && expectedMode !== "already-exact") {
       fail("PROMOTION_EXPECTED_MODE is not exact");
     }
-    const promote = (promotionApi) => promoteWebsiteProduction({
-      api: promotionApi,
+    const receipt = await promoteWebsiteProduction({
+      advanceWithRevocation: expectedMode === "advanced"
+        ? (operation) => advanceWithRevokedReleaseAppToken(process.env, operation)
+        : undefined,
+      api,
       baselineReceipt: decodeProviderReceipt(process.env.BASELINE_RECEIPT, "BASELINE_RECEIPT"),
       defaultBranch: process.env.DEFAULT_BRANCH,
       eventName: process.env.EVENT_NAME,
@@ -2136,15 +2215,6 @@ async function main() {
       verifiedSha: process.env.VERIFIED_SHA,
       verifiedTag: process.env.VERIFIED_TAG,
     });
-    const receipt = expectedMode === "advanced"
-      ? await withReleaseAppTokenFromEnvironment(process.env, async (token) => {
-        const promotionApi = new GitHubApi({
-          ...process.env,
-          MLM_RELEASE_APP_TOKEN: token,
-        });
-        return promote(promotionApi);
-      })
-      : await promote(api);
     if (receipt.mode !== expectedMode) {
       fail(`promotion mode ${String(receipt.mode)} did not match ${expectedMode}`);
     }
