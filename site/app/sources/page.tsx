@@ -37,7 +37,9 @@ const beeperProvenanceSummary =
 const whatsappProducerSummary =
   `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion} owns official ` +
   `${WHATSAPP_COMPATIBILITY.providerCli} v${WHATSAPP_COMPATIBILITY.providerCliVersion}, ` +
-  'linked-device authentication, synchronization, and the bounded local export.';
+  'linked-device authentication, synchronization, and the bounded local export. ' +
+  `It omits reaction-shaped rows with ${WHATSAPP_COMPATIBILITY.reactionWarning} ` +
+  'when current state cannot be proved.';
 
 export default function SourcesPage() {
   return (
@@ -157,7 +159,9 @@ export default function SourcesPage() {
             <strong>What this does not mean:</strong> Message Like Me does not install or
             start Wacli, receive a WhatsApp credential or session database, synchronize
             a linked device, call a provider network, or send. Existing Beeper overlap
-            requires explicit exact account, peer, and shared-message proof.
+            requires explicit exact account, peer, and shared-message proof. An empty
+            native reaction artifact is unavailable evidence, not evidence of no
+            reactions.
           </aside>
           <div className="source-links">
             <a href="https://wrench.rip/providers/whatsapp/">Inspect Wrench’s WhatsApp surface ↗</a>

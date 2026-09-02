@@ -48,11 +48,13 @@ describe('supported source presentation', () => {
       sourceTransformVersion: '1.0.0',
       providerId: 'whatsapp',
       network: 'whatsapp',
+      reactionState: 'unproven-omitted',
+      reactionWarning: 'reaction-state-unproven',
     });
     const whatsapp = SUPPORTED_SOURCES.find((entry) => entry.id === 'whatsapp-via-wrench');
     expect(whatsapp?.name).toBe('WhatsApp via Wrench');
-    expect(whatsapp?.boundary).toContain('Wrench alone owns Wacli');
-    expect(whatsapp?.boundary).toContain('never sends');
+    expect(whatsapp?.boundary).toContain('omits reaction-shaped rows');
+    expect(whatsapp?.boundary).toContain('never operates WhatsApp');
   });
 
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
@@ -90,7 +92,19 @@ describe('supported source presentation', () => {
   test('publishes the catalog across human and machine discovery surfaces', async () => {
     const renderedHomePage = renderToStaticMarkup(HomePage());
     const renderedSourcesPage = renderToStaticMarkup(SourcesPage());
-    const [home, sourcesPage, chrome, sitemap, llms, readme, bundleContract, whatsappContract] =
+    const [
+      home,
+      sourcesPage,
+      chrome,
+      sitemap,
+      llms,
+      readme,
+      changelog,
+      bundleContract,
+      whatsappContract,
+      messagingSkill,
+      privacyGuide,
+    ] =
       await Promise.all([
         source('site/app/page.tsx'),
         source('site/app/sources/page.tsx'),
@@ -98,8 +112,11 @@ describe('supported source presentation', () => {
         source('site/app/sitemap.ts'),
         source('site/app/llms.txt/route.ts'),
         source('README.md'),
+        source('CHANGELOG.md'),
         source('docs/local-message-bundle-v1.md'),
         source('docs/local-message-bundle-v2.md'),
+        source('skills/message-like-me/SKILL.md'),
+        source('skills/message-like-me/references/privacy.md'),
       ]);
 
     expect(home).toMatch(
@@ -219,6 +236,24 @@ describe('supported source presentation', () => {
     ]) {
       expect(whatsappContract).toContain(coordinate);
     }
+    for (const copy of [
+      readme,
+      changelog,
+      whatsappContract,
+      llms,
+      messagingSkill,
+      privacyGuide,
+    ]) {
+      expect(copy).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
+    }
+    for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
+      expect(copy).toMatch(/unobservable|observability limit/u);
+    }
+    expect(changelog).toContain('## Unreleased');
+    expect(changelog).not.toContain('## 0.8.1');
+    expect(privacyGuide).toContain('never turn that missing evidence into a');
+    expect(renderedSourcesPage).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
+    expect(renderedSourcesPage).toContain('not evidence of no reactions');
     for (const coordinate of [
       `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
       `executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}`,

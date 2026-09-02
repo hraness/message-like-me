@@ -116,6 +116,13 @@ messagelikeme ingest bundle --input <absolute-private-whatsapp-bundle> --json
 Do not request or handle Wacli session state or WhatsApp linked-device
 authentication, call Wacli, inspect its database, synchronize the account, or
 open bundle records in agent context. Wrench owns those provider operations.
+The Wrench v0.16.3/Wacli v0.15.0 producer omits every reaction-shaped row and
+reports `reaction-state-unproven` when it encounters one because current active
+or removed state is not durable. Treat that warning, and an empty reaction
+artifact from this producer, as unobservable reaction behavior. Do not infer
+that the user avoided reactions or compare a native WhatsApp reaction ratio.
+The v2 wire contract can parse a proven reaction record, but this exact producer
+does not supply one.
 If the CLI reports an exact existing Beeper WhatsApp account, inspect the
 redacted source inventory and pass `--overlap-source <source-id>` only when the
 user intends that reconciliation. The CLI must prove exact self and direct-peer

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Document that the Wrench v0.16.3 and official Wacli v0.15.0 WhatsApp
+  producer omits reaction-shaped rows and reports `reaction-state-unproven`
+  when current active or removed state cannot be established.
+- Keep the v2 reaction artifact and strict parser for proven records while
+  treating an empty artifact from this producer as unobservable reaction
+  behavior, not evidence that no reactions occurred. Native WhatsApp overlap
+  therefore cannot reconcile reaction state from this producer.
+
 ## 0.8.0
 
 - Add `ensoul prepare` as an offline, bounded source adapter for the owner or
