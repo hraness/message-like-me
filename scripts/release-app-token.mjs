@@ -710,9 +710,10 @@ async function asRevocationIndeterminate(reason, operation) {
 }
 
 /**
- * Sends exactly one revocation request and then waits for two stable authorization denials from
- * the token's exact selected-repository endpoint. The 30-second request-start window is
- * an operational fail-closed ceiling, not a claim about GitHub's revocation propagation SLA.
+ * Sends exactly one revocation request and then waits for two stable HTTP 401-or-403
+ * authorization denials from the token's exact selected-repository endpoint. The 30-second
+ * request-start window is an operational fail-closed ceiling, not a claim about GitHub's
+ * revocation propagation SLA.
  */
 export async function revokeReleaseAppTokenWithConvergence(input) {
   const apiUrl = input.apiUrl;
@@ -882,7 +883,10 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
         sawAuthorizedResponse = true;
         continue;
       }
-      if (observation.response.status === 401) {
+      if (
+        observation.response.status === 401 ||
+        observation.response.status === 403
+      ) {
         let deniedBytes;
         try {
           deniedBytes = await readBoundedBytes(
