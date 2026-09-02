@@ -606,11 +606,17 @@ class ProviderApiFixture {
     return { body, serverDate: serverDate ?? providerPromotionServerDate };
   }
 
-  async advanceRef(repository: string, expectedOldSha: string, verifiedSha: string): Promise<void> {
-    this.calls.push(`GIT PUSH ${repository} ${expectedOldSha} ${verifiedSha}`);
+  async advanceRef(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+    verifiedTag: string,
+  ): Promise<void> {
+    this.calls.push(`GIT PUSH ${repository} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
     expect(repository).toBe(providerRepository);
     expect(expectedOldSha).toBe(providerPreviousSha);
     expect(verifiedSha).toBe(providerVerifiedSha);
+    expect(verifiedTag).toBe(providerTag);
     if (this.advanceError !== undefined) throw this.advanceError;
     this.refSha = providerVerifiedSha;
   }
@@ -1093,7 +1099,7 @@ esac
     expect(helper).toContain('mode = "already-exact"');
     expect(helper).toContain('mode = "advanced"');
     expect(helper).toContain("35613825");
-    expect(helper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha)");
+    expect(helper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
     expect(helper).toContain("/git/ref/heads/website-production");
     expect(helper).not.toContain("/git/refs/heads/website-production");
     expect(helper).not.toContain("matching-refs");
@@ -1467,7 +1473,7 @@ esac
     const advanced = await providerReceipts("advanced");
     expect((advanced.promotion as Readonly<Record<string, unknown>>).mode).toBe("advanced");
     expect(advanced.promotionCalls.filter((call) => call.startsWith("GIT PUSH "))).toEqual([
-      `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha}`,
+      `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`,
     ]);
     expect(advanced.promotionCalls.some((call) => call.includes("/deployments"))).toBe(false);
     const recovered = await providerReceipts("already-exact");

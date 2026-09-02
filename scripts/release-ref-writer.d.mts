@@ -9,6 +9,10 @@ export function websiteProductionPushArguments(
   verifiedSha: string,
 ): readonly string[];
 
+export function verifiedReleaseFetchArguments(
+  verifiedTag: string,
+): readonly string[];
+
 export function advanceWebsiteProductionRef(options: Readonly<{
   environment: RefWriterEnvironment;
   expectedOldSha: string;
@@ -19,6 +23,7 @@ export function advanceWebsiteProductionRef(options: Readonly<{
     options: SpawnSyncOptionsWithStringEncoding,
   ): SpawnSyncReturns<string>;
   verifiedSha: string;
+  verifiedTag: string;
 }>): void;
 
 export function advanceWebsiteProductionRefFromEnvironment(input: Readonly<{
@@ -26,4 +31,5 @@ export function advanceWebsiteProductionRefFromEnvironment(input: Readonly<{
   expectedOldSha: string;
   repository: string;
   verifiedSha: string;
+  verifiedTag: string;
 }>): void;

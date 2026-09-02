@@ -12,6 +12,7 @@ const CODEOWNERS = join(import.meta.dir, "..", ".github", "CODEOWNERS");
 const PUBLISHING_GUIDE = join(import.meta.dir, "..", "docs", "publishing.md");
 const APP_TOKEN_HELPER = join(import.meta.dir, "release-app-token.mjs");
 const PROVIDER_HELPER = join(import.meta.dir, "release-provider-outcome.mjs");
+const REF_WRITER_HELPER = join(import.meta.dir, "release-ref-writer.mjs");
 const NPM_PUBLISHER = join(import.meta.dir, "publish-npm-release.ts");
 const NPM_PROVENANCE = join(import.meta.dir, "npm-provenance-verification.ts");
 const NPM_RETRY = join(import.meta.dir, "check-npm-retry-state.ts");
@@ -329,10 +330,11 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
 });
 
 test("site promotion accepts reviewed release ancestry and isolates a fresh App-key writer", async () => {
-  const [workflow, appTokenHelper, providerHelper, publicAdmission] = await Promise.all([
+  const [workflow, appTokenHelper, providerHelper, refWriterHelper, publicAdmission] = await Promise.all([
     readFile(join(WORKFLOWS, "website-production.yml"), "utf8"),
     readFile(APP_TOKEN_HELPER, "utf8"),
     readFile(PROVIDER_HELPER, "utf8"),
+    readFile(REF_WRITER_HELPER, "utf8"),
     readFile(PUBLIC_ADMISSION, "utf8"),
   ]);
 
@@ -425,8 +427,17 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(providerHelper).toContain('key.startsWith("MLM_RELEASE_APP_")');
   expect(providerHelper).not.toContain(".head_commit");
   expect(providerHelper).not.toContain('event === "push"');
+  expect(providerHelper).toContain("api.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+  expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
+  expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
+  expect(refWriterHelper).toContain('`refs/tags/${tag}`');
+  expect(refWriterHelper).toContain("GIT_LFS_SKIP_SMUDGE");
+  expect(refWriterHelper).toContain("verifiedTag: input.verifiedTag");
   expect(/PROVIDER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
     createHash("sha256").update(providerHelper).digest("hex"),
+  );
+  expect(/REF_WRITER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(refWriterHelper).digest("hex"),
   );
   expect(workflow.match(/release-provider-outcome\.mjs revalidate-authority/gu)?.length).toBeGreaterThanOrEqual(6);
   expect(workflow.match(/check-public-release\.ts/gu)?.length).toBeGreaterThanOrEqual(8);
@@ -548,6 +559,9 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "repository ID `1342143606`",
     "repository_ids: [1342143606]",
     "DELETE /installation/token",
+    "`refs/tags/<verified-tag>`",
+    "`FETCH_HEAD^{commit}`",
+    "submodule recursion disabled",
     "skips the\nentire `production-ref-writer-key` job, and mints no App token",
     "a later `main` push creates no Vercel Production deployment",
     "product pull request must not change\n`.github/workflows/`, `.github/CODEOWNERS`",

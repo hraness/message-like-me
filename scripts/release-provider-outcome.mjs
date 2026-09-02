@@ -1501,7 +1501,7 @@ export async function promoteWebsiteProduction({
     mode = "advanced";
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
-    await api.advanceRef(coordinate, prePatchRef.sha, sha);
+    await api.advanceRef(coordinate, prePatchRef.sha, sha, tag);
   }
 
   const promotedSha = await readProductionRef(api, coordinate);
@@ -2028,12 +2028,13 @@ class GitHubApi {
     return this.#run(args, "GraphQL Production deployments");
   }
 
-  async advanceRef(repository, expectedOldSha, verifiedSha) {
+  async advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag) {
     advanceWebsiteProductionRefFromEnvironment({
       environment: this.#environment,
       expectedOldSha,
       repository,
       verifiedSha,
+      verifiedTag,
     });
   }
 }

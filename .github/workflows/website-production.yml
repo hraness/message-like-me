@@ -282,8 +282,8 @@ jobs:
       - name: Pin the only secret-bearing writer code to reviewed hashes
         env:
           APP_TOKEN_SHA256: 7de86680f81cbfafdb9123c9fa63c5a3298c3048eeeaf35d78f5663cca37a114
-          PROVIDER_SHA256: 5ccc1d842ca1e42cd3971cbea6fe74fe565d82ebe1ea78ce1bd2d8bff5c0cf02
-          REF_WRITER_SHA256: 741ea9018459d4e3fd240097a64b3beeb5bfbb958c993206c7bf052fae7975c0
+          PROVIDER_SHA256: 3befd84b08cb24b4ce58812bf61e1637112d018e55031b0bab793008f9987058
+          REF_WRITER_SHA256: 41c136d48e562d5c9e3ea3cb894fca8752aa2481e56fb01ebb0481b14f92687f
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"

@@ -305,8 +305,12 @@ recovery. Both paths use the same checks. That workflow:
    boundary. A mutation failure and a revocation failure are both retained;
 5. sandwiches the fresh writer job with separate read-only immutable Release,
    Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
-   admissions; proves `website-production` can fast-forward;
-   then uses authenticated Git over a fixed HTTPS remote to push exactly
+   admissions; proves `website-production` can fast-forward; then fetches only
+   `refs/tags/<verified-tag>` from the fixed HTTPS repository at depth one,
+   with tag following and submodule recursion disabled. It peels
+   `FETCH_HEAD^{commit}` without checking out or executing tagged code and
+   requires the result to equal `verified_sha` before using authenticated Git
+   to push exactly
    `<verified-sha>:refs/heads/website-production` with
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>`. The
    token stays out of URLs, argv, and Git config behind a bounded temporary

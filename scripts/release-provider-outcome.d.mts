@@ -3,6 +3,7 @@ export interface ReleaseProviderApi {
     repository: string,
     expectedOldSha: string,
     verifiedSha: string,
+    verifiedTag: string,
   ): Promise<void>;
   get?(endpoint: string): Promise<unknown>;
   getWithServerDate?(endpoint: string): Promise<unknown>;
