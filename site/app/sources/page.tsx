@@ -74,7 +74,7 @@ export default function SourcesPage() {
         <section className="beeper-workflow" aria-labelledby="beeper-workflow-title">
           <div className="beeper-workflow-intro">
             <p className="eyebrow">Beeper via Wrench</p>
-            <h2 id="beeper-workflow-title">One exporter. One verifier. No hidden handoff.</h2>
+            <h2 id="beeper-workflow-title">Wrench exports. Message Like Me verifies.</h2>
             <p>
               Wrench handles the bounded provider observation. Message Like Me handles
               strict local verification, normalization, measurement, and drafts-only

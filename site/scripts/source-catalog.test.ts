@@ -119,6 +119,9 @@ describe('supported source presentation', () => {
       'Wrench v0.16.3 uses beeper-local adapter v2.3.0',
     );
     expect(renderedSourcesPage).toContain(
+      'Wrench exports. Message Like Me verifies.',
+    );
+    expect(renderedSourcesPage).toContain(
       '32 reviewed Beeper operations comprise 27 through the pinned Beeper CLI and 5 fixed Desktop reads',
     );
     expect(renderedSourcesPage).toContain(
