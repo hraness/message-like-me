@@ -319,8 +319,9 @@ recovery. Both paths use the same checks. That workflow:
    that callback it sends exactly one nonredirecting `DELETE /installation/token`,
    requires an HTTP 204 with absent or canonical-zero `Content-Length` and zero
    body bytes, and then observes the exact selected-repository authority until
-   two stable HTTP 401 responses prove convergence. A mutation failure and a
-   revocation or convergence failure are both retained;
+   two stable authorization-denial responses, each HTTP 401 or 403, prove
+   convergence. A mutation failure and a revocation or convergence failure are
+   both retained;
 5. sandwiches the fresh writer job with separate read-only immutable Release,
    Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
    admissions; proves `website-production` can fast-forward; then fetches only
@@ -348,8 +349,9 @@ recovery. Both paths use the same checks. That workflow:
    Release, Latest, workflow-source, ref, inventory, and status readbacks close
    the workflow.
 
-The successful DELETE and every accepted HTTP 200 or 401 observation require a
-canonical GitHub `Date` strictly before the minted token's exact `expires_at`.
+The successful DELETE and every accepted HTTP 200, 401, or 403 observation
+require a canonical GitHub `Date` strictly before the minted token's exact
+`expires_at`.
 The monotonic completion of the DELETE anchors a separate 30-second half-open
 request-start window `[start, deadline)`: a response completing exactly at the
 deadline remains eligible, while a later completion fails. The helper may read
@@ -358,18 +360,22 @@ deadline remains eligible, while a later completion fails. The helper may read
 missed slot is skipped rather than retried or shifted, and request, body, and
 sleep latency all consume the same window. App identity, installation, mint,
 DELETE, and observation bodies are streamed under a 1 MiB cap and scrubbed
-after parsing. Every HTTP 200 must still describe
-the exact singleton selected `hraness/message-like-me` repository with ID
-`1342143606`. Acceptance requires two distinct scheduled HTTP 401 reads. A 200
-after a 401, only one 401, any other status, a redirect, malformed or oversized
-body, transport or timing ambiguity, or failure to converge within the window
-fails closed. `propagationObserved=false` means the first two probes were the
-stable denial pair; `true` means one or more exact authorized 200 responses
-preceded the final two denials. This 30-second bound is a Message Like Me
-operational ceiling, not a claim about GitHub's revocation-propagation SLA. The
-action is never retried, the full App path is capped at fourteen REST requests,
-and the exact production-ref post-read cannot begin until convergence has been
-reported through the sanitized revocation receipt.
+after parsing. Every HTTP 200 must still describe the exact singleton selected
+`hraness/message-like-me` repository with ID `1342143606`. Acceptance requires
+two distinct scheduled authorization-denial reads. Each may be HTTP 401 or 403,
+including a mixed status pair. A 200 after either denial, only one denial, any
+other status, a redirect, malformed or oversized body, transport or timing
+ambiguity, or failure to converge within the window fails closed. The exact
+empty HTTP 204 DELETE response is the documented revocation success. The
+scheduled reads are a defense-in-depth check and do not require GitHub to return
+one unique post-revocation denial status. `propagationObserved=false` means the
+first two probes were the stable denial pair; `true` means one or more exact
+authorized 200 responses preceded the final two denials. This 30-second bound is
+a Message Like Me operational ceiling, not a claim about GitHub's
+revocation-propagation SLA. The action is never retried, the full App path is
+capped at fourteen REST requests, and the exact production-ref post-read cannot
+begin until convergence has been reported through the sanitized revocation
+receipt.
 
 Any ambiguity, concurrent production deployment, missing or changed baseline
 item, provider error, terminal failure, identity mismatch, ref race, status
