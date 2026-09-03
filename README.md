@@ -37,7 +37,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the immutable public
 release from GitHub, then install both bundled Agent Skills:
 
 ```sh
-bun add --global github:hraness/message-like-me#v0.8.0
+bun add --global github:hraness/message-like-me#v0.8.1
 messagelikeme skill install
 ```
 

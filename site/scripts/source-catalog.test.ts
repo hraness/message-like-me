@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import HomePage from '../app/page.tsx';
+import sitemap from '../app/sitemap.ts';
 import SourcesPage from '../app/sources/page.tsx';
 import { SourceIcon } from '../app/_components/source-icon.tsx';
 import {
@@ -20,6 +21,24 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
+  test('dates only the routes changed by the source integration', () => {
+    const routeDates = sitemap().map(({ lastModified, url }) => {
+      if (!(lastModified instanceof Date)) {
+        throw new Error(`Expected a Date lastModified value for ${url}`);
+      }
+      return [new URL(url).pathname, lastModified.toISOString()];
+    });
+
+    expect(routeDates).toEqual([
+      ['/', '2026-09-03T00:00:00.000Z'],
+      ['/sources', '2026-09-03T00:00:00.000Z'],
+      ['/docs', '2026-09-03T00:00:00.000Z'],
+      ['/methodology', '2026-08-27T00:00:00.000Z'],
+      ['/research', '2026-08-27T00:00:00.000Z'],
+      ['/about', '2026-08-27T00:00:00.000Z'],
+    ]);
+  });
+
   test('keeps one exact, source-aware catalog', () => {
     expect(SUPPORTED_SOURCES.map((entry) => entry.id)).toEqual([
       'apple-messages',
@@ -213,18 +232,18 @@ describe('supported source presentation', () => {
     expect(renderedSourcesPage).toContain(
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
-    expect(renderedSourcesPage).toContain('Current support in v0.8.0');
+    expect(renderedSourcesPage).toContain('Current support in v0.8.1');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.0/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.1/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
       'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.0/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.1/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -307,8 +326,8 @@ describe('supported source presentation', () => {
     for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
       expect(copy).toMatch(/unobservable|observability limit/u);
     }
-    expect(changelog).toContain('## Unreleased');
-    expect(changelog).not.toContain('## 0.8.1');
+    expect(changelog).toContain('## 0.8.1');
+    expect(changelog).not.toContain('## Unreleased');
     expect(privacyGuide).toContain('never turn that missing evidence into a');
     expect(renderedSourcesPage).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
     expect(renderedSourcesPage).toContain('not evidence of no reactions');
