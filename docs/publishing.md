@@ -97,15 +97,18 @@ for this rollout and do not create a replacement Sites project.
    scope, then configure its sole trusted publisher as GitHub Actions repository
    `hraness/message-like-me`, workflow file `release.yml`, with `npm publish`
    permission. The one-time registry bootstrap may publish only the exact
-   already-reviewed `v0.8.0` package bytes under a non-Latest `legacy` dist-tag;
-   every later release must use OIDC from the checked workflow. Once trusted
+   already-reviewed `v0.8.0` package bytes under the `legacy` dist-tag; every
+   later release must use OIDC from the checked workflow. Once trusted
    publishing is proven, disallow traditional token publication for the
-   package. This manual `v0.8.0` registry seed is historical bootstrap only: it
-   remains outside Latest and is not expected to acquire trusted-publisher
-   metadata retroactively. Do not rerun its tag or invoke the automated Release
-   workflow for `v0.8.0`. After the version-neutral control change merges,
-   prepare a separate product pull request for a version newer than `0.8.0`;
-   that new version is the first automated OIDC release and becomes Latest.
+   package. This manual `v0.8.0` registry seed is historical bootstrap only.
+   The registry may resolve both `legacy` and `latest` to those same immutable
+   `0.8.0` bytes. Dist-tags are mutable labels, so sharing that coordinate does
+   not alter the historical bootstrap or give it
+   trusted-publisher metadata retroactively. Do not rerun its tag or invoke the
+   automated Release workflow for `v0.8.0`. After the version-neutral control
+   change merges, prepare a separate product pull request for a version newer
+   than `0.8.0`; that new version is the first automated OIDC release and
+   becomes Latest.
    Never retag or reuse `v0.8.0`. The public repository and package must retain
    automatic npm provenance for every automated release.
 
@@ -186,7 +189,8 @@ has passed review and entered `main`; the tag commit must remain an ancestor of
 current `main`, and the tag must be the newest stable semantic version. Later
 reviewed `main` descendants do not invalidate the immutable release authority.
 The first automated trusted-publisher version must be newer than the manual
-non-Latest `v0.8.0` bootstrap coordinate.
+`v0.8.0` bootstrap coordinate, whether npm currently maps only `legacy` or both
+`legacy` and `latest` to `0.8.0`.
 
 The tag-triggered Release workflow:
 

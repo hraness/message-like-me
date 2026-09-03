@@ -581,11 +581,13 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "Immutable version tags",
     "current_user_can_bypass=never",
     "workflow file `release.yml`, with `npm publish`",
-    "non-Latest `legacy` dist-tag",
+    "registry may resolve both `legacy` and `latest` to those same",
+    "Dist-tags are mutable labels",
     "manual `v0.8.0` registry seed is historical bootstrap only",
-    "first automated OIDC release and becomes Latest",
+    "first automated OIDC release",
+    "becomes Latest",
     "Never retag or reuse `v0.8.0`",
-    "every later release must use OIDC",
+    "later release must use OIDC",
     "automatic npm provenance for every automated release",
     "exactly `contents:write` plus `metadata:read`",
     "{hraness/message-like-me}",
@@ -644,5 +646,12 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "never retags",
   ] as const) {
     expect(guide).toContain(required);
+  }
+  for (const inaccurate of [
+    "non-Latest `legacy` dist-tag",
+    "remains outside Latest",
+    "non-Latest `v0.8.0` bootstrap coordinate",
+  ] as const) {
+    expect(guide).not.toContain(inaccurate);
   }
 });
