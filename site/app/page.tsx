@@ -59,7 +59,7 @@ const HOME_QUESTIONS = [
   {
     question: 'What does it cost?',
     answer:
-      'Nothing. Message Like Me is open source under the MIT license and installs from an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
+      'Nothing. Message Like Me is open source under the MIT license. Install the exact public npm package; the same reviewed bytes are mirrored by an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
   },
   {
     question: 'Which platforms does it run on?',
@@ -305,7 +305,7 @@ export default function Home() {
             id="install"
           >
             <ol className="command-stack" aria-label="Installation and first-check commands">
-              <li><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></li>
+              <li><code>bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}</code></li>
               <li><code>messagelikeme skill install</code></li>
               <li><code>messagelikeme init</code></li>
               <li><code>messagelikeme doctor --json</code></li>
