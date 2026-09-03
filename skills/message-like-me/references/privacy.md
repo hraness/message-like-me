@@ -21,7 +21,7 @@ sensitive local data.
   synchronize a linked device, inspect its database, or expose exact JIDs.
   Wrench owns that provider boundary. `--overlap-source` requires explicit
   intent and exact CLI proof; it never authorizes fuzzy account or contact
-  matching. The Wrench v0.16.3 producer omits reaction-shaped Wacli rows with
+  matching. The Wrench v0.16.4 producer omits reaction-shaped Wacli rows with
   `reaction-state-unproven`; never turn that missing evidence into a claim that
   no reactions occurred.
 - Treat a caller-owned X data archive ZIP as private source evidence. Pass only

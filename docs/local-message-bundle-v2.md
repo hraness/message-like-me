@@ -10,7 +10,7 @@ network, or sends a message.
 The intended producer flow is:
 
 ```sh
-bun add --global @hraness/wrench@0.16.3
+bun add --global @hraness/wrench@0.16.4
 wrench whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
   --output /absolute/private/path/whatsapp-bundle
@@ -20,7 +20,7 @@ messagelikeme ingest bundle \
   --json
 ```
 
-The checked compatibility coordinates are Wrench v0.16.3 and official Wacli
+The checked compatibility coordinates are Wrench v0.16.4 and official Wacli
 v0.15.0. Wrench owns that executable dependency and its authentication state;
 neither enters Message Like Me.
 
@@ -89,7 +89,7 @@ byte disagreement, and SHA-256 disagreement. The same public bounds as v1
 apply, except v2 admits exactly one account.
 
 The v2 wire contract retains the fixed `reactions.ndjson` artifact and strict
-reaction parser for proven records. The checked Wrench v0.16.3/Wacli v0.15.0
+reaction parser for proven records. The checked Wrench v0.16.4/Wacli v0.15.0
 producer leaves that artifact empty because it cannot prove current reaction
 state.
 
@@ -162,7 +162,7 @@ duplicates cannot prove equivalence.
 
 Both source provenances and all source-unique history remain stored. Proven
 message duplicates contribute once. A reaction can deduplicate only when a
-conforming producer supplies a proven reaction record; Wrench v0.16.3 supplies
+conforming producer supplies a proven reaction record; Wrench v0.16.4 supplies
 none, so this overlap path does not reconcile reaction state. The native Wacli
 conversation is the preferred action route and carries the exact private
 `whatsappJid` coordinate. Its proven Beeper duplicate remains evidence with

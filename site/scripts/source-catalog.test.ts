@@ -94,7 +94,7 @@ describe('supported source presentation', () => {
   test('pins the native WhatsApp Wrench/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.3',
+      producerVersion: '0.16.4',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
       bundleSchemaVersion: '2',
@@ -114,7 +114,7 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.3',
+      producerVersion: '0.16.4',
       adapterId: 'beeper-local',
       adapterVersion: '2.3.0',
       reviewedOperationCount: 32,
@@ -187,7 +187,7 @@ describe('supported source presentation', () => {
     expect(sourcesPage).toContain('Beeper via Wrench');
     expect(sourcesPage).toContain('Message Like Me owns zero');
     expect(renderedSourcesPage).toContain(
-      'Wrench v0.16.3 uses beeper-local adapter v2.3.0',
+      'Wrench v0.16.4 uses beeper-local adapter v2.3.0',
     );
     expect(renderedSourcesPage).toContain(
       'Wrench exports. Message Like Me verifies.',
