@@ -2,7 +2,7 @@
 
 ## 0.8.1
 
-- Document that the Wrench v0.16.4 and official Wacli v0.15.0 WhatsApp
+- Document that the Wrench v0.16.5 and official Wacli v0.15.0 WhatsApp
   producer omits reaction-shaped rows and reports `reaction-state-unproven`
   when current active or removed state cannot be established.
 - Keep the v2 reaction artifact and strict parser for proven records while

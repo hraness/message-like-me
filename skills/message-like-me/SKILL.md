@@ -116,7 +116,7 @@ messagelikeme ingest bundle --input <absolute-private-whatsapp-bundle> --json
 Do not request or handle Wacli session state or WhatsApp linked-device
 authentication, call Wacli, inspect its database, synchronize the account, or
 open bundle records in agent context. Wrench owns those provider operations.
-The Wrench v0.16.4/Wacli v0.15.0 producer omits every reaction-shaped row and
+The Wrench v0.16.5/Wacli v0.15.0 producer omits every reaction-shaped row and
 reports `reaction-state-unproven` when it encounters one because current active
 or removed state is not durable. Treat that warning, and an empty reaction
 artifact from this producer, as unobservable reaction behavior. Do not infer

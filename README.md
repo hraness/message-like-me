@@ -101,8 +101,8 @@ visibly instead of being treated as current.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.4 with Beeper adapter 2.3.0 and executable runtime 0.6.2 | Message Like Me owns zero Beeper operations, credentials, or live sessions; it reads the finished bundle, never sends, and does not claim complete history. |
-| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.4 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
+| Beeper via Wrench | A bounded local bundle produced by verified Wrench v0.16.5 with Beeper adapter 2.3.0 and executable runtime 0.6.2 | Message Like Me owns zero Beeper operations, credentials, or live sessions; it reads the finished bundle, never sends, and does not claim complete history. |
+| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.5 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Add private local history
@@ -181,12 +181,12 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[`@hraness/wrench@0.16.4`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.4)
+[`@hraness/wrench@0.16.5`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.5)
 package from npm, then use Wrench to create a new private Message Like Me
 bundle:
 
 ```sh
-bun add --global @hraness/wrench@0.16.4
+bun add --global @hraness/wrench@0.16.5
 wrench beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output /absolute/private/path/beeper-bundle \
@@ -195,7 +195,7 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench v0.16.4 adapter
+path to a directory that does not already exist. Wrench v0.16.5 adapter
 `beeper-local@2.3.0` exposes 32 reviewed Beeper operations: 27 use the pinned
 CLI and 5 use fixed Desktop loopback reads. Message Like Me owns none of
 those operations. The bundle command enters Wrench's separate internal bounded
@@ -239,7 +239,7 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.16.4 is the currently verified
+source-transform version `1.1.0`. Wrench v0.16.5 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
 not by an open-ended Wrench package range.
 
@@ -250,11 +250,11 @@ reappearance restores it. Older snapshots cannot overwrite newer state. Use
 `sources show <source-id> --private --json` only when you deliberately need the
 private provider account and source metadata.
 
-For native WhatsApp evidence, install Wrench v0.16.4 and let its official
+For native WhatsApp evidence, install Wrench v0.16.5 and let its official
 Wacli 0.15.0 adapter create the one-account v2 bundle:
 
 ```sh
-bun add --global @hraness/wrench@0.16.4
+bun add --global @hraness/wrench@0.16.5
 wrench whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
   --output /absolute/private/path/whatsapp-bundle \
@@ -274,7 +274,7 @@ surfaces are excluded. The complete contract is in
 [local message bundle v2](docs/local-message-bundle-v2.md).
 
 Wacli v0.15.0 may retain an earlier emoji after a reaction is removed, so its
-local rows cannot prove current active reaction state. Wrench v0.16.4 omits
+local rows cannot prove current active reaction state. Wrench v0.16.5 omits
 every reaction-shaped row and adds `reaction-state-unproven` when it observes
 one. An empty `reactions.ndjson` from this producer means reaction behavior was
 unobservable, not that the account had no reactions. The v2 wire contract keeps

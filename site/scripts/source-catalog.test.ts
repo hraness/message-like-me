@@ -30,9 +30,9 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-03T00:00:00.000Z'],
-      ['/sources', '2026-09-03T00:00:00.000Z'],
-      ['/docs', '2026-09-03T00:00:00.000Z'],
+      ['/', '2026-09-04T00:00:00.000Z'],
+      ['/sources', '2026-09-04T00:00:00.000Z'],
+      ['/docs', '2026-09-04T00:00:00.000Z'],
       ['/methodology', '2026-08-27T00:00:00.000Z'],
       ['/research', '2026-08-27T00:00:00.000Z'],
       ['/about', '2026-08-27T00:00:00.000Z'],
@@ -113,7 +113,7 @@ describe('supported source presentation', () => {
   test('pins the native WhatsApp Wrench/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.4',
+      producerVersion: '0.16.5',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
       bundleSchemaVersion: '2',
@@ -133,7 +133,7 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.4',
+      producerVersion: '0.16.5',
       adapterId: 'beeper-local',
       adapterVersion: '2.3.0',
       reviewedOperationCount: 32,
@@ -206,7 +206,7 @@ describe('supported source presentation', () => {
     expect(sourcesPage).toContain('Beeper via Wrench');
     expect(sourcesPage).toContain('Message Like Me owns zero');
     expect(renderedSourcesPage).toContain(
-      'Wrench v0.16.4 uses beeper-local adapter v2.3.0',
+      'Wrench v0.16.5 uses beeper-local adapter v2.3.0',
     );
     expect(renderedSourcesPage).toContain(
       'Wrench exports. Message Like Me verifies.',
