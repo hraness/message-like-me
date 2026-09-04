@@ -63,6 +63,24 @@ async function runWorkflowScript(
   return Object.freeze({ exitCode, stderr, stdout });
 }
 
+async function runProviderCommand(
+  command: string,
+  environment: Readonly<Record<string, string>>,
+): Promise<Readonly<{ exitCode: number; stderr: string; stdout: string }>> {
+  const child = Bun.spawn(["node", fileURLToPath(providerOutcomeHelperUrl), command], {
+    cwd: repository,
+    env: { ...process.env, ...environment },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+    new Response(child.stdout).text(),
+  ]);
+  return Object.freeze({ exitCode, stderr, stdout });
+}
+
 const providerRepository = "hraness/message-like-me";
 const providerPreviousSha = "1".repeat(40);
 const providerTag = "v0.8.0";
@@ -720,6 +738,52 @@ async function providerReceipts(mode: "advanced" | "already-exact"): Promise<Rea
 
 
 describe("release-bound site control", () => {
+  test("decodes the workflow-range receipt only on the executable promote path", async () => {
+    const malformedWorkflowRangeReceipt = "***";
+    const authority = await runProviderCommand("revalidate-authority", {
+      DEFAULT_BRANCH: "main",
+      EVENT_NAME: "workflow_dispatch",
+      GITHUB_REPOSITORY: "not-one-coordinate",
+      PROMOTION_EXPECTED_MODE: "advanced",
+      RECOVERY_WORKFLOW_SHA: providerVerifiedSha,
+      VERIFIED_SHA: providerVerifiedSha,
+      VERIFIED_TAG: providerTag,
+      WORKFLOW_RANGE_RECEIPT: malformedWorkflowRangeReceipt,
+    });
+    expect(authority.exitCode).not.toBe(0);
+    expect(authority.stdout).toBe("");
+    expect(authority.stderr).toContain("repository is not one owner/name coordinate");
+    expect(authority.stderr).not.toContain("expectedMode");
+    expect(authority.stderr).not.toContain("Encoded workflow-range receipt");
+
+    const baselineReceipt = encodeProviderReceipt(Object.freeze({
+      completedAt: providerBaselineServerDate,
+      deploymentFingerprint: "6".repeat(64),
+      deploymentIds: Object.freeze([]),
+      lowerBound: providerBaselineServerDate,
+      productionRef: "refs/heads/website-production",
+      refSha: providerPreviousSha,
+      repository: providerRepository,
+      schema: "message-like-me-provider-baseline-v1",
+      verifiedSha: providerVerifiedSha,
+    }));
+    const promotion = await runProviderCommand("promote", {
+      BASELINE_RECEIPT: baselineReceipt,
+      DEFAULT_BRANCH: "main",
+      EVENT_NAME: "workflow_dispatch",
+      GITHUB_REPOSITORY: providerRepository,
+      PROMOTION_EXPECTED_MODE: "advanced",
+      RECOVERY_WORKFLOW_SHA: providerVerifiedSha,
+      VERIFIED_SHA: providerVerifiedSha,
+      VERIFIED_TAG: providerTag,
+      WORKFLOW_RANGE_RECEIPT: malformedWorkflowRangeReceipt,
+    });
+    expect(promotion.exitCode).not.toBe(0);
+    expect(promotion.stdout).toBe("");
+    expect(promotion.stderr).toContain("Encoded workflow-range receipt is missing or malformed");
+    expect(promotion.stderr).not.toContain("expectedMode is not defined");
+  });
+
   test("accepts only one exact stable tag push in the Release workflow", async () => {
     const workflow = await readFile(releaseWorkflowUrl, "utf8");
     const script = workflowStepScript(workflow, "Resolve release request");

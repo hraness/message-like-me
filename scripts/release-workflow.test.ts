@@ -495,6 +495,16 @@ test("site promotion gates complete workflow history before a fresh narrow-token
   expect(providerHelper).toContain("assertWorkflowRangeReceipt(workflowRangeReceipt");
   expect(providerHelper.indexOf("assertWorkflowRangeReceipt(workflowRangeReceipt"))
     .toBeLessThan(providerHelper.indexOf("await advanceWithRevocation(async"));
+  const revalidateAuthorityCommand = providerHelper.slice(
+    providerHelper.indexOf('if (command === "revalidate-authority")'),
+    providerHelper.indexOf('if (command === "promote")'),
+  );
+  const promoteCommand = providerHelper.slice(
+    providerHelper.indexOf('if (command === "promote")'),
+    providerHelper.indexOf('if (command === "wait")'),
+  );
+  expect(revalidateAuthorityCommand).not.toContain("workflowRangeReceipt");
+  expect(promoteCommand).toContain("decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT)");
   expect(workflowRangeHelper).toContain('`${oldCommit}..${newCommit}`');
   expect(workflowRangeHelper).toContain("MAXIMUM_WORKFLOW_RANGE_COMMITS = 250");
   expect(workflowRangeHelper).toContain("trees.findIndex((tree) => tree !== baselineTree)");
