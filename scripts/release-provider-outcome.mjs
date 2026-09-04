@@ -10,6 +10,10 @@ import {
   withReleaseAppTokenFromEnvironment,
 } from "./release-app-token.mjs";
 import { advanceWebsiteProductionRefFromEnvironment } from "./release-ref-writer.mjs";
+import {
+  assertWorkflowRangeReceipt,
+  decodeWorkflowRangeReceipt,
+} from "./release-workflow-range.mjs";
 
 const BASELINE_SCHEMA = "message-like-me-provider-baseline-v1";
 const PROMOTION_SCHEMA = "message-like-me-provider-promotion-v1";
@@ -1492,6 +1496,7 @@ export async function promoteWebsiteProduction({
   repository,
   verifiedSha,
   verifiedTag,
+  workflowRangeReceipt,
 }) {
   const coordinate = expectRepository(repository);
   const sha = expectSha(verifiedSha, "verified SHA");
@@ -1530,6 +1535,10 @@ export async function promoteWebsiteProduction({
     mode = "already-exact";
   } else {
     mode = "advanced";
+    assertWorkflowRangeReceipt(workflowRangeReceipt, {
+      previousSha: prePatchRef.sha,
+      verifiedSha: sha,
+    });
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
     if (typeof advanceWithRevocation !== "function") {
@@ -2145,6 +2154,7 @@ async function main() {
       "advance_required",
       parsed.refSha === parsed.verifiedSha ? "false" : "true",
     );
+    writeNamedOutput("ref_sha", parsed.refSha);
     return;
   }
   if (command === "release-order") {
@@ -2214,6 +2224,9 @@ async function main() {
       repository: process.env.GITHUB_REPOSITORY,
       verifiedSha: process.env.VERIFIED_SHA,
       verifiedTag: process.env.VERIFIED_TAG,
+      workflowRangeReceipt: expectedMode === "advanced"
+        ? decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT)
+        : undefined,
     });
     if (receipt.mode !== expectedMode) {
       fail(`promotion mode ${String(receipt.mode)} did not match ${expectedMode}`);

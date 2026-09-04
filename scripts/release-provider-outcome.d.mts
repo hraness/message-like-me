@@ -132,6 +132,7 @@ export function promoteWebsiteProduction(input: Readonly<{
   repository: string;
   verifiedSha: string;
   verifiedTag: string;
+  workflowRangeReceipt?: unknown;
 }>): Promise<unknown>;
 
 export function waitForProviderOutcome(input: Readonly<{

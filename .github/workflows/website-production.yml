@@ -188,6 +188,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       advance_required: ${{ steps.baseline.outputs.advance_required }}
+      ref_sha: ${{ steps.baseline.outputs.ref_sha }}
       receipt: ${{ steps.baseline.outputs.receipt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -248,6 +249,17 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
+      - name: Prove the complete workflow-control range before environment admission
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_OLD_SHA: ${{ needs.provider_baseline.outputs.ref_sha }}
+          RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$VERIFIED_TAG" "$RECOVERY_WORKFLOW_SHA" "$VERIFIED_SHA" >/dev/null
+          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" >/dev/null
       - name: Revalidate public artifacts before production-ref mutation
         env:
           DEFAULT_BRANCH: main
@@ -279,16 +291,32 @@ jobs:
           fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - name: Pin the only secret-bearing writer code to reviewed hashes
+      - name: Pin the secret-bearing writer and workflow-range code to reviewed hashes
         env:
           APP_TOKEN_SHA256: 70182b80b35129910bd6993f2e5bfd7cd5a2934ac1ea54e490b2cd73363891b3
-          PROVIDER_SHA256: 0693b9e48ddf5466bca9929f427e519232855f15a488d5a13f85e689a5f1bc4e
+          PROVIDER_SHA256: 7b3f6341dd5ddff42e7555a15ea27a3680ddf442e436e7d88a53366701024b72
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 41c136d48e562d5c9e3ea3cb894fca8752aa2481e56fb01ebb0481b14f92687f
+          WORKFLOW_RANGE_SHA256: d8f583b0b1e65a3ff76c085bb7d726501f6ff302ff7d8aaa417d984e61448658
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
           test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
           test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Re-prove the complete workflow-control range before reading the key
+        id: workflow_range
+        env:
+          DEFAULT_BRANCH: main
+          EXPECTED_OLD_SHA: ${{ needs.provider_baseline.outputs.ref_sha }}
+          RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$VERIFIED_TAG" "$RECOVERY_WORKFLOW_SHA" "$VERIFIED_SHA" >/dev/null
+          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" >> "$GITHUB_OUTPUT"
       - name: Promote verified website production source
         id: promotion
         env:
@@ -308,6 +336,7 @@ jobs:
           RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+          WORKFLOW_RANGE_RECEIPT: ${{ steps.workflow_range.outputs.receipt }}
         run: node ./scripts/release-provider-outcome.mjs promote
 
   advance_production_ref:

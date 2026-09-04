@@ -25,10 +25,13 @@
   current-`main` production workflow is the sole routine writer of that
   established ref for an immutable annotated release commit in reviewed
   `main` history. A fresh dependency-free, hash-pinned job may mint its
-  one-repository release App token and make
-  one exact leased fast-forward only after the exact npm package and immutable,
-  artifact-complete Latest GitHub Release pass external admission. Already-exact
-  recovery stays read-only and outside the
+  one-repository `contents:write` plus `metadata:read` release App token and make
+  one exact leased fast-forward only after complete history proves every newly
+  reachable commit preserves the production baseline's `.github/workflows`
+  tree and the exact npm package and immutable, artifact-complete Latest GitHub
+  Release pass external admission. A workflow-control epoch uses the separately
+  approved bootstrap, App downgrade, and key rotation in the publishing
+  runbook. Already-exact recovery stays read-only and outside the
   key environment. Treat `main` and pull requests as preview sources. A
   missing, divergent, force-moved, or manually advanced production ref is a
   hard release failure; follow `../docs/publishing.md` rather than recreating

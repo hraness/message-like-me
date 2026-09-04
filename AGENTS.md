@@ -130,10 +130,16 @@
   in those jobs as part of the privileged release TCB. Keep the GitHub token
   scoped to the dependency-free publisher step. Keep the App private key
   inside the main-only `production-ref-writer-key` environment and expose it
-  only to a fresh dependency-free, hash-pinned writer job; mint the numeric
-  one-repository token only when the ref must advance, and require the bounded
-  read-only provider outcome gate to finish. Already-exact recovery must not
-  enter the key environment. Recovery may revalidate only an existing
+  only to a fresh dependency-free, hash-pinned writer job. Before environment
+  admission, and again in the writer before reading the key, require complete
+  non-shallow history and prove that every commit newly reachable from the
+  expected-old production SHA preserves its `.github/workflows` tree OID. Mint
+  only the numeric one-repository `contents:write` plus `metadata:read` token;
+  never give the routine token `workflows:write`. A reviewed workflow-control
+  epoch requires the separately approved out-of-band bootstrap in the runbook,
+  followed by App downgrade, key rotation, and already-exact recovery. Require
+  the bounded read-only provider outcome gate to finish. Already-exact recovery
+  must not enter the key environment. Recovery may revalidate only an existing
   immutable, artifact-complete Latest Release and exact npm version and must
   never create either one. A later positive attempt may finish the same exact
   tag, commit, and tarball only when Sigstore binds the actual run ID and an
