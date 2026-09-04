@@ -99,6 +99,15 @@ const providerAuthority = Object.freeze({
   verifiedSha: providerVerifiedSha,
   verifiedTag: providerTag,
 });
+const providerWorkflowRangeReceipt = Object.freeze({
+  newCommitCount: 1,
+  newCommitDigest: "4".repeat(64),
+  previousSha: providerPreviousSha,
+  productionRef: "refs/heads/website-production",
+  schema: "message-like-me-workflow-range-v1",
+  verifiedSha: providerVerifiedSha,
+  workflowTreeOid: "5".repeat(40),
+});
 
 type ProviderOutcomeInput = Parameters<typeof waitForProviderOutcomeRaw>[0];
 type ProviderPromotionInput = Parameters<typeof promoteWebsiteProductionRaw>[0];
@@ -136,6 +145,7 @@ const promoteWebsiteProduction = (
   defaultBranch: "main",
   eventName: "workflow_dispatch",
   recoveryWorkflowSha: providerVerifiedSha,
+  workflowRangeReceipt: providerWorkflowRangeReceipt,
   ...options,
 });
 
@@ -977,12 +987,17 @@ esac
     const appPostflight = job(productionWorkflow, "advance_production_ref");
     expect(appPreflight).toContain("check-public-release.ts");
     expect(appPreflight).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(appPreflight).toContain("release-workflow-range.mjs");
     expect(appPreflight).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY");
     expect(appWriter).toContain("environment: { name: production-ref-writer-key, deployment: false }");
-    expect(appWriter).toContain("Pin the only secret-bearing writer code to reviewed hashes");
+    expect(appWriter).toContain("Pin the secret-bearing writer and workflow-range code to reviewed hashes");
     expect(appWriter).toMatch(/APP_TOKEN_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/PROVIDER_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toMatch(/REF_AUTHORITY_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/REF_WRITER_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toMatch(/WORKFLOW_RANGE_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toContain("Re-prove the complete workflow-control range before reading the key");
+    expect(appWriter).toContain("WORKFLOW_RANGE_RECEIPT:");
     expect(appWriter).not.toContain("setup-bun");
     expect(appWriter).not.toContain("bun install");
     expect(appWriter).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
@@ -1063,14 +1078,19 @@ esac
     expect(baselineJob).not.toContain("contents: write");
     expect(baselineJob).toContain("release-provider-outcome.mjs baseline");
     expect(baselineJob).toContain("advance_required:");
+    expect(baselineJob).toContain("ref_sha:");
     expect(preflightJob).toContain("- provider_baseline");
     expect(permissions(preflightJob)).toEqual(["contents: read"]);
     expect(preflightJob).toContain("release-provider-outcome.mjs revalidate-authority");
+    expect(preflightJob).toContain("release-workflow-range.mjs");
     expect(preflightJob).toContain("check-public-release.ts");
     expect(preflightJob).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
     expect(permissions(writerJob)).toEqual(["contents: read"]);
     expect(writerJob).toContain("PROMOTION_EXPECTED_MODE: advanced");
     expect(writerJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(writerJob).toContain("release-ref-authority.ts promotion");
+    expect(writerJob).toContain("release-workflow-range.mjs");
+    expect(writerJob).toContain("WORKFLOW_RANGE_RECEIPT:");
     expect(writerJob).toContain("release-provider-outcome.mjs promote");
     expect(writerJob).not.toContain("setup-bun");
     expect(writerJob).not.toContain("bun install");
@@ -1464,7 +1484,7 @@ esac
     }, providerRepository)).rejects.toThrow("simulated provider API failure");
   });
 
-  test("stabilizes the baseline and records the actual promotion mode", async () => {
+  test("stabilizes the baseline and admits external-bootstrap already-exact recovery", async () => {
     const baselineDeployment = providerDeployment(
       10,
       "2026-08-29T13:00:00Z",
@@ -1513,7 +1533,7 @@ esac
     expect((recovered.promotion as Readonly<Record<string, unknown>>).mode).toBe("already-exact");
     expect(recovered.promotionCalls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
     let alreadyExactTokenLifecycles = 0;
-    const explicitKeylessRecovery = await promoteWebsiteProductionRaw({
+    const externalBootstrapRecovery = await promoteWebsiteProductionRaw({
       advanceWithRevocation: async () => {
         alreadyExactTokenLifecycles += 1;
         throw new Error("already-exact recovery must not enter the App-token lifecycle");
@@ -1530,7 +1550,7 @@ esac
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
     });
-    expect(explicitKeylessRecovery).toMatchObject({ mode: "already-exact" });
+    expect(externalBootstrapRecovery).toMatchObject({ mode: "already-exact" });
     expect(alreadyExactTokenLifecycles).toBe(0);
 
     const concurrent = providerDeployment(11, "2026-08-29T15:01:00Z");
@@ -1894,6 +1914,7 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
     });
 
     expect(promotion).toMatchObject({ mode: "advanced", verifiedSha: providerVerifiedSha });
@@ -1961,6 +1982,7 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
     })).rejects.toThrow("release App token revocation convergence is indeterminate");
 
     const push = `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`;
@@ -1973,6 +1995,33 @@ esac
 
   test("fails promotion closed on comparison, ref, and lease races", async () => {
     const { baseline, baselineDeployment } = await providerReceipts("advanced");
+    let rejectedRangeTokenLifecycles = 0;
+    const rejectedRange = new ProviderApiFixture({
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      statuses: terminalBaselineStatus(),
+    });
+    await expect(promoteWebsiteProductionRaw({
+      advanceWithRevocation: async () => {
+        rejectedRangeTokenLifecycles += 1;
+        throw new Error("workflow-range rejection must precede token minting");
+      },
+      api: rejectedRange,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+      workflowRangeReceipt: {
+        ...providerWorkflowRangeReceipt,
+        previousSha: "9".repeat(40),
+      },
+    })).rejects.toThrow("does not bind the leased production transition");
+    expect(rejectedRangeTokenLifecycles).toBe(0);
+    expect(rejectedRange.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
+
     const missingLifecycle = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
       refSha: providerPreviousSha,
@@ -1987,6 +2036,7 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
     })).rejects.toThrow("requires the bounded release App token lifecycle");
     expect(missingLifecycle.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
@@ -2011,6 +2061,7 @@ esac
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
     })).rejects.toThrow("revocation receipt is malformed");
     const malformedPush = malformedRevocation.calls.findIndex((call) => call.startsWith("GIT PUSH "));
     expect(malformedPush).toBeGreaterThanOrEqual(0);

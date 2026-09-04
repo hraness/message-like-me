@@ -149,28 +149,80 @@ code-owner, exact CI, deletion, and non-fast-forward requirements. The control
 change deliberately retains version `0.8.0` and changes no product claim,
 dependency, lockfile, or generated documentation.
 
+### Bootstrap one workflow-control epoch
+
+The routine writer is intentionally incapable of crossing a change to
+`.github/workflows/**`. GitHub requires `Workflows: Read and write` for a Git
+push that changes that path, while every token minted by the checked automation
+is exactly `contents:write` plus `metadata:read`. Do not add `workflows:write` to
+the automated mint request, environment, or persistent post-bootstrap App.
+
+When an already-established `website-production` ref predates reviewed workflow
+control changes, perform one separately approved control-epoch bootstrap after
+the target's immutable Release and public npm bytes have passed admission:
+
+1. Record the exact current production SHA, exact release SHA, annotated tag,
+   immutable Latest Release, ruleset readbacks, and the complete reviewed commit
+   range. Let the routine promotion fail at its workflow-range gate; do not
+   approve the key environment for that rejected run.
+2. In an owner-operated, out-of-band procedure, explicitly authorize one token
+   whose only effective repository permissions are `contents:write`,
+   `metadata:read`, and `workflows:write`, selected to numeric repository ID
+   `1342143606`. Do not put that token or the broader permission into Actions.
+3. Use the same fixed repository, exact annotated-tag target, and nonempty
+   `--force-with-lease=refs/heads/website-production:<expected-old-sha>` contract
+   to make exactly one fast-forward. Revoke the token immediately and prove the
+   ref is the exact release SHA. Preserve the permanent creation, deletion,
+   non-fast-forward, and App-only update rulesets.
+4. Remove `Workflows: Read and write` from the App, accept or refresh the
+   selected installation as GitHub requires, and read back the exact
+   `contents:write` plus `metadata:read` closure and singleton repository set.
+   Generate a fresh App private key, replace `MLM_RELEASE_APP_PRIVATE_KEY`, and
+   delete the pre-bootstrap key. Routine automation must remain paused until
+   both the App downgrade and key rotation are proven.
+5. Dispatch `Promote website production` for the same immutable tag. Because
+   the external bootstrap made the ref already exact, recovery stays outside
+   `production-ref-writer-key`, mints no token, and accepts only the bounded
+   exact-SHA Vercel Production outcome that postdates the Release.
+
+That bootstrap closes one workflow-control epoch; it is not precedent for a
+routine broad token or an unleased manual ref move. Any later release whose
+newly reachable history contains a workflow-tree change starts a new control
+epoch and requires its own explicit review and authorization.
+
 ### Prove the writer bypass before product release
 
 Do not infer the bypass from configuration alone. Before the first product
 release, precreate persistent ref
 `refs/heads/website-production-writer-canary` at the reviewed control commit.
 Apply separate active rulesets with the same no-bypass protections and the same
-App-only update rule to that exact canary ref. Under a separately reviewed,
-owner-operated procedure, mint the same repository-scoped App token and make
-one fast-forward advancement to a reviewed descendant with an explicit
-nonempty expected-old
-`--force-with-lease`. A personal token or deploy key is not an acceptable
-probe. A bare lease, remote-tracking lease, `--force`, empty expected-old,
-creation, deletion, wildcard, or multi-ref push is not acceptable evidence.
+App-only update rule to that exact canary ref. Prove both halves of the narrow
+token canary contract after the App downgrade and key rotation:
 
-Capture canonical ruleset and rule-suite evidence that binds the probe ref,
-numeric App ID, App slug, installation ID, before SHA, after SHA, operation
-time, and originating run. The successful suite must report result `bypass`
-for the App's `always` bypass while the ordinary update rule itself reports a
-failed evaluation. Separately prove an ordinary writer cannot make the same
-update. Keep the canary ref and its dedicated rulesets active after the proof so
-the evidence remains reproducible. The no-bypass deletion rule deliberately
-forbids deleting it; do not attempt deletion or temporarily remove protection.
+1. The negative workflow-delta canary targets a reviewed descendant that
+   changes `.github/workflows/**`. The complete-history gate must reject it
+   before environment admission and before token minting. In the separately
+   approved owner-operated server-side probe, the exact narrow App token's
+   leased push must also be rejected and the canary ref must remain unchanged.
+2. The positive non-workflow canary targets a reviewed descendant for which
+   every newly reachable commit preserves the baseline workflow-tree OID. Mint
+   the exact repository-scoped narrow App token and make one fast-forward with
+   an explicit nonempty expected-old `--force-with-lease`.
+
+A personal token or deploy key is not an acceptable probe. A bare lease,
+remote-tracking lease, `--force`, empty expected-old, creation, deletion,
+wildcard, or multi-ref push is not acceptable evidence.
+
+Capture canonical ruleset and rule-suite evidence that binds both probes to the
+canary ref, numeric App ID, App slug, installation ID, before SHA, attempted or
+accepted after SHA, operation time, and originating run. The positive suite
+must report result `bypass` for the App's `always` bypass while the ordinary
+update rule itself reports a failed evaluation. The negative record must prove
+the server rejected the workflow-changing update and the ref stayed exact.
+Separately prove an ordinary writer cannot make the positive update. Keep the
+canary ref and its dedicated rulesets active after the proof so the evidence
+remains reproducible. The no-bypass deletion rule deliberately forbids deleting
+it; do not attempt deletion or temporarily remove protection.
 Read back that the production rulesets still target only
 `refs/heads/website-production` and the canary rulesets still target only the
 persistent canary ref.
@@ -307,9 +359,19 @@ recovery. Both paths use the same checks. That workflow:
    `website-production` ref reads;
 3. enters `production-ref-writer-key` with `deployment:false` only when the
    baseline and a separate read-only preflight prove that the ref must advance.
-   The fresh secret-bearing job installs no dependencies; immediately before
-   reading the key it verifies hard-coded SHA-256 pins for the three reviewed
-   built-in `.mjs` helpers. A checked local helper signs a
+   That preflight first imports complete exact governed history and enumerates
+   every commit newly reachable in `<expected-old>..<verified-release>`, capped
+   at 250 commits. It rejects shallow or incomplete history, non-fast-forwards,
+   malformed or oversized inventories, and any commit whose
+   `.github/workflows` tree OID differs from the expected-old baseline. Checking
+   every newly reachable commit catches merge-side changes and an edit followed
+   by a revert even when the two endpoint trees match. The fresh secret-bearing
+   job installs no dependencies; in a step that does not receive the private
+   key, it verifies hard-coded SHA-256 pins for the five reviewed helpers,
+   repeats the exact complete-history proof, and emits a bounded receipt binding
+   the expected-old SHA, release SHA, commit count and digest, and baseline
+   workflow-tree OID. The promotion helper validates that receipt before it may
+   enter the App-token lifecycle. A checked local helper then signs a
    bounded RS256 App JWT, authenticates the exact App ID, client ID, slug, and
    organization owner, then reads the checked installation ID and requires its
    selected `hraness` account plus exact `contents:write` and `metadata:read`
@@ -403,7 +465,9 @@ exact existing npm version and immutable artifact-complete Latest Release. It
 never creates, replaces, or edits an npm version or GitHub Release.
 
 If `website-production` still precedes the release commit, recovery performs
-the same checked explicit-lease fast-forward and requires one new provider outcome.
+the same checked explicit-lease fast-forward only when every newly reachable
+commit preserves the baseline workflow-tree OID, and requires one new provider
+outcome.
 If the ref is already exact, the baseline marks advancement false, skips the
 entire `production-ref-writer-key` job, and mints no App token. A separate
 read-only job accepts only the unique latest exact-SHA Production deployment in
@@ -411,7 +475,10 @@ the stable baseline that postdates the immutable Release. That newest attempt
 itself must be provider-accepted. A newer terminal failure, error, or inactive
 attempt blocks recovery instead of allowing an older success to be reused.
 Recovery then repeats the terminal authority readbacks. A missing ref is a hard
-failure and must not be recreated by the workflow.
+failure and must not be recreated by the workflow. If the desired transition
+crosses any workflow change, use the separately approved control-epoch
+bootstrap above; after that exact external advancement, the already-exact
+recovery path supplies the provider proof without reading the App key.
 
 When a tag run fails after its exact draft or immutable Release exists, preserve
 its evidence and rerun that same workflow. Re-running only failed jobs is
@@ -422,5 +489,5 @@ the same tag, commit, deterministic draft, and tarball; npm provenance must bind
 the same run ID and an allowed actual positive attempt. Correct only the failed
 control and use the website recovery path after public admission succeeds. Do
 not retag, delete the immutable Release or exact residual draft, manually move
-`website-production`, redeploy from Vercel, or weaken a ruleset to make the run
-pass.
+`website-production` outside the one separately approved control-epoch
+bootstrap, redeploy from Vercel, or weaken a ruleset to make the run pass.

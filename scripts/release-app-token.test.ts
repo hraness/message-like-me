@@ -23,6 +23,10 @@ const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toStri
 const token = "installation-token-for-exact-repository";
 const serverDate = "Sat, 29 Aug 2026 18:00:00 GMT";
 const expiresAt = "2026-08-29T19:00:00Z";
+const exactPermissions = Object.freeze({
+  contents: "write" as const,
+  metadata: "read" as const,
+});
 const revocationReceipt = Object.freeze({
   converged: true as const,
   observationCount: 2,
@@ -44,7 +48,7 @@ const environment = Object.freeze({
 function tokenResponse(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
     expires_at: expiresAt,
-    permissions: { contents: "write", metadata: "read" },
+    permissions: { ...exactPermissions },
     repositories: [{
       full_name: "hraness/message-like-me",
       id: MESSAGE_LIKE_ME_REPOSITORY_ID,
@@ -62,7 +66,7 @@ function appIdentity(overrides: Readonly<Record<string, unknown>> = {}) {
     client_id: "Iv1.messageLikeMeRelease",
     id: 24680,
     owner: { login: "hraness", type: "Organization" },
-    permissions: { contents: "write", metadata: "read" },
+    permissions: { ...exactPermissions },
     slug: "message-like-me-release-writer",
     ...overrides,
   };
@@ -74,7 +78,7 @@ function installationIdentity(overrides: Readonly<Record<string, unknown>> = {})
     app_id: 24680,
     app_slug: "message-like-me-release-writer",
     id: 13579,
-    permissions: { contents: "write", metadata: "read" },
+    permissions: { ...exactPermissions },
     repository_selection: "selected",
     target_type: "Organization",
     ...overrides,
@@ -347,12 +351,12 @@ describe("release App token transaction", () => {
 
   test("requests and accepts only the numeric Message Like Me repository closure", () => {
     expect(releaseAppTokenRequestBody()).toEqual({
-      permissions: { contents: "write", metadata: "read" },
+      permissions: exactPermissions,
       repository_ids: [1_342_143_606],
     });
     expect(parseReleaseAppTokenResponse(tokenResponse(), serverDate)).toEqual({
       expiresAt,
-      permissions: { contents: "write", metadata: "read" },
+      permissions: exactPermissions,
       repositoryId: 1_342_143_606,
       token,
     });
@@ -364,6 +368,31 @@ describe("release App token transaction", () => {
       installationIdentity(),
       parseReleaseAppConfiguration(environment),
     )).not.toThrow();
+  });
+
+  test("rejects missing, downgraded, or extra authority at every App permission boundary", () => {
+    const configuration = parseReleaseAppConfiguration(environment);
+    const invalidPermissions = [
+      { metadata: "read" },
+      { contents: "read", metadata: "read" },
+      { contents: "write", metadata: "read", workflows: "write" },
+      { actions: "read", contents: "write", metadata: "read" },
+    ] as const;
+
+    for (const permissions of invalidPermissions) {
+      expect(() => parseReleaseAppIdentity(
+        appIdentity({ permissions }),
+        configuration,
+      )).toThrow();
+      expect(() => parseReleaseAppInstallation(
+        installationIdentity({ permissions }),
+        configuration,
+      )).toThrow();
+      expect(() => parseReleaseAppTokenResponse(
+        tokenResponse({ permissions }),
+        serverDate,
+      )).toThrow();
+    }
   });
 
   test("masks, uses, and revokes the exact token around one operation", async () => {

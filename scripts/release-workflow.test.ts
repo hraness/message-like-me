@@ -20,6 +20,7 @@ const PUBLIC_ADMISSION = join(import.meta.dir, "check-public-release.ts");
 const GITHUB_ADMISSION = join(import.meta.dir, "check-github-release.ts");
 const GITHUB_PUBLISHER = join(import.meta.dir, "publish-github-release.ts");
 const REF_AUTHORITY = join(import.meta.dir, "release-ref-authority.ts");
+const WORKFLOW_RANGE = join(import.meta.dir, "release-workflow-range.mjs");
 const SIGNER_VERIFIER = join(import.meta.dir, "verify-npm-provenance-signer.mjs");
 const PACKAGE_MANIFEST = join(import.meta.dir, "..", "package.json");
 
@@ -368,12 +369,20 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(npmPublish).toBeGreaterThan(githubPublish);
 });
 
-test("site promotion accepts reviewed release ancestry and isolates a fresh App-key writer", async () => {
-  const [workflow, appTokenHelper, providerHelper, refWriterHelper, publicAdmission] = await Promise.all([
+test("site promotion gates complete workflow history before a fresh narrow-token writer", async () => {
+  const [
+    workflow,
+    appTokenHelper,
+    providerHelper,
+    refWriterHelper,
+    workflowRangeHelper,
+    publicAdmission,
+  ] = await Promise.all([
     readFile(join(WORKFLOWS, "website-production.yml"), "utf8"),
     readFile(APP_TOKEN_HELPER, "utf8"),
     readFile(PROVIDER_HELPER, "utf8"),
     readFile(REF_WRITER_HELPER, "utf8"),
+    readFile(WORKFLOW_RANGE, "utf8"),
     readFile(PUBLIC_ADMISSION, "utf8"),
   ]);
 
@@ -407,8 +416,10 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
     "check-public-release.ts",
     "provider_baseline:",
     "advance_required: ${{ steps.baseline.outputs.advance_required }}",
+    "ref_sha: ${{ steps.baseline.outputs.ref_sha }}",
     "release-provider-outcome.mjs baseline",
     "advance_production_ref_preflight:",
+    "Prove the complete workflow-control range before environment admission",
     "write_production_ref:",
     "advance_production_ref:",
     "if: needs.provider_baseline.outputs.advance_required == 'true'",
@@ -423,10 +434,15 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
     "MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}",
     "GH_TOKEN: ${{ github.token }}",
     "PROMOTION_EXPECTED_MODE: advanced",
-    "Pin the only secret-bearing writer code to reviewed hashes",
+    "Pin the secret-bearing writer and workflow-range code to reviewed hashes",
     "APP_TOKEN_SHA256:",
     "PROVIDER_SHA256:",
+    "REF_AUTHORITY_SHA256:",
     "REF_WRITER_SHA256:",
+    "WORKFLOW_RANGE_SHA256:",
+    "Re-prove the complete workflow-control range before reading the key",
+    "release-workflow-range.mjs",
+    "WORKFLOW_RANGE_RECEIPT: ${{ steps.workflow_range.outputs.receipt }}",
     "release-provider-outcome.mjs promote",
     "Revalidate authority after production-ref mutation",
     "confirm_existing_production_ref:",
@@ -459,6 +475,8 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(workflow).not.toContain("ref: ${{ needs.verify.outputs.verified_sha }}");
   expect(publicAdmission).toContain("releaseVersionForCurrentAdmission(");
   expect(appTokenHelper).toContain("repository_ids");
+  expect(appTokenHelper).toContain('permissions: Object.freeze({ contents: "write", metadata: "read" })');
+  expect(appTokenHelper).not.toContain('workflows: "write"');
   expect(appTokenHelper).toContain("MESSAGE_LIKE_ME_REPOSITORY_ID = 1_342_143_606");
   expect(appTokenHelper).toContain("/app/installations/${String(input.installationId)}");
   expect(appTokenHelper).toContain('method: "DELETE"');
@@ -474,6 +492,12 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(providerHelper).toContain("advanceWithRevokedReleaseAppToken(process.env, operation)");
   expect(providerHelper).toContain("return operation(Object.freeze({");
   expect(providerHelper).not.toContain("operation(new GitHubApi");
+  expect(providerHelper).toContain("assertWorkflowRangeReceipt(workflowRangeReceipt");
+  expect(providerHelper.indexOf("assertWorkflowRangeReceipt(workflowRangeReceipt"))
+    .toBeLessThan(providerHelper.indexOf("await advanceWithRevocation(async"));
+  expect(workflowRangeHelper).toContain('`${oldCommit}..${newCommit}`');
+  expect(workflowRangeHelper).toContain("MAXIMUM_WORKFLOW_RANGE_COMMITS = 250");
+  expect(workflowRangeHelper).toContain("trees.findIndex((tree) => tree !== baselineTree)");
   expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
   expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
@@ -485,8 +509,14 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(/PROVIDER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
     createHash("sha256").update(providerHelper).digest("hex"),
   );
+  expect(/REF_AUTHORITY_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(await readFile(REF_AUTHORITY, "utf8")).digest("hex"),
+  );
   expect(/REF_WRITER_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
     createHash("sha256").update(refWriterHelper).digest("hex"),
+  );
+  expect(/WORKFLOW_RANGE_SHA256: ([0-9a-f]{64})/u.exec(workflow)?.[1]).toBe(
+    createHash("sha256").update(workflowRangeHelper).digest("hex"),
   );
   expect(workflow.match(/release-provider-outcome\.mjs revalidate-authority/gu)?.length).toBeGreaterThanOrEqual(6);
   expect(workflow.match(/check-public-release\.ts/gu)?.length).toBeGreaterThanOrEqual(8);
@@ -502,11 +532,14 @@ test("site promotion accepts reviewed release ancestry and isolates a fresh App-
   expect(writerJob).toContain("production-ref-writer-key");
   expect(writerJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY");
   expect(writerJob).toContain("release-provider-outcome.mjs promote");
+  expect(writerJob).toContain("release-workflow-range.mjs");
   expect(writerJob).not.toContain("bun install");
   expect(writerJob).not.toContain("setup-node");
   expect(writerJob).not.toContain("setup-bun");
   expect(writerJob).not.toContain("check-public-release.ts");
-  expect(writerJob).not.toContain("revalidate-authority");
+  expect(writerJob).toContain("release-ref-authority.ts promotion");
+  expect(writerJob.indexOf("Re-prove the complete workflow-control range before reading the key"))
+    .toBeLessThan(writerJob.indexOf("MLM_RELEASE_APP_PRIVATE_KEY:"));
   expect(workflow.match(/^\s+MLM_RELEASE_APP_PRIVATE_KEY:/gmu)).toHaveLength(1);
   expect(workflow.match(/environment: \{ name: production-ref-writer-key, deployment: false \}/gu))
     .toHaveLength(1);
@@ -548,11 +581,15 @@ test("repository guides describe the separate release and production writers", a
   expect(rootGuide).toContain("Build the\n  package once, publish the immutable Latest GitHub Release");
   expect(rootGuide).toContain("tarball\n  plus `SHA256SUMS` first");
   expect(rootGuide).toContain("fresh dependency-free, hash-pinned writer job");
-  expect(rootGuide).toContain("Already-exact recovery must not\n  enter the key environment");
+  expect(rootGuide).toContain("every commit newly reachable from the\n  expected-old production SHA preserves its `.github/workflows` tree OID");
+  expect(rootGuide).toContain("never give the routine token `workflows:write`");
+  expect(rootGuide).toContain("Already-exact recovery\n  must not enter the key environment");
   expect(siteGuide).toContain("dedicated\n  current-`main` production workflow is the sole routine writer");
-  expect(siteGuide).toContain("immutable,\n  artifact-complete Latest GitHub Release");
+  expect(siteGuide).toContain("exact npm package and immutable, artifact-complete Latest GitHub\n  Release");
   expect(siteGuide).toContain("fresh dependency-free, hash-pinned job");
-  expect(siteGuide).toContain("Already-exact\n  recovery stays read-only and outside the\n  key environment");
+  expect(siteGuide).toContain("`contents:write` plus `metadata:read` release App token");
+  expect(siteGuide).toContain("A workflow-control epoch uses the separately\n  approved bootstrap");
+  expect(siteGuide).toContain("Already-exact recovery stays read-only and outside the\n  key environment");
   expect(siteGuide).not.toContain("Release\n  workflow is the sole routine writer");
 });
 
@@ -589,7 +626,7 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "Never retag or reuse `v0.8.0`",
     "later release must use OIDC",
     "automatic npm provenance for every automated release",
-    "exactly `contents:write` plus `metadata:read`",
+    "is exactly `contents:write` plus `metadata:read`",
     "{hraness/message-like-me}",
     "actor type\n     `Integration`",
     "GitHub Actions Integration\n     `15368`",
@@ -599,6 +636,14 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "code-owner",
     "precreate persistent ref",
     "website-production-writer-canary",
+    "one separately approved control-epoch bootstrap",
+    "Remove `Workflows: Read and write` from the App",
+    "Generate a fresh App private key",
+    "negative workflow-delta canary",
+    "positive non-workflow canary",
+    "complete-history gate",
+    "capped\n   at 250 commits",
+    "merge-side changes and an edit followed",
     "--force-with-lease",
     "GIT_ASKPASS",
     "stale\n   lease fails without mutation",
