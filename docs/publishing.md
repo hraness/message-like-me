@@ -442,7 +442,14 @@ recovery. Both paths use the same checks. That workflow:
    attester neither reads nor uses that name, and the App token is never passed
    to the ref writer. Prompting is disabled, global and system configuration
    are disabled, hooks and tags are disabled, cleanup is trapped, and a stale
-   lease fails without mutation. The exact production-ref
+   lease fails without mutation. The sterile bare repository requires
+   `core.repositoryformatversion=0`, `core.bare=true`, and
+   `core.filemode=true|false`. Beyond those core keys, it admits only Git's
+   filesystem probes: `core.ignorecase=true` when emitted and optional
+   `core.precomposeunicode=true|false`. Every other local configuration key is
+   rejected before fetch or push. This keeps platform-specific Git
+   initialization differences from being mistaken for inherited
+   configuration. The exact production-ref
    post-read and independent current-`main` workflow-source revalidation do not
    begin until the terminal status is proven and the App-token wrapper returns
    after its `onRevoked` callback has accepted the sanitized convergence
