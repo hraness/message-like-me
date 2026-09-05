@@ -2,8 +2,13 @@ import {
   MarketingCallToAction,
   MarketingFlow,
   MarketingInstallPanel,
-  MarketingInterfaceGrid,
+  MarketingMaker,
+  MarketingPage,
+  MarketingPillars,
+  MarketingPrimitives,
+  MarketingProofFrame,
   MarketingQuestionList,
+  MarketingSection,
   MarketingTrustBoundary,
   ProductHero,
 } from '@hraness/design-kit/react/server';
@@ -22,41 +27,64 @@ import {
 } from './_lib/site';
 
 export const metadata = pageMetadata({
-  title: 'Message Like Me — Study how you message',
+  title: 'Message Like Me — Draft messages that sound like you',
   description: SITE_DESCRIPTION,
   path: '/',
 });
+
+const HERO_FOOTNOTE =
+  `Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer. Version ${SOFTWARE_VERSION}.`;
 
 const HOME_QUESTIONS = [
   {
     question: 'Does the website receive my messages?',
     answer:
-      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface.',
+      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays in a private local store on your machine.',
   },
   {
-    question: 'Does Message Like Me include an AI model?',
+    question: 'Do I need an account or an API key?',
     answer:
-      'No. The CLI performs deterministic local ingestion and measurement. Semantic analysis and unsent drafting happen through the agent environment you already chose.',
+      'No. There is no Message Like Me account, sign-in, server, telemetry, or sync. The CLI never calls a model or an AI provider. Drafting happens in the agent you already use, under that agent’s own account and terms.',
   },
   {
     question: 'Can it send or schedule a message?',
     answer:
-      'No. Message Like Me has no send, react, schedule, provider-authentication, or messaging-application command. Drafting ends as text.',
+      'No. Message Like Me has no send, react, schedule, provider-authentication, or messaging-application command. Drafting ends as text on your screen, and you decide what to do with it.',
   },
   {
     question: 'Which sources are supported?',
     answer:
-      'Apple Messages, caller-owned X data archives, bounded Beeper and native WhatsApp bundles exported through compatible Wrench releases, and optional macOS Contacts labels.',
+      'Apple Messages, caller-owned X data archives, bounded Beeper and native WhatsApp bundles exported through compatible Wrench releases, and optional macOS Contacts labels. Every path is read-only; Messages, Contacts, archives, and bundles are never changed.',
+  },
+  {
+    question: 'What does it cost?',
+    answer:
+      'Nothing. Message Like Me is open source under the MIT license and installs from an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
+  },
+  {
+    question: 'Which platforms does it run on?',
+    answer:
+      `macOS with Bun 1.3.14 or newer. Apple Messages and Contacts are read from the current macOS user’s local databases. Version ${SOFTWARE_VERSION} is the current release.`,
+  },
+  {
+    question: 'Does Message Like Me include an AI model?',
+    answer:
+      'No. The CLI performs deterministic local ingestion and measurement. Semantic analysis and unsent drafting happen through the agent environment you already chose, using the installed Agent Skill.',
   },
   {
     question: 'Is the result a digital clone?',
     answer:
-      'No. The result is bounded, revisable evidence for a draft. It does not establish identity, beliefs, intent, consent, or what you would write now.',
+      'No. The result is revisable evidence for a draft. It does not establish identity, beliefs, intent, consent, or what you would write now. What you mean today always outranks how you wrote before.',
   },
   {
-    question: 'Can I verify the local boundary before importing history?',
+    question: 'Can I use it from TypeScript?',
     answer:
-      'Yes. Run messagelikeme init and messagelikeme doctor --json. The result reports local paths and store integrity without reading a message body, contact, account, or provider credential.',
+      'Yes. The @hraness/message-like-me package exports the versioned corpus, metrics, study-packet, and profile types plus canonical JSON and SHA-256 helpers, with no filesystem or network work on import.',
+  },
+  {
+    question: 'Who made it?',
+    answer:
+      'Ben Guo, a musician and builder, formerly a founder and engineering leader at companies including Venmo and Stripe, now building from Puerto Rico. The source is public on GitHub under the MIT license.',
   },
 ] as const;
 
@@ -73,6 +101,35 @@ const faqStructuredData = {
   })),
 };
 
+function HeroFrame() {
+  return (
+    <MarketingProofFrame
+      caption="A synthetic conversation and transcript. No real messages, contacts, or private paths appear on this site."
+      credit={`Synthetic example · v${SOFTWARE_VERSION}`}
+      title="Message Like Me · synthetic example"
+    >
+      <div className="mlm-frame" role="group" aria-label="A synthetic local drafting workflow">
+        <div className="message-stage">
+          <p className="stage-label">Synthetic example</p>
+          <div className="bubble bubble-in">yes to friday. also can you send me that link?</div>
+          <div className="bubble bubble-out">perfect, friday it is</div>
+          <div className="bubble bubble-out bubble-short">yep one sec</div>
+        </div>
+        <div className="terminal-card">
+          <p>
+            <span>$</span>{' '}wrench whatsapp export-message-like-me --auth whatsapp-main --output &quot;$HOME/message-like-me-whatsapp&quot;
+          </p>
+          <p className="terminal-result">✓ compatible Wrench bundle written</p>
+          <p>
+            <span>$</span>{' '}messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;
+          </p>
+          <p className="terminal-result">✓ verified source observation ingested</p>
+        </div>
+      </div>
+    </MarketingProofFrame>
+  );
+}
+
 export default function Home() {
   return (
     <>
@@ -83,271 +140,228 @@ export default function Home() {
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqStructuredData) }}
         />
 
-        <ProductHero
-          actions={[
-            { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
-            { href: '#how-it-works', label: 'See the working model' },
-          ]}
-          boundary="macOS sources · local CLI · bring your own agent · drafts only"
-          className="mlm-marketing-hero"
-          eyebrow="Local messaging evidence"
-          facts={[
-            { detail: 'Messages, X, Beeper, and WhatsApp.', label: 'History inputs', value: '4 bounded sources' },
-            { detail: 'Contacts enrich labels; they are not message history.', label: 'Local context', value: '1 optional source' },
-            { detail: 'Human, agent, and typed integration surfaces.', label: 'Interfaces', value: 'CLI + Skill + library' },
-            { detail: 'No send, react, schedule, account, or product server.', label: 'Final boundary', value: 'Unsent text' },
-          ]}
-          heading="Study how you message. Draft without giving up control."
-          headingId="message-like-me-title"
-          name="Message Like Me"
-          proof={{
-            content: (
-              <MarketingFlow
-                ariaLabel="Message Like Me working model"
-                steps={[
-                  {
-                    code: 'messagelikeme ingest imessage --json',
-                    detail: 'Read an ownership-checked stable copy without changing Messages.',
-                    label: 'Ingest',
-                  },
-                  {
-                    code: 'messagelikeme inspect tempo <contact-id> --json',
-                    detail: 'Inspect pseudonymous counts and timing without exposing prose.',
-                    label: 'Measure',
-                  },
-                  {
-                    code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
-                    detail: 'Write one bounded, mode-0600 evidence packet to a path you name.',
-                    label: 'Prepare',
-                  },
-                  {
-                    code: 'Use $message-like-me in your agent',
-                    detail: 'Interpret the packet and stop at an inspectable, unsent draft.',
-                    label: 'Draft',
-                  },
-                ]}
-              />
-            ),
-            heading: 'One source-to-draft path, with every boundary visible.',
-            kicker: 'Working model',
-          }}
-          summary={SITE_DESCRIPTION}
-        />
+        <MarketingPage className="mlm-page">
+          <ProductHero
+            actions={[
+              { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
+              { href: '#how-it-works', label: 'See how it works' },
+            ]}
+            boundary={HERO_FOOTNOTE}
+            className="mlm-marketing-hero"
+            example="Ask your agent to draft a reply about Friday plans that reads the way you actually text that friend."
+            eyebrow="A local-first CLI and Agent Skill"
+            frame={<HeroFrame />}
+            heading="Draft messages that sound like you"
+            headingId="message-like-me-title"
+            name="Message Like Me"
+            summary="Message Like Me studies how you actually text one person, then hands your agent an evidence profile for an unsent draft. It reads local history and never sends."
+          />
 
-        <MarketingInstallPanel
-          className="mlm-marketing-install"
-          eyebrow={`Install v${SOFTWARE_VERSION}`}
-          heading="Prove the local boundary first."
-          headingId="message-like-me-install-title"
-          id="install"
-        >
-          <div className="command-stack" aria-label="Installation and first-proof commands">
-            <p><span>1</span><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></p>
-            <p><span>2</span><code>messagelikeme skill install</code></p>
-            <p><span>3</span><code>messagelikeme init</code></p>
-            <p><span>4</span><code>messagelikeme doctor --json</code></p>
-          </div>
-          <p className="mlm-install-note">
-            The first check imports no history. It reports initialized local paths and store integrity.
-            {' '}<a href={RELEASE_URL}>Inspect the immutable release ↗</a>
-          </p>
-        </MarketingInstallPanel>
+          <MarketingPillars
+            ariaLabel="Message Like Me in three points"
+            pillars={[
+              {
+                label: 'Ingest',
+                summary: 'Read Apple Messages, an X archive, or a Beeper or WhatsApp bundle from Wrench without changing any of them.',
+              },
+              {
+                label: 'Understand',
+                summary: 'Measure how you write to one person: word choice, timing, bubble shape, and how you answer several things at once.',
+              },
+              {
+                label: 'Draft',
+                summary: 'Hand your agent the evidence and get an unsent draft back. You decide what, if anything, gets sent.',
+              },
+            ]}
+          />
 
-        <section className="sources-section" aria-labelledby="sources-title">
-          <div className="sources-heading">
-            <div>
-              <p className="eyebrow">Supported sources</p>
-              <h2 id="sources-title">History in. Evidence out.</h2>
+          <MarketingSection
+            heading="Your history comes in from the apps you already use."
+            headingId="sources-title"
+            id="sources"
+            label="Supported sources"
+            summary="Four messaging-history inputs and one optional label source. Beeper and native WhatsApp arrive as explicit Wrench bundle paths, never as hidden account connections or sending integrations."
+          >
+            <div className="source-grid">
+              {SUPPORTED_SOURCES.map((source) => (
+                <SourceCard key={source.id} source={source} />
+              ))}
             </div>
-            <div>
+            <p className="mlm-section-link">
+              <Link href="/sources">Compare every source and its limits</Link>
+            </p>
+          </MarketingSection>
+
+          <MarketingSection
+            heading="The CLI measures. Your agent writes."
+            headingId="how-it-works-title"
+            id="how-it-works"
+            label="How it works"
+            layout="split"
+            summary="Every step is one command with a JSON form. The CLI never calls a model; the skill you install teaches the agent you already use how to read the evidence and where to stop."
+          >
+            <MarketingFlow
+              ariaLabel="From history to an unsent draft"
+              steps={[
+                {
+                  code: 'messagelikeme ingest imessage --json',
+                  detail: 'Read a stable copy of Apple Messages, or bring an X archive or a Wrench bundle. Nothing in the source changes.',
+                  label: 'Ingest',
+                },
+                {
+                  code: 'messagelikeme inspect tempo <contact-id> --json',
+                  detail: 'See counts, timing, bursts, and reply habits for one person under pseudonymous IDs, with no message text.',
+                  label: 'Understand',
+                },
+                {
+                  code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
+                  detail: 'Write one evidence packet with real excerpts to a path you name, readable only by you.',
+                  label: 'Prepare',
+                },
+                {
+                  code: 'Use $message-like-me in your agent',
+                  detail: 'Your agent reads the packet, keeps what is uncertain uncertain, and stops at a draft you can edit or discard.',
+                  label: 'Draft',
+                },
+              ]}
+            />
+          </MarketingSection>
+
+          <MarketingPrimitives
+            heading="Voice has a rhythm."
+            headingId="evidence-title"
+            id="evidence"
+            items={[
+              { label: 'Prose', summary: 'Case, punctuation, vocabulary, warmth, humor, and uncertainty.' },
+              { label: 'Tempo', summary: 'Response latency, turns, bursts, and where a conversation pauses.' },
+              { label: 'Shape', summary: 'One long message versus several deliberate bubbles.' },
+              { label: 'Context', summary: 'What changes across play, planning, support, conflict, and reflection.' },
+              { label: 'Coverage', summary: 'How several incoming questions or emotional beats get resolved.' },
+              { label: 'Replies', summary: 'When explicit reply links clarify a dense or delayed thread.' },
+            ]}
+            label="The evidence profile"
+            summary="Word choice matters. So do the pauses, the bursts, the afterthought, and the decision to answer three things in one message or three."
+          />
+
+          <MarketingSection
+            className="mlm-contrast-section"
+            heading="Evidence for a draft."
+            headingId="what-it-is-title"
+            id="what-it-is"
+            label="What it is"
+            layout="split"
+            summary="Message Like Me measures your outgoing prose and reply shape for one person across the sources you import, then gives your agent a profile it can cite line by line."
+          >
+            <div className="mlm-contrast">
+              <p className="mlm-contrast__label">What it is not</p>
+              <h3 className="mlm-contrast__heading">Not a model of you.</h3>
               <p>
-                Four bounded messaging-history inputs and one optional local label
-                source. Beeper and native WhatsApp support use explicit Wrench bundle
-                paths, never hidden account connections or sending integrations.
+                It does not train a model, represent your identity, predict your
+                beliefs, or send a message. What you mean now always outranks how
+                you wrote before.
               </p>
-              <Link href="/sources">Compare every source and boundary →</Link>
+              <p className="mlm-section-link">
+                <Link href="/research">Read the research review</Link>
+              </p>
             </div>
-          </div>
-          <div className="source-grid">
-            {SUPPORTED_SOURCES.map((source) => (
-              <SourceCard key={source.id} source={source} />
-            ))}
-          </div>
-        </section>
+          </MarketingSection>
 
-        <section className="process-section" id="how-it-works" aria-labelledby="process-title">
-          <div className="section-heading">
-            <p className="eyebrow">How it works</p>
-            <h2 id="process-title">The CLI owns evidence. Your agent owns interpretation.</h2>
-          </div>
-          <div className="process-grid">
-            <article>
-              <p className="section-number">01 / ingest</p>
-              <h3>Read stable local copies.</h3>
-              <p>
-                Import Apple Messages or a caller-owned X archive, optionally add
-                macOS Contacts labels, or ingest a private Beeper or native WhatsApp
-                bundle exported by a compatible Wrench release.
-              </p>
-              <code>messagelikeme ingest bundle --input /absolute/private/bundle --json</code>
-            </article>
-            <article>
-              <p className="section-number">02 / measure</p>
-              <h3>Make behavior observable.</h3>
-              <p>
-                Inspect prose features, response tempo, bubble sequences, multiple
-                incoming points, reactions, and explicit reply use.
-              </p>
-              <code>messagelikeme inspect tempo &lt;contact-id&gt; --json</code>
-            </article>
-            <article>
-              <p className="section-number">03 / interpret</p>
-              <h3>Give bounded evidence to your agent.</h3>
-              <p>
-                Open only an explicit study packet in an agent environment you chose,
-                retain uncertainty, and produce an inspectable draft.
-              </p>
-              <code>messagelikeme study prepare &lt;contact-id&gt; --output /absolute/private/study.json --json</code>
-            </article>
-          </div>
-        </section>
+          <MarketingTrustBoundary
+            className="mlm-marketing-trust"
+            heading="Your history is evidence, not inventory."
+            headingId="privacy-title"
+            id="privacy"
+            items={[
+              {
+                label: 'It stays on your machine',
+                detail: 'Imported history, measurements, and profiles live in a private local data root with owner-only permissions.',
+              },
+              {
+                label: 'Everyday output has no prose',
+                detail: 'Ordinary commands report counts and timing under pseudonymous IDs. They omit message bodies, handles, and contact names.',
+              },
+              {
+                label: 'You choose what an agent sees',
+                detail: 'A study packet holds real excerpts. It reaches an agent only when you write it to a path you name and open it in an environment you trust.',
+              },
+              {
+                label: 'No account, server, or model',
+                detail: 'There is no Message Like Me account, server, AI-provider call, telemetry, or sync. This website is an informational page.',
+              },
+              {
+                label: 'Nothing sends',
+                detail: 'Drafting ends as text on your screen. There is no command that sends, reacts, schedules, or operates a messaging app.',
+              },
+            ]}
+            label="Your data"
+            summary="Local-first describes where the work happens, not a promise of secrecy. Here is what stays where, in plain words."
+          />
 
-        <section className="analysis-section" aria-labelledby="analysis-title">
-          <div className="analysis-intro">
-            <p className="eyebrow">Relationship-aware evidence</p>
-            <h2 id="analysis-title">Voice has a rhythm.</h2>
-            <p>
-              Word choice matters. So do the pauses, the bursts, the afterthought,
-              and the decision to answer three things in one message or three.
+          <MarketingInstallPanel
+            className="mlm-marketing-install"
+            eyebrow={`Install v${SOFTWARE_VERSION}`}
+            heading="Start with an empty store."
+            headingId="install-title"
+            id="install"
+          >
+            <ol className="command-stack" aria-label="Installation and first-check commands">
+              <li><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></li>
+              <li><code>messagelikeme skill install</code></li>
+              <li><code>messagelikeme init</code></li>
+              <li><code>messagelikeme doctor --json</code></li>
+            </ol>
+            <p className="mlm-install-note">
+              The first check imports no history. It reports where Message Like Me
+              will work and whether its private store is healthy, before you choose
+              a source. Requires Bun 1.3.14 or newer.
+              {' '}<a href={RELEASE_URL}>Inspect the release on GitHub</a>
             </p>
-          </div>
-          <dl className="signal-grid">
-            <div><dt>Prose</dt><dd>Case, punctuation, vocabulary, warmth, humor, and uncertainty.</dd></div>
-            <div><dt>Tempo</dt><dd>Response latency, turns, bursts, and session boundaries.</dd></div>
-            <div><dt>Shape</dt><dd>One long message versus several deliberate bubbles.</dd></div>
-            <div><dt>Context</dt><dd>What changes across play, planning, support, conflict, and reflection.</dd></div>
-            <div><dt>Coverage</dt><dd>How several incoming questions or emotional beats get resolved.</dd></div>
-            <div><dt>Replies</dt><dd>When explicit reply links clarify a dense or delayed thread.</dd></div>
-          </dl>
-        </section>
+          </MarketingInstallPanel>
 
-        <MarketingInterfaceGrid
-          className="mlm-marketing-interfaces"
-          heading="One evidence model, three deliberate surfaces."
-          headingId="message-like-me-interfaces-title"
-          id="interfaces"
-          interfaces={[
-            {
-              example: <pre><code>messagelikeme inspect tempo &lt;contact-id&gt; --json</code></pre>,
-              label: 'CLI',
-              summary: 'Own read-only ingestion, deterministic measurement, private artifacts, validation, and redacted machine-readable output.',
-            },
-            {
-              example: <pre><code>Use $message-like-me in your agent</code></pre>,
-              label: 'Agent Skill',
-              summary: 'Interpret an explicit bounded packet, preserve uncertainty, and draft without adding a model or provider to the CLI.',
-            },
-            {
-              example: <pre><code>{'import { canonicalJson, sha256 } from "@hraness/message-like-me"'}</code></pre>,
-              label: 'TypeScript library',
-              summary: 'Use versioned public types, strict bundle parsers, canonical JSON, digest helpers, and pure packet builders without filesystem or network work on import.',
-            },
-          ]}
-          label="Interfaces"
-          summary="The artifact is the seam. Deterministic code produces it; an authorized agent may interpret it; typed consumers can verify it."
-        />
+          <MarketingQuestionList
+            className="mlm-marketing-questions"
+            heading="Before you install."
+            headingId="questions-title"
+            id="questions"
+            label="Questions"
+            questions={HOME_QUESTIONS.map(({ answer, question }) => ({
+              answer: <p>{answer}</p>,
+              question,
+            }))}
+          />
 
-        <section className="boundary-section" aria-label="Product interpretation boundary">
-          <div>
-            <p className="eyebrow">What it is</p>
-            <h2>Evidence for a draft.</h2>
+          <MarketingMaker
+            heading="Built by Ben Guo"
+            headingId="maker-title"
+            id="maker"
+            label="Built by"
+            links={[
+              { href: 'https://hraness.com', label: 'hraness.com' },
+              { href: 'https://x.com/hraness', label: '@hraness' },
+              { href: GITHUB_URL, label: 'GitHub' },
+            ]}
+          >
             <p>
-              Message Like Me measures your outgoing prose and response shape for
-              one person across imported services, then gives your agent a
-              bounded, inspectable profile.
+              Message Like Me is built by Ben Guo, a musician and builder, formerly a
+              founder and engineering leader at companies including Venmo and Stripe,
+              now building from Puerto Rico. The source, the method, and the research
+              review are public.
             </p>
-          </div>
-          <div>
-            <p className="eyebrow">What it is not</p>
-            <h2>Not a model of you.</h2>
-            <p>
-              It does not train a model, represent your identity, predict your
-              beliefs, or decide what you mean now. Current facts and intent always
-              outrank historical style.
-            </p>
-            <Link href="/research">Read the research review →</Link>
-          </div>
-        </section>
+          </MarketingMaker>
 
-        <MarketingTrustBoundary
-          className="mlm-marketing-trust"
-          heading="Private history crosses only boundaries you can name."
-          headingId="message-like-me-trust-title"
-          id="privacy"
-          items={[
-            { label: 'Source access', detail: 'The CLI reads ownership-checked stable copies. It does not modify Messages, Contacts, archives, bundles, or sidecars.' },
-            { label: 'Ordinary output', detail: 'Aggregate commands use pseudonymous IDs and omit message bodies, handles, contact names, and group titles.' },
-            { label: 'Explicit packets', detail: 'Only study, Ensoul, evaluation, and handoff preparation may write bounded bodies outside the private store, to owner-selected mode-0600 paths.' },
-            { label: 'Agent boundary', detail: 'A packet reaches an agent only when you deliberately open it in an environment you authorize.' },
-            { label: 'Product network', detail: 'The CLI has no Message Like Me account, server, AI-provider call, authentication, telemetry, synchronization, or sending integration.' },
-            { label: 'Final action', detail: 'Drafting ends as visible text. Nothing sends, reacts, schedules, or operates a messaging application.' },
-          ]}
-          label="Trust boundary"
-          summary="Local-first is a process boundary, not a magical secrecy claim. The site, CLI, explicit artifacts, and your chosen agent each have a distinct role."
-        />
-
-        <section className="readme-section" id="readme" aria-labelledby="readme-title">
-          <div className="readme-heading">
-            <p className="eyebrow">Checked documentation</p>
-            <h2 id="readme-title">Inspect the product boundary.</h2>
-            <a href={`${GITHUB_URL}#readme`}>Browse the repository ↗</a>
-          </div>
-          <div className="docs-grid">
-            <article>
-              <p className="section-number">01 / use</p>
-              <h3>Complete documentation</h3>
-              <p>Install, ingest, inspect, study, evaluate, and draft with the checked README rendered on-site.</p>
-              <Link href="/docs">Read the docs →</Link>
-            </article>
-            <article>
-              <p className="section-number">02 / method</p>
-              <h3>How evidence is measured</h3>
-              <p>See the local data boundary, deterministic metrics, bounded study method, and explicit limits.</p>
-              <Link href="/methodology">Read the methodology →</Link>
-            </article>
-            <article>
-              <p className="section-number">03 / evidence</p>
-              <h3>Research and prior art</h3>
-              <p>Review the primary research, neighboring open-source projects, and claims this tool does not make.</p>
-              <Link href="/research">Read the research →</Link>
-            </article>
-          </div>
-        </section>
-
-        <MarketingQuestionList
-          className="mlm-marketing-questions"
-          heading="The boundary, in plain language."
-          headingId="message-like-me-questions-title"
-          id="questions"
-          label="Questions"
-          questions={HOME_QUESTIONS.map(({ answer, question }) => ({
-            answer: <p>{answer}</p>,
-            question,
-          }))}
-          summary="The important questions are about data movement, interpretation, and authority—not an abstract privacy label."
-        />
-
-        <MarketingCallToAction
-          actions={[
-            { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
-            { href: '/docs', label: 'Read the checked docs' },
-          ]}
-          className="mlm-marketing-cta"
-          eyebrow="Start without private data"
-          heading="Prove the boundary. Then choose the evidence."
-          headingId="message-like-me-cta-title"
-          summary="Initialize an empty local store and inspect its exact state before Message Like Me reads a message source."
-        />
+          <MarketingCallToAction
+            actions={[
+              { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
+              { href: '/docs', label: 'Read the docs' },
+            ]}
+            className="mlm-marketing-cta"
+            footnote={HERO_FOOTNOTE}
+            heading="Draft with an agent. Sound like you."
+            headingId="closing-title"
+            id="closing"
+            summary="Install the CLI, import one source, and hand your agent the evidence. Every draft stays on your screen until you decide."
+          />
+        </MarketingPage>
       </main>
       <SiteFooter path="/" />
     </>

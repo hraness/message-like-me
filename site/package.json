@@ -16,7 +16,7 @@
     "check": "bun run sync:readme && bun run test && bun run lint && bun run typecheck && bun run build"
   },
   "dependencies": {
-    "@hraness/design-kit": "github:hraness/design-kit#v0.3.0",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.4.0",
     "@hraness/ui": "github:hraness/ui#v0.4.10",
     "next": "16.2.6",
     "react": "19.2.6",

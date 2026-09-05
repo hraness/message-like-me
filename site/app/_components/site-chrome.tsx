@@ -1,3 +1,4 @@
+import { MarketingSiteHeader } from '@hraness/design-kit/react/server';
 import { AskAiAboutThis } from '@hraness/ui';
 import Link from 'next/link';
 
@@ -5,24 +6,27 @@ import {
   absoluteUrl,
   type CanonicalPagePath,
   GITHUB_URL,
+  SOFTWARE_VERSION,
 } from '../_lib/site';
 
 export function SiteHeader() {
   return (
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <header className="site-header">
-        <Link className="wordmark" href="/" aria-label="Message Like Me home">
-          message <span>like me</span>
-        </Link>
-        <nav aria-label="Primary navigation">
-          <Link className="nav-priority" href="/sources">Sources</Link>
-          <Link href="/docs">Docs</Link>
-          <Link href="/methodology">Method</Link>
-          <Link href="/research">Research</Link>
-          <a href={GITHUB_URL}>GitHub ↗</a>
-        </nav>
-      </header>
+      <MarketingSiteHeader
+        action={{ href: '/#install', label: `Install v${SOFTWARE_VERSION}` }}
+        ariaLabel="Primary navigation"
+        brand="Message Like Me"
+        brandLabel="Message Like Me home"
+        className="site-header"
+        links={[
+          { href: '/sources', label: 'Sources' },
+          { href: '/docs', label: 'Docs' },
+          { href: '/methodology', label: 'Method' },
+          { href: '/research', label: 'Research' },
+          { href: GITHUB_URL, label: 'GitHub' },
+        ]}
+      />
     </>
   );
 }
@@ -36,14 +40,14 @@ export function SiteFooter({ path }: Readonly<{ path?: CanonicalPagePath }>) {
           url={absoluteUrl(path)}
         />
       )}
-      <footer>
-        <Link className="wordmark" href="/">message <span>like me</span></Link>
+      <footer className="site-footer">
+        <Link className="wordmark" href="/">Message Like Me</Link>
         <p>Open source · MIT · local first</p>
         <nav aria-label="Footer navigation">
           <Link href="/about">About</Link>
           <Link href="/sources">Sources</Link>
           <Link href="/docs">Docs</Link>
-          <a href={GITHUB_URL}>GitHub ↗</a>
+          <a href={GITHUB_URL}>GitHub</a>
         </nav>
       </footer>
     </>

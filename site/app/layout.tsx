@@ -11,13 +11,12 @@ import {
   SOFTWARE_VERSION,
 } from './_lib/site';
 import '@hraness/design-kit/fonts.css';
-import '@hraness/design-kit/product-marketing.css';
 import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: {
-    default: 'Message Like Me — Study how you message',
+    default: 'Message Like Me — Draft messages that sound like you',
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -58,7 +57,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
-    title: 'Message Like Me — Study how you message',
+    title: 'Message Like Me — Draft messages that sound like you',
     description: SITE_DESCRIPTION,
     images: [
       {
@@ -71,7 +70,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Message Like Me — Study how you message',
+    title: 'Message Like Me — Draft messages that sound like you',
     description: SITE_DESCRIPTION,
     images: [{
       url: absoluteUrl('/og.png'),
@@ -81,8 +80,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
-  themeColor: '#f4f0e8',
+  colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fbfaf7' },
+    { media: '(prefers-color-scheme: dark)', color: '#141310' },
+  ],
 };
 
 const websiteId = `${absoluteUrl('/')}#website`;
