@@ -15,9 +15,8 @@ import {
   proveWebsiteProductionCanaryStaleLeaseFromEnvironment,
 } from "./release-ref-writer.mjs";
 import {
-  parseReleaseCanaryStatusResponse,
   RELEASE_CANARY_STATUS_CONTEXT,
-  releaseCanaryStatusRequest,
+  withReleaseCanaryAttestationFromEnvironment,
   withReleaseCanaryTerminalStatusFromEnvironment,
 } from "./release-status-attester.mjs";
 import {
@@ -1590,30 +1589,8 @@ async function livePreflight(environment) {
 async function createCanaryAttestationFromEnvironment(environment, admitted) {
   assertAppOnlyProcess(environment);
   let revocation;
-  const status = await withReleaseAppTokenFromEnvironment(
+  const status = await withReleaseCanaryAttestationFromEnvironment(
     { ...environment, TARGET: admitted.targetSha },
-    async (token, app) => {
-      const request = releaseCanaryStatusRequest(admitted.targetSha, "success");
-      const response = await fetch(new URL(request.endpoint, exactApiUrl(environment.GITHUB_API_URL)), {
-        body: JSON.stringify(request.body),
-        headers: githubHeaders(token, true),
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
-      });
-      if (response.redirected !== false || response.headers.get("location") !== null) {
-        fail("writer canary attestation POST redirected");
-      }
-      if (response.status !== 201) {
-        await readBoundedBytes(response, "writer canary attestation error response");
-        fail(`writer canary attestation POST returned HTTP ${String(response.status)}`);
-      }
-      return parseReleaseCanaryStatusResponse(
-        await readBoundedJson(response, "writer canary attestation response"),
-        response.headers.get("date"),
-        { app, state: "success", targetSha: admitted.targetSha },
-      );
-    },
     async (receipt) => {
       revocation = receipt;
     },

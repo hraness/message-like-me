@@ -385,7 +385,12 @@ function createHarness(options: HarnessOptions = {}) {
       authorityId += 1;
       currentAuthority = "error";
       authorityCreatedAt = new Date(Date.parse(date)).toISOString().replace(".000Z", "Z");
-      return jsonResponse(statusBody("error", authorityId, authorityCreatedAt), date, 201);
+      const response = jsonResponse(statusBody("error", authorityId, authorityCreatedAt), date, 201);
+      response.headers.set(
+        "Location",
+        `https://api.github.com/repos/${repository}/statuses/${targetSha}`,
+      );
+      return response;
     }
 
     if (url.pathname === `/repos/${repository}`) {
@@ -690,7 +695,7 @@ describe("release authority cleanup", () => {
       .toThrow(message);
   });
 
-  test("posts one distinct terminal error, proves exact combined readback, and records App-token revocation", async () => {
+  test("accepts GitHub's 201 creation Location, proves terminal readback, and records App-token revocation", async () => {
     const harness = installHarness();
     const initial = await createCleanupPreflight(environment());
     const initialEncoded = encodeCleanupPreflightReceipt(initial);

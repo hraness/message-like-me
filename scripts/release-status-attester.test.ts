@@ -341,7 +341,7 @@ describe("release authority commit-status lifecycle", () => {
     expect(source).toContain("withReleaseAppTokenFromEnvironment");
   });
 
-  test("executes the real status-only HTTP and token-revocation transaction", async () => {
+  test("accepts GitHub's 201 creation Location and completes the status-only revocation transaction", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
     const installationToken = "exact-status-only-installation-token";
@@ -434,6 +434,7 @@ describe("release authority commit-status lifecycle", () => {
               Date: body.state === "success"
                 ? "Sat, 05 Sep 2026 01:00:10 GMT"
                 : "Sat, 05 Sep 2026 01:00:11 GMT",
+              Location: `https://api.github.com/repos/hraness/message-like-me/statuses/${targetSha}`,
             },
             status: 201,
           });

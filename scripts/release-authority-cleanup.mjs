@@ -198,10 +198,14 @@ async function requestJson(apiUrl, token, path, label, init = {}) {
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
   });
-  if (response.redirected !== false || response.headers.get("location") !== null) {
+  const isCreation = init.method === "POST";
+  if (
+    response.redirected !== false
+    || (!isCreation && response.headers.get("location") !== null)
+  ) {
     fail(`${label} redirected`);
   }
-  const expectedStatus = init.method === "POST" ? 201 : 200;
+  const expectedStatus = isCreation ? 201 : 200;
   if (response.status !== expectedStatus) {
     try { await response.body?.cancel(); } catch { /* best effort */ }
     fail(`${label} returned HTTP ${String(response.status)}`);

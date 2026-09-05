@@ -719,8 +719,12 @@ function requestHeaders(token, hasBody, noCache = false) {
   };
 }
 
-function responseRedirected(response) {
-  return response.redirected !== false || response.headers.get("location") !== null;
+function responseWasRedirected(response) {
+  return response.redirected !== false;
+}
+
+function responseCarriesRedirect(response) {
+  return responseWasRedirected(response) || response.headers.get("location") !== null;
 }
 
 async function postStatusWithFetch(apiUrl, token, request) {
@@ -731,7 +735,10 @@ async function postStatusWithFetch(apiUrl, token, request) {
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
   });
-  if (responseRedirected(response)) fail("release authority status POST redirected");
+  // GitHub's successful 201 Created response may carry Location as resource
+  // metadata. Fetch's redirected bit, together with redirect: "error", is the
+  // redirect boundary for this creation request.
+  if (responseWasRedirected(response)) fail("release authority status POST redirected");
   if (response.status !== 201) {
     await readBoundedBytes(response, "release authority status error response");
     fail(`release authority status POST returned HTTP ${String(response.status)}`);
@@ -755,7 +762,7 @@ async function readCombinedStatusWithFetch(apiUrl, token, targetSha) {
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
   });
-  if (responseRedirected(response)) fail("combined release authority status GET redirected");
+  if (responseCarriesRedirect(response)) fail("combined release authority status GET redirected");
   if (response.status !== 200) {
     await readBoundedBytes(response, "combined release authority status error response");
     fail(`combined release authority status GET returned HTTP ${String(response.status)}`);
