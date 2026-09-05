@@ -521,6 +521,14 @@ IDs in `MLM_RELEASE_PRODUCTION_WORKFLOW_ID`,
 dispatch attempt 1 with the exact failed production run ID/attempt, immutable
 tag and peeled target SHA, and unchanged production-ref SHA.
 
+Treat an Actions run's `name` and `display_title` as presentation fields: a
+workflow-level `run-name` can change them for each invocation. Stable workflow
+identity is the exact numeric workflow ID plus its checked repository path;
+exact run admission additionally binds the repository, run ID, event, attempt,
+and source SHA. Cleanup separately requires the target-bearing `display_title`
+defined by the checked workflow so it cannot select an unrelated failed run,
+but that title is not a substitute for the numeric ID and path.
+
 The cleanup inventories every attempt for all three credential-capable
 workflows from one fixed authenticated GitHub `Date` minus 36 days. Thirty-six
 days exceeds GitHub's 35-day maximum workflow lifetime, so a pre-freeze run
