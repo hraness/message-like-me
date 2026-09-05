@@ -28,7 +28,7 @@ import {
 
 const roots: string[] = [];
 const repositoryId = 1_342_143_606;
-const workflowId = 345_585_865;
+const workflowId = 350_746_736;
 const httpDate = "Sat, 05 Sep 2026 04:00:00 GMT";
 
 afterEach(() => {
@@ -114,7 +114,7 @@ function run(targetSha: string) {
     head_branch: "main",
     head_sha: targetSha,
     id: 9001,
-    name: "Prove production ref writer canary",
+    name: `Prove writer canary target ${targetSha}`,
     path: ".github/workflows/production-writer-canary.yml",
     repository: { full_name: "hraness/message-like-me", id: repositoryId },
     run_attempt: 1,
@@ -365,6 +365,14 @@ describe("persistent production-ref writer canary", () => {
       { ...run(targetSha), workflow_id: 0 },
       { runId: 9001, workflowSha: targetSha },
     )).toThrow("positive integer");
+    expect(() => parseWriterCanaryRun(
+      { ...run(targetSha), workflow_id: 345_585_865 },
+      { runId: 9001, workflowSha: targetSha },
+    )).toThrow("does not bind");
+    expect(parseWriterCanaryRun(
+      { ...run(targetSha), name: "Presentation metadata is not workflow identity" },
+      { runId: 9001, workflowSha: targetSha },
+    )).toEqual({ runAttempt: 1, runId: 9001, workflowId });
   });
 
   test("creates a canary-specific complete-range receipt and rejects workflow drift", async () => {
