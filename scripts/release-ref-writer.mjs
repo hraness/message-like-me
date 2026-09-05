@@ -315,12 +315,20 @@ function initializeSterileRepository(spawnImplementation, root, repositoryDirect
   const allowedKeys = new Set([
     "core.bare",
     "core.filemode",
+    "core.ignorecase",
+    "core.precomposeunicode",
     "core.repositoryformatversion",
   ]);
+  const ignoreCase = exact.get("core.ignorecase");
+  const precomposeUnicode = exact.get("core.precomposeunicode");
   if (
     [...exact.keys()].some((key) => !allowedKeys.has(key)) ||
     exact.get("core.bare") !== "true" ||
     (exact.get("core.filemode") !== "true" && exact.get("core.filemode") !== "false") ||
+    (ignoreCase !== undefined && ignoreCase !== "true") ||
+    (precomposeUnicode !== undefined &&
+      precomposeUnicode !== "true" &&
+      precomposeUnicode !== "false") ||
     exact.get("core.repositoryformatversion") !== "0"
   ) {
     fail("sterile release-writer repository config is not exact");

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,12 +16,21 @@ const previousSha = "1".repeat(40);
 const verifiedSha = "2".repeat(40);
 const verifiedTag = "v0.8.0";
 const token = "ghs_private-release-token-value";
-const exactBareRepositoryConfig = [
+const exactBareRepositoryConfigEntries = [
   "core.repositoryformatversion\n0",
   "core.filemode\ntrue",
   "core.bare\ntrue",
+];
+const sterileRepositoryConfig = (...entries: readonly string[]) => [
+  ...exactBareRepositoryConfigEntries,
+  ...entries,
   "",
 ].join("\0");
+const exactBareRepositoryConfig = sterileRepositoryConfig();
+const exactAppleBareRepositoryConfig = sterileRepositoryConfig(
+  "core.ignorecase\ntrue",
+  "core.precomposeunicode\ntrue",
+);
 
 function gitResult(
   stdout = "",
@@ -155,7 +165,9 @@ describe("website-production Git writer", () => {
         } else {
           expect(cwd).toBe(sterileRoot);
         }
-        const bootstrap = sterileBootstrapResult(calls.length);
+        const bootstrap = calls.length === 2
+          ? gitResult(exactAppleBareRepositoryConfig)
+          : sterileBootstrapResult(calls.length);
         if (bootstrap !== undefined) return bootstrap;
         if (calls.length === 4) return gitResult(`${verifiedSha}\n`);
         return gitResult(
@@ -232,6 +244,108 @@ describe("website-production Git writer", () => {
       toSha: verifiedSha,
     });
     expect(await Bun.file(askpassPath).exists()).toBe(false);
+  });
+
+  test("accepts only the exact optional Git filesystem probe values", () => {
+    const accepted = [
+      sterileRepositoryConfig("core.ignorecase\ntrue"),
+      sterileRepositoryConfig("core.precomposeunicode\ntrue"),
+      sterileRepositoryConfig("core.precomposeunicode\nfalse"),
+      sterileRepositoryConfig("core.ignorecase\ntrue", "core.precomposeunicode\nfalse"),
+    ];
+    for (const config of accepted) {
+      let calls = 0;
+      const receipt = advanceWebsiteProductionRef({
+        environment: { MLM_RELEASE_REF_TOKEN: token },
+        expectedOldSha: previousSha,
+        repository: "hraness/message-like-me",
+        spawnImplementation() {
+          calls += 1;
+          if (calls === 1) return gitResult();
+          if (calls === 2) return gitResult(config);
+          if (calls === 4) return gitResult(`${verifiedSha}\n`);
+          return gitResult(
+            `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
+          );
+        },
+        verifiedSha,
+        verifiedTag,
+      });
+      expect(calls).toBe(5);
+      expect(receipt.classification).toBe("fast-forward");
+    }
+
+    for (const config of [
+      sterileRepositoryConfig("core.ignorecase\nfalse"),
+      sterileRepositoryConfig("core.ignorecase\nTRUE"),
+      sterileRepositoryConfig("core.precomposeunicode\nmaybe"),
+      sterileRepositoryConfig("core.precomposeunicode\n"),
+    ]) {
+      let calls = 0;
+      expect(() => advanceWebsiteProductionRef({
+        environment: { MLM_RELEASE_REF_TOKEN: token },
+        expectedOldSha: previousSha,
+        repository: "hraness/message-like-me",
+        spawnImplementation() {
+          calls += 1;
+          return calls === 1 ? gitResult() : gitResult(config);
+        },
+        verifiedSha,
+        verifiedTag,
+      })).toThrow("sterile release-writer repository config is not exact");
+      expect(calls).toBe(2);
+    }
+  });
+
+  test("accepts this host Git's fresh bare repository config before mocked remote calls", () => {
+    let calls = 0;
+    let inspectedConfig = "";
+    const receipt = advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation(command, arguments_, options) {
+        calls += 1;
+        if (calls <= 2) {
+          const result = spawnSync(command, arguments_, options);
+          if (calls === 2) inspectedConfig = result.stdout;
+          return result;
+        }
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        return calls === 3
+          ? gitResult()
+          : gitResult(
+            `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
+          );
+      },
+      verifiedSha,
+      verifiedTag,
+    });
+    expect(calls).toBe(5);
+    expect(inspectedConfig).toContain("core.repositoryformatversion\n0\0");
+    expect(inspectedConfig).toContain("core.bare\ntrue\0");
+    expect(receipt.classification).toBe("fast-forward");
+  });
+
+  test("rejects repeated Git filesystem probe keys", () => {
+    let calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation() {
+        calls += 1;
+        return calls === 1
+          ? gitResult()
+          : gitResult(sterileRepositoryConfig(
+            "core.ignorecase\ntrue",
+            "core.ignorecase\ntrue",
+          ));
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("sterile release-writer repository config repeats a key");
+    expect(calls).toBe(2);
   });
 
   test("rejects any unexpected entry in the sterile repository config", () => {
