@@ -227,6 +227,10 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(workflow).not.toContain("git tag --list");
   expect(workflow).not.toContain("mkdir -p release-writer");
   expect(workflow).not.toContain("mkdir -p github-release-writer");
+  for (const source of [workflow, npmPublisher]) {
+    expect(source).not.toMatch(/\bnpm\s+stage\b/iu);
+    expect(source).not.toMatch(/\bstage\s+publish\b/iu);
+  }
   expect(workflow.match(/fetch-depth: 1/gu)).toHaveLength(5);
   expect(workflow.match(/fetch-tags: false/gu)).toHaveLength(5);
   expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(5);
@@ -266,6 +270,13 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
   expect(npmPublisher).toContain('from "./release-distribution-policy.ts"');
   expect(npmPublisher).toContain('from "./release-process-environment.ts"');
   expect(npmPublisher).not.toMatch(/from "\.\/[^".]+"/u);
+  expect(npmPublisher).toContain([
+    '          "npm",',
+    '          "publish",',
+    "          tarball,",
+    '          "--access",',
+    '          "public",',
+  ].join("\n"));
   expect(npmWriter).toContain("contents: none");
   expect(npmWriter).toContain("id-token: write");
   expect(npmWriter).not.toContain("actions/checkout");
@@ -793,7 +804,9 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "MLM_RELEASE_WORKFLOW_ID",
     "Immutable version tags",
     "current_user_can_bypass=never",
-    "workflow file `release.yml`, with `npm publish`",
+    "permission set to be `createPackage` plus npm's provider-imposed\n   `createStagedPackage`",
+    "never `npm stage` or `stage publish`",
+    "staged-package inventory to be exactly empty",
     "registry may resolve both `legacy` and `latest` to those same",
     "Dist-tags are mutable labels",
     "manual `v0.8.0` registry seed is historical bootstrap only",

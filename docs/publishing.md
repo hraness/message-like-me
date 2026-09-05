@@ -97,10 +97,14 @@ for this rollout and do not create a replacement Sites project.
    published Release reports `immutable=true` before npm can run.
 10. Ensure `@hraness/message-like-me` exists publicly under the Hraness npm
    scope, then configure its sole trusted publisher as GitHub Actions repository
-   `hraness/message-like-me`, workflow file `release.yml`, with `npm publish`
-   permission. The one-time registry bootstrap may publish only the exact
-   already-reviewed `v0.8.0` package bytes under the `legacy` dist-tag; every
-   later release must use OIDC from the checked workflow. Once trusted
+   `hraness/message-like-me`, workflow file `release.yml`. Require its exact
+   permission set to be `createPackage` plus npm's provider-imposed
+   `createStagedPackage`. The checked Release workflow uses only its reviewed
+   direct `npm publish` path, never `npm stage` or `stage publish`, and release
+   preflight requires the staged-package inventory to be exactly empty. The
+   one-time registry bootstrap may publish only the exact already-reviewed
+   `v0.8.0` package bytes under the `legacy` dist-tag; every later release must use OIDC
+   from the checked workflow. Once trusted
    publishing is proven, disallow traditional token publication for the
    package. This manual `v0.8.0` registry seed is historical bootstrap only.
    The registry may resolve both `legacy` and `latest` to those same immutable
