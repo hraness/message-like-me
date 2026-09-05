@@ -5,7 +5,7 @@ export function SourceCard({ source }: { source: SupportedSource }) {
   return (
     <article className="source-card" id={source.id}>
       <div className="source-card-heading">
-        <SourceIcon name={source.icon} />
+        <SourceIcon sourceId={source.id} />
         <div>
           <p className="source-kind">{source.kind}</p>
           <h3>{source.name}</h3>
@@ -21,4 +21,3 @@ export function SourceCard({ source }: { source: SupportedSource }) {
     </article>
   );
 }
-

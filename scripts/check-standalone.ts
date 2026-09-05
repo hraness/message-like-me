@@ -385,9 +385,9 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (sourceVersion.trim() !== expectedSource) {
     problems.push(`src/version.ts must match package version ${version}`);
   }
-  const expectedInstall = `github:hraness/message-like-me#v${version}`;
+  const expectedInstall = `@hraness/message-like-me@${version}`;
   if (!readme.includes(expectedInstall)) {
-    problems.push(`README.md install tag must match package version v${version}`);
+    problems.push(`README.md npm install must match package version ${version}`);
   }
   if (!readme.startsWith(`# Message Like Me\n\n${SKILLS_BADGE}\n\n`)) {
     problems.push("README.md must place the official skills.sh repository badge below the title");

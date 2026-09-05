@@ -39,7 +39,7 @@ const HOME_QUESTIONS = [
   {
     question: 'Does the website receive my messages?',
     answer:
-      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays in a private local store on your machine.',
+      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays on your machine in private local paths you choose.',
   },
   {
     question: 'Do I need an account or an API key?',
@@ -59,7 +59,7 @@ const HOME_QUESTIONS = [
   {
     question: 'What does it cost?',
     answer:
-      'Nothing. Message Like Me is open source under the MIT license and installs from an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
+      'Nothing. Message Like Me is open source under the MIT license. Install the exact public npm package; the same reviewed bytes are mirrored by an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
   },
   {
     question: 'Which platforms does it run on?',
@@ -215,7 +215,7 @@ export default function Home() {
                 },
                 {
                   code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
-                  detail: 'Write one evidence packet with real excerpts to a path you name, readable only by you.',
+                  detail: 'Write one evidence packet with real excerpts to a path you name, with owner-only filesystem permissions.',
                   label: 'Prepare',
                 },
                 {
@@ -305,7 +305,7 @@ export default function Home() {
             id="install"
           >
             <ol className="command-stack" aria-label="Installation and first-check commands">
-              <li><code>bun add --global github:hraness/message-like-me#v{SOFTWARE_VERSION}</code></li>
+              <li><code>bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}</code></li>
               <li><code>messagelikeme skill install</code></li>
               <li><code>messagelikeme init</code></li>
               <li><code>messagelikeme doctor --json</code></li>

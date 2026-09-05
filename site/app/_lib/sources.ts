@@ -1,15 +1,23 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.16.1',
+  producerVersion: '0.16.5',
+  adapterId: 'beeper-local',
+  adapterVersion: '2.3.0',
+  reviewedOperationCount: 32,
+  pinnedCliOperationCount: 27,
+  fixedDesktopReadOperationCount: 5,
   providerCliVersion: '0.6.2',
+  providerCliSourcePackagePath: 'packages/cli/package.json',
+  providerCliSourceDeclaredVersion: '0.6.1',
   bundleSchemaVersion: '1',
   sourceId: 'beeper-local',
   sourceTransformVersion: '1.1.0',
+  exportBoundary: 'internal-bounded',
 } as const);
 
 export const WHATSAPP_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.16.3',
+  producerVersion: '0.16.5',
   providerCli: 'Wacli',
   providerCliVersion: '0.15.0',
   bundleSchemaVersion: '2',
@@ -17,18 +25,20 @@ export const WHATSAPP_COMPATIBILITY = Object.freeze({
   sourceTransformVersion: '1.0.0',
   providerId: 'whatsapp',
   network: 'whatsapp',
+  reactionState: 'unproven-omitted',
+  reactionWarning: 'reaction-state-unproven',
 } as const);
 
-export type SourceIconName = 'archive' | 'contacts' | 'messages' | 'wrench';
 export type SourceKind = 'Messaging history' | 'Label enrichment';
+export type SupportedSourceId =
+  | 'apple-messages'
+  | 'beeper-via-wrench'
+  | 'whatsapp-via-wrench'
+  | 'x-data-archive'
+  | 'macos-contacts';
 
 export type SupportedSource = Readonly<{
-  id:
-    | 'apple-messages'
-    | 'beeper-via-wrench'
-    | 'whatsapp-via-wrench'
-    | 'x-data-archive'
-    | 'macos-contacts';
+  id: SupportedSourceId;
   name: string;
   kind: SourceKind;
   mode: string;
@@ -36,7 +46,6 @@ export type SupportedSource = Readonly<{
   summary: string;
   boundary: string;
   command: string;
-  icon: SourceIconName;
 }>;
 
 export const SUPPORTED_SOURCES = Object.freeze([
@@ -51,7 +60,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Message Like Me never modifies Messages, chat.db, or its transactional sidecars.',
     command: 'messagelikeme ingest imessage',
-    icon: 'messages',
   },
   {
     id: 'beeper-via-wrench',
@@ -60,11 +68,10 @@ export const SUPPORTED_SOURCES = Object.freeze([
     mode: 'Bounded local bundle',
     status: 'Supported',
     summary:
-      'Ingests a verified, multi-account Beeper observation exported by Wrench.',
+      'Ingests a verified, bounded Beeper observation exported by Wrench v0.16.5.',
     boundary:
-      'Message Like Me receives no Beeper credential, calls no Beeper or Wrench operation, and never sends.',
+      'Message Like Me owns zero Beeper operations, credentials, or live sessions; it never sends and does not claim complete history.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
-    icon: 'wrench',
   },
   {
     id: 'whatsapp-via-wrench',
@@ -75,9 +82,8 @@ export const SUPPORTED_SOURCES = Object.freeze([
     summary:
       'Ingests one native WhatsApp linked-device observation exported by Wrench through official Wacli.',
     boundary:
-      'Wrench alone owns Wacli, authentication, synchronization, and provider operations; Message Like Me verifies the finished bundle and never sends.',
+      'Wrench omits reaction-shaped rows when Wacli cannot prove current state; Message Like Me verifies the finished bundle and never operates WhatsApp.',
     command: 'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
-    icon: 'wrench',
   },
   {
     id: 'x-data-archive',
@@ -90,7 +96,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'This path covers archive DMs, not X Chat, and never accesses X or downloads media.',
     command: 'messagelikeme ingest x-archive --input /absolute/private/archive.zip',
-    icon: 'archive',
   },
   {
     id: 'macos-contacts',
@@ -103,7 +108,6 @@ export const SUPPORTED_SOURCES = Object.freeze([
     boundary:
       'Contacts supplies labels only; it is not messaging history and ambiguous matches stay separate.',
     command: 'messagelikeme ingest contacts',
-    icon: 'contacts',
   },
 ] as const satisfies readonly SupportedSource[]);
 

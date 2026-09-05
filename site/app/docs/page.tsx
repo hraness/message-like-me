@@ -20,6 +20,7 @@ export default function DocsPage() {
       path="/docs"
       html={readmeHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/README.md`}
+      dateModified="2026-09-05"
       sourceOwnsHeading
     />
   );

@@ -15,6 +15,7 @@ test('renders the complete README with one source-owned heading and working anch
   expect(html).toContain('href="#install-and-first-run"');
   expect(html).toContain('<h2 id="install-and-first-run">Install and first run</h2>');
   expect(html).toContain('"headline":"Message Like Me"');
+  expect(html).toContain('"dateModified":"2026-09-05"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 
@@ -26,4 +27,5 @@ test.each([
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe(heading);
   expect(html).toContain(`"headline":"${heading}"`);
+  expect(html).toContain('"dateModified":"2026-08-27"');
 });

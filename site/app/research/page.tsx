@@ -20,6 +20,7 @@ export default function ResearchPage() {
       path="/research"
       html={researchHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/docs/research.md`}
+      dateModified="2026-08-27"
       sourceOwnsHeading
     />
   );

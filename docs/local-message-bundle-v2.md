@@ -10,7 +10,7 @@ network, or sends a message.
 The intended producer flow is:
 
 ```sh
-bun add --global @hraness/wrench@0.16.3
+bun add --global @hraness/wrench@0.16.5
 wrench whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
   --output /absolute/private/path/whatsapp-bundle
@@ -20,9 +20,15 @@ messagelikeme ingest bundle \
   --json
 ```
 
-The checked compatibility coordinates are Wrench v0.16.3 and official Wacli
+The checked compatibility coordinates are Wrench v0.16.5 and official Wacli
 v0.15.0. Wrench owns that executable dependency and its authentication state;
 neither enters Message Like Me.
+
+That exact producer excludes every reaction-shaped Wacli row. Wacli v0.15.0
+may retain an earlier emoji after a removal, so the local projection cannot
+durably establish current active reaction state. A bundle that encountered any
+such row carries the categorical `reaction-state-unproven` warning. This is an
+observability limit, not evidence that no reactions occurred.
 
 The normative object schema is
 [`schema/local-message-bundle-v2.schema.json`](../schema/local-message-bundle-v2.schema.json).
@@ -82,6 +88,11 @@ changes, invalid UTF-8, blank or oversized records, noncanonical JSON, count or
 byte disagreement, and SHA-256 disagreement. The same public bounds as v1
 apply, except v2 admits exactly one account.
 
+The v2 wire contract retains the fixed `reactions.ndjson` artifact and strict
+reaction parser for proven records. The checked Wrench v0.16.5/Wacli v0.15.0
+producer leaves that artifact empty because it cannot prove current reaction
+state.
+
 `manifest.json` is canonical JSON followed by one newline. Every NDJSON record
 is one canonical JSON object followed by one newline. The manifest integrity
 digest covers its canonical projection without the `integrity` member;
@@ -112,8 +123,10 @@ matches.
 Every message has a proven incoming or outgoing direction. Direct-message
 senders are proven. A group or system row may retain a null sender when the
 bounded local observation cannot prove one, and it cannot establish overlap.
-Reply, edit, deletion, reaction, attachment, and tombstone fields retain the
-same strict meanings as v1. Attachment bytes, provider URLs, credentials, Wacli
+Reply, edit, deletion, attachment, and tombstone fields retain the same strict
+meanings as v1. The contract also defines reaction records, but the checked
+producer emits none and reports `reaction-state-unproven` when it encounters a
+reaction-shaped row. Attachment bytes, provider URLs, credentials, Wacli
 session state, database paths, and unmodeled provider payloads are excluded.
 Unsupported status, broadcast, and newsletter records are not represented as
 ordinary conversations.
@@ -148,11 +161,13 @@ messages, groups, names, phone suffixes, approximate timestamps, and ambiguous
 duplicates cannot prove equivalence.
 
 Both source provenances and all source-unique history remain stored. Proven
-message and reaction duplicates contribute once. The native Wacli conversation
-is the preferred action route and carries the exact private `whatsappJid`
-coordinate. Its proven Beeper duplicate remains evidence with reason
-`superseded-route`. Reimport rechecks the named proof atomically and fails
-closed on disagreement.
+message duplicates contribute once. A reaction can deduplicate only when a
+conforming producer supplies a proven reaction record; Wrench v0.16.5 supplies
+none, so this overlap path does not reconcile reaction state. The native Wacli
+conversation is the preferred action route and carries the exact private
+`whatsappJid` coordinate. Its proven Beeper duplicate remains evidence with
+reason `superseded-route`. Reimport rechecks the named proof atomically and
+fails closed on disagreement.
 
 ## Privacy and action boundary
 
