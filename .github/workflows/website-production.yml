@@ -1,4 +1,5 @@
 name: Promote website production
+run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0}', inputs.release_tag) }}
 
 on:
   workflow_run:
@@ -271,18 +272,23 @@ jobs:
         run: bun run ./scripts/check-public-release.ts
 
   write_production_ref:
-    name: Advance website-production with the dedicated release App
+    name: Attest, advance, and consume production authority
     needs:
       - verify
       - provider_baseline
       - advance_production_ref_preflight
     if: needs.provider_baseline.outputs.advance_required == 'true'
     permissions:
-      contents: read
+      contents: write
+      statuses: read
     environment: { name: production-ref-writer-key, deployment: false }
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
+      attestation_receipt: ${{ steps.attest.outputs.receipt }}
+      consumption_receipt: ${{ steps.consume.outputs.receipt }}
+      denial_receipt: ${{ steps.deny.outputs.receipt }}
+      precondition_receipt: ${{ steps.precondition.outputs.receipt }}
       receipt: ${{ steps.promotion.outputs.receipt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -291,19 +297,27 @@ jobs:
           fetch-tags: false
           persist-credentials: false
           ref: ${{ needs.verify.outputs.workflow_sha }}
-      - name: Pin the secret-bearing writer and workflow-range code to reviewed hashes
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Pin the complete production authority TCB to reviewed hashes
+        id: initial_pin
         env:
-          APP_TOKEN_SHA256: 70182b80b35129910bd6993f2e5bfd7cd5a2934ac1ea54e490b2cd73363891b3
-          PROVIDER_SHA256: 7b3f6341dd5ddff42e7555a15ea27a3680ddf442e436e7d88a53366701024b72
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 41c136d48e562d5c9e3ea3cb894fca8752aa2481e56fb01ebb0481b14f92687f
-          WORKFLOW_RANGE_SHA256: d8f583b0b1e65a3ff76c085bb7d726501f6ff302ff7d8aaa417d984e61448658
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
           test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
           test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
           test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
           test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
       - name: Re-prove the complete workflow-control range before reading the key
         id: workflow_range
@@ -317,27 +331,177 @@ jobs:
           set -euo pipefail
           node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$VERIFIED_TAG" "$RECOVERY_WORKFLOW_SHA" "$VERIFIED_SHA" >/dev/null
           node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" >> "$GITHUB_OUTPUT"
-      - name: Promote verified website production source
-        id: promotion
+      - name: Re-pin the complete TCB before the App-only precondition
+        id: pre_precondition_pin
         env:
-          BASELINE_RECEIPT: ${{ needs.provider_baseline.outputs.receipt }}
-          DEFAULT_BRANCH: main
-          EVENT_NAME: ${{ github.event_name }}
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Terminalize the target before proving required-status denial
+        id: precondition
+        if: ${{ steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' }}
+        env:
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          GH_TOKEN: ${{ github.token }}
           MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
           MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
           MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
           MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
           MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+          TARGET: ${{ needs.verify.outputs.verified_sha }}
+        run: node ./scripts/release-production-authority.mjs consume
+      - name: Re-pin the complete TCB before the denial writer
+        id: pre_denial_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Prove the writer cannot advance without current success
+        id: deny
+        env:
+          AUTHORITY_PRECONDITION_RECEIPT: ${{ steps.precondition.outputs.receipt }}
+          BASELINE_RECEIPT: ${{ needs.provider_baseline.outputs.receipt }}
+          DEFAULT_BRANCH: main
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
+          RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
+          WORKFLOW_RANGE_RECEIPT: ${{ steps.workflow_range.outputs.receipt }}
+        run: node ./scripts/release-provider-outcome.mjs deny-production
+      - name: Re-pin the complete TCB after the denial writer
+        id: pre_attest_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Attest the exact release with the status-only App and revoke its token
+        id: attest
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+          TARGET: ${{ needs.verify.outputs.verified_sha }}
+        run: node ./scripts/release-production-authority.mjs attest
+      - name: Re-pin the complete TCB after the App-only attestation
+        id: post_attest_pin
+        if: ${{ always() && steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' && steps.precondition.outcome != 'skipped' }}
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Read current authority and advance the exact production ref
+        id: promotion
+        if: ${{ steps.attest.outcome == 'success' && steps.post_attest_pin.outcome == 'success' }}
+        env:
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+          AUTHORITY_DENIAL_RECEIPT: ${{ steps.deny.outputs.receipt }}
+          BASELINE_RECEIPT: ${{ needs.provider_baseline.outputs.receipt }}
+          DEFAULT_BRANCH: main
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
           PROMOTION_EXPECTED_MODE: advanced
           RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
           WORKFLOW_RANGE_RECEIPT: ${{ steps.workflow_range.outputs.receipt }}
         run: node ./scripts/release-provider-outcome.mjs promote
+      - name: Re-pin the complete TCB after the writer-only process
+        id: post_writer_pin
+        if: ${{ always() && steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' && steps.precondition.outcome != 'skipped' }}
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
+          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-production-authority.mjs | cut -d ' ' -f 1)" = "$PRODUCTION_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-provider-outcome.mjs | cut -d ' ' -f 1)" = "$PROVIDER_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-authority.ts | cut -d ' ' -f 1)" = "$REF_AUTHORITY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Consume authority and revoke the terminal status-only token
+        id: consume
+        if: ${{ always() && steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' && steps.precondition.outcome != 'skipped' && steps.post_writer_pin.outcome == 'success' }}
+        env:
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+          PROMOTION_RECEIPT_SHA256: ${{ steps.promotion.outputs.receipt_sha256 }}
+          TARGET: ${{ needs.verify.outputs.verified_sha }}
+        run: node ./scripts/release-production-authority.mjs consume
 
   advance_production_ref:
     name: Re-admit authority after the production-ref writer
@@ -348,6 +512,7 @@ jobs:
     if: needs.provider_baseline.outputs.advance_required == 'true'
     permissions:
       contents: read
+      statuses: read
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     outputs:
@@ -366,6 +531,15 @@ jobs:
         with:
           bun-version: "1.3.14"
       - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Bind the split status, writer, and terminal receipts
+        env:
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ needs.write_production_ref.outputs.attestation_receipt }}
+          AUTHORITY_CONSUMPTION_RECEIPT: ${{ needs.write_production_ref.outputs.consumption_receipt }}
+          AUTHORITY_DENIAL_RECEIPT: ${{ needs.write_production_ref.outputs.denial_receipt }}
+          AUTHORITY_PRECONDITION_RECEIPT: ${{ needs.write_production_ref.outputs.precondition_receipt }}
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_RECEIPT: ${{ needs.write_production_ref.outputs.receipt }}
+        run: node ./scripts/release-provider-outcome.mjs finalize-authority
       - name: Revalidate authority after production-ref mutation
         env:
           DEFAULT_BRANCH: main

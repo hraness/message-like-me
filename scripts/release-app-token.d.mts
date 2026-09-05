@@ -18,6 +18,8 @@ export interface ReleaseAppTokenReceipt {
 
 export interface ReleaseAppTokenRevocationReceipt {
   readonly converged: true;
+  readonly deletionServerDate: string;
+  readonly lastObservationServerDate: string;
   readonly observationCount: number;
   readonly propagationObserved: boolean;
   readonly stableDenials: 2;
@@ -55,7 +57,7 @@ export function createReleaseAppJwt(input: Readonly<{
 }>): string;
 
 export function releaseAppTokenRequestBody(): Readonly<{
-  permissions: Readonly<{ contents: "write"; metadata: "read" }>;
+  permissions: Readonly<{ metadata: "read"; statuses: "write" }>;
   repository_ids: readonly [1342143606];
 }>;
 
@@ -71,7 +73,7 @@ export function parseReleaseAppInstallation(
 
 export function parseReleaseAppTokenResponse(value: unknown, serverDate: unknown): Readonly<{
   expiresAt: string;
-  permissions: Readonly<{ contents: "write"; metadata: "read" }>;
+  permissions: Readonly<{ metadata: "read"; statuses: "write" }>;
   repositoryId: 1342143606;
   token: string;
 }>;

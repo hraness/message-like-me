@@ -1,0 +1,220 @@
+name: Terminalize release authority
+run-name: Terminalize release authority target ${{ inputs.expected_target_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: Exact website-production commit that must remain unchanged
+        required: true
+        type: string
+      expected_target_sha:
+        description: Exact immutable release commit whose failed attempt may have left authority
+        required: true
+        type: string
+      release_tag:
+        description: Exact immutable release tag whose authority must be consumed
+        required: true
+        type: string
+      incident_run_id:
+        description: Run ID of the newest failed production attempt for this exact release target
+        required: true
+        type: string
+      incident_run_attempt:
+        description: Attempt number of the newest failed credential-capable attempt
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-production-promotion
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Admit one immutable release authority cleanup
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      receipt: ${{ steps.preflight.outputs.receipt }}
+      target_sha: ${{ steps.preflight.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Pin the cleanup admission helper to reviewed bytes
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CLEANUP_SHA256: b4612a21b33e3f4a96ca8378f5015f571a5fc705b296154557f1009fe9a99a5c
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-authority-cleanup.mjs | cut -d ' ' -f 1)" = "$CLEANUP_SHA256"
+      - name: Prove the exact current-main, ref, annotated tag, and immutable Release
+        id: preflight
+        env:
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          EXPECTED_TARGET_SHA: ${{ inputs.expected_target_sha }}
+          EXPECTED_CLEANUP_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CLEANUP_WORKFLOW_ID }}
+          EXPECTED_CANARY_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CANARY_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_WORKFLOW_ID: ${{ vars.MLM_RELEASE_PRODUCTION_WORKFLOW_ID }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          INCIDENT_RUN_ATTEMPT: ${{ inputs.incident_run_attempt }}
+          INCIDENT_RUN_ID: ${{ inputs.incident_run_id }}
+          VERIFIED_TAG: ${{ inputs.release_tag }}
+        run: node ./scripts/release-authority-cleanup.mjs preflight
+
+  terminalize:
+    name: Consume only the admitted release authority
+    needs: preflight
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    environment: { name: production-ref-writer-key, deployment: false }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      admitted_receipt: ${{ steps.revalidate.outputs.receipt }}
+      receipt: ${{ steps.terminalize.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Pin the cleanup helper before post-approval revalidation
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CLEANUP_SHA256: b4612a21b33e3f4a96ca8378f5015f571a5fc705b296154557f1009fe9a99a5c
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-authority-cleanup.mjs | cut -d ' ' -f 1)" = "$CLEANUP_SHA256"
+      - name: Re-admit the exact coordinate after environment approval and before key access
+        id: revalidate
+        env:
+          CLEANUP_INITIAL_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          EXPECTED_CLEANUP_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CLEANUP_WORKFLOW_ID }}
+          EXPECTED_CANARY_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CANARY_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_WORKFLOW_ID: ${{ vars.MLM_RELEASE_PRODUCTION_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          EXPECTED_TARGET_SHA: ${{ inputs.expected_target_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          INCIDENT_RUN_ATTEMPT: ${{ inputs.incident_run_attempt }}
+          INCIDENT_RUN_ID: ${{ inputs.incident_run_id }}
+          VERIFIED_TAG: ${{ inputs.release_tag }}
+        run: node ./scripts/release-authority-cleanup.mjs preflight
+      - name: Re-pin the complete App-only TCB immediately before key access
+        id: app_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CLEANUP_SHA256: b4612a21b33e3f4a96ca8378f5015f571a5fc705b296154557f1009fe9a99a5c
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-authority-cleanup.mjs | cut -d ' ' -f 1)" = "$CLEANUP_SHA256"
+      - name: Post terminal authority, prove readback, and revoke the App token
+        id: terminalize
+        if: ${{ steps.revalidate.outcome == 'success' && steps.app_pin.outcome == 'success' }}
+        env:
+          CLEANUP_INITIAL_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          CLEANUP_PREFLIGHT_RECEIPT: ${{ steps.revalidate.outputs.receipt }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: node ./scripts/release-authority-cleanup.mjs terminalize
+
+  final:
+    name: Prove cleanup and production-ref preservation read-only
+    needs:
+      - preflight
+      - terminalize
+    if: ${{ always() && needs.preflight.result == 'success' }}
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ always() }}
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ always() }}
+        with:
+          node-version: "24.19.0"
+      - name: Pin the complete read-only cleanup verifier to reviewed bytes
+        id: pin
+        if: ${{ always() }}
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CLEANUP_SHA256: b4612a21b33e3f4a96ca8378f5015f571a5fc705b296154557f1009fe9a99a5c
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-authority-cleanup.mjs | cut -d ' ' -f 1)" = "$CLEANUP_SHA256"
+      - name: Prove the production ref stayed unchanged even after an indeterminate terminalizer
+        id: postflight
+        if: ${{ always() && steps.pin.outcome == 'success' }}
+        env:
+          CLEANUP_INITIAL_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          CLEANUP_REVALIDATED_PREFLIGHT_RECEIPT: ${{ needs.terminalize.outputs.admitted_receipt }}
+          CLEANUP_TERMINAL_RECEIPT: ${{ needs.terminalize.outputs.receipt }}
+          EXPECTED_CLEANUP_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CLEANUP_WORKFLOW_ID }}
+          EXPECTED_CANARY_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CANARY_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_WORKFLOW_ID: ${{ vars.MLM_RELEASE_PRODUCTION_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          EXPECTED_TARGET_SHA: ${{ inputs.expected_target_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          INCIDENT_RUN_ATTEMPT: ${{ inputs.incident_run_attempt }}
+          INCIDENT_RUN_ID: ${{ inputs.incident_run_id }}
+          VERIFIED_TAG: ${{ inputs.release_tag }}
+        run: node ./scripts/release-authority-cleanup.mjs postflight
+      - name: Bind terminal status and an unchanged production ref
+        if: ${{ always() && steps.pin.outcome == 'success' }}
+        env:
+          CLEANUP_INITIAL_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          CLEANUP_REVALIDATED_PREFLIGHT_RECEIPT: ${{ needs.terminalize.outputs.admitted_receipt }}
+          CLEANUP_POSTFLIGHT_RECEIPT: ${{ steps.postflight.outputs.receipt }}
+          CLEANUP_TERMINAL_RECEIPT: ${{ needs.terminalize.outputs.receipt }}
+          EXPECTED_CLEANUP_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CLEANUP_WORKFLOW_ID }}
+          EXPECTED_CANARY_WORKFLOW_ID: ${{ vars.MLM_RELEASE_CANARY_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_WORKFLOW_ID: ${{ vars.MLM_RELEASE_PRODUCTION_WORKFLOW_ID }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          EXPECTED_TARGET_SHA: ${{ inputs.expected_target_sha }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          INCIDENT_RUN_ATTEMPT: ${{ inputs.incident_run_attempt }}
+          INCIDENT_RUN_ID: ${{ inputs.incident_run_id }}
+          VERIFIED_TAG: ${{ inputs.release_tag }}
+        run: node ./scripts/release-authority-cleanup.mjs final

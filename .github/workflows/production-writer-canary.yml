@@ -1,0 +1,289 @@
+name: Prove production ref writer canary
+run-name: Prove writer canary target ${{ github.workflow_sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-production-promotion
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Prove current-main canary range before key admission
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      expected_old_sha: ${{ steps.preflight.outputs.expected_old_sha }}
+      receipt: ${{ steps.preflight.outputs.receipt }}
+      target_sha: ${{ steps.preflight.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Fetch only complete governed main history
+        run: |
+          set -euo pipefail
+          git -c credential.helper= -c http.extraHeader= -c core.hooksPath=/dev/null \
+            fetch --no-tags --no-recurse-submodules --unshallow \
+            https://github.com/hraness/message-like-me.git refs/heads/main
+          test "$(git rev-parse --verify 'HEAD^{commit}')" = "$GITHUB_SHA"
+          test "$(git rev-parse --is-shallow-repository)" = "false"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Bind the persistent canary to one unchanged-workflow current-main range
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node ./scripts/release-writer-canary.mjs preflight
+
+  prove:
+    name: Prove split status and writer credentials
+    needs: preflight
+    permissions:
+      actions: read
+      contents: write
+      statuses: read
+    environment: { name: production-ref-writer-key, deployment: false }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      advance_receipt: ${{ steps.advance.outputs.receipt }}
+      attestation_receipt: ${{ steps.attest.outputs.receipt }}
+      consumption_receipt: ${{ steps.consume.outputs.receipt }}
+      denial_receipt: ${{ steps.deny.outputs.receipt }}
+      terminal_receipt: ${{ steps.terminalize.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ needs.preflight.outputs.target_sha }}
+      - name: Fetch only complete governed main history and prove no persisted credential
+        run: |
+          set -euo pipefail
+          test -z "$(git config --local --get-all http.https://github.com/.extraheader || true)"
+          test -z "$(git config --local --get-all credential.helper || true)"
+          git -c credential.helper= -c http.extraHeader= -c core.hooksPath=/dev/null \
+            fetch --no-tags --no-recurse-submodules --unshallow \
+            https://github.com/hraness/message-like-me.git refs/heads/main
+          test "$(git rev-parse --verify 'HEAD^{commit}')" = "$GITHUB_SHA"
+          test "$(git rev-parse --is-shallow-repository)" = "false"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Pin every canary authority helper to reviewed bytes
+        id: pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Revalidate stable authority and non-regressing GitHub observations
+        id: revalidate
+        env:
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node ./scripts/release-writer-canary.mjs revalidate
+      - name: Re-pin the complete TCB before the App-only terminal phase
+        id: pre_terminalize_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Terminalize the exact target and prove the App cannot write refs
+        id: terminalize
+        env:
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: node ./scripts/release-writer-canary.mjs terminalize
+      - name: Re-pin the complete TCB after the App-only terminal phase
+        id: post_terminalize_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Prove the writer cannot advance without current success
+        id: deny
+        env:
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
+        run: node ./scripts/release-writer-canary.mjs deny
+      - name: Re-pin the complete TCB before the App-only attestation
+        id: pre_attest_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Attest the exact target with the status-only App and revoke its token
+        id: attest
+        env:
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: node ./scripts/release-writer-canary.mjs attest
+      - name: Re-pin the complete TCB after the App-only attestation phase
+        id: post_attest_pin
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Read back success, advance once, and prove stale lease rejection
+        id: advance
+        env:
+          CANARY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
+        run: node ./scripts/release-writer-canary.mjs advance
+      - name: Re-pin the complete TCB before the final App-only cleanup
+        id: cleanup_pin
+        if: ${{ always() && steps.pin.outcome == 'success' && steps.revalidate.outcome == 'success' && steps.pre_terminalize_pin.outcome == 'success' && steps.terminalize.outcome != 'skipped' }}
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Consume the canary authority and prove terminal readback
+        id: consume
+        if: ${{ always() && steps.cleanup_pin.outcome == 'success' }}
+        env:
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: node ./scripts/release-writer-canary.mjs consume
+  final:
+    name: Bind the complete canary proof read-only
+    needs:
+      - preflight
+      - prove
+    permissions:
+      contents: read
+      statuses: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ needs.preflight.outputs.target_sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Pin every finalizer dependency after protected execution
+        env:
+          APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
+          CANARY_SHA256: 5238389f4351142809466676250bf0323893e2b797817f5bfc96bb9bee2e7e1b
+          REF_WRITER_SHA256: fae2e12b1720ecaad6ba43d43530869b80afb12a4b1d4be1a3ec994eaacd7383
+          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
+          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
+          test "$(shasum -a 256 scripts/release-writer-canary.mjs | cut -d ' ' -f 1)" = "$CANARY_SHA256"
+          test "$(shasum -a 256 scripts/release-ref-writer.mjs | cut -d ' ' -f 1)" = "$REF_WRITER_SHA256"
+          test "$(shasum -a 256 scripts/release-status-attester.mjs | cut -d ' ' -f 1)" = "$STATUS_ATTESTER_SHA256"
+          test "$(shasum -a 256 scripts/release-workflow-range.mjs | cut -d ' ' -f 1)" = "$WORKFLOW_RANGE_SHA256"
+      - name: Bind and persist the complete canary proof
+        id: final
+        env:
+          CANARY_ADVANCE_RECEIPT: ${{ needs.prove.outputs.advance_receipt }}
+          CANARY_ATTESTATION_RECEIPT: ${{ needs.prove.outputs.attestation_receipt }}
+          CANARY_CONSUMPTION_RECEIPT: ${{ needs.prove.outputs.consumption_receipt }}
+          CANARY_DENIAL_RECEIPT: ${{ needs.prove.outputs.denial_receipt }}
+          CANARY_PREFLIGHT_RECEIPT: ${{ needs.preflight.outputs.receipt }}
+          CANARY_TERMINAL_RECEIPT: ${{ needs.prove.outputs.terminal_receipt }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node ./scripts/release-writer-canary.mjs final

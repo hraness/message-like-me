@@ -6,7 +6,9 @@ import { pathToFileURL } from "node:url";
 
 const WORKFLOW_PATH = ".github/workflows";
 const PRODUCTION_REF = "refs/heads/website-production";
-const RECEIPT_SCHEMA = "message-like-me-workflow-range-v1";
+const CANARY_REF = "refs/heads/website-production-writer-canary";
+const PRODUCTION_RECEIPT_SCHEMA = "message-like-me-workflow-range-v1";
+const CANARY_RECEIPT_SCHEMA = "message-like-me-canary-workflow-range-v1";
 const MAXIMUM_GIT_OUTPUT_BYTES = 256 * 1024;
 const GIT_TIMEOUT_MILLISECONDS = 120_000;
 const WORKFLOW_TREE_CHUNK_SIZE = 64;
@@ -51,6 +53,19 @@ function expectSha(value, label) {
   return value;
 }
 
+function exactProtectedRef(value = PRODUCTION_REF) {
+  if (value !== PRODUCTION_REF && value !== CANARY_REF) {
+    fail("workflow-range protected ref is not exact production or canary");
+  }
+  return value;
+}
+
+function schemaForProtectedRef(value) {
+  return exactProtectedRef(value) === PRODUCTION_REF
+    ? PRODUCTION_RECEIPT_SCHEMA
+    : CANARY_RECEIPT_SCHEMA;
+}
+
 function exactCommandOutput(result, label) {
   if (
     result === null
@@ -80,13 +95,14 @@ function createDefaultGitRunner(workingDirectory) {
         cwd: workingDirectory,
         encoding: "buffer",
         env: {
-          ...process.env,
           GIT_ASKPASS: "/bin/false",
           GIT_CONFIG_GLOBAL: "/dev/null",
           GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_SYSTEM: "/dev/null",
           GIT_NO_REPLACE_OBJECTS: "1",
           GIT_TERMINAL_PROMPT: "0",
           LC_ALL: "C",
+          PATH: "/usr/bin:/bin",
           SSH_ASKPASS: "/bin/false",
         },
         maxBuffer: MAXIMUM_GIT_OUTPUT_BYTES,
@@ -185,7 +201,8 @@ function normalizedWorkflowRangeReceipt(value) {
     "verifiedSha",
     "workflowTreeOid",
   ], "workflow-range receipt");
-  if (receipt.schema !== RECEIPT_SCHEMA || receipt.productionRef !== PRODUCTION_REF) {
+  const productionRef = exactProtectedRef(receipt.productionRef);
+  if (receipt.schema !== schemaForProtectedRef(productionRef)) {
     fail("workflow-range receipt has the wrong schema or production ref.");
   }
   if (
@@ -202,16 +219,23 @@ function normalizedWorkflowRangeReceipt(value) {
     newCommitCount: receipt.newCommitCount,
     newCommitDigest: receipt.newCommitDigest,
     previousSha: expectSha(receipt.previousSha, "workflow-range receipt previousSha"),
-    productionRef: PRODUCTION_REF,
-    schema: RECEIPT_SCHEMA,
+    productionRef,
+    schema: receipt.schema,
     verifiedSha: expectSha(receipt.verifiedSha, "workflow-range receipt verifiedSha"),
     workflowTreeOid: expectSha(receipt.workflowTreeOid, "workflow-range receipt workflowTreeOid"),
   });
 }
 
-export function verifyWorkflowRange({ previousSha, runner, verifiedSha, workingDirectory = process.cwd() }) {
+function verifyProtectedWorkflowRange({
+  previousSha,
+  productionRef,
+  runner,
+  verifiedSha,
+  workingDirectory = process.cwd(),
+}) {
   const oldCommit = expectSha(previousSha, "workflow-range previous SHA");
   const newCommit = expectSha(verifiedSha, "workflow-range verified SHA");
+  const protectedRef = exactProtectedRef(productionRef);
   if (oldCommit === newCommit) fail("workflow-range verification requires one advancing transition.");
   const git = runner ?? createDefaultGitRunner(workingDirectory);
 
@@ -253,21 +277,52 @@ export function verifyWorkflowRange({ previousSha, runner, verifiedSha, workingD
     newCommitCount: commits.length,
     newCommitDigest: createHash("sha256").update(`${commits.join("\n")}\n`, "utf8").digest("hex"),
     previousSha: oldCommit,
-    productionRef: PRODUCTION_REF,
-    schema: RECEIPT_SCHEMA,
+    productionRef: protectedRef,
+    schema: schemaForProtectedRef(protectedRef),
     verifiedSha: newCommit,
     workflowTreeOid: baselineTree,
   }));
 }
 
-export function assertWorkflowRangeReceipt(value, { previousSha, verifiedSha }) {
+export function verifyWorkflowRange(input) {
+  return verifyProtectedWorkflowRange({ ...input, productionRef: PRODUCTION_REF });
+}
+
+export function verifyCanaryWorkflowRange(input) {
+  return verifyProtectedWorkflowRange({ ...input, productionRef: CANARY_REF });
+}
+
+function assertProtectedWorkflowRangeReceipt(value, {
+  previousSha,
+  productionRef,
+  verifiedSha,
+}) {
   const receipt = normalizedWorkflowRangeReceipt(value);
   const oldCommit = expectSha(previousSha, "expected workflow-range previous SHA");
   const newCommit = expectSha(verifiedSha, "expected workflow-range verified SHA");
-  if (receipt.previousSha !== oldCommit || receipt.verifiedSha !== newCommit) {
+  const protectedRef = exactProtectedRef(productionRef);
+  if (
+    receipt.previousSha !== oldCommit ||
+    receipt.productionRef !== protectedRef ||
+    receipt.verifiedSha !== newCommit
+  ) {
     fail("workflow-range receipt does not bind the leased production transition.");
   }
   return receipt;
+}
+
+export function assertWorkflowRangeReceipt(value, expected) {
+  return assertProtectedWorkflowRangeReceipt(
+    value,
+    { ...expected, productionRef: PRODUCTION_REF },
+  );
+}
+
+export function assertCanaryWorkflowRangeReceipt(value, expected) {
+  return assertProtectedWorkflowRangeReceipt(
+    value,
+    { ...expected, productionRef: CANARY_REF },
+  );
 }
 
 export function encodeWorkflowRangeReceipt(value) {
@@ -301,14 +356,19 @@ export function decodeWorkflowRangeReceipt(value) {
 }
 
 function main() {
-  const [previousSha, verifiedSha, ...extra] = process.argv.slice(2);
+  const [previousSha, verifiedSha, mode, ...extra] = process.argv.slice(2);
   if (previousSha === undefined || verifiedSha === undefined || extra.length > 0) {
-    fail("Usage: release-workflow-range.mjs PREVIOUS_SHA VERIFIED_SHA");
+    fail("Usage: release-workflow-range.mjs PREVIOUS_SHA VERIFIED_SHA [--canary]");
   }
   if (process.env.GITHUB_REPOSITORY !== "hraness/message-like-me") {
     fail("Workflow range must run for exact repository hraness/message-like-me.");
   }
-  const receipt = verifyWorkflowRange({ previousSha, verifiedSha });
+  if (mode !== undefined && mode !== "--canary") {
+    fail("workflow-range mode is not exact production or canary");
+  }
+  const receipt = mode === "--canary"
+    ? verifyCanaryWorkflowRange({ previousSha, verifiedSha })
+    : verifyWorkflowRange({ previousSha, verifiedSha });
   process.stdout.write(`receipt=${encodeWorkflowRangeReceipt(receipt)}\n`);
 }
 

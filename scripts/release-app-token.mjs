@@ -127,6 +127,18 @@ function parseSecondTimestamp(value, label) {
   return milliseconds;
 }
 
+function parseReceiptTimestamp(value, label) {
+  const timestamp = expectString(value, label);
+  const milliseconds = Date.parse(timestamp);
+  if (
+    !Number.isFinite(milliseconds) ||
+    new Date(milliseconds).toISOString() !== timestamp
+  ) {
+    fail(`${label} is not one exact UTC receipt timestamp`);
+  }
+  return milliseconds;
+}
+
 function base64Url(value) {
   return Buffer.from(value).toString("base64url");
 }
@@ -143,7 +155,7 @@ export function parseReleaseAppConfiguration(environment) {
     repositoryOwner !== EXPECTED_OWNER ||
     repositoryId !== MESSAGE_LIKE_ME_REPOSITORY_ID
   ) {
-    fail(`release App writer must run for exact repository ${EXPECTED_REPOSITORY}`);
+    fail(`release App attester must run for exact repository ${EXPECTED_REPOSITORY}`);
   }
   const apiUrl = new URL(exactEnvironmentString(environment, "GITHUB_API_URL"));
   if (
@@ -209,7 +221,7 @@ export function createReleaseAppJwt(input) {
 
 export function releaseAppTokenRequestBody() {
   return Object.freeze({
-    permissions: Object.freeze({ contents: "write", metadata: "read" }),
+    permissions: Object.freeze({ metadata: "read", statuses: "write" }),
     repository_ids: Object.freeze([MESSAGE_LIKE_ME_REPOSITORY_ID]),
   });
 }
@@ -218,15 +230,15 @@ export function parseReleaseAppIdentity(value, configuration) {
   const app = expectRecord(value, "release App identity");
   const owner = expectRecord(app.owner, "release App owner");
   const permissions = expectRecord(app.permissions, "release App permissions");
-  expectExactKeys(permissions, ["contents", "metadata"], "release App permissions");
+  expectExactKeys(permissions, ["metadata", "statuses"], "release App permissions");
   if (
     app.id !== configuration.appId ||
     app.slug !== configuration.appSlug ||
     app.client_id !== configuration.clientId ||
     owner.login !== EXPECTED_OWNER ||
     owner.type !== "Organization" ||
-    permissions.contents !== "write" ||
-    permissions.metadata !== "read"
+    permissions.metadata !== "read" ||
+    permissions.statuses !== "write"
   ) {
     fail("authenticated release App identity or permission closure does not match checked variables");
   }
@@ -241,7 +253,7 @@ export function parseReleaseAppInstallation(value, configuration) {
   );
   expectExactKeys(
     permissions,
-    ["contents", "metadata"],
+    ["metadata", "statuses"],
     "release App installation permissions",
   );
   if (
@@ -252,8 +264,8 @@ export function parseReleaseAppInstallation(value, configuration) {
     installation.target_type !== "Organization" ||
     account.login !== EXPECTED_OWNER ||
     account.type !== "Organization" ||
-    permissions.contents !== "write" ||
-    permissions.metadata !== "read"
+    permissions.metadata !== "read" ||
+    permissions.statuses !== "write"
   ) {
     fail("release App installation identity or permission closure does not match checked variables");
   }
@@ -267,8 +279,23 @@ function exactRevocationReceipt(value) {
   const receipt = expectRecord(value, "release App token revocation receipt");
   expectExactKeys(
     receipt,
-    ["converged", "observationCount", "propagationObserved", "stableDenials"],
+    [
+      "converged",
+      "deletionServerDate",
+      "lastObservationServerDate",
+      "observationCount",
+      "propagationObserved",
+      "stableDenials",
+    ],
     "release App token revocation receipt",
+  );
+  const deletionServerMilliseconds = parseReceiptTimestamp(
+    receipt.deletionServerDate,
+    "release App token revocation deletionServerDate",
+  );
+  const lastObservationServerMilliseconds = parseReceiptTimestamp(
+    receipt.lastObservationServerDate,
+    "release App token revocation lastObservationServerDate",
   );
   if (
     receipt.converged !== true ||
@@ -280,12 +307,15 @@ function exactRevocationReceipt(value) {
       receipt.observationCount !== REQUIRED_STABLE_REVOCATION_DENIALS) ||
     (receipt.propagationObserved === true &&
       receipt.observationCount < REQUIRED_STABLE_REVOCATION_DENIALS + 1) ||
-    receipt.stableDenials !== REQUIRED_STABLE_REVOCATION_DENIALS
+    receipt.stableDenials !== REQUIRED_STABLE_REVOCATION_DENIALS ||
+    lastObservationServerMilliseconds < deletionServerMilliseconds
   ) {
     fail("release App token revocation receipt is malformed");
   }
   return Object.freeze({
     converged: true,
+    deletionServerDate: receipt.deletionServerDate,
+    lastObservationServerDate: receipt.lastObservationServerDate,
     observationCount: receipt.observationCount,
     propagationObserved: receipt.propagationObserved,
     stableDenials: REQUIRED_STABLE_REVOCATION_DENIALS,
@@ -343,9 +373,9 @@ export function parseReleaseAppTokenResponse(value, serverDate) {
     fail("release App token expiry is outside the one-hour response window");
   }
   const permissions = expectRecord(response.permissions, "release App token permissions");
-  expectExactKeys(permissions, ["contents", "metadata"], "release App token permissions");
-  if (permissions.contents !== "write" || permissions.metadata !== "read") {
-    fail("release App token permissions are not exactly contents:write and metadata:read");
+  expectExactKeys(permissions, ["metadata", "statuses"], "release App token permissions");
+  if (permissions.metadata !== "read" || permissions.statuses !== "write") {
+    fail("release App token permissions are not exactly metadata:read and statuses:write");
   }
   if (response.repository_selection !== "selected") {
     fail("release App token response is not selected-repository scoped");
@@ -364,7 +394,7 @@ export function parseReleaseAppTokenResponse(value, serverDate) {
   }
   return Object.freeze({
     expiresAt: response.expires_at,
-    permissions: Object.freeze({ contents: "write", metadata: "read" }),
+    permissions: Object.freeze({ metadata: "read", statuses: "write" }),
     repositoryId: MESSAGE_LIKE_ME_REPOSITORY_ID,
     token,
   });
@@ -508,6 +538,7 @@ function appRequestHeaders(credential) {
   return Object.freeze({
     Accept: "application/vnd.github+json",
     Authorization: credential,
+    "Cache-Control": "no-cache",
     "User-Agent": "message-like-me-release-writer",
     "X-GitHub-Api-Version": "2022-11-28",
   });
@@ -521,11 +552,8 @@ async function mintWithFetch(input) {
   const response = await fetch(endpoint, {
     body: JSON.stringify(input.body),
     headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${input.jwt}`,
+      ...appRequestHeaders(`Bearer ${input.jwt}`),
       "Content-Type": "application/json",
-      "User-Agent": "message-like-me-release-writer",
-      "X-GitHub-Api-Version": "2022-11-28",
     },
     method: "POST",
     redirect: "error",
@@ -544,12 +572,7 @@ async function mintWithFetch(input) {
 async function inspectWithFetch(input) {
   const endpoint = new URL("/app", input.apiUrl);
   const response = await fetch(endpoint, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${input.jwt}`,
-      "User-Agent": "message-like-me-release-writer",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
+    headers: appRequestHeaders(`Bearer ${input.jwt}`),
     method: "GET",
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
@@ -566,12 +589,7 @@ async function inspectInstallationWithFetch(input) {
     input.apiUrl,
   );
   const response = await fetch(endpoint, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${input.jwt}`,
-      "User-Agent": "message-like-me-release-writer",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
+    headers: appRequestHeaders(`Bearer ${input.jwt}`),
     method: "GET",
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
@@ -710,7 +728,7 @@ async function asRevocationIndeterminate(reason, operation) {
 }
 
 /**
- * Sends exactly one revocation request and then waits for two stable HTTP 401-or-403
+ * Sends exactly one revocation request and then waits for two stable HTTP 401
  * authorization denials from the token's exact selected-repository endpoint. The 30-second
  * request-start window is an operational fail-closed ceiling, not a claim about GitHub's
  * revocation propagation SLA.
@@ -791,9 +809,10 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
   lastNow.value = startedAt;
 
   let expiresMilliseconds;
+  let deletionServerMilliseconds;
   try {
     expiresMilliseconds = parseSecondTimestamp(input.expiresAt, "release App token expires_at");
-    parseServerDateBeforeExpiry(
+    deletionServerMilliseconds = parseServerDateBeforeExpiry(
       deletion.response,
       expiresMilliseconds,
       "release App token revocation",
@@ -813,6 +832,7 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
   let observationCount = 0;
   let sawAuthorizedResponse = false;
   let stableDenials = 0;
+  let lastObservationServerMilliseconds = deletionServerMilliseconds;
   let convergenceReceipt;
   let convergenceError;
   try {
@@ -861,11 +881,17 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
             "release App token revocation observation response",
           );
           parseInstallationRepositories(body);
-          parseServerDateBeforeExpiry(
+          const observationServerMilliseconds = parseServerDateBeforeExpiry(
             observation.response,
             expiresMilliseconds,
             "release App token revocation observation",
           );
+          if (observationServerMilliseconds < lastObservationServerMilliseconds) {
+            throw revocationIndeterminate(
+              "authorized revocation observation predates the accepted revocation chain",
+            );
+          }
+          lastObservationServerMilliseconds = observationServerMilliseconds;
         } catch {
           throw revocationIndeterminate("authorized revocation observation is malformed");
         }
@@ -883,21 +909,24 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
         sawAuthorizedResponse = true;
         continue;
       }
-      if (
-        observation.response.status === 401 ||
-        observation.response.status === 403
-      ) {
+      if (observation.response.status === 401) {
         let deniedBytes;
         try {
           deniedBytes = await readBoundedBytes(
             observation.response,
             "release App token revocation observation response",
           );
-          parseServerDateBeforeExpiry(
+          const observationServerMilliseconds = parseServerDateBeforeExpiry(
             observation.response,
             expiresMilliseconds,
             "release App token revocation observation",
           );
+          if (observationServerMilliseconds < lastObservationServerMilliseconds) {
+            throw revocationIndeterminate(
+              "denied revocation observation predates the accepted revocation chain",
+            );
+          }
+          lastObservationServerMilliseconds = observationServerMilliseconds;
         } catch {
           throw revocationIndeterminate("denied revocation observation is malformed");
         } finally {
@@ -915,6 +944,10 @@ export async function revokeReleaseAppTokenWithConvergence(input) {
         if (stableDenials === REQUIRED_STABLE_REVOCATION_DENIALS) {
           convergenceReceipt = Object.freeze({
             converged: true,
+            deletionServerDate: new Date(deletionServerMilliseconds).toISOString(),
+            lastObservationServerDate: new Date(
+              lastObservationServerMilliseconds,
+            ).toISOString(),
             observationCount,
             propagationObserved: sawAuthorizedResponse,
             stableDenials: REQUIRED_STABLE_REVOCATION_DENIALS,
