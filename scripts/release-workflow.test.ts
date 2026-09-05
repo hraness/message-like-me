@@ -823,6 +823,7 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "complete-history gate",
     "capped\n   at 250 commits",
     "merge-side changes and an edit followed",
+    "seven reviewed helpers",
     "--force-with-lease",
     "GIT_ASKPASS",
     "stale leases all fail without mutation",
