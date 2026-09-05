@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.2
+
+- Fix the automated release admission so the npm provenance signer policy
+  matches what Fulcio issues: extensions from 1.8 upward are compared as DER
+  UTF8Strings, and the source repository and ref extension carries the owner
+  and repository ids. The 0.8.1 release published exact bytes to npm and the
+  immutable GitHub Release but failed this final check, so 0.8.2 carries the
+  same product with a passing admission.
+- Make the exact public `@hraness/message-like-me@0.8.2` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
+
 ## 0.8.1
 
 - Verify the Beeper bundle boundary at Wrench v0.16.5 and adapter
