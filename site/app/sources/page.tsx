@@ -22,14 +22,24 @@ export const metadata = pageMetadata({
 });
 
 const beeperProducerSummary =
-  `Verified producer Wrench v${BEEPER_COMPATIBILITY.producerVersion} calls ` +
-  `its pinned official Beeper CLI v${BEEPER_COMPATIBILITY.providerCliVersion} ` +
-  'and publishes a bounded, digest-bound local directory.';
+  `Verified producer Wrench v${BEEPER_COMPATIBILITY.producerVersion} uses ` +
+  `${BEEPER_COMPATIBILITY.adapterId} adapter v${BEEPER_COMPATIBILITY.adapterVersion}. ` +
+  `Its ${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations comprise ` +
+  `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through the pinned Beeper CLI and ` +
+  `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} fixed Desktop reads.`;
+
+const beeperProvenanceSummary =
+  `The pinned executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}. ` +
+  `At that tag, ${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} declares ` +
+  `v${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion}; that source value is ` +
+  'provenance only and never overrides the executable runtime identity.';
 
 const whatsappProducerSummary =
   `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion} owns official ` +
   `${WHATSAPP_COMPATIBILITY.providerCli} v${WHATSAPP_COMPATIBILITY.providerCliVersion}, ` +
-  'linked-device authentication, synchronization, and the bounded local export.';
+  'linked-device authentication, synchronization, and the bounded local export. ' +
+  `It omits reaction-shaped rows with ${WHATSAPP_COMPATIBILITY.reactionWarning} ` +
+  'when current state cannot be proved.';
 
 export default function SourcesPage() {
   return (
@@ -66,7 +76,7 @@ export default function SourcesPage() {
         <section className="beeper-workflow" aria-labelledby="beeper-workflow-title">
           <div className="beeper-workflow-intro">
             <p className="eyebrow">Beeper via Wrench</p>
-            <h2 id="beeper-workflow-title">One exporter. One verifier. No hidden handoff.</h2>
+            <h2 id="beeper-workflow-title">Wrench exports. Message Like Me verifies.</h2>
             <p>
               Wrench handles the bounded provider observation. Message Like Me handles
               strict local verification, normalization, measurement, and drafts-only
@@ -79,6 +89,7 @@ export default function SourcesPage() {
               <div>
                 <h3>Wrench writes the private bundle.</h3>
                 <p>{beeperProducerSummary}</p>
+                <p>{beeperProvenanceSummary}</p>
                 <code className="workflow-command">wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle</code>
               </div>
             </li>
@@ -97,10 +108,12 @@ export default function SourcesPage() {
             </li>
           </ol>
           <aside className="beeper-boundary" aria-label="Beeper operation boundary">
-            <strong>What this does not mean:</strong> Wrench exposes additional bounded
-            Beeper operations, including mutations behind its own controls. Message Like
-            Me invokes none of them. It has no Beeper authentication, live API, account
-            operation, send, react, or schedule command.
+            <strong>What this does not mean:</strong> Message Like Me owns zero of Wrench’s{' '}
+            {BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations.
+            It receives only the finished bundle: no Beeper credential, live session,
+            provider call, or send capability crosses the handoff. The command above enters
+            Wrench’s separate internal bounded export; it does not expose Beeper’s raw export
+            arguments or establish complete-history coverage.
           </aside>
           <div className="source-links">
             <a href="https://wrench.rip/providers/beeper/">Inspect Wrench’s Beeper surface ↗</a>
@@ -146,7 +159,9 @@ export default function SourcesPage() {
             <strong>What this does not mean:</strong> Message Like Me does not install or
             start Wacli, receive a WhatsApp credential or session database, synchronize
             a linked device, call a provider network, or send. Existing Beeper overlap
-            requires explicit exact account, peer, and shared-message proof.
+            requires explicit exact account, peer, and shared-message proof. An empty
+            native reaction artifact is unavailable evidence, not evidence of no
+            reactions.
           </aside>
           <div className="source-links">
             <a href="https://wrench.rip/providers/whatsapp/">Inspect Wrench’s WhatsApp surface ↗</a>

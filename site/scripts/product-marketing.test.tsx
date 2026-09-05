@@ -48,6 +48,9 @@ test('renders the outcome-led shared product-marketing grammar', () => {
   expect(html).toContain('Use $message-like-me in your agent');
   expect(html).toContain('@hraness/message-like-me');
   expect(html).toContain('No. messagelikeme.com is an informational project page.');
+  expect(html).toContain('stays on your machine in private local paths you choose');
+  expect(html).toContain('with owner-only filesystem permissions');
+  expect(html).not.toContain('readable only by you');
   expect(html).toContain('"@type":"FAQPage"');
   expect(html).toContain('Synthetic example');
   expect(html).toContain('Built by Ben Guo');

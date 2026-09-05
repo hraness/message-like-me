@@ -20,6 +20,7 @@ export default function MethodologyPage() {
       path="/methodology"
       html={methodologyHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/docs/methodology.md`}
+      dateModified="2026-08-27"
       sourceOwnsHeading
     />
   );

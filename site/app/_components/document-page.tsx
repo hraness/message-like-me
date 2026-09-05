@@ -13,6 +13,7 @@ export function DocumentPage({
   path,
   html,
   sourceUrl,
+  dateModified,
   sourceOwnsHeading = false,
 }: {
   eyebrow: string;
@@ -21,6 +22,7 @@ export function DocumentPage({
   path: CanonicalPagePath;
   html: string;
   sourceUrl: string;
+  dateModified: string;
   sourceOwnsHeading?: boolean;
 }) {
   const articleJsonLd = {
@@ -30,7 +32,7 @@ export function DocumentPage({
     description: summary,
     url: absoluteUrl(path),
     inLanguage: 'en-US',
-    dateModified: '2026-08-26',
+    dateModified,
     author: {
       '@type': 'Organization',
       name: SITE_NAME,
