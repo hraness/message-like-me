@@ -215,7 +215,7 @@ export default function Home() {
                 },
                 {
                   code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
-                  detail: 'Write one evidence packet with real excerpts to a path you name, readable only by you.',
+                  detail: 'Write one evidence packet with real excerpts to a path you name, with owner-only filesystem permissions.',
                   label: 'Prepare',
                 },
                 {
