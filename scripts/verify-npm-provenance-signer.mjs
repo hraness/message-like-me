@@ -7,7 +7,19 @@ const SHA = /^[0-9a-f]{40}$/u;
 const STABLE_TAG = /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
 const RUN_INVOCATION =
   /^https:\/\/github\.com\/hraness\/message-like-me\/actions\/runs\/[1-9][0-9]*\/attempts\/[1-9][0-9]*$/u;
+const OWNER_ID = "307125679";
 const MAXIMUM_BUNDLE_BYTES = 4 * 1_024 * 1_024;
+
+// Fulcio encodes every extension from 1.8 upward as a DER UTF8String inside the
+// extension octet string, and sigstore-js compares policy values byte for byte.
+// The deprecated 1.1 through 1.6 extensions stay raw strings.
+function derUtf8String(value) {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.byteLength > 127) {
+    throw new Error("Sigstore release signer extension exceeds short-form DER length.");
+  }
+  return Buffer.concat([Buffer.from([0x0c, bytes.byteLength]), bytes]);
+}
 
 function escapeRegularExpression(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -30,17 +42,19 @@ export function releaseSignerIdentity(tag, sha, invocation) {
         "1.3.6.1.4.1.57264.1.3": sha,
         "1.3.6.1.4.1.57264.1.5": PACKAGE_REPOSITORY,
         "1.3.6.1.4.1.57264.1.6": ref,
-        "1.3.6.1.4.1.57264.1.11": "github-hosted",
-        "1.3.6.1.4.1.57264.1.12": `https://github.com/${PACKAGE_REPOSITORY}`,
-        "1.3.6.1.4.1.57264.1.13": sha,
-        "1.3.6.1.4.1.57264.1.14": ref,
-        "1.3.6.1.4.1.57264.1.15": REPOSITORY_ID,
-        "1.3.6.1.4.1.57264.1.18": identity,
-        "1.3.6.1.4.1.57264.1.19": sha,
-        "1.3.6.1.4.1.57264.1.20": "push",
-        "1.3.6.1.4.1.57264.1.21": invocation,
-        "1.3.6.1.4.1.57264.1.22": "public",
-        "1.3.6.1.4.1.57264.1.24": `repo:${PACKAGE_REPOSITORY}:ref:${ref}`,
+        "1.3.6.1.4.1.57264.1.11": derUtf8String("github-hosted"),
+        "1.3.6.1.4.1.57264.1.12": derUtf8String(`https://github.com/${PACKAGE_REPOSITORY}`),
+        "1.3.6.1.4.1.57264.1.13": derUtf8String(sha),
+        "1.3.6.1.4.1.57264.1.14": derUtf8String(ref),
+        "1.3.6.1.4.1.57264.1.15": derUtf8String(REPOSITORY_ID),
+        "1.3.6.1.4.1.57264.1.18": derUtf8String(identity),
+        "1.3.6.1.4.1.57264.1.19": derUtf8String(sha),
+        "1.3.6.1.4.1.57264.1.20": derUtf8String("push"),
+        "1.3.6.1.4.1.57264.1.21": derUtf8String(invocation),
+        "1.3.6.1.4.1.57264.1.22": derUtf8String("public"),
+        "1.3.6.1.4.1.57264.1.24": derUtf8String(
+          `repo:hraness@${OWNER_ID}/message-like-me@${REPOSITORY_ID}:ref:${ref}`,
+        ),
       }),
       ctLogThreshold: 1,
       tlogThreshold: 1,
