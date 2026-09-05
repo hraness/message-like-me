@@ -1,10 +1,7 @@
 export interface ReleaseProviderApi {
-  advanceRef?(
-    repository: string,
-    expectedOldSha: string,
-    verifiedSha: string,
-    verifiedTag: string,
-  ): Promise<void>;
+  getCombinedStatus?(targetSha: string): Promise<unknown>;
+  getRef?(): Promise<unknown>;
+  getRules?(): Promise<unknown>;
   get?(endpoint: string): Promise<unknown>;
   getWithServerDate?(endpoint: string): Promise<unknown>;
   graphql?(input: Readonly<{
@@ -13,15 +10,6 @@ export interface ReleaseProviderApi {
     owner: string;
     query: string;
   }>): Promise<unknown>;
-}
-
-export interface ReleaseProviderWriter {
-  advanceRef(
-    repository: string,
-    expectedOldSha: string,
-    verifiedSha: string,
-    verifiedTag: string,
-  ): Promise<void>;
 }
 
 export interface ProductionDeployment {
@@ -115,15 +103,7 @@ export function createProviderBaseline(input: Readonly<{
   verifiedSha: string;
 }>): Promise<unknown>;
 
-export function promoteWebsiteProduction(input: Readonly<{
-  advanceWithRevocation?(
-    operation: (writer: ReleaseProviderWriter) => Promise<void>,
-  ): Promise<Readonly<{
-    converged: true;
-    observationCount: number;
-    propagationObserved: boolean;
-    stableDenials: 2;
-  }>>;
+type ProviderPromotionCommon = Readonly<{
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
   defaultBranch: string;
@@ -132,8 +112,59 @@ export function promoteWebsiteProduction(input: Readonly<{
   repository: string;
   verifiedSha: string;
   verifiedTag: string;
-  workflowRangeReceipt?: unknown;
+}>;
+
+type ProviderAdvancedPromotionAuthority = Readonly<{
+  advanceRef(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+    verifiedTag: string,
+  ): Promise<Readonly<{
+    classification: "fast-forward";
+    fromSha: string;
+    protectedRef: "refs/heads/website-production";
+    summarySha256: string;
+    toSha: string;
+  }>>;
+  attestationReceipt: unknown;
+  denialReceipt: unknown;
+  workflowRangeReceipt: unknown;
+}>;
+
+type ProviderAlreadyExactAuthority = Readonly<{
+  advanceRef?: undefined;
+  attestationReceipt?: undefined;
+  denialReceipt?: undefined;
+  workflowRangeReceipt?: undefined;
+}>;
+
+export function proveProductionRequiredStatusDenial(input: Readonly<{
+  api: ReleaseProviderApi;
+  baselineReceipt: unknown;
+  defaultBranch: string;
+  denyRef(
+    repository: string,
+    expectedOldSha: string,
+    verifiedSha: string,
+    verifiedTag: string,
+  ): Promise<Readonly<{
+    classification: "required-status-missing";
+    diagnosticSha256: string;
+  }>>;
+  eventName: string;
+  preconditionReceipt: unknown;
+  recoveryWorkflowSha: string;
+  repository: string;
+  verifiedSha: string;
+  verifiedTag: string;
+  workflowRangeReceipt: unknown;
 }>): Promise<unknown>;
+
+export function promoteWebsiteProduction(
+  input: ProviderPromotionCommon &
+    (ProviderAdvancedPromotionAuthority | ProviderAlreadyExactAuthority),
+): Promise<unknown>;
 
 export function waitForProviderOutcome(input: Readonly<{
   api: ReleaseProviderApi;

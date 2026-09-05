@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,11 +14,17 @@ import {
   encodeProviderReceipt,
   parseIncludedGitHubResponse,
   promoteWebsiteProduction as promoteWebsiteProductionRaw,
+  proveProductionRequiredStatusDenial,
   releaseGraphqlRequestBudget,
   releaseRestRequestBudget,
   waitForProviderOutcome as waitForProviderOutcomeRaw,
 } from "./release-provider-outcome.mjs";
-import { MESSAGE_LIKE_ME_REPOSITORY_ID, withReleaseAppToken } from "./release-app-token.mjs";
+import {
+  createProductionAuthorityAttestedReceipt,
+  createProductionAuthorityConsumedReceipt,
+  encodeProductionAuthorityPhaseReceipt,
+  productionAuthorityReceiptDigest,
+} from "./release-production-authority.mjs";
 
 const releaseWorkflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
 const productionWorkflowUrl = new URL("../.github/workflows/website-production.yml", import.meta.url);
@@ -102,12 +108,16 @@ const providerPromotionServerDate = "2026-08-29T15:01:00.000Z";
 const providerCurrentMainSha = "3".repeat(40);
 type ProviderRevocationReceipt = Readonly<{
   converged: true;
+  deletionServerDate: string;
+  lastObservationServerDate: string;
   observationCount: number;
   propagationObserved: boolean;
   stableDenials: 2;
 }>;
 const providerRevocationReceipt: ProviderRevocationReceipt = Object.freeze({
   converged: true as const,
+  deletionServerDate: providerPromotionServerDate,
+  lastObservationServerDate: providerPromotionServerDate,
   observationCount: 2,
   propagationObserved: false,
   stableDenials: 2 as const,
@@ -127,9 +137,227 @@ const providerWorkflowRangeReceipt = Object.freeze({
   workflowTreeOid: "5".repeat(40),
 });
 
+const productionAuthorityContext =
+  "message-like-me/website-production-authority" as const;
+
+function providerProductionStatus<State extends "error" | "success">(
+  state: State,
+  id: number,
+  createdAt = "2026-08-29T15:01:00Z",
+) {
+  return Object.freeze({
+    appId: 4_830_612 as const,
+    appSlug: "mlm-prod-ref-writer-1342143606" as const,
+    context: productionAuthorityContext,
+    createdAt,
+    creator: Object.freeze({
+      id: 123,
+      login: "mlm-prod-ref-writer-1342143606[bot]",
+      nodeId: "MDM6Qm90MTIz",
+    }),
+    description: state === "success"
+      ? "Exact release authority admitted for one production-ref attempt"
+      : "Release authority consumed after the production-ref attempt",
+    installationId: 159_058_102 as const,
+    repository: providerRepository as "hraness/message-like-me",
+    repositoryId: 1_342_143_606 as const,
+    serverDate: createdAt.replace("Z", ".000Z"),
+    state,
+    statusId: id,
+    statusNodeId: `SC_status_${String(id)}`,
+    statusUrl: `https://api.github.com/repos/${providerRepository}/statuses/${providerVerifiedSha}`,
+    targetSha: providerVerifiedSha,
+  });
+}
+
+const providerAttestationStatus = providerProductionStatus("success", 9_001);
+
+function providerProductionCombinedStatus(status = providerAttestationStatus): ProviderJson {
+  return {
+    commit_url: `https://api.github.com/repos/${providerRepository}/commits/${providerVerifiedSha}`,
+    repository: {
+      full_name: providerRepository,
+      id: 1_342_143_606,
+      name: "message-like-me",
+      owner: { login: "hraness", type: "Organization" },
+    },
+    sha: providerVerifiedSha,
+    state: status.state === "success" ? "success" : "failure",
+    statuses: [{
+      context: status.context,
+      created_at: status.createdAt,
+      description: status.description,
+      id: status.statusId,
+      node_id: status.statusNodeId,
+      state: status.state,
+      target_url: null,
+      updated_at: status.createdAt,
+      url: status.statusUrl,
+    }],
+    total_count: 1,
+    url: `https://api.github.com/repos/${providerRepository}/commits/${providerVerifiedSha}/status`,
+  };
+}
+
+function providerRulesetBase(id: number, name: string, rules: readonly ProviderJson[]): ProviderJson {
+  return {
+    _links: {
+      html: { href: `https://github.com/${providerRepository}/rules/${String(id)}` },
+      self: { href: `https://api.github.com/repos/${providerRepository}/rulesets/${String(id)}` },
+    },
+    bypass_actors: [],
+    conditions: {
+      ref_name: { exclude: [], include: ["refs/heads/website-production"] },
+    },
+    current_user_can_bypass: "never",
+    enforcement: "active",
+    id,
+    name,
+    rules,
+    source: providerRepository,
+    source_type: "Repository",
+    target: "branch",
+  };
+}
+
+function providerAuthorityRule(): ProviderJson {
+  return {
+    parameters: {
+      do_not_enforce_on_create: false,
+      required_status_checks: [{
+        context: productionAuthorityContext,
+        integration_id: 4_830_612,
+      }],
+      strict_required_status_checks_policy: false,
+    },
+    type: "required_status_checks",
+  };
+}
+
+function providerProductionRules() {
+  const lifecycle = ["creation", "deletion", "non_fast_forward"].map((type) => ({
+    ruleset_id: 21_821_875,
+    ruleset_source: providerRepository,
+    ruleset_source_type: "Repository",
+    type,
+  }));
+  const authority = {
+    ...providerAuthorityRule() as Readonly<Record<string, ProviderJson>>,
+    ruleset_id: 22_290_922,
+    ruleset_source: providerRepository,
+    ruleset_source_type: "Repository",
+  };
+  const receipt = (body: ProviderJson) => ({
+    body,
+    serverDate: providerPromotionServerDate,
+  });
+  return Object.freeze({
+    authority: receipt(providerRulesetBase(
+      22_290_922,
+      "Message Like Me production status authority",
+      [providerAuthorityRule()],
+    )),
+    effective: receipt([...lifecycle, authority]),
+    lifecycle: receipt(providerRulesetBase(
+      21_821_875,
+      "Immutable website-production lifecycle",
+      ["creation", "deletion", "non_fast_forward"].map((type) => ({ type })),
+    )),
+  });
+}
+
+function providerAuthorityPhases(baseline: unknown) {
+  const preconditionStatus = providerProductionStatus(
+    "error",
+    9_000,
+    "2026-08-29T15:00:00Z",
+  );
+  const precondition = createProductionAuthorityConsumedReceipt(
+    providerVerifiedSha,
+    undefined,
+    undefined,
+    {
+      consumption: preconditionStatus,
+      readback: {
+        context: productionAuthorityContext,
+        serverDate: "2026-08-29T15:00:01.000Z",
+        state: "failure" as const,
+        statusCount: 1,
+        targetSha: providerVerifiedSha,
+        terminalStatusId: preconditionStatus.statusId,
+        terminalStatusNodeId: preconditionStatus.statusNodeId,
+      },
+    },
+    {
+      ...providerRevocationReceipt,
+      deletionServerDate: "2026-08-29T15:00:02.000Z",
+      lastObservationServerDate: "2026-08-29T15:00:03.000Z",
+    },
+  );
+  const attestation = createProductionAuthorityAttestedReceipt(
+    providerVerifiedSha,
+    providerAttestationStatus,
+    providerRevocationReceipt,
+  );
+  const rules = providerProductionRules();
+  const normalize = (value: unknown): string =>
+    createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
+  const denial = Object.freeze({
+    baselineDigest: normalize(baseline),
+    denial: Object.freeze({
+      classification: "required-status-missing" as const,
+      diagnosticSha256: "d".repeat(64),
+    }),
+    observedAt: providerPromotionServerDate,
+    preconditionSha256: productionAuthorityReceiptDigest(precondition),
+    previousSha: providerPreviousSha,
+    productionRef: "refs/heads/website-production" as const,
+    repository: providerRepository,
+    rules: Object.freeze({
+      bodySha256: Object.freeze({
+        authority: normalize(rules.authority.body),
+        effective: normalize(rules.effective.body),
+        lifecycle: normalize(rules.lifecycle.body),
+      }),
+      rules: Object.freeze({
+        authority: Object.freeze({
+          doNotEnforceOnCreate: false as const,
+          integrationId: 4_830_612 as const,
+          name: "Message Like Me production status authority" as const,
+          rulesetId: 22_290_922 as const,
+          strict: false as const,
+        }),
+        lifecycle: Object.freeze({
+          name: "Immutable website-production lifecycle" as const,
+          rulesetId: 21_821_875 as const,
+        }),
+      }),
+      serverDates: Object.freeze({
+        authority: providerPromotionServerDate,
+        effective: providerPromotionServerDate,
+        lifecycle: providerPromotionServerDate,
+      }),
+    }),
+    schema: "message-like-me-production-required-status-denial-v1" as const,
+    verifiedSha: providerVerifiedSha,
+    verifiedTag: providerTag,
+  });
+  return Object.freeze({ attestation, denial, precondition });
+}
+
 type ProviderOutcomeInput = Parameters<typeof waitForProviderOutcomeRaw>[0];
-type ProviderPromotionInput = Parameters<typeof promoteWebsiteProductionRaw>[0];
 type AuthorityDefaults = "defaultBranch" | "eventName" | "recoveryWorkflowSha";
+type ProviderPromotionTestInput = Readonly<{
+  api: ProviderApiFixture;
+  baselineReceipt: unknown;
+  defaultBranch?: string;
+  eventName?: string;
+  recoveryWorkflowSha?: string;
+  repository?: string;
+  verifiedSha?: string;
+  verifiedTag?: string;
+  workflowRangeReceipt?: unknown;
+}>;
 
 const waitForProviderOutcome = (
   options: Omit<ProviderOutcomeInput, AuthorityDefaults> &
@@ -143,29 +371,31 @@ const waitForProviderOutcome = (
 });
 
 const promoteWebsiteProduction = (
-  options: Omit<ProviderPromotionInput, AuthorityDefaults> &
-    Partial<Pick<ProviderPromotionInput, AuthorityDefaults>>,
-): ReturnType<typeof promoteWebsiteProductionRaw> => promoteWebsiteProductionRaw({
-  advanceWithRevocation: async (operation) => {
-    const advanceRef = options.api.advanceRef;
-    if (advanceRef === undefined) throw new Error("test provider writer is missing");
-    await operation(Object.freeze({
-      advanceRef: (
-        repository: string,
-        expectedOldSha: string,
-        verifiedSha: string,
-        verifiedTag: string,
-      ) =>
-        advanceRef.call(options.api, repository, expectedOldSha, verifiedSha, verifiedTag),
-    }));
-    return providerRevocationReceipt;
-  },
-  defaultBranch: "main",
-  eventName: "workflow_dispatch",
-  recoveryWorkflowSha: providerVerifiedSha,
-  workflowRangeReceipt: providerWorkflowRangeReceipt,
-  ...options,
-});
+  options: ProviderPromotionTestInput,
+): ReturnType<typeof promoteWebsiteProductionRaw> => {
+  const common = {
+    api: options.api,
+    baselineReceipt: options.baselineReceipt,
+    defaultBranch: options.defaultBranch ?? "main",
+    eventName: options.eventName ?? "workflow_dispatch",
+    recoveryWorkflowSha: options.recoveryWorkflowSha ?? providerVerifiedSha,
+    repository: options.repository ?? providerRepository,
+    verifiedSha: options.verifiedSha ?? providerVerifiedSha,
+    verifiedTag: options.verifiedTag ?? providerTag,
+  };
+  const baseline = options.baselineReceipt as Readonly<Record<string, unknown>>;
+  if (baseline.refSha === providerVerifiedSha) {
+    return promoteWebsiteProductionRaw(common);
+  }
+  const authority = providerAuthorityPhases(options.baselineReceipt);
+  return promoteWebsiteProductionRaw({
+    ...common,
+    advanceRef: new ProviderRefWriterFixture(options.api).advanceRef,
+    attestationReceipt: encodeProductionAuthorityPhaseReceipt(authority.attestation),
+    denialReceipt: authority.denial,
+    workflowRangeReceipt: options.workflowRangeReceipt ?? providerWorkflowRangeReceipt,
+  });
+};
 
 type ProviderJson = undefined | null | boolean | number | string | readonly ProviderJson[] | {
   readonly [key: string]: ProviderJson;
@@ -414,7 +644,6 @@ class ProviderApiFixture {
   compareHook: (() => void) | undefined;
   readonly reviewedCompare: ProviderJson | undefined;
   deploymentDetailError: Error | undefined;
-  advanceError: Error | undefined;
   refSha: string;
   readonly refSnapshots: readonly string[];
   readonly refValues: readonly ProviderJson[];
@@ -649,6 +878,13 @@ class ProviderApiFixture {
       const statuses = this.#statusCurrent.get(deploymentId) ?? [];
       return statuses.slice((page - 1) * 100, page * 100);
     }
+    if (
+      endpoint ===
+      `/repos/${providerRepository}/commits/${providerVerifiedSha}/status?per_page=100`
+    ) {
+      this.calls.push("GET PRODUCTION AUTHORITY STATUS");
+      return providerProductionCombinedStatus();
+    }
     throw new Error(`Unexpected provider GET ${endpoint}`);
   }
 
@@ -662,20 +898,49 @@ class ProviderApiFixture {
     return { body, serverDate: serverDate ?? providerPromotionServerDate };
   }
 
-  async advanceRef(
+  async getCombinedStatus(_targetSha: string): Promise<ProviderJson> {
+    this.calls.push("GET PRODUCTION AUTHORITY STATUS");
+    return {
+      body: providerProductionCombinedStatus(),
+      serverDate: providerPromotionServerDate,
+    };
+  }
+
+  async getRules(): Promise<ReturnType<typeof providerProductionRules>> {
+    this.calls.push("GET PRODUCTION RULES");
+    return providerProductionRules();
+  }
+
+}
+
+class ProviderRefWriterFixture {
+  advanceError: Error | undefined;
+
+  constructor(readonly readApi: ProviderApiFixture) {}
+
+  readonly advanceRef = async (
     repository: string,
     expectedOldSha: string,
     verifiedSha: string,
     verifiedTag: string,
-  ): Promise<void> {
-    this.calls.push(`GIT PUSH ${repository} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
+  ) => {
+    this.readApi.calls.push(
+      `GIT PUSH ${repository} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`,
+    );
     expect(repository).toBe(providerRepository);
     expect(expectedOldSha).toBe(providerPreviousSha);
     expect(verifiedSha).toBe(providerVerifiedSha);
     expect(verifiedTag).toBe(providerTag);
     if (this.advanceError !== undefined) throw this.advanceError;
-    this.refSha = providerVerifiedSha;
-  }
+    this.readApi.refSha = providerVerifiedSha;
+    return Object.freeze({
+      classification: "fast-forward" as const,
+      fromSha: expectedOldSha,
+      protectedRef: "refs/heads/website-production" as const,
+      summarySha256: "f".repeat(64),
+      toSha: verifiedSha,
+    });
+  };
 }
 
 function terminalBaselineStatus(
@@ -768,10 +1033,18 @@ describe("release-bound site control", () => {
       verifiedSha: providerVerifiedSha,
     }));
     const promotion = await runProviderCommand("promote", {
+      AUTHORITY_ATTESTATION_RECEIPT: encodeProductionAuthorityPhaseReceipt(
+        providerAuthorityPhases(decodeProviderReceipt(baselineReceipt)).attestation,
+      ),
+      AUTHORITY_DENIAL_RECEIPT: encodeProviderReceipt(
+        providerAuthorityPhases(decodeProviderReceipt(baselineReceipt)).denial,
+      ),
       BASELINE_RECEIPT: baselineReceipt,
       DEFAULT_BRANCH: "main",
       EVENT_NAME: "workflow_dispatch",
       GITHUB_REPOSITORY: providerRepository,
+      GH_TOKEN: "read-token",
+      MLM_RELEASE_REF_TOKEN: "writer-token",
       PROMOTION_EXPECTED_MODE: "advanced",
       RECOVERY_WORKFLOW_SHA: providerVerifiedSha,
       VERIFIED_SHA: providerVerifiedSha,
@@ -1054,17 +1327,19 @@ esac
     expect(appPreflight).toContain("release-workflow-range.mjs");
     expect(appPreflight).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY");
     expect(appWriter).toContain("environment: { name: production-ref-writer-key, deployment: false }");
-    expect(appWriter).toContain("Pin the secret-bearing writer and workflow-range code to reviewed hashes");
+    expect(appWriter).toContain("Pin the complete production authority TCB to reviewed hashes");
     expect(appWriter).toMatch(/APP_TOKEN_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/PROVIDER_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/REF_AUTHORITY_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/REF_WRITER_SHA256: [0-9a-f]{64}/u);
+    expect(appWriter).toMatch(/STATUS_ATTESTER_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toMatch(/WORKFLOW_RANGE_SHA256: [0-9a-f]{64}/u);
     expect(appWriter).toContain("Re-prove the complete workflow-control range before reading the key");
     expect(appWriter).toContain("WORKFLOW_RANGE_RECEIPT:");
     expect(appWriter).not.toContain("setup-bun");
     expect(appWriter).not.toContain("bun install");
     expect(appWriter).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(appWriter).toContain("MLM_RELEASE_REF_TOKEN:");
     expect(appPostflight).toContain("check-public-release.ts");
     expect(appPostflight).toContain("release-provider-outcome.mjs revalidate-authority");
     expect(appPostflight).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY");
@@ -1149,9 +1424,10 @@ esac
     expect(preflightJob).toContain("release-workflow-range.mjs");
     expect(preflightJob).toContain("check-public-release.ts");
     expect(preflightJob).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
-    expect(permissions(writerJob)).toEqual(["contents: read"]);
+    expect(permissions(writerJob)).toEqual(["contents: write", "statuses: read"]);
     expect(writerJob).toContain("PROMOTION_EXPECTED_MODE: advanced");
     expect(writerJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
+    expect(writerJob).toContain("MLM_RELEASE_REF_TOKEN:");
     expect(writerJob).toContain("release-ref-authority.ts promotion");
     expect(writerJob).toContain("release-workflow-range.mjs");
     expect(writerJob).toContain("WORKFLOW_RANGE_RECEIPT:");
@@ -1159,9 +1435,9 @@ esac
     expect(writerJob).not.toContain("setup-bun");
     expect(writerJob).not.toContain("bun install");
     expect(writerJob).not.toContain("release-provider-outcome.mjs wait");
-    expect(writerJob).not.toContain("/statuses?");
+    expect(writerJob).toContain("STATUS_ATTESTER_SHA256:");
     expect(postflightJob).toContain("- write_production_ref");
-    expect(permissions(postflightJob)).toEqual(["contents: read"]);
+    expect(permissions(postflightJob)).toEqual(["contents: read", "statuses: read"]);
     expect(postflightJob).toContain("release-provider-outcome.mjs revalidate-authority");
     expect(postflightJob).toContain("check-public-release.ts");
     expect(postflightJob).not.toContain("MLM_RELEASE_APP_PRIVATE_KEY:");
@@ -1205,18 +1481,17 @@ esac
     expect(helper).toContain("MAX_PROVIDER_POLLS = 15");
     expect(helper).toContain("PROVIDER_POLL_INTERVAL_MILLISECONDS = 60_000");
     expect(helper).not.toContain("Date.now");
-    expect(helper).toContain('this.#runRaw(["--include", endpoint]');
+    expect(helper).toContain('this.#runRaw([\n      "--include",');
+    expect(helper).toContain('spawnSync("/usr/bin/gh"');
     expect(workflow).not.toContain("release-provider-outcome.mjs release-order");
     expect(workflow).not.toContain("gh api --paginate");
     expect(helper).toContain('mode = "already-exact"');
     expect(helper).toContain('mode = "advanced"');
     expect(helper).toContain("35613825");
-    expect(helper).toContain("writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag)");
-    expect(helper).toContain("exactSanitizedRevocationReceipt(revocationReceipt)");
-    expect(helper).toContain("advanceWithRevokedReleaseAppToken(process.env, operation)");
-    expect(helper).toContain("return operation(Object.freeze({");
-    expect(helper).not.toContain("operation(new GitHubApi");
-    expect(helper).toContain("async (receipt) => {");
+    expect(helper).toContain("await advanceRef(coordinate, prePatchRef.sha, sha, tag)");
+    expect(helper).toContain("proveProductionRequiredStatusDenial");
+    expect(helper).not.toContain("authorizeWithRevocation");
+    expect(helper).not.toContain("writerApi.advanceRef");
     expect(helper).toContain("/git/ref/heads/website-production");
     expect(helper).not.toContain("/git/refs/heads/website-production");
     expect(helper).not.toContain("matching-refs");
@@ -1224,14 +1499,14 @@ esac
     expect(helper).not.toContain('["--method", "POST"');
     expect(releaseRestRequestBudget).toEqual({
       githubTokenLimit: 1_000,
-      headroom: 792,
+      headroom: 789,
       maxPolls: 15,
       pollIntervalMilliseconds: 60_000,
       providerBaseline: 2,
       providerOutcome: 164,
-      providerPromotion: 27,
+      providerPromotion: 30,
       surroundingRelease: 15,
-      total: 208,
+      total: 211,
     });
     expect(releaseGraphqlRequestBudget).toEqual({
       githubPointLimit: 1_000,
@@ -1596,12 +1871,7 @@ esac
     const recovered = await providerReceipts("already-exact");
     expect((recovered.promotion as Readonly<Record<string, unknown>>).mode).toBe("already-exact");
     expect(recovered.promotionCalls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
-    let alreadyExactTokenLifecycles = 0;
     const externalBootstrapRecovery = await promoteWebsiteProductionRaw({
-      advanceWithRevocation: async () => {
-        alreadyExactTokenLifecycles += 1;
-        throw new Error("already-exact recovery must not enter the App-token lifecycle");
-      },
       api: new ProviderApiFixture({
         refSha: providerVerifiedSha,
         serverDates: [providerPromotionServerDate],
@@ -1615,7 +1885,6 @@ esac
       verifiedTag: providerTag,
     });
     expect(externalBootstrapRecovery).toMatchObject({ mode: "already-exact" });
-    expect(alreadyExactTokenLifecycles).toBe(0);
 
     const concurrent = providerDeployment(11, "2026-08-29T15:01:00Z");
     await expect(createProviderBaseline({
@@ -1845,7 +2114,7 @@ esac
     );
   });
 
-  test("orders the privileged write, token revocation convergence, and read-only post-read", async () => {
+  test("proves required-status denial before the exact attested write", async () => {
     const baselineDeployment = providerDeployment(10, "2026-08-29T13:00:00Z", {
       sha: providerPreviousSha,
     });
@@ -1853,193 +2122,63 @@ esac
       api: new ProviderApiFixture({
         deployments: [[baselineDeployment]],
         refSha: providerPreviousSha,
-        serverDates: [providerBaselineServerDate, providerBaselineServerDate],
+        serverDates: [providerBaselineServerDate],
         statuses: terminalBaselineStatus(),
       }),
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
     });
-    const fixture = new ProviderApiFixture({
-      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerCurrentMainSha),
+    const phases = providerAuthorityPhases(baseline);
+    const denialApi = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerVerifiedSha),
       deployments: [[baselineDeployment]],
       refSha: providerPreviousSha,
-      reviewedCompare: providerReviewedMainCompare(providerVerifiedSha, providerCurrentMainSha),
       serverDates: [providerPromotionServerDate],
       statuses: terminalBaselineStatus(),
     });
-    const events: string[] = [];
-    const readApi = {
-      async get(endpoint: string): Promise<ProviderJson> {
-        events.push(`GET ${endpoint}`);
-        return fixture.get(endpoint);
-      },
-      async getWithServerDate(endpoint: string): Promise<ProviderJson> {
-        events.push(`GET with Date ${endpoint}`);
-        return fixture.getWithServerDate(endpoint);
-      },
-    };
-    const writerApi = {
-      async advanceRef(
-        coordinate: string,
-        expectedOldSha: string,
-        verifiedSha: string,
-        verifiedTag: string,
-      ): Promise<void> {
-        events.push(`GIT PUSH ${coordinate} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
-        await fixture.advanceRef(coordinate, expectedOldSha, verifiedSha, verifiedTag);
-      },
-    };
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-    const environment = Object.freeze({
-      GITHUB_API_URL: "https://api.github.com",
-      GITHUB_REPOSITORY: providerRepository,
-      GITHUB_REPOSITORY_ID: String(MESSAGE_LIKE_ME_REPOSITORY_ID),
-      GITHUB_REPOSITORY_OWNER: "hraness",
-      MLM_RELEASE_APP_CLIENT_ID: "Iv1.messageLikeMeRelease",
-      MLM_RELEASE_APP_ID: "24680",
-      MLM_RELEASE_APP_INSTALLATION_ID: "13579",
-      MLM_RELEASE_APP_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
-      MLM_RELEASE_APP_SLUG: "message-like-me-release-writer",
-    });
-    const token = "installation-token-for-exact-provider-order";
-    let revokedReceipt: ProviderRevocationReceipt | undefined;
-
-    const promotion = await promoteWebsiteProductionRaw({
-      advanceWithRevocation: async (operation) => {
-        await withReleaseAppToken({
-          environment,
-          async inspect() {
-            events.push("GET /app");
-            return {
-              client_id: "Iv1.messageLikeMeRelease",
-              id: 24680,
-              owner: { login: "hraness", type: "Organization" },
-              permissions: { contents: "write", metadata: "read" },
-              slug: "message-like-me-release-writer",
-            };
-          },
-          async inspectInstallation() {
-            events.push("GET /app/installations/13579");
-            return {
-              account: { login: "hraness", type: "Organization" },
-              app_id: 24680,
-              app_slug: "message-like-me-release-writer",
-              id: 13579,
-              permissions: { contents: "write", metadata: "read" },
-              repository_selection: "selected",
-              target_type: "Organization",
-            };
-          },
-          mask() {
-            events.push("MASK APP TOKEN");
-          },
-          async mint() {
-            events.push("POST /app/installations/13579/access_tokens");
-            return {
-              body: {
-                expires_at: "2026-08-29T19:00:00Z",
-                permissions: { contents: "write", metadata: "read" },
-                repositories: [{
-                  full_name: providerRepository,
-                  id: MESSAGE_LIKE_ME_REPOSITORY_ID,
-                  name: "message-like-me",
-                  owner: { login: "hraness" },
-                }],
-                repository_selection: "selected",
-                token,
-              },
-              serverDate: "Sat, 29 Aug 2026 18:00:00 GMT",
-            };
-          },
-          nowMilliseconds: () => Date.parse("2026-08-29T18:00:00Z"),
-          async onRevoked(receipt) {
-            revokedReceipt = receipt;
-            events.push("REVOCATION CONVERGED");
-          },
-          async revoke() {
-            events.push("DELETE /installation/token");
-            events.push("GET /installation/repositories 401");
-            events.push("GET /installation/repositories 401");
-            return providerRevocationReceipt;
-          },
-        }, async (leasedToken) => {
-          expect(leasedToken).toBe(token);
-          await operation(writerApi);
-        });
-        events.push("TOKEN WRAPPER RETURNED");
-        if (revokedReceipt === undefined) throw new Error("missing revocation receipt");
-        return revokedReceipt;
-      },
-      api: readApi,
+    const denial = await proveProductionRequiredStatusDenial({
+      api: denialApi,
       baselineReceipt: baseline,
       defaultBranch: "main",
+      denyRef: async (coordinate, expectedOldSha, verifiedSha, verifiedTag) => {
+        expect({ coordinate, expectedOldSha, verifiedSha, verifiedTag }).toEqual({
+          coordinate: providerRepository,
+          expectedOldSha: providerPreviousSha,
+          verifiedSha: providerVerifiedSha,
+          verifiedTag: providerTag,
+        });
+        return {
+          classification: "required-status-missing" as const,
+          diagnosticSha256: "d".repeat(64),
+        };
+      },
       eventName: "workflow_dispatch",
-      recoveryWorkflowSha: providerCurrentMainSha,
+      preconditionReceipt: encodeProductionAuthorityPhaseReceipt(phases.precondition),
+      recoveryWorkflowSha: providerVerifiedSha,
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
       workflowRangeReceipt: providerWorkflowRangeReceipt,
     });
+    expect(denial).toMatchObject({
+      previousSha: providerPreviousSha,
+      schema: "message-like-me-production-required-status-denial-v1",
+      verifiedSha: providerVerifiedSha,
+    });
 
-    expect(promotion).toMatchObject({ mode: "advanced", verifiedSha: providerVerifiedSha });
-    const push = `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`;
-    expect(events.slice(events.indexOf(push))).toEqual([
-      push,
-      "DELETE /installation/token",
-      "GET /installation/repositories 401",
-      "GET /installation/repositories 401",
-      "REVOCATION CONVERGED",
-      "TOKEN WRAPPER RETURNED",
-      `GET /repos/${providerRepository}/git/ref/heads/website-production`,
-      `GET /repos/${providerRepository}`,
-      `GET /repos/${providerRepository}/git/ref/heads/main`,
-      `GET /repos/${providerRepository}/compare/${providerVerifiedSha}...${providerCurrentMainSha}`,
-      `GET /repos/${providerRepository}`,
-      `GET /repos/${providerRepository}/git/ref/heads/main`,
-      `GET /repos/${providerRepository}/compare/${providerVerifiedSha}...${providerCurrentMainSha}`,
-    ]);
-  });
-
-  test("does not post-read the advanced ref when token revocation is indeterminate", async () => {
-    const { baseline, baselineDeployment } = await providerReceipts("advanced");
-    const fixture = new ProviderApiFixture({
+    const promotionApi = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerVerifiedSha),
       deployments: [[baselineDeployment]],
       refSha: providerPreviousSha,
       serverDates: [providerPromotionServerDate],
       statuses: terminalBaselineStatus(),
     });
-    const events: string[] = [];
-    const readApi = {
-      async get(endpoint: string): Promise<ProviderJson> {
-        events.push(`GET ${endpoint}`);
-        return fixture.get(endpoint);
-      },
-      async getWithServerDate(endpoint: string): Promise<ProviderJson> {
-        events.push(`GET with Date ${endpoint}`);
-        return fixture.getWithServerDate(endpoint);
-      },
-    };
-    const writerApi = {
-      async advanceRef(
-        coordinate: string,
-        expectedOldSha: string,
-        verifiedSha: string,
-        verifiedTag: string,
-      ): Promise<void> {
-        events.push(`GIT PUSH ${coordinate} ${expectedOldSha} ${verifiedSha} ${verifiedTag}`);
-        await fixture.advanceRef(coordinate, expectedOldSha, verifiedSha, verifiedTag);
-      },
-    };
-
-    await expect(promoteWebsiteProductionRaw({
-      advanceWithRevocation: async (operation) => {
-        await operation(writerApi);
-        events.push("DELETE /installation/token");
-        events.push("GET /installation/repositories 401");
-        throw new Error("release App token revocation convergence is indeterminate");
-      },
-      api: readApi,
+    const promotion = await promoteWebsiteProductionRaw({
+      advanceRef: new ProviderRefWriterFixture(promotionApi).advanceRef,
+      api: promotionApi,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(phases.attestation),
       baselineReceipt: baseline,
+      denialReceipt: denial,
       defaultBranch: "main",
       eventName: "workflow_dispatch",
       recoveryWorkflowSha: providerVerifiedSha,
@@ -2047,31 +2186,39 @@ esac
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
       workflowRangeReceipt: providerWorkflowRangeReceipt,
-    })).rejects.toThrow("release App token revocation convergence is indeterminate");
-
-    const push = `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`;
-    expect(events.slice(events.indexOf(push))).toEqual([
-      push,
-      "DELETE /installation/token",
-      "GET /installation/repositories 401",
-    ]);
+    }) as Readonly<Record<string, unknown>>;
+    expect(promotion).toMatchObject({
+      authority: {
+        statusId: providerAttestationStatus.statusId,
+        statusNodeId: providerAttestationStatus.statusNodeId,
+      },
+      mode: "advanced",
+      verifiedSha: providerVerifiedSha,
+    });
+    const rulesIndex = promotionApi.calls.lastIndexOf("GET PRODUCTION RULES");
+    const statusIndex = promotionApi.calls.lastIndexOf("GET PRODUCTION AUTHORITY STATUS");
+    const pushIndex = promotionApi.calls.findIndex((call) => call.startsWith("GIT PUSH "));
+    expect(rulesIndex).toBeGreaterThanOrEqual(0);
+    expect(statusIndex).toBeGreaterThan(rulesIndex);
+    expect(pushIndex).toBeGreaterThan(statusIndex);
   });
 
   test("fails promotion closed on comparison, ref, and lease races", async () => {
     const { baseline, baselineDeployment } = await providerReceipts("advanced");
-    let rejectedRangeTokenLifecycles = 0;
+    const authority = providerAuthorityPhases(baseline);
     const rejectedRange = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
       refSha: providerPreviousSha,
       statuses: terminalBaselineStatus(),
     });
     await expect(promoteWebsiteProductionRaw({
-      advanceWithRevocation: async () => {
-        rejectedRangeTokenLifecycles += 1;
+      advanceRef: async () => {
         throw new Error("workflow-range rejection must precede token minting");
       },
       api: rejectedRange,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(authority.attestation),
       baselineReceipt: baseline,
+      denialReceipt: authority.denial,
       defaultBranch: "main",
       eventName: "workflow_dispatch",
       recoveryWorkflowSha: providerVerifiedSha,
@@ -2083,17 +2230,19 @@ esac
         previousSha: "9".repeat(40),
       },
     })).rejects.toThrow("does not bind the leased production transition");
-    expect(rejectedRangeTokenLifecycles).toBe(0);
     expect(rejectedRange.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
-    const missingLifecycle = new ProviderApiFixture({
+    const malformedDenial = new ProviderApiFixture({
       deployments: [[baselineDeployment]],
       refSha: providerPreviousSha,
       statuses: terminalBaselineStatus(),
     });
     await expect(promoteWebsiteProductionRaw({
-      api: missingLifecycle,
+      advanceRef: new ProviderRefWriterFixture(malformedDenial).advanceRef,
+      api: malformedDenial,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(authority.attestation),
       baselineReceipt: baseline,
+      denialReceipt: { ...authority.denial, previousSha: "9".repeat(40) },
       defaultBranch: "main",
       eventName: "workflow_dispatch",
       recoveryWorkflowSha: providerVerifiedSha,
@@ -2101,35 +2250,8 @@ esac
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
       workflowRangeReceipt: providerWorkflowRangeReceipt,
-    })).rejects.toThrow("requires the bounded release App token lifecycle");
-    expect(missingLifecycle.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
-
-    const malformedRevocation = new ProviderApiFixture({
-      deployments: [[baselineDeployment]],
-      refSha: providerPreviousSha,
-      statuses: terminalBaselineStatus(),
-    });
-    await expect(promoteWebsiteProductionRaw({
-      advanceWithRevocation: async (operation) => {
-        await operation(malformedRevocation);
-        return {
-          ...providerRevocationReceipt,
-          observationCount: 3,
-        };
-      },
-      api: malformedRevocation,
-      baselineReceipt: baseline,
-      defaultBranch: "main",
-      eventName: "workflow_dispatch",
-      recoveryWorkflowSha: providerVerifiedSha,
-      repository: providerRepository,
-      verifiedSha: providerVerifiedSha,
-      verifiedTag: providerTag,
-      workflowRangeReceipt: providerWorkflowRangeReceipt,
-    })).rejects.toThrow("revocation receipt is malformed");
-    const malformedPush = malformedRevocation.calls.findIndex((call) => call.startsWith("GIT PUSH "));
-    expect(malformedPush).toBeGreaterThanOrEqual(0);
-    expect(malformedRevocation.calls.slice(malformedPush + 1)).toEqual([]);
+    })).rejects.toThrow("does not bind the required-status denial proof");
+    expect(malformedDenial.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const staleLatest = new ProviderApiFixture({
       latestSnapshots: [providerLatest({ tag_name: "v0.7.9" })],
@@ -2191,13 +2313,21 @@ esac
       deployments: [[baselineDeployment]],
       statuses: terminalBaselineStatus(),
     });
-    patchFailure.advanceError = new Error("simulated stale lease");
-    await expect(promoteWebsiteProduction({
+    const patchFailureWriter = new ProviderRefWriterFixture(patchFailure);
+    patchFailureWriter.advanceError = new Error("simulated stale lease");
+    await expect(promoteWebsiteProductionRaw({
+      advanceRef: patchFailureWriter.advanceRef,
       api: patchFailure,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(authority.attestation),
       baselineReceipt: baseline,
+      denialReceipt: authority.denial,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
       repository: providerRepository,
       verifiedSha: providerVerifiedSha,
       verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
     })).rejects.toThrow("simulated stale lease");
 
     const movedBeforePatch = new ProviderApiFixture({
@@ -2932,7 +3062,7 @@ esac
       pollIntervalMilliseconds: 0,
       promotionReceipt: wrongMode,
       sleep: async () => {},
-    })).rejects.toThrow("mode contradicts");
+    })).rejects.toThrow("already-exact promotion contains write authority evidence");
     const tamperedBaseline = {
       ...(baseline as Readonly<Record<string, ProviderJson>>),
       completedAt: "2026-08-29T15:00:00.600Z",

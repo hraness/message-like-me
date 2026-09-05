@@ -122,29 +122,43 @@
   package once, publish the immutable Latest GitHub Release with that tarball
   plus `SHA256SUMS` first, then publish the same tarball through npm trusted
   publishing before the separate current-`main` promotion workflow
-  fast-forwards the established `website-production` ref with its dedicated
-  release App and exact expected-old lease. Keep the tag workflow's write scope
-  split: only the GitHub publication job gets `contents: write`, only the npm
-  publication job gets `id-token: write`, and a separate read-only job admits
-  exact bytes and provenance. Treat every SHA-pinned setup and artifact action
-  in those jobs as part of the privileged release TCB. Keep the GitHub token
-  scoped to the dependency-free publisher step. Keep the App private key
-  inside the main-only `production-ref-writer-key` environment and expose it
-  only to a fresh dependency-free, hash-pinned writer job. Before environment
-  admission, and again in the writer before reading the key, require complete
-  non-shallow history and prove that every commit newly reachable from the
-  expected-old production SHA preserves its `.github/workflows` tree OID. Mint
-  only the numeric one-repository `contents:write` plus `metadata:read` token;
-  never give the routine token `workflows:write`. A reviewed workflow-control
-  epoch requires the separately approved out-of-band bootstrap in the runbook,
-  followed by App downgrade, key rotation, and already-exact recovery. Require
-  the bounded read-only provider outcome gate to finish. Already-exact recovery
-  must not enter the key environment. Recovery may revalidate only an existing
-  immutable, artifact-complete Latest Release and exact npm version and must
-  never create either one. A later positive attempt may finish the same exact
-  tag, commit, and tarball only when Sigstore binds the actual run ID and an
-  allowed positive attempt. Keep Vercel Production
+  fast-forwards the established `website-production` ref with an exact
+  expected-old lease. Keep the tag workflow's write scope split: only the
+  GitHub publication job gets `contents: write`, only the npm publication job
+  gets `id-token: write`, and a separate read-only job admits exact bytes and
+  provenance. Treat every SHA-pinned setup and artifact action in those jobs as
+  part of the privileged release TCB. Keep the GitHub token scoped to the
+  dependency-free publisher step. Keep the dedicated status-signing App's
+  private key inside the main-only `production-ref-writer-key` environment and
+  expose it only to a fresh dependency-free, hash-pinned promotion job. Before
+  environment admission, and again in that job before reading the key, require
+  complete non-shallow history and prove that every commit newly reachable from
+  the expected-old production SHA preserves its `.github/workflows` tree OID.
+  Mint only the numeric one-repository `statuses:write` plus `metadata:read`
+  App token. Require that App to be the pinned source of one exact-SHA success
+  status, prove its readback, and revoke that token. Let only the same job's
+  scoped `GITHUB_TOKEN` perform the leased ref move, then mint a separate
+  status-only token to replace the success with a proven terminal non-success
+  status before revoking the second token. The status App must have neither `contents:write` nor
+  `workflows:write`, and it must not be a ref-ruleset bypass actor. A reviewed
+  workflow-control epoch requires the separately approved out-of-band bootstrap
+  in the runbook, followed by App downgrade, key rotation, and already-exact
+  recovery. Require the bounded read-only provider outcome gate to finish.
+  Already-exact recovery must not enter the key environment. Recovery may
+  revalidate only an existing immutable, artifact-complete Latest Release and
+  exact npm version and must never create either one. A later positive attempt
+  may finish the same exact tag, commit, and tarball only when Sigstore binds
+  the actual run ID and an allowed positive attempt. Keep Vercel Production
   Branch on `website-production`; `main` and pull requests are preview sources.
+  If a runner interruption may leave a success status, disable both routine
+  promotion workflows and use only the target-bound terminal-authority cleanup
+  in the publishing runbook after its 36-day complete attempt inventory and
+  65-minute token-expiry quarantine. A hard cancellation can prevent token
+  revocation and receipt persistence, so absent evidence starts a fresh
+  quarantine rather than authorizing a retry. Cleanup may append only a distinct
+  App-authored terminal `error`; it never moves a ref or creates restart
+  authority. Require owner-admin before/after proof of empty ruleset bypasses,
+  and treat every incomplete cleanup receipt as continued quarantine.
 
 <!-- hra-local-efficiency:start -->
 - Treat the user's request to change this repository as standing authorization for routine task-owned commits, pushes, pull requests, merges, releases, deployments, and production verification after the repository's required validation, review, identity, and rollout gates pass. Do not ask for another confirmation at each delivery step.

@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   advanceWebsiteProductionRef,
+  proveWebsiteProductionCanaryStaleLease,
   verifiedReleaseFetchArguments,
   websiteProductionPushArguments,
 } from "./release-ref-writer.mjs";
@@ -14,6 +15,32 @@ const previousSha = "1".repeat(40);
 const verifiedSha = "2".repeat(40);
 const verifiedTag = "v0.8.0";
 const token = "ghs_private-release-token-value";
+const exactBareRepositoryConfig = [
+  "core.repositoryformatversion\n0",
+  "core.filemode\ntrue",
+  "core.bare\ntrue",
+  "",
+].join("\0");
+
+function gitResult(
+  stdout = "",
+  status = 0,
+  stderr = "",
+) {
+  return {
+    error: undefined,
+    signal: null,
+    status,
+    stderr,
+    stdout,
+  } as never;
+}
+
+function sterileBootstrapResult(call: number) {
+  if (call === 1) return gitResult();
+  if (call === 2) return gitResult(exactBareRepositoryConfig);
+  return undefined;
+}
 
 describe("website-production Git writer", () => {
   test("builds one fixed refspec with one nonempty exact explicit lease", () => {
@@ -25,6 +52,12 @@ describe("website-production Git writer", () => {
       "credential.helper=",
       "-c",
       "http.extraHeader=",
+      "-c",
+      "http.sslVerify=true",
+      "-c",
+      "http.followRedirects=false",
+      "-c",
+      "http.proxy=",
       "-c",
       "push.followTags=false",
       "-c",
@@ -56,6 +89,12 @@ describe("website-production Git writer", () => {
       "credential.helper=",
       "-c",
       "http.extraHeader=",
+      "-c",
+      "http.sslVerify=true",
+      "-c",
+      "http.followRedirects=false",
+      "-c",
+      "http.proxy=",
       "fetch",
       "--no-tags",
       "--no-recurse-submodules",
@@ -70,72 +109,175 @@ describe("website-production Git writer", () => {
     }
   });
 
-  test("fetches, peels, and pushes under one bounded credential boundary", async () => {
+  test("uses one sterile repository despite caller Git config poisoning", async () => {
     let askpassPath = "";
     let askpass = "";
+    let sterileRoot = "";
     const calls: Array<Readonly<{
       arguments: readonly string[];
+      cwd: string;
       environment: Readonly<Record<string, string>>;
     }>> = [];
-    advanceWebsiteProductionRef({
-      environment: { MLM_RELEASE_APP_TOKEN: token },
+    const receipt = advanceWebsiteProductionRef({
+      environment: {
+        GIT_CONFIG_COUNT: "3",
+        GIT_CONFIG_GLOBAL: "/caller/poisoned-global-config",
+        GIT_CONFIG_KEY_0: "url.https://attacker.invalid/.insteadOf",
+        GIT_CONFIG_KEY_1: "url.https://attacker.invalid/.pushInsteadOf",
+        GIT_CONFIG_KEY_2: "http.sslVerify",
+        GIT_CONFIG_VALUE_0: "https://github.com/",
+        GIT_CONFIG_VALUE_1: "https://github.com/",
+        GIT_CONFIG_VALUE_2: "false",
+        GIT_DIR: "/caller/poisoned.git",
+        HOME: "/caller/poisoned-home",
+        MLM_RELEASE_REF_TOKEN: token,
+      },
       expectedOldSha: previousSha,
       repository: "hraness/message-like-me",
       spawnImplementation(command, arguments_, options) {
         expect(command).toBe("/usr/bin/git");
         expect(arguments_.join(" ")).not.toContain(token);
-        expect(arguments_.join(" ")).not.toContain("MLM_RELEASE_APP_TOKEN");
+        expect(arguments_.join(" ")).not.toContain("MLM_RELEASE_REF_TOKEN");
+        expect(arguments_.join(" ")).not.toContain("attacker.invalid");
+        expect(options.encoding).toBe("utf8");
         expect(options.killSignal).toBe("SIGKILL");
+        expect(options.maxBuffer).toBe(4096);
+        expect(options.stdio).toEqual(["ignore", "pipe", "pipe"]);
         expect(options.timeout).toBe(60_000);
+        const cwd = String(options.cwd);
         const environment = options.env as Readonly<Record<string, string>>;
-        calls.push({ arguments: [...arguments_], environment });
+        calls.push({ arguments: [...arguments_], cwd, environment });
         if (calls.length === 1) {
-          askpassPath = environment.GIT_ASKPASS ?? "";
+          sterileRoot = cwd;
+          askpassPath = join(sterileRoot, "askpass.sh");
           askpass = readFileSync(askpassPath, "utf8");
           expect(statSync(askpassPath).mode & 0o777).toBe(0o700);
-          return { error: undefined, signal: null, status: 0, stderr: "", stdout: "" } as never;
+        } else {
+          expect(cwd).toBe(sterileRoot);
         }
-        if (calls.length === 2) {
-          return {
-            error: undefined,
-            signal: null,
-            status: 0,
-            stderr: "",
-            stdout: `${verifiedSha}\n`,
-          } as never;
-        }
-        return { error: undefined, signal: null, status: 0, stderr: "", stdout: "ok" } as never;
+        const bootstrap = sterileBootstrapResult(calls.length);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls.length === 4) return gitResult(`${verifiedSha}\n`);
+        return gitResult(
+          `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
+        );
       },
       verifiedSha,
       verifiedTag,
     });
 
     expect(calls.map((call) => call.arguments)).toEqual([
+      [
+        "-c",
+        "init.defaultBranch=main",
+        "init",
+        "--bare",
+        "--object-format=sha1",
+        `--template=${join(sterileRoot, "empty-template")}`,
+        join(sterileRoot, "repository.git"),
+      ],
+      ["config", "--local", "--null", "--list"],
       verifiedReleaseFetchArguments(verifiedTag),
       ["-c", "core.hooksPath=/dev/null", "rev-parse", "--verify", "FETCH_HEAD^{commit}"],
       websiteProductionPushArguments(previousSha, verifiedSha),
     ]);
     expect(askpass).toContain("x-access-token");
-    expect(askpass).toContain('"$MLM_RELEASE_APP_TOKEN"');
+    expect(askpass).toContain('"$MLM_RELEASE_REF_TOKEN"');
     expect(askpass).not.toContain(token);
-    const commonEnvironment = {
+    const bootstrapEnvironment = {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_DISCOVERY_ACROSS_FILESYSTEM: "0",
+      LC_ALL: "C",
+      PATH: "/usr/bin:/bin",
+    };
+    const commonEnvironment = {
+      GIT_ALLOW_PROTOCOL: "https",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_DIR: join(sterileRoot, "repository.git"),
+      GIT_DISCOVERY_ACROSS_FILESYSTEM: "0",
       GIT_LFS_SKIP_SMUDGE: "1",
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_PROTOCOL_FROM_USER: "0",
       GIT_TERMINAL_PROMPT: "0",
       LC_ALL: "C",
       PATH: "/usr/bin:/bin",
     };
-    expect(calls[0]?.environment).toEqual({
+    const authenticatedEnvironment = {
       ...commonEnvironment,
       GIT_ASKPASS: askpassPath,
       GIT_ASKPASS_REQUIRE: "force",
-      MLM_RELEASE_APP_TOKEN: token,
-    });
+      MLM_RELEASE_REF_TOKEN: token,
+    };
+    expect(calls.map((call) => call.cwd)).toEqual(Array(5).fill(sterileRoot));
+    expect(calls[0]?.environment).toEqual(bootstrapEnvironment);
     expect(calls[1]?.environment).toEqual(commonEnvironment);
-    expect(calls[2]?.environment).toEqual(calls[0]?.environment);
+    expect(calls[2]?.environment).toEqual(authenticatedEnvironment);
+    expect(calls[3]?.environment).toEqual(commonEnvironment);
+    expect(calls[4]?.environment).toEqual(authenticatedEnvironment);
+    for (const call of calls) {
+      expect(Object.keys(call.environment).some((key) => key.startsWith("GIT_CONFIG_KEY_")))
+        .toBe(false);
+      expect(call.environment.GIT_CONFIG_COUNT).toBeUndefined();
+      expect(call.environment.HOME).toBeUndefined();
+    }
+    expect(receipt).toEqual({
+      classification: "fast-forward",
+      fromSha: previousSha,
+      protectedRef: "refs/heads/website-production",
+      summarySha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      toSha: verifiedSha,
+    });
     expect(await Bun.file(askpassPath).exists()).toBe(false);
+  });
+
+  test("rejects any unexpected entry in the sterile repository config", () => {
+    let calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation(_command, arguments_) {
+        calls += 1;
+        if (calls === 1) return gitResult();
+        expect(arguments_).toEqual(["config", "--local", "--null", "--list"]);
+        return gitResult([
+          exactBareRepositoryConfig,
+          "url.https://attacker.invalid/.insteadof\nhttps://github.com/",
+          "",
+        ].join("\0"));
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("sterile release-writer repository config is not exact");
+    expect(calls).toBe(2);
+  });
+
+  test("rejects an exit-zero up-to-date race instead of claiming this writer advanced the ref", () => {
+    let calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation() {
+        calls += 1;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls === 5) {
+          return gitResult(
+            `To https://github.com/hraness/message-like-me.git\n=\t${verifiedSha}:refs/heads/website-production\t[up to date]\nDone\n`,
+          );
+        }
+        return gitResult();
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("was not one attributable fast-forward update");
+    expect(calls).toBe(5);
   });
 
   test("rejects bare, empty, remote-tracking, wildcard, creation, deletion, and multi-ref shapes", () => {
@@ -155,60 +297,76 @@ describe("website-production Git writer", () => {
   test("rejects a fetched tag that peels to another commit before push", () => {
     let calls = 0;
     expect(() => advanceWebsiteProductionRef({
-      environment: { MLM_RELEASE_APP_TOKEN: token },
+      environment: { MLM_RELEASE_REF_TOKEN: token },
       expectedOldSha: previousSha,
       repository: "hraness/message-like-me",
       spawnImplementation() {
         calls += 1;
-        return {
-          error: undefined,
-          signal: null,
-          status: 0,
-          stderr: "",
-          stdout: calls === 2 ? `${"3".repeat(40)}\n` : "",
-        } as never;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        return gitResult(calls === 4 ? `${"3".repeat(40)}\n` : "");
       },
       verifiedSha,
       verifiedTag,
     })).toThrow("fetched release tag does not peel to the verified release SHA");
-    expect(calls).toBe(2);
+    expect(calls).toBe(4);
   });
 
   test("redacts token-bearing push failures and leaves no askpass material", async () => {
     let askpassPath = "";
     let calls = 0;
     expect(() => advanceWebsiteProductionRef({
-      environment: { MLM_RELEASE_APP_TOKEN: token },
+      environment: { MLM_RELEASE_REF_TOKEN: token },
       expectedOldSha: previousSha,
       repository: "hraness/message-like-me",
       spawnImplementation(_command, _arguments, options) {
         calls += 1;
-        askpassPath = (options.env as Readonly<Record<string, string>>).GIT_ASKPASS ?? "";
-        if (calls === 1) {
-          return { error: undefined, signal: null, status: 0, stderr: "", stdout: "" } as never;
-        }
-        if (calls === 2) {
-          return {
-            error: undefined,
-            signal: null,
-            status: 0,
-            stderr: "",
-            stdout: `${verifiedSha}\n`,
-          } as never;
-        }
-        return {
-          error: undefined,
-          signal: null,
-          status: 1,
-          stderr: `stale info accidentally contained ${token}`,
-          stdout: "",
-        } as never;
+        if (calls === 1) askpassPath = join(String(options.cwd), "askpass.sh");
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 3) return gitResult();
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        return gitResult("", 1, `stale info accidentally contained ${token}`);
       },
       verifiedSha,
       verifiedTag,
     })).toThrow("stale info accidentally contained [redacted]");
-    expect(calls).toBe(3);
+    expect(calls).toBe(5);
     expect(await Bun.file(askpassPath).exists()).toBe(false);
+  });
+});
+
+describe("website-production canary stale lease", () => {
+  test("binds the real porcelain stale-info stream instead of relying on stderr prose", () => {
+    let calls = 0;
+    const currentSha = "3".repeat(40);
+    const receipt = proveWebsiteProductionCanaryStaleLease({
+      currentSha,
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      repository: "hraness/message-like-me",
+      spawnImplementation(_command, arguments_) {
+        calls += 1;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 5 || calls === 6) return gitResult(`${currentSha}\n`);
+        if (calls === 8) return gitResult(`${previousSha}\n`);
+        if (calls === 10) {
+          expect(arguments_).toContain("--porcelain");
+          return gitResult(
+            `To https://github.com/hraness/message-like-me.git\n!\t${previousSha}:refs/heads/website-production-writer-canary\t[rejected] (stale info)\nDone\n`,
+            1,
+            "error: failed to push some refs to 'https://github.com/hraness/message-like-me.git'\n",
+          );
+        }
+        return gitResult();
+      },
+      staleExpectedSha: previousSha,
+    });
+    expect(receipt).toEqual({
+      classification: "stale-info",
+      diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(calls).toBe(10);
   });
 });
 

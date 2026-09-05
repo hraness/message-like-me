@@ -7,8 +7,9 @@ trusted publishing. Its informational site can enter Vercel Production only
 after both public coordinates pass admission. The tag workflow never receives
 the production-ref writer key. A separate current-`main` workflow admits the
 external npm and GitHub artifacts, then advances the production source after
-the Release succeeds using a short-lived token from a dedicated private Hraness
-GitHub App.
+the Release succeeds. A dedicated private Hraness GitHub App signs one
+exact-commit status; the same protected job's scoped GitHub Actions token makes
+the leased ref move only while the matching App-sourced success is current.
 
 No personal access token, deploy key, Vercel token, or repository-administration
 permission belongs in either workflow.
@@ -49,8 +50,8 @@ for this rollout and do not create a replacement Sites project.
    install command, Git connection, domains, environment, and deployment
    settings.
 4. Register one private Hraness-owned GitHub App dedicated to Message Like Me
-   production-ref advancement. Give the App exactly repository permissions
-   `Contents: Read and write` and implicit `Metadata: Read`, with no
+   production authorization. Give the App exactly repository permissions
+   `Commit statuses: Read and write` and implicit `Metadata: Read`, with no
    organization permission. Install it on `hraness` with selected-repository
    access to exactly `hraness/message-like-me`. Record its numeric App ID,
    client ID, numeric installation ID, App slug, and the repository's numeric
@@ -74,11 +75,12 @@ for this rollout and do not create a replacement Sites project.
    `refs/heads/website-production`:
    - A no-bypass ruleset blocks creation, deletion, and non-fast-forward
      updates. It prevents recreation or force movement after the bootstrap.
-   - A separate update ruleset blocks ordinary updates and gives the dedicated
-     release App's exact numeric App ID one `always` bypass with actor type
-     `Integration`. Set `update_allows_fetch_and_merge=false`. Do not use the
-     client ID, installation ID, bot user ID, GitHub Actions Integration
-     `15368`, `exempt`, a human identity, or a generic deploy-key bypass.
+   - A separate no-bypass required-status-check ruleset requires context
+     `message-like-me/website-production-authority` from the dedicated release
+     App's exact numeric App ID. It has no update restriction or bypass actor.
+     Bind the expected status source to the App; do not use the client ID,
+     installation ID, bot user ID, GitHub Actions Integration `15368`, a human
+     identity, an unpinned status context, or a generic deploy-key bypass.
 7. Add a separate active `main` ruleset requiring pull requests, code-owner
    review for `/.github/workflows/**`, the exact CI checks used by this
    repository, and protection from deletion and non-fast-forward updates. Keep
@@ -128,11 +130,12 @@ assertions together:
 - the stable-tag ruleset targets only `refs/tags/v*`, contains only update and
   deletion restrictions, has no bypass actors, and reports
   `current_user_can_bypass=never`;
-- the update ruleset contains only the update restriction for that exact ref,
-  has the dedicated App's numeric ID as its sole `Integration` `always` bypass,
-  and reports `update_allows_fetch_and_merge=false`;
+- the required-status-check ruleset targets only that exact ref, requires
+  context `message-like-me/website-production-authority` from the dedicated
+  App's numeric ID, and has no bypass actor;
 - the App installation reports `repository_selection=selected`, account
-  `hraness`, exactly `contents:write` plus `metadata:read`, and an exhaustive
+  `hraness`, exactly `statuses:write` plus `metadata:read`, no `contents` or
+  `workflows` authority, and an exhaustive
   `/installation/repositories` set of exactly
   `{hraness/message-like-me}` with repository ID `1342143606`;
 - `production-ref-writer-key` admits only `main`, requires the expected
@@ -149,13 +152,23 @@ code-owner, exact CI, deletion, and non-fast-forward requirements. The control
 change deliberately retains version `0.8.0` and changes no product claim,
 dependency, lockfile, or generated documentation.
 
+Treat the production and canary ruleset IDs and their complete live readbacks as
+an external release gate, not as inputs the promotion workflow may administer.
+The workflow must not create, replace, patch, disable, or broaden a ruleset. A
+release operator revalidates the existing IDs, targets, lifecycle rules,
+App-pinned status context, integration ID, enforcement state, and empty bypass
+sets before admitting a release. Any drift blocks promotion until it is reviewed
+and repaired out of band.
+
 ### Bootstrap one workflow-control epoch
 
-The routine writer is intentionally incapable of crossing a change to
-`.github/workflows/**`. GitHub requires `Workflows: Read and write` for a Git
-push that changes that path, while every token minted by the checked automation
-is exactly `contents:write` plus `metadata:read`. Do not add `workflows:write` to
-the automated mint request, environment, or persistent post-bootstrap App.
+The routine promotion is intentionally incapable of crossing a change to
+`.github/workflows/**`. Its complete-history gate rejects that range before the
+key environment even though GitHub may allow a contents-capable token to move a
+ref to an existing workflow-changing commit. The permanent App has only
+`statuses:write` plus `metadata:read`; it cannot move any ref. The checked
+workflow must never mint persistent App `contents` or `workflows` authority or
+treat permission omission alone as the workflow-control boundary.
 
 When an already-established `website-production` ref predates reviewed workflow
 control changes, perform one separately approved control-epoch bootstrap after
@@ -165,64 +178,81 @@ the target's immutable Release and public npm bytes have passed admission:
    immutable Latest Release, ruleset readbacks, and the complete reviewed commit
    range. Let the routine promotion fail at its workflow-range gate; do not
    approve the key environment for that rejected run.
-2. In an owner-operated, out-of-band procedure, explicitly authorize one token
-   whose only effective repository permissions are `contents:write`,
-   `metadata:read`, and `workflows:write`, selected to numeric repository ID
-   `1342143606`. Do not put that token or the broader permission into Actions.
-3. Use the same fixed repository, exact annotated-tag target, and nonempty
+2. In an owner-operated, out-of-band procedure, explicitly authorize a single
+   control-epoch credential selected to numeric repository ID `1342143606` with
+   only the temporary permissions needed to post the pinned status and move the
+   workflow-changing ref. Keep that credential out of Actions and preserve the
+   required-status-check and ref-lifecycle rulesets.
+3. Post the exact App-sourced success status for the release SHA, then use the
+   same fixed repository, exact annotated-tag target, and nonempty
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>` contract
-   to make exactly one fast-forward. Revoke the token immediately and prove the
-   ref is the exact release SHA. Preserve the permanent creation, deletion,
-   non-fast-forward, and App-only update rulesets.
-4. Remove `Workflows: Read and write` from the App, accept or refresh the
-   selected installation as GitHub requires, and read back the exact
-   `contents:write` plus `metadata:read` closure and singleton repository set.
-   Generate a fresh App private key, replace `MLM_RELEASE_APP_PRIVATE_KEY`, and
-   delete the pre-bootstrap key. Routine automation must remain paused until
-   both the App downgrade and key rotation are proven.
+   to make exactly one fast-forward. Immediately replace the success with the
+   terminal non-success status, revoke the credential, and prove the ref is the
+   exact release SHA. Never leave a reusable success context behind.
+4. Restore and read back the permanent App's exact `statuses:write` plus
+   `metadata:read` closure, absence of `contents` and `workflows` authority, and
+   singleton repository set. Generate a fresh App private key, replace
+   `MLM_RELEASE_APP_PRIVATE_KEY`, and delete the control-epoch key. Routine
+   automation must remain paused until both the App downgrade and key rotation
+   are proven.
 5. Dispatch `Promote website production` for the same immutable tag. Because
    the external bootstrap made the ref already exact, recovery stays outside
    `production-ref-writer-key`, mints no token, and accepts only the bounded
    exact-SHA Vercel Production outcome that postdates the Release.
 
 That bootstrap closes one workflow-control epoch; it is not precedent for a
-routine broad token or an unleased manual ref move. Any later release whose
-newly reachable history contains a workflow-tree change starts a new control
-epoch and requires its own explicit review and authorization.
+routine broad token, a persistent ref bypass, or an unleased manual ref move.
+Any later release whose newly reachable history contains a workflow-tree change
+starts a new control epoch and requires its own explicit review and
+authorization.
 
-### Prove the writer bypass before product release
+### Prove the split status-and-writer boundary before product release
 
-Do not infer the bypass from configuration alone. Before the first product
+Do not infer the boundary from configuration alone. Before the first product
 release, precreate persistent ref
 `refs/heads/website-production-writer-canary` at the reviewed control commit.
 Apply separate active rulesets with the same no-bypass protections and the same
-App-only update rule to that exact canary ref. Prove both halves of the narrow
-token canary contract after the App downgrade and key rotation:
+App-pinned required status check to that exact canary ref. Prove every side of
+the split credential contract after the App downgrade and key rotation:
 
 1. The negative workflow-delta canary targets a reviewed descendant that
    changes `.github/workflows/**`. The complete-history gate must reject it
-   before environment admission and before token minting. In the separately
-   approved owner-operated server-side probe, the exact narrow App token's
-   leased push must also be rejected and the canary ref must remain unchanged.
+   before environment admission and before token minting. Permission omission
+   is not the gate: record the complete-history rejection itself.
 2. The positive non-workflow canary targets a reviewed descendant for which
-   every newly reachable commit preserves the baseline workflow-tree OID. Mint
-   the exact repository-scoped narrow App token and make one fast-forward with
-   an explicit nonempty expected-old `--force-with-lease`.
+   every newly reachable commit preserves the baseline workflow-tree OID. Prove
+   the status-only App token cannot update the ref and the job-scoped writer
+   token cannot update it before the exact App-sourced success exists.
+3. Post one success status on the exact positive target under context
+   `message-like-me/website-production-writer-canary-authority`, prove its exact
+   readback, and revoke that short-lived status-only token. With the success
+   current, use only the job-scoped writer token to make one fast-forward with
+   an explicit nonempty expected-old `--force-with-lease`. Then mint a separate
+   status-only token, post and read back the terminal non-success status, and
+   revoke that second token.
+4. Read the exact context back as the distinct terminal `error` after
+   consumption, prove a stale lease cannot move the canary, and prove neither
+   credential can perform the other credential's role. This evidence proves
+   the observed target ended terminal; it does not claim an atomic
+   post-consumption update denial that GitHub's status and ref APIs cannot
+   express as one transaction.
 
 A personal token or deploy key is not an acceptable probe. A bare lease,
 remote-tracking lease, `--force`, empty expected-old, creation, deletion,
 wildcard, or multi-ref push is not acceptable evidence.
 
-Capture canonical ruleset and rule-suite evidence that binds both probes to the
-canary ref, numeric App ID, App slug, installation ID, before SHA, attempted or
-accepted after SHA, operation time, and originating run. The positive suite
-must report result `bypass` for the App's `always` bypass while the ordinary
-update rule itself reports a failed evaluation. The negative record must prove
-the server rejected the workflow-changing update and the ref stayed exact.
-Separately prove an ordinary writer cannot make the positive update. Keep the
-canary ref and its dedicated rulesets active after the proof so the evidence
-remains reproducible. The no-bypass deletion rule deliberately forbids deleting
-it; do not attempt deletion or temporarily remove protection.
+Capture canonical ruleset, status, and rule-suite evidence that binds every
+probe to the canary ref, status context, numeric App ID, App slug, installation
+ID, before SHA, attempted or accepted after SHA, operation time, and originating
+run. The accepted update must prove the required check came from the pinned App,
+not a name-matching status from another actor, and used no bypass. The negative
+records must prove missing authorization and direct App ref mutation. They must
+also prove stale leases all fail without mutation; the final combined-status
+read must prove the success was replaced by the exact App-authored terminal
+status. Keep the canary ref and
+its dedicated rulesets active after the proof so the evidence remains
+reproducible. The no-bypass deletion rule deliberately forbids deleting it; do
+not attempt deletion or temporarily remove protection.
 Read back that the production rulesets still target only
 `refs/heads/website-production` and the canary rulesets still target only the
 persistent canary ref.
@@ -367,25 +397,32 @@ recovery. Both paths use the same checks. That workflow:
    every newly reachable commit catches merge-side changes and an edit followed
    by a revert even when the two endpoint trees match. The fresh secret-bearing
    job installs no dependencies; in a step that does not receive the private
-   key, it verifies hard-coded SHA-256 pins for the five reviewed helpers,
+   key, it verifies hard-coded SHA-256 pins for the six reviewed helpers,
    repeats the exact complete-history proof, and emits a bounded receipt binding
    the expected-old SHA, release SHA, commit count and digest, and baseline
    workflow-tree OID. The promotion helper validates that receipt before it may
    enter the App-token lifecycle. A checked local helper then signs a
    bounded RS256 App JWT, authenticates the exact App ID, client ID, slug, and
    organization owner, then reads the checked installation ID and requires its
-   selected `hraness` account plus exact `contents:write` and `metadata:read`
+   selected `hraness` account plus exact `statuses:write` and `metadata:read`
    permission closure. It then POSTs one token request with literal
    `repository_ids: [1342143606]` and only those permissions;
 4. fails closed unless the mint response contains exactly that numeric
    repository, selected-repository scope, those two permissions, and a
    canonical expiry within the authenticated one-hour response window. It
-   masks the token before use and keeps it out of workflow outputs. The
-   token-scoped callback ends immediately after the one leased Git push. After
-   that callback it sends exactly one nonredirecting `DELETE /installation/token`,
+   masks the token before use and keeps it out of workflow outputs. The checked
+   attester posts one `success` status for the exact verified SHA under context
+   `message-like-me/website-production-authority`, with no target URL and with
+   the status source bound to the dedicated App, proves exact readback, and
+   sends exactly one nonredirecting `DELETE /installation/token` for that
+   admission token. Only after its bounded revocation convergence may the
+   separate job-scoped GitHub Actions credential attempt the leased Git push.
+   After that one writer process, a new status-only App token posts a terminal
+   `error` under the same context, proves exact readback so the success cannot
+   authorize a replay, and is independently revoked. Each DELETE
    requires an HTTP 204 with absent or canonical-zero `Content-Length` and zero
    body bytes, and then observes the exact selected-repository authority until
-   two stable authorization-denial responses, each HTTP 401 or 403, prove
+   two stable authenticated HTTP 401 authorization-denial responses prove
    convergence. A mutation failure and a revocation or convergence failure are
    both retained;
 5. sandwiches the fresh writer job with separate read-only immutable Release,
@@ -394,19 +431,23 @@ recovery. Both paths use the same checks. That workflow:
    `refs/tags/<verified-tag>` from the fixed HTTPS repository at depth one,
    with tag following and submodule recursion disabled. It peels
    `FETCH_HEAD^{commit}` without checking out or executing tagged code and
-   requires the result to equal `verified_sha` before using authenticated Git
-   to push exactly
+   requires the result to equal `verified_sha` before using only the writer
+   job's `GITHUB_TOKEN`, passed as `MLM_RELEASE_REF_TOKEN`, to push exactly
    `<verified-sha>:refs/heads/website-production` with
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>`. The
-   token stays out of URLs, argv, and Git config behind a bounded temporary
-   `GIT_ASKPASS` helper, prompting is disabled, global and system configuration
+   ref token stays out of URLs, argv, and Git config behind a bounded temporary
+   `GIT_ASKPASS` helper. The job token is necessarily available to the hashed
+   job code and is also named `GH_TOKEN` for its read-only REST and GraphQL
+   calls; only the fixed ref writer reads `MLM_RELEASE_REF_TOKEN`. The status
+   attester neither reads nor uses that name, and the App token is never passed
+   to the ref writer. Prompting is disabled, global and system configuration
    are disabled, hooks and tags are disabled, cleanup is trapped, and a stale
-   lease fails without mutation. Read-only singular REST ref reads before the
-   push use the job's read-only GitHub Actions token. The exact post-push ref
-   read and independent current-`main` workflow-source revalidation do not
-   begin until the App-token wrapper returns after its `onRevoked` callback has
-   accepted the sanitized convergence receipt. An indeterminate revocation
-   therefore prevents every post-read; and
+   lease fails without mutation. The exact production-ref
+   post-read and independent current-`main` workflow-source revalidation do not
+   begin until the terminal status is proven and the App-token wrapper returns
+   after its `onRevoked` callback has accepted the sanitized convergence
+   receipt. An indeterminate terminal status or revocation therefore prevents
+   every post-read; and
 6. uses a separate read-only job, bounded to 20 minutes, to require exactly one
    new Vercel Production deployment. The deployment and its exhaustive status
    history must bind Vercel bot `35613825`, the exact release SHA, task
@@ -415,7 +456,7 @@ recovery. Both paths use the same checks. That workflow:
    Release, Latest, workflow-source, ref, inventory, and status readbacks close
    the workflow.
 
-The successful DELETE and every accepted HTTP 200, 401, or 403 observation
+The successful DELETE and every accepted HTTP 200 or 401 observation
 require a canonical GitHub `Date` strictly before the minted token's exact
 `expires_at`.
 The monotonic completion of the DELETE anchors a separate 30-second half-open
@@ -428,9 +469,10 @@ sleep latency all consume the same window. App identity, installation, mint,
 DELETE, and observation bodies are streamed under a 1 MiB cap and scrubbed
 after parsing. Every HTTP 200 must still describe the exact singleton selected
 `hraness/message-like-me` repository with ID `1342143606`. Acceptance requires
-two distinct scheduled authorization-denial reads. Each may be HTTP 401 or 403,
-including a mixed status pair. A 200 after either denial, only one denial, any
-other status, a redirect, malformed or oversized body, transport or timing
+two distinct scheduled HTTP 401 authorization-denial reads. An HTTP 403 is
+indeterminate because GitHub can use it for rate limiting or policy denial; it
+never proves revocation. A 200 after either denial, only one denial, any other
+status, a redirect, malformed or oversized body, transport or timing
 ambiguity, or failure to converge within the window fails closed. The exact
 empty HTTP 204 DELETE response is the documented revocation success. The
 scheduled reads are a defense-in-depth check and do not require GitHub to return
@@ -439,9 +481,88 @@ first two probes were the stable denial pair; `true` means one or more exact
 authorized 200 responses preceded the final two denials. This 30-second bound is
 a Message Like Me operational ceiling, not a claim about GitHub's
 revocation-propagation SLA. The action is never retried, the full App path is
-capped at fourteen REST requests, and the exact production-ref post-read cannot
+capped at seventeen REST requests, and the exact production-ref post-read cannot
 begin until convergence has been reported through the sanitized revocation
 receipt.
+
+A runner cancellation, host loss, or indeterminate status response after the
+success POST is a quarantined authorization incident, never a retry signal.
+Neither GitHub Actions nor a process signal handler can make the remote status
+POST, readback, and token revocation atomic. A hard cancellation can therefore
+end the runner before the status-only installation token is revoked; keep both
+writers disabled and begin a fresh 65-minute quarantine from the newest
+authenticated attempt update before any cleanup or writer is admitted.
+Freeze promotion and read the exact target's App-sourced status plus the
+production ref out of band. If the ref did not move, use a separately admitted
+status-only cleanup to append and read back the terminal `error` before starting
+a fresh run from a new baseline. If the ref did move, never move it backward;
+require the exact provider outcome and use only the already-exact recovery path.
+Do not dispatch another writer while the newest exact context is successful or
+unknown.
+
+### Terminalize an interrupted production authority
+
+Use `Terminalize release authority` only for a failed `Promote website
+production` attempt whose checked run title durably names the exact immutable
+tag or release target. It is not a general status editor and it cannot clean up
+an unbound historical run. If an older workflow lacks that target-bearing run
+title, keep routine promotion disabled and resolve the target from owner-admin
+evidence; do not treat the cleanup workflow as authority to restart.
+
+Before dispatch, disable both `Promote website production` and `Prove
+production ref writer canary`. Freeze workflow dispatches, reruns, Actions run
+history deletion, ruleset administration, App installation changes, and key
+rotation. Record owner-admin readbacks showing both production rulesets have no
+bypass actors and `current_user_can_bypass=never`; the workflow token's rules
+API is intentionally not trusted to prove those administrator-only fields.
+Leave `Terminalize release authority` active, record the three exact workflow
+IDs in `MLM_RELEASE_PRODUCTION_WORKFLOW_ID`,
+`MLM_RELEASE_CANARY_WORKFLOW_ID`, and `MLM_RELEASE_CLEANUP_WORKFLOW_ID`, and
+dispatch attempt 1 with the exact failed production run ID/attempt, immutable
+tag and peeled target SHA, and unchanged production-ref SHA.
+
+The cleanup inventories every attempt for all three credential-capable
+workflows from one fixed authenticated GitHub `Date` minus 36 days. Thirty-six
+days exceeds GitHub's 35-day maximum workflow lifetime, so a pre-freeze run
+cannot remain runnable outside the inventory. It rejects 1,000 or more retained
+runs for any workflow, more than 51 attempts for one run, more than 150 attempts
+total, a missing attempt, another nonterminal attempt, or any workflow-state
+change. The initial inventory lower bound and freeze anchor are reused
+byte-for-byte through revalidation and postflight. Wait until the authenticated
+completion time is at least 65 minutes after the latest disabled-workflow
+update, inventoried prior-attempt update, and current App predecessor; this
+exceeds the admitted one-hour App-token lifetime. A deleted history item,
+recreated workflow, ambiguous newest failure for the target, changed run title,
+or decreasing inventory digest fails closed. Because an administrator could
+delete and recreate evidence between API reads, the owner freeze and
+before/after admin readbacks remain part of admission.
+
+After the main-only environment approval, the helper repeats the complete
+snapshot before it may read the private key. The status-only App may then POST
+only one distinct `error` for the exact failed target, prove that exact status
+through the combined-status endpoint, and revoke the token through the same
+bounded 401-convergence contract as routine promotion. A third complete
+read-only snapshot must bind the exact terminal status, unchanged immutable
+tag/Release and ancestry, unchanged production ref, workflow states, rules and
+inventory. The final verifier then reads the exact terminal status, rules and
+production ref in causal order. Its canonical receipt is written to the job
+summary. If the runner remains available, every final-job bootstrap and
+verification step is guarded with `always()` so an ordinary postflight or final
+verification failure persists a canonical incomplete receipt. The receipt
+retains every available validated initial, revalidated, terminal, and
+postflight object (or its parse-failure digest), plus an independent exact
+production-ref readback when available, and exits nonzero. A hard workflow
+cancellation, runner loss, checkout failure, or platform termination can still
+prevent any finalizer from executing; absence of a receipt is itself an
+indeterminate incident. An incomplete or absent receipt is quarantine evidence,
+never permission to retry.
+
+After a complete receipt, repeat the owner-admin no-bypass/ruleset/App/key/run
+inventory readbacks before re-enabling either routine workflow. A cancelled or
+failed cleanup becomes a new externally recorded incident; keep both writers
+disabled and wait a new 65-minute quarantine instead of blindly rerunning it.
+Cleanup never moves or creates a ref, posts `success`, edits a Release, or
+grants restart authority by itself.
 
 Any ambiguity, concurrent production deployment, missing or changed baseline
 item, provider error, terminal failure, identity mismatch, ref race, status

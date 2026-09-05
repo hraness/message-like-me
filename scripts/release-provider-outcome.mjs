@@ -1,22 +1,32 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS,
-  withReleaseAppTokenFromEnvironment,
-} from "./release-app-token.mjs";
-import { advanceWebsiteProductionRefFromEnvironment } from "./release-ref-writer.mjs";
+  advanceWebsiteProductionRefFromEnvironment,
+  proveWebsiteProductionRequiredStatusDenialFromEnvironment,
+} from "./release-ref-writer.mjs";
+import {
+  decodeProductionAuthorityPhaseReceipt,
+  finalizeProductionAuthority,
+  normalizeProductionAuthorityRulesReceipt,
+  parseCurrentProductionAuthoritySuccess,
+  parseProductionAuthorityRulesApiClosure,
+  productionAuthorityReceiptDigest,
+} from "./release-production-authority.mjs";
 import {
   assertWorkflowRangeReceipt,
   decodeWorkflowRangeReceipt,
 } from "./release-workflow-range.mjs";
 
 const BASELINE_SCHEMA = "message-like-me-provider-baseline-v1";
-const PROMOTION_SCHEMA = "message-like-me-provider-promotion-v1";
+const PROMOTION_SCHEMA = "message-like-me-provider-promotion-v2";
+const EXPECTED_REPOSITORY = "hraness/message-like-me";
 const PRODUCTION_REF = "refs/heads/website-production";
 const PAGE_SIZE = 100;
 const MAX_ITEMS = 500;
@@ -137,7 +147,7 @@ const PRODUCTION_DEPLOYMENTS_QUERY = `query MessageLikeMeProductionDeployments(
 }`;
 
 const BASELINE_REST_REQUESTS = 2;
-const PROMOTION_REST_REQUESTS = 27;
+const PROMOTION_REST_REQUESTS = 30;
 const OUTCOME_ANNOTATED_TAG_OBJECT_REQUESTS = 7;
 const OUTCOME_REST_REQUESTS =
   6 +
@@ -248,6 +258,12 @@ function expectSha(value, label) {
   const sha = expectString(value, label);
   if (!SHA.test(sha)) fail(`${label} is not one lowercase 40-hex commit`);
   return sha;
+}
+
+function expectSha256(value, label) {
+  const digest = expectString(value, label);
+  if (!/^[0-9a-f]{64}$/u.test(digest)) fail(`${label} is not one lowercase SHA-256 digest`);
+  return digest;
 }
 
 function expectStableTag(value, label) {
@@ -1367,19 +1383,63 @@ function baselineReceiptValue(receipt) {
   });
 }
 
+function parseProductionDenialReceipt(value) {
+  const receipt = expectRecord(value, "production writer denial receipt");
+  expectExactKeys(receipt, [
+    "baselineDigest", "denial", "observedAt", "preconditionSha256", "previousSha",
+    "productionRef", "repository", "rules", "schema", "verifiedSha", "verifiedTag",
+  ], "production writer denial receipt");
+  const denial = expectRecord(receipt.denial, "production writer denial");
+  expectExactKeys(denial, ["classification", "diagnosticSha256"], "production writer denial");
+  if (
+    receipt.schema !== "message-like-me-production-required-status-denial-v1" ||
+    receipt.productionRef !== PRODUCTION_REF ||
+    denial.classification !== "required-status-missing"
+  ) {
+    fail("production writer denial receipt has the wrong boundary");
+  }
+  return Object.freeze({
+    baselineDigest: expectSha256(receipt.baselineDigest, "production denial baseline digest"),
+    denial: Object.freeze({
+      classification: "required-status-missing",
+      diagnosticSha256: expectSha256(
+        denial.diagnosticSha256,
+        "production writer denial diagnostic digest",
+      ),
+    }),
+    observedAt: parseReceiptTimestamp(receipt.observedAt, "production denial observedAt").timestamp,
+    preconditionSha256: expectSha256(
+      receipt.preconditionSha256,
+      "production denial precondition digest",
+    ),
+    previousSha: expectSha(receipt.previousSha, "production denial previous SHA"),
+    productionRef: PRODUCTION_REF,
+    repository: expectRepository(receipt.repository),
+    rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
+    schema: "message-like-me-production-required-status-denial-v1",
+    verifiedSha: expectSha(receipt.verifiedSha, "production denial verified SHA"),
+    verifiedTag: expectStableTag(receipt.verifiedTag, "production denial verified tag"),
+  });
+}
+
 function parsePromotionReceipt(value) {
   const receipt = expectRecord(value, "promotion receipt");
   expectExactKeys(receipt, [
+    "authority",
     "baselineDigest",
     "boundaryAt",
+    "denialSha256",
     "mode",
     "previousSha",
+    "promotedAt",
     "productionRef",
     "releasePublishedAt",
     "repository",
+    "rules",
     "schema",
     "verifiedSha",
     "verifiedTag",
+    "writerPush",
   ], "promotion receipt");
   if (receipt.schema !== PROMOTION_SCHEMA || receipt.productionRef !== PRODUCTION_REF) {
     fail("promotion receipt has the wrong schema or production ref");
@@ -1389,62 +1449,112 @@ function parsePromotionReceipt(value) {
   const baselineDigestValue = expectString(receipt.baselineDigest, "promotion receipt baselineDigest");
   if (!/^[0-9a-f]{64}$/u.test(baselineDigestValue)) fail("promotion receipt baselineDigest is invalid");
   const boundary = parseReceiptTimestamp(receipt.boundaryAt, "promotion receipt boundaryAt");
+  const promoted = parseReceiptTimestamp(receipt.promotedAt, "promotion receipt promotedAt");
   const published = parseSecondTimestamp(receipt.releasePublishedAt, "promotion receipt releasePublishedAt");
+  const previousSha = expectSha(receipt.previousSha, "promotion receipt previousSha");
+  const verifiedSha = expectSha(receipt.verifiedSha, "promotion receipt verifiedSha");
+  let authority = null;
+  let denialSha256 = null;
+  let rules = null;
+  let writerPush = null;
+  if (mode === "advanced") {
+    const authorityValue = expectRecord(receipt.authority, "promotion authority receipt");
+    expectExactKeys(authorityValue, [
+      "attestationSha256",
+      "statusId",
+      "statusNodeId",
+      "statusReadbackAt",
+    ], "promotion authority receipt");
+    const statusNodeId = expectString(
+      authorityValue.statusNodeId,
+      "promotion authority statusNodeId",
+    );
+    if (statusNodeId.length < 1 || statusNodeId.length > 512) {
+      fail("promotion authority statusNodeId is malformed");
+    }
+    authority = Object.freeze({
+      attestationSha256: expectSha256(
+        authorityValue.attestationSha256,
+        "promotion authority attestationSha256",
+      ),
+      statusId: expectSafeId(authorityValue.statusId, "promotion authority statusId"),
+      statusNodeId,
+      statusReadbackAt: parseReceiptTimestamp(
+        authorityValue.statusReadbackAt,
+        "promotion authority statusReadbackAt",
+      ).timestamp,
+    });
+    const push = expectRecord(receipt.writerPush, "promotion writer push receipt");
+    expectExactKeys(push, [
+      "classification", "fromSha", "protectedRef", "summarySha256", "toSha",
+    ], "promotion writer push receipt");
+    if (
+      push.classification !== "fast-forward" ||
+      push.fromSha !== previousSha ||
+      push.protectedRef !== PRODUCTION_REF ||
+      push.toSha !== verifiedSha
+    ) {
+      fail("promotion writer push is not one attributable exact update");
+    }
+    writerPush = Object.freeze({
+      classification: "fast-forward",
+      fromSha: previousSha,
+      protectedRef: PRODUCTION_REF,
+      summarySha256: expectSha256(push.summarySha256, "promotion writer summarySha256"),
+      toSha: verifiedSha,
+    });
+    rules = normalizeProductionAuthorityRulesReceipt(receipt.rules);
+    denialSha256 = expectSha256(receipt.denialSha256, "promotion denial receipt digest");
+    if (promoted.milliseconds < Date.parse(authority.statusReadbackAt)) {
+      fail("promotion ref readback predates its status authority");
+    }
+  } else if (
+    receipt.authority !== null ||
+    receipt.denialSha256 !== null ||
+    receipt.rules !== null ||
+    receipt.writerPush !== null
+  ) {
+    fail("already-exact promotion contains write authority evidence");
+  }
   return Object.freeze({
+    authority,
     baselineDigest: baselineDigestValue,
     boundaryAt: boundary.timestamp,
     boundaryMilliseconds: boundary.milliseconds,
+    denialSha256,
     mode,
-    previousSha: expectSha(receipt.previousSha, "promotion receipt previousSha"),
+    previousSha,
+    promotedAt: promoted.timestamp,
+    promotedMilliseconds: promoted.milliseconds,
     productionRef: PRODUCTION_REF,
     releasePublishedAt: published.timestamp,
     releasePublishedMilliseconds: published.milliseconds,
     repository: expectRepository(receipt.repository),
+    rules,
     schema: PROMOTION_SCHEMA,
-    verifiedSha: expectSha(receipt.verifiedSha, "promotion receipt verifiedSha"),
+    verifiedSha,
     verifiedTag: expectStableTag(receipt.verifiedTag, "promotion receipt verifiedTag"),
+    writerPush,
   });
 }
 
 function promotionReceiptValue(receipt) {
   return Object.freeze({
+    authority: receipt.authority,
     baselineDigest: receipt.baselineDigest,
     boundaryAt: receipt.boundaryAt,
+    denialSha256: receipt.denialSha256,
     mode: receipt.mode,
     previousSha: receipt.previousSha,
+    promotedAt: receipt.promotedAt,
     productionRef: receipt.productionRef,
     releasePublishedAt: receipt.releasePublishedAt,
     repository: receipt.repository,
+    rules: receipt.rules,
     schema: receipt.schema,
     verifiedSha: receipt.verifiedSha,
     verifiedTag: receipt.verifiedTag,
-  });
-}
-
-function exactSanitizedRevocationReceipt(value) {
-  const receipt = expectRecord(value, "release App token revocation receipt");
-  expectExactKeys(
-    receipt,
-    ["converged", "observationCount", "propagationObserved", "stableDenials"],
-    "release App token revocation receipt",
-  );
-  if (
-    receipt.converged !== true ||
-    !Number.isSafeInteger(receipt.observationCount) ||
-    receipt.observationCount < 2 ||
-    receipt.observationCount > RELEASE_APP_REVOCATION_OBSERVATION_OFFSETS_MILLISECONDS.length ||
-    typeof receipt.propagationObserved !== "boolean" ||
-    (receipt.propagationObserved === false && receipt.observationCount !== 2) ||
-    (receipt.propagationObserved === true && receipt.observationCount < 3) ||
-    receipt.stableDenials !== 2
-  ) {
-    fail("release App token revocation receipt is malformed");
-  }
-  return Object.freeze({
-    converged: true,
-    observationCount: receipt.observationCount,
-    propagationObserved: receipt.propagationObserved,
-    stableDenials: 2,
+    writerPush: receipt.writerPush,
   });
 }
 
@@ -1486,10 +1596,93 @@ export async function createProviderBaseline({ api, repository, verifiedSha }) {
   return baselineReceiptValue(parseBaselineReceipt(receipt));
 }
 
-export async function promoteWebsiteProduction({
-  advanceWithRevocation,
+export async function proveProductionRequiredStatusDenial({
   api,
   baselineReceipt,
+  defaultBranch,
+  denyRef,
+  eventName,
+  preconditionReceipt,
+  recoveryWorkflowSha,
+  repository,
+  verifiedSha,
+  verifiedTag,
+  workflowRangeReceipt,
+}) {
+  const coordinate = expectRepository(repository);
+  const sha = expectSha(verifiedSha, "production denial verified SHA");
+  const tag = expectStableTag(verifiedTag, "production denial verified tag");
+  const baseline = parseBaselineReceipt(baselineReceipt);
+  const baselineValue = baselineReceiptValue(baseline);
+  const precondition = decodeProductionAuthorityPhaseReceipt(preconditionReceipt);
+  if (
+    baseline.repository !== coordinate ||
+    baseline.verifiedSha !== sha ||
+    precondition.phase !== "consumed" ||
+    precondition.targetSha !== sha ||
+    precondition.attestationSha256 !== null ||
+    precondition.promotionSha256 !== null
+  ) {
+    fail("production denial does not bind its baseline and terminal precondition");
+  }
+  assertWorkflowRangeReceipt(workflowRangeReceipt, {
+    previousSha: baseline.refSha,
+    verifiedSha: sha,
+  });
+  const workflowSource = Object.freeze({
+    defaultBranch,
+    eventName,
+    recoveryWorkflowSha,
+    verifiedSha: sha,
+  });
+  await revalidateWorkflowSource(api, coordinate, workflowSource);
+  await readVerifiedTagCommit(api, coordinate, tag, sha);
+  await readImmutableRelease(api, coordinate, tag);
+  await readLatestRelease(api, coordinate, tag);
+  const before = await readProductionRefWithServerDate(api, coordinate);
+  if (before.sha !== baseline.refSha) fail("website-production moved before denial proof");
+  const rules = parseProductionAuthorityRulesApiClosure(
+    await api.getRules(),
+    "production denial",
+  );
+  const preconditionDate = Date.parse(precondition.revocation.lastObservationServerDate);
+  if (
+    Date.parse(before.timestamp) < preconditionDate ||
+    Object.values(rules.serverDates).some((value) => Date.parse(value) < Date.parse(before.timestamp))
+  ) {
+    fail("production denial rules do not follow the terminal precondition");
+  }
+  if (typeof denyRef !== "function") fail("production denial has no bounded writer");
+  const denial = await denyRef(coordinate, baseline.refSha, sha, tag);
+  const after = await readProductionRefWithServerDate(api, coordinate);
+  if (
+    after.sha !== baseline.refSha ||
+    Date.parse(after.timestamp) < Math.max(...Object.values(rules.serverDates).map(Date.parse))
+  ) {
+    fail("production required-status denial did not preserve the exact ref");
+  }
+  await revalidateWorkflowSource(api, coordinate, workflowSource);
+  return parseProductionDenialReceipt(Object.freeze({
+    baselineDigest: receiptDigest(baselineValue),
+    denial,
+    observedAt: after.timestamp,
+    preconditionSha256: productionAuthorityReceiptDigest(precondition),
+    previousSha: baseline.refSha,
+    productionRef: PRODUCTION_REF,
+    repository: coordinate,
+    rules,
+    schema: "message-like-me-production-required-status-denial-v1",
+    verifiedSha: sha,
+    verifiedTag: tag,
+  }));
+}
+
+export async function promoteWebsiteProduction({
+  advanceRef,
+  api,
+  attestationReceipt,
+  baselineReceipt,
+  denialReceipt,
   defaultBranch,
   eventName,
   recoveryWorkflowSha,
@@ -1531,6 +1724,10 @@ export async function promoteWebsiteProduction({
   }
 
   let mode;
+  let authority = null;
+  let denialSha256 = null;
+  let rules = null;
+  let writerPush = null;
   if (prePatchRef.sha === sha) {
     mode = "already-exact";
   } else {
@@ -1541,43 +1738,79 @@ export async function promoteWebsiteProduction({
     });
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
-    if (typeof advanceWithRevocation !== "function") {
-      fail("advanced promotion requires the bounded release App token lifecycle");
+    const denied = parseProductionDenialReceipt(denialReceipt);
+    if (
+      denied.baselineDigest !== receiptDigest(baselineValue) ||
+      denied.previousSha !== prePatchRef.sha ||
+      denied.repository !== coordinate ||
+      denied.verifiedSha !== sha ||
+      denied.verifiedTag !== tag
+    ) {
+      fail("advanced promotion does not bind the required-status denial proof");
     }
-    let advanceState = "pending";
-    const revocationReceipt = await advanceWithRevocation(async (writerApi) => {
-      if (advanceState !== "pending") fail("production ref advance was invoked more than once");
-      if (
-        writerApi === null ||
-        typeof writerApi !== "object" ||
-        typeof writerApi.advanceRef !== "function"
-      ) {
-        fail("release App writer cannot advance the production ref");
-      }
-      advanceState = "running";
-      await writerApi.advanceRef(coordinate, prePatchRef.sha, sha, tag);
-      advanceState = "completed";
+    denialSha256 = receiptDigest(denied);
+    const attested = decodeProductionAuthorityPhaseReceipt(attestationReceipt);
+    if (attested.phase !== "attested" || attested.targetSha !== sha) {
+      fail("advanced promotion requires the exact production authority attestation");
+    }
+    if (typeof advanceRef !== "function") {
+      fail("advanced promotion requires the bounded ref writer");
+    }
+    rules = parseProductionAuthorityRulesApiClosure(
+      await api.getRules(),
+      "production pre-push",
+    );
+    if (
+      JSON.stringify(rules.rules) !== JSON.stringify(denied.rules.rules) ||
+      JSON.stringify(rules.bodySha256) !== JSON.stringify(denied.rules.bodySha256) ||
+      Object.values(rules.serverDates).some((value) => Date.parse(value) < Date.parse(denied.observedAt))
+    ) {
+      fail("production required-status rules changed after the denial proof");
+    }
+    const currentStatusResponse = await api.getWithServerDate(
+      `/repos/${coordinate}/commits/${sha}/status?per_page=100`,
+    );
+    const currentStatus = parseCurrentProductionAuthoritySuccess(
+      currentStatusResponse.body,
+      currentStatusResponse.serverDate,
+      attested,
+    );
+    if (
+      Date.parse(attested.status.serverDate) < Date.parse(denied.observedAt) ||
+      Object.values(rules.serverDates).some((value) =>
+        Date.parse(value) < Date.parse(attested.revocation.lastObservationServerDate) ||
+        Date.parse(currentStatus.serverDate) < Date.parse(value))
+    ) {
+      fail("production status readback predates the exact required-status rules");
+    }
+    writerPush = await advanceRef(coordinate, prePatchRef.sha, sha, tag);
+    authority = Object.freeze({
+      attestationSha256: productionAuthorityReceiptDigest(attested),
+      statusId: currentStatus.statusId,
+      statusNodeId: currentStatus.statusNodeId,
+      statusReadbackAt: currentStatus.serverDate,
     });
-    if (advanceState !== "completed") {
-      fail("release App token lifecycle did not complete the production ref advance");
-    }
-    exactSanitizedRevocationReceipt(revocationReceipt);
   }
 
-  const promotedSha = await readProductionRef(api, coordinate);
-  if (promotedSha !== sha) fail(`website-production resolved to ${promotedSha} after promotion`);
+  const promotedRef = await readProductionRefWithServerDate(api, coordinate);
+  if (promotedRef.sha !== sha) fail(`website-production resolved to ${promotedRef.sha} after promotion`);
   await revalidateWorkflowSource(api, coordinate, workflowSource);
   const receipt = Object.freeze({
+    authority,
     baselineDigest: receiptDigest(baselineValue),
     boundaryAt: prePatchRef.timestamp,
+    denialSha256,
     mode,
     previousSha: prePatchRef.sha,
+    promotedAt: promotedRef.timestamp,
     productionRef: PRODUCTION_REF,
     releasePublishedAt: release.publishedAt,
     repository: coordinate,
+    rules,
     schema: PROMOTION_SCHEMA,
     verifiedSha: sha,
     verifiedTag: tag,
+    writerPush,
   });
   return promotionReceiptValue(parsePromotionReceipt(receipt));
 }
@@ -2039,22 +2272,38 @@ class GitHubApi {
   }
 
   #runRaw(args, label) {
-    const readOnlyEnvironment = { ...this.#environment };
-    for (const key of Object.keys(readOnlyEnvironment)) {
-      if (key.startsWith("MLM_RELEASE_APP_")) delete readOnlyEnvironment[key];
+    const token = this.#environment.GH_TOKEN;
+    if (typeof token !== "string" || token.length === 0 || /[\0\r\n]/u.test(token)) {
+      fail(`${label} has no exact GitHub token`);
     }
-    const result = spawnSync("gh", ["api", ...args], {
-      encoding: "utf8",
-      env: readOnlyEnvironment,
-      maxBuffer: MAX_RESPONSE_BYTES,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (result.error !== undefined) fail(`${label} could not start: ${result.error.message}`);
-    if (result.status !== 0) {
-      const detail = typeof result.stderr === "string" ? result.stderr.trim() : "";
-      fail(`${label} failed${detail.length === 0 ? "" : `: ${detail}`}`);
+    const configurationDirectory = mkdtempSync(
+      join(tmpdir(), "message-like-me-provider-gh-config-"),
+    );
+    try {
+      const result = spawnSync("/usr/bin/gh", ["api", "--hostname", "github.com", ...args], {
+        encoding: "utf8",
+        env: Object.freeze({
+          GH_CONFIG_DIR: configurationDirectory,
+          GH_HOST: "github.com",
+          GH_TOKEN: token,
+          LC_ALL: "C",
+          PATH: "/usr/local/bin:/usr/bin:/bin",
+        }),
+        maxBuffer: MAX_RESPONSE_BYTES,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 30_000,
+      });
+      if (result.error !== undefined) fail(`${label} could not start: ${result.error.message}`);
+      if (result.status !== 0) {
+        const detail = typeof result.stderr === "string"
+          ? result.stderr.replaceAll(token, "[redacted]").trim()
+          : "";
+        fail(`${label} failed${detail.length === 0 ? "" : `: ${detail}`}`);
+      }
+      return result.stdout;
+    } finally {
+      rmSync(configurationDirectory, { force: true, recursive: true });
     }
-    return result.stdout;
   }
 
   #run(args, label) {
@@ -2067,8 +2316,35 @@ class GitHubApi {
 
   async getWithServerDate(endpoint) {
     const label = `GET with Date ${endpoint}`;
-    const response = this.#runRaw(["--include", endpoint], label);
+    const response = this.#runRaw([
+      "--include",
+      "-H",
+      "Cache-Control: no-cache",
+      endpoint,
+    ], label);
     return parseIncludedGitHubResponse(response, label);
+  }
+
+  async getRef() {
+    const receipt = await readProductionRefWithServerDate(this, EXPECTED_REPOSITORY);
+    return Object.freeze({ body: receipt.sha, serverDate: receipt.timestamp });
+  }
+
+  getCombinedStatus(targetSha) {
+    return this.getWithServerDate(
+      `/repos/${EXPECTED_REPOSITORY}/commits/${expectSha(targetSha, "production status target")}/status?per_page=100`,
+    );
+  }
+
+  async getRules() {
+    const [effective, lifecycle, authority] = await Promise.all([
+      this.getWithServerDate(
+        `/repos/${EXPECTED_REPOSITORY}/rules/branches/website-production`,
+      ),
+      this.getWithServerDate(`/repos/${EXPECTED_REPOSITORY}/rulesets/21821875`),
+      this.getWithServerDate(`/repos/${EXPECTED_REPOSITORY}/rulesets/22290922`),
+    ]);
+    return Object.freeze({ authority, effective, lifecycle });
   }
 
   async graphql({ after, name, owner, query }) {
@@ -2088,46 +2364,31 @@ class GitHubApi {
     return this.#run(args, "GraphQL Production deployments");
   }
 
-  async advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag) {
-    advanceWebsiteProductionRefFromEnvironment({
-      environment: this.#environment,
-      expectedOldSha,
-      repository,
-      verifiedSha,
-      verifiedTag,
-    });
-  }
-}
-
-async function advanceWithRevokedReleaseAppToken(environment, operation) {
-  let revocationReceipt;
-  await withReleaseAppTokenFromEnvironment(
-    environment,
-    async (token) => {
-      const writerApi = new GitHubApi({
-        ...environment,
-        MLM_RELEASE_APP_TOKEN: token,
-      });
-      return operation(Object.freeze({
-        advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag) {
-          return writerApi.advanceRef(repository, expectedOldSha, verifiedSha, verifiedTag);
-        },
-      }));
-    },
-    async (receipt) => {
-      revocationReceipt = receipt;
-    },
-  );
-  if (revocationReceipt === undefined) {
-    fail("release App token lifecycle ended without a revocation receipt");
-  }
-  return revocationReceipt;
 }
 
 function writeReceiptOutput(receipt) {
   const output = process.env.GITHUB_OUTPUT;
   if (typeof output !== "string" || output.length === 0) fail("GITHUB_OUTPUT is unavailable");
   appendFileSync(output, `receipt=${encodeProviderReceipt(receipt)}\n`, { encoding: "utf8" });
+  appendFileSync(output, `receipt_sha256=${receiptDigest(receipt)}\n`, { encoding: "utf8" });
+}
+
+function persistFinalAuthorityReceipt(receipt) {
+  const encoded = encodeProviderReceipt(receipt);
+  const receiptSha256 = receiptDigest(receipt);
+  const output = process.env.GITHUB_OUTPUT;
+  if (typeof output !== "string" || output.length === 0) fail("GITHUB_OUTPUT is unavailable");
+  appendFileSync(output, `receipt=${encoded}\n`, { encoding: "utf8" });
+  appendFileSync(output, `receipt_sha256=${receiptSha256}\n`, { encoding: "utf8" });
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (typeof summary === "string" && summary.length > 0) {
+    appendFileSync(
+      summary,
+      `\n- Canonical production authority receipt SHA-256: \`${receiptSha256}\`\n- Canonical production authority receipt: \`${encoded}\`\n`,
+      { encoding: "utf8" },
+    );
+  }
+  process.stdout.write(`::notice::Production authority receipt SHA-256 ${receiptSha256}\n`);
 }
 
 function writeNamedOutput(name, value) {
@@ -2137,6 +2398,36 @@ function writeNamedOutput(name, value) {
     fail("workflow output name or value is malformed");
   }
   appendFileSync(output, `${name}=${value}\n`, { encoding: "utf8" });
+}
+
+function assertNoAppAuthorityEnvironment(environment, label) {
+  for (const key of Object.keys(environment)) {
+    if (key.startsWith("MLM_RELEASE_APP_") && environment[key] !== undefined) {
+      fail(`${label} unexpectedly received ${key}`);
+    }
+  }
+}
+
+function assertWriterOnlyEnvironment(environment) {
+  assertNoAppAuthorityEnvironment(environment, "production writer process");
+  if (
+    typeof environment.GH_TOKEN !== "string" ||
+    environment.GH_TOKEN.length === 0 ||
+    typeof environment.MLM_RELEASE_REF_TOKEN !== "string" ||
+    environment.MLM_RELEASE_REF_TOKEN.length === 0
+  ) {
+    fail("production writer process is missing its exact read and ref tokens");
+  }
+}
+
+function assertReadOnlyAuthorityEnvironment(environment) {
+  assertNoAppAuthorityEnvironment(environment, "production finalizer process");
+  if (typeof environment.MLM_RELEASE_REF_TOKEN === "string" && environment.MLM_RELEASE_REF_TOKEN.length > 0) {
+    fail("production finalizer process unexpectedly received the ref token");
+  }
+  if (typeof environment.GH_TOKEN !== "string" || environment.GH_TOKEN.length === 0) {
+    fail("production finalizer process is missing its read-only token");
+  }
 }
 
 async function main() {
@@ -2207,17 +2498,60 @@ async function main() {
     });
     return;
   }
+  if (command === "deny-production") {
+    assertWriterOnlyEnvironment(process.env);
+    const receipt = await proveProductionRequiredStatusDenial({
+      api,
+      baselineReceipt: decodeProviderReceipt(process.env.BASELINE_RECEIPT, "BASELINE_RECEIPT"),
+      defaultBranch: process.env.DEFAULT_BRANCH,
+      denyRef: (repository, expectedOldSha, verifiedSha, verifiedTag) =>
+        Promise.resolve(proveWebsiteProductionRequiredStatusDenialFromEnvironment({
+          environment: Object.freeze({
+            MLM_RELEASE_REF_TOKEN: process.env.MLM_RELEASE_REF_TOKEN,
+          }),
+          expectedOldSha,
+          repository,
+          verifiedSha,
+          verifiedTag,
+        })),
+      eventName: process.env.EVENT_NAME,
+      preconditionReceipt: process.env.AUTHORITY_PRECONDITION_RECEIPT,
+      recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA,
+      repository: process.env.GITHUB_REPOSITORY,
+      verifiedSha: process.env.VERIFIED_SHA,
+      verifiedTag: process.env.VERIFIED_TAG,
+      workflowRangeReceipt: decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT),
+    });
+    writeReceiptOutput(receipt);
+    return;
+  }
   if (command === "promote") {
     const expectedMode = process.env.PROMOTION_EXPECTED_MODE;
     if (expectedMode !== "advanced" && expectedMode !== "already-exact") {
       fail("PROMOTION_EXPECTED_MODE is not exact");
     }
+    if (expectedMode === "advanced") assertWriterOnlyEnvironment(process.env);
     const receipt = await promoteWebsiteProduction({
-      advanceWithRevocation: expectedMode === "advanced"
-        ? (operation) => advanceWithRevokedReleaseAppToken(process.env, operation)
+      advanceRef: expectedMode === "advanced"
+        ? (repository, expectedOldSha, verifiedSha, verifiedTag) =>
+            advanceWebsiteProductionRefFromEnvironment({
+              environment: Object.freeze({
+                MLM_RELEASE_REF_TOKEN: process.env.MLM_RELEASE_REF_TOKEN,
+              }),
+              expectedOldSha,
+              repository,
+              verifiedSha,
+              verifiedTag,
+            })
         : undefined,
       api,
+      attestationReceipt: expectedMode === "advanced"
+        ? process.env.AUTHORITY_ATTESTATION_RECEIPT
+        : undefined,
       baselineReceipt: decodeProviderReceipt(process.env.BASELINE_RECEIPT, "BASELINE_RECEIPT"),
+      denialReceipt: expectedMode === "advanced"
+        ? decodeProviderReceipt(process.env.AUTHORITY_DENIAL_RECEIPT, "AUTHORITY_DENIAL_RECEIPT")
+        : undefined,
       defaultBranch: process.env.DEFAULT_BRANCH,
       eventName: process.env.EVENT_NAME,
       recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA,
@@ -2232,6 +2566,49 @@ async function main() {
       fail(`promotion mode ${String(receipt.mode)} did not match ${expectedMode}`);
     }
     writeReceiptOutput(receipt);
+    return;
+  }
+  if (command === "finalize-authority") {
+    assertReadOnlyAuthorityEnvironment(process.env);
+    const attestation = decodeProductionAuthorityPhaseReceipt(
+      process.env.AUTHORITY_ATTESTATION_RECEIPT,
+    );
+    const consumption = decodeProductionAuthorityPhaseReceipt(
+      process.env.AUTHORITY_CONSUMPTION_RECEIPT,
+    );
+    const precondition = decodeProductionAuthorityPhaseReceipt(
+      process.env.AUTHORITY_PRECONDITION_RECEIPT,
+    );
+    const denial = parseProductionDenialReceipt(
+      decodeProviderReceipt(process.env.AUTHORITY_DENIAL_RECEIPT, "AUTHORITY_DENIAL_RECEIPT"),
+    );
+    const promotionValue = decodeProviderReceipt(
+      process.env.PROMOTION_RECEIPT,
+      "PROMOTION_RECEIPT",
+    );
+    const promotion = parsePromotionReceipt(promotionValue);
+    if (
+      precondition.phase !== "consumed" ||
+      precondition.attestationSha256 !== null ||
+      precondition.promotionSha256 !== null ||
+      denial.preconditionSha256 !== productionAuthorityReceiptDigest(precondition) ||
+      promotion.denialSha256 !== receiptDigest(denial)
+    ) {
+      fail("production finalizer does not bind the precondition and denial receipts");
+    }
+    const fullPromotion = promotionReceiptValue(promotion);
+    const finalReceipt = await finalizeProductionAuthority({
+      api,
+      attestationReceipt: attestation,
+      consumptionReceipt: consumption,
+      denialReceipt: denial,
+      preconditionReceipt: precondition,
+      promotion: Object.freeze({
+        ...fullPromotion,
+        receiptSha256: receiptDigest(fullPromotion),
+      }),
+    });
+    persistFinalAuthorityReceipt(finalReceipt);
     return;
   }
   if (command === "wait") {

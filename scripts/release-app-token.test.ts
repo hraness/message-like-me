@@ -24,11 +24,13 @@ const token = "installation-token-for-exact-repository";
 const serverDate = "Sat, 29 Aug 2026 18:00:00 GMT";
 const expiresAt = "2026-08-29T19:00:00Z";
 const exactPermissions = Object.freeze({
-  contents: "write" as const,
   metadata: "read" as const,
+  statuses: "write" as const,
 });
 const revocationReceipt = Object.freeze({
   converged: true as const,
+  deletionServerDate: "2026-08-29T18:00:01.000Z",
+  lastObservationServerDate: "2026-08-29T18:00:01.000Z",
   observationCount: 2,
   propagationObserved: false,
   stableDenials: 2 as const,
@@ -241,6 +243,7 @@ function createRevocationHarness(
     expect(headers).toEqual({
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache",
       "User-Agent": "message-like-me-release-writer",
       "X-GitHub-Api-Version": "2022-11-28",
     });
@@ -374,9 +377,10 @@ describe("release App token transaction", () => {
     const configuration = parseReleaseAppConfiguration(environment);
     const invalidPermissions = [
       { metadata: "read" },
-      { contents: "read", metadata: "read" },
-      { contents: "write", metadata: "read", workflows: "write" },
-      { actions: "read", contents: "write", metadata: "read" },
+      { metadata: "read", statuses: "read" },
+      { metadata: "read", statuses: "write", workflows: "write" },
+      { actions: "read", metadata: "read", statuses: "write" },
+      { contents: "write", metadata: "read", statuses: "write" },
     ] as const;
 
     for (const permissions of invalidPermissions) {
@@ -465,7 +469,7 @@ describe("release App token transaction", () => {
       installationIdentity({ app_slug: "other-app" }),
       installationIdentity({ account: { login: "other", type: "Organization" } }),
       installationIdentity({ repository_selection: "all" }),
-      installationIdentity({ permissions: { contents: "read", metadata: "read" } }),
+      installationIdentity({ permissions: { metadata: "read", statuses: "read" } }),
     ] as const) {
       const calls: string[] = [];
       await expect(withReleaseAppToken({
@@ -489,7 +493,7 @@ describe("release App token transaction", () => {
   test("revokes a minted token when response validation or the operation fails", async () => {
     for (const body of [
       tokenResponse({ expires_at: "2026-08-29T18:01:00Z" }),
-      tokenResponse({ permissions: { contents: "read", metadata: "read" } }),
+      tokenResponse({ permissions: { metadata: "read", statuses: "read" } }),
       tokenResponse({ repositories: [] }),
       tokenResponse({ repository_selection: "all" }),
     ] as const) {
@@ -590,7 +594,7 @@ describe("release App token transaction", () => {
   test("binds the complete helper and exercises the real three-argument environment wrapper", async () => {
     const source = await readFile(releaseAppTokenHelperUrl, "utf8");
     expect(createHash("sha256").update(source).digest("hex")).toBe(
-      "70182b80b35129910bd6993f2e5bfd7cd5a2934ac1ea54e490b2cd73363891b3",
+      "8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526",
     );
     const implementationStart = source.indexOf("function revocationIndeterminate");
     const implementationEnd = source.indexOf("\nasync function revokeWithFetch", implementationStart);
@@ -598,7 +602,7 @@ describe("release App token transaction", () => {
     expect(implementationEnd).toBeGreaterThan(implementationStart);
     expect(createHash("sha256").update(
       source.slice(implementationStart, implementationEnd),
-    ).digest("hex")).toBe("01313422804654ee916c7f09242c8ce06fe07344e2b98dca879585a342ba79c9");
+    ).digest("hex")).toBe("e3cdfb5de5dd6165784af10b1d8624d9dd20094329c17035adf2ae26b84aab0c");
     expect(withReleaseAppTokenFromEnvironment.length).toBe(3);
     expect(source.slice(source.indexOf("export function withReleaseAppTokenFromEnvironment")).trimEnd())
       .toBe(`export function withReleaseAppTokenFromEnvironment(environment, operation, onRevoked) {
@@ -696,30 +700,25 @@ describe("release App token transaction", () => {
   });
 
   test("requires exact repository authority and two stable post-delete denials", async () => {
-    for (const denials of [
-      stableDenials,
-      [observation(403, { body: "empty" }), observation(403, { body: "json" })],
-      [observation(401, { body: "text" }), observation(403, { body: "empty" })],
-      [observation(403, { body: "text" }), observation(401, { body: "empty" })],
-    ] as const) {
-      const direct = await runRevocationCase(denials);
-      expect(direct.receipt).toEqual(revocationReceipt);
-      expect(direct.harness.calls).toEqual([
-        "DELETE /installation/token",
-        "GET /installation/repositories",
-        "GET /installation/repositories",
-      ]);
-      expect(direct.harness.sourceChunks.every((chunk) =>
-        chunk.every((value) => value === 0))).toBe(true);
-    }
+    const direct = await runRevocationCase(stableDenials);
+    expect(direct.receipt).toEqual(revocationReceipt);
+    expect(direct.harness.calls).toEqual([
+      "DELETE /installation/token",
+      "GET /installation/repositories",
+      "GET /installation/repositories",
+    ]);
+    expect(direct.harness.sourceChunks.every((chunk) =>
+      chunk.every((value) => value === 0))).toBe(true);
 
     const propagated = await runRevocationCase([
       observation(200),
-      observation(403, { body: "text" }),
+      observation(401, { body: "text" }),
       observation(401, { body: "empty" }),
     ], { sleepMode: "partial" });
     expect(propagated.receipt).toEqual({
       converged: true,
+      deletionServerDate: "2026-08-29T18:00:01.000Z",
+      lastObservationServerDate: "2026-08-29T18:00:01.000Z",
       observationCount: 3,
       propagationObserved: true,
       stableDenials: 2,
@@ -742,27 +741,25 @@ describe("release App token transaction", () => {
       "GET /installation/repositories",
     ]);
 
-    for (const denialStatus of [401, 403] as const) {
-      const authorizationReturned = createRevocationHarness([
-        observation(denialStatus, { body: "empty" }),
-        observation(200),
-      ]);
-      await expect(revokeReleaseAppTokenWithConvergence({
-        apiUrl: new URL("https://api.github.com/"),
-        createTimeoutSignal: authorizationReturned.createTimeoutSignal,
-        expiresAt,
-        fetchImplementation: authorizationReturned.fetchImplementation,
-        now: authorizationReturned.now,
-        sleep: authorizationReturned.sleep,
-        token,
-      })).rejects.toThrow("authorization returned after a denial observation");
-      expect(authorizationReturned.calls.filter((value) =>
-        value === "DELETE /installation/token")).toHaveLength(1);
-    }
+    const authorizationReturned = createRevocationHarness([
+      observation(401, { body: "empty" }),
+      observation(200),
+    ]);
+    await expect(revokeReleaseAppTokenWithConvergence({
+      apiUrl: new URL("https://api.github.com/"),
+      createTimeoutSignal: authorizationReturned.createTimeoutSignal,
+      expiresAt,
+      fetchImplementation: authorizationReturned.fetchImplementation,
+      now: authorizationReturned.now,
+      sleep: authorizationReturned.sleep,
+      token,
+    })).rejects.toThrow("authorization returned after a denial observation");
+    expect(authorizationReturned.calls.filter((value) =>
+      value === "DELETE /installation/token")).toHaveLength(1);
 
     const oneDenial = createRevocationHarness([
       ...Array.from({ length: 9 }, () => observation(200)),
-      observation(403, { body: "empty" }),
+      observation(401, { body: "empty" }),
     ]);
     await expect(revokeReleaseAppTokenWithConvergence({
       apiUrl: new URL("https://api.github.com/"),
@@ -774,7 +771,7 @@ describe("release App token transaction", () => {
       token,
     })).rejects.toThrow("only one denial was observed before the operational deadline");
 
-    for (const status of [302, 404, 429, 500, 503] as const) {
+    for (const status of [302, 403, 404, 429, 500, 503] as const) {
       const unexpected = createRevocationHarness([observation(status, { body: "text" })]);
       await expect(revokeReleaseAppTokenWithConvergence({
         apiUrl: new URL("https://api.github.com/"),
@@ -1002,6 +999,25 @@ describe("release App token transaction", () => {
     });
     expect(accepted.receipt.propagationObserved).toBe(true);
 
+    await expect(runRevocationCase([
+      observation(401, { body: "empty", date: "Sat, 29 Aug 2026 18:00:01 GMT" }),
+    ], {
+      deleteObservation: observation(204, {
+        body: "empty",
+        date: "Sat, 29 Aug 2026 18:00:02 GMT",
+      }),
+    })).rejects.toThrow("denied revocation observation is malformed");
+
+    await expect(runRevocationCase([
+      observation(401, { body: "empty", date: "Sat, 29 Aug 2026 18:00:02 GMT" }),
+      observation(401, { body: "empty", date: "Sat, 29 Aug 2026 18:00:01 GMT" }),
+    ], {
+      deleteObservation: observation(204, {
+        body: "empty",
+        date: "Sat, 29 Aug 2026 18:00:01 GMT",
+      }),
+    })).rejects.toThrow("denied revocation observation is malformed");
+
     for (const failureCase of [
       {
         expected: "revocation authority time proof is malformed",
@@ -1033,14 +1049,14 @@ describe("release App token transaction", () => {
         observations: [observation(401, { body: "overflow" })],
       },
       {
-        expected: "denied revocation observation is malformed",
+        expected: "observation returned an unexpected authorization state",
         observations: [observation(403, {
           body: "empty",
           date: "Sat, 29 Aug 2026 19:00:00 GMT",
         })],
       },
       {
-        expected: "denied revocation observation is malformed",
+        expected: "unexpected revocation observation response is malformed",
         observations: [observation(403, { body: "overflow" })],
       },
     ] as const) {
