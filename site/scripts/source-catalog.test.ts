@@ -232,18 +232,18 @@ describe('supported source presentation', () => {
     expect(renderedSourcesPage).toContain(
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
-    expect(renderedSourcesPage).toContain('Current support in v0.8.1');
+    expect(renderedSourcesPage).toContain('Current support in v0.8.2');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.1/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.2/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
       'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.1/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.2/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -326,7 +326,7 @@ describe('supported source presentation', () => {
     for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
       expect(copy).toMatch(/unobservable|observability limit/u);
     }
-    expect(changelog).toContain('## 0.8.1');
+    expect(changelog).toContain('## 0.8.2');
     expect(changelog).not.toContain('## Unreleased');
     expect(changelog).toContain('Wrench v0.16.5');
     expect(changelog).toContain('`beeper-local@2.3.0`');
