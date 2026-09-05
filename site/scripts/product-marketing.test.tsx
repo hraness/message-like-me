@@ -4,16 +4,41 @@ import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import Home from '../app/page.tsx';
-import { SITE_DESCRIPTION, SOFTWARE_VERSION } from '../app/_lib/site.ts';
+import { SOFTWARE_VERSION } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
-test('renders the evidence-led shared product-marketing grammar', () => {
+const HERO_VOCABULARY_TO_AVOID = [
+  'bounded',
+  'exact',
+  'authority',
+  'custody',
+  'immutable',
+  'inspectable',
+  'canonical',
+  'projection',
+  'receipt',
+] as const;
+
+test('renders the outcome-led shared product-marketing grammar', () => {
   const html = renderToStaticMarkup(<Home />);
 
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(html).toContain(SITE_DESCRIPTION);
-  for (const role of ['hero', 'flow', 'facts', 'install', 'interfaces', 'trust', 'questions', 'cta']) {
+  expect(html).toContain('>Draft messages that sound like you</h1>');
+  for (const role of [
+    'header',
+    'hero',
+    'proof-frame',
+    'pillars',
+    'section',
+    'flow',
+    'primitives',
+    'trust',
+    'install',
+    'questions',
+    'maker',
+    'cta',
+  ]) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
   expect(html).toContain(`Install v${SOFTWARE_VERSION}`);
@@ -24,10 +49,28 @@ test('renders the evidence-led shared product-marketing grammar', () => {
   expect(html).toContain('@hraness/message-like-me');
   expect(html).toContain('No. messagelikeme.com is an informational project page.');
   expect(html).toContain('"@type":"FAQPage"');
+  expect(html).toContain('Synthetic example');
+  expect(html).toContain('Built by Ben Guo');
+  expect(html).toContain('href="https://x.com/hraness"');
   expect(html).not.toMatch(/<(?:form|input|textarea)\b/u);
 });
 
-test('binds Design Kit v0.3.0 to the Message Like Me visual identity', async () => {
+test('keeps the hero outcome-led and free of contract vocabulary', () => {
+  const html = renderToStaticMarkup(<Home />);
+  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<div class="hraness-marketing-hero__frame">/u.exec(html);
+  expect(hero).not.toBeNull();
+  const heroCopy = (hero?.[0] ?? '').replace(/<[^>]+>/gu, ' ').toLowerCase();
+  const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
+
+  expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(8);
+  expect(heading).not.toMatch(/\.$/u);
+  expect(heroCopy).toContain(' you');
+  for (const word of HERO_VOCABULARY_TO_AVOID) {
+    expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
+  }
+});
+
+test('binds Design Kit v0.4.0 to one light-default accent palette', async () => {
   const [layout, css, manifestSource] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -38,9 +81,18 @@ test('binds Design Kit v0.3.0 to the Message Like Me visual identity', async () 
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.3.0');
-  expect(layout).toContain("import '@hraness/design-kit/product-marketing.css';");
+    .toBe('github:hraness/design-kit#v0.4.0');
+  expect(manifest.dependencies?.['@hraness/ui'])
+    .toBe('github:hraness/ui#v0.4.10');
+  expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
+  expect(layout).toContain("colorScheme: 'light dark'");
+  expect(css).toContain('color-scheme: light dark;');
+  expect(css).toContain('@media (prefers-color-scheme: dark)');
+  expect(css).toContain('--hraness-site-accent: var(--accent);');
+  expect(css).toContain('--hraness-site-accent-ink: var(--accent-ink);');
+  expect(css).toContain(':where(.hraness-marketing-page, .hraness-marketing-header) {');
   expect(css).toContain('.mlm-marketing-hero {');
-  expect(css).toContain('.mlm-marketing-trust {');
-  expect(css).toContain('--hraness-marketing-accent: var(--acid);');
+  expect(css).toContain('.mlm-marketing-trust .hraness-marketing-trust-grid {');
+  expect(css).not.toContain('--acid');
+  expect(css).not.toMatch(/transition:/u);
 });
