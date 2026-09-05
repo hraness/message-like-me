@@ -397,7 +397,7 @@ recovery. Both paths use the same checks. That workflow:
    every newly reachable commit catches merge-side changes and an edit followed
    by a revert even when the two endpoint trees match. The fresh secret-bearing
    job installs no dependencies; in a step that does not receive the private
-   key, it verifies hard-coded SHA-256 pins for the six reviewed helpers,
+   key, it verifies hard-coded SHA-256 pins for the seven reviewed helpers,
    repeats the exact complete-history proof, and emits a bounded receipt binding
    the expected-old SHA, release SHA, commit count and digest, and baseline
    workflow-tree OID. The promotion helper validates that receipt before it may
