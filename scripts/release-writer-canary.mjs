@@ -29,6 +29,7 @@ const EXPECTED_REPOSITORY = "hraness/message-like-me";
 const EXPECTED_REPOSITORY_ID = 1_342_143_606;
 const EXPECTED_APP_ID = 4_830_612;
 const EXPECTED_APP_SLUG = "mlm-prod-ref-writer-1342143606";
+const EXPECTED_WORKFLOW_ID = 350_746_736;
 const CANARY_LIFECYCLE_RULESET_ID = 21_826_586;
 const CANARY_AUTHORITY_RULESET_ID = 22_290_941;
 const CANARY_LIFECYCLE_RULESET_NAME = "Immutable production-writer canary lifecycle";
@@ -440,6 +441,7 @@ export function parseWriterCanaryRef(value, expectedRef) {
 export function parseWriterCanaryRun(value, expected) {
   const run = expectRecord(value, "writer canary run response");
   const repository = expectRecord(run.repository, "writer canary run repository");
+  const workflowId = exactPositiveInteger(run.workflow_id, "writer canary workflow_id");
   if (
     run.id !== expected.runId ||
     run.run_attempt !== 1 ||
@@ -447,7 +449,7 @@ export function parseWriterCanaryRun(value, expected) {
     run.head_branch !== "main" ||
     run.head_sha !== expected.workflowSha ||
     run.path !== EXPECTED_WORKFLOW_RUN_PATH ||
-    run.name !== EXPECTED_WORKFLOW_NAME ||
+    workflowId !== EXPECTED_WORKFLOW_ID ||
     repository.id !== EXPECTED_REPOSITORY_ID ||
     repository.full_name !== EXPECTED_REPOSITORY
   ) {
@@ -456,7 +458,7 @@ export function parseWriterCanaryRun(value, expected) {
   return Object.freeze({
     runAttempt: 1,
     runId: expected.runId,
-    workflowId: exactPositiveInteger(run.workflow_id, "writer canary workflow_id"),
+    workflowId: EXPECTED_WORKFLOW_ID,
   });
 }
 

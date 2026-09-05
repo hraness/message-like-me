@@ -909,13 +909,13 @@ async function readCoordinate(apiUrl, token, expected) {
 
 function workflowExpectation(path) {
   if (path === PRODUCTION_WORKFLOW_PATH) {
-    return Object.freeze({ events: new Set(["workflow_dispatch", "workflow_run"]), name: "Promote website production" });
+    return Object.freeze({ events: new Set(["workflow_dispatch", "workflow_run"]) });
   }
   if (path === CANARY_WORKFLOW_PATH) {
-    return Object.freeze({ events: new Set(["workflow_dispatch"]), name: "Prove production ref writer canary" });
+    return Object.freeze({ events: new Set(["workflow_dispatch"]) });
   }
   if (path === EXPECTED_WORKFLOW_RUN_PATH) {
-    return Object.freeze({ events: new Set(["workflow_dispatch"]), name: EXPECTED_WORKFLOW_NAME });
+    return Object.freeze({ events: new Set(["workflow_dispatch"]) });
   }
   fail("cleanup workflow inventory contains an unknown workflow path");
 }
@@ -932,7 +932,7 @@ function parseWorkflowAttempt(value, expectedPath, expectedWorkflowId) {
     "startup_failure", "success", "timed_out",
   ]);
   if (
-    run.path !== expectedPath || run.name !== expectation.name ||
+    run.path !== expectedPath ||
     run.workflow_id !== expectedWorkflowId ||
     !expectation.events.has(run.event) || run.head_branch !== "main" ||
     repository.id !== EXPECTED_REPOSITORY_ID || repository.full_name !== EXPECTED_REPOSITORY ||
