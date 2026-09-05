@@ -39,7 +39,7 @@ const HOME_QUESTIONS = [
   {
     question: 'Does the website receive my messages?',
     answer:
-      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays in a private local store on your machine.',
+      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays on your machine in private local paths you choose.',
   },
   {
     question: 'Do I need an account or an API key?',

@@ -30,9 +30,9 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-04T00:00:00.000Z'],
-      ['/sources', '2026-09-04T00:00:00.000Z'],
-      ['/docs', '2026-09-04T00:00:00.000Z'],
+      ['/', '2026-09-05T00:00:00.000Z'],
+      ['/sources', '2026-09-05T00:00:00.000Z'],
+      ['/docs', '2026-09-05T00:00:00.000Z'],
       ['/methodology', '2026-08-27T00:00:00.000Z'],
       ['/research', '2026-08-27T00:00:00.000Z'],
       ['/about', '2026-08-27T00:00:00.000Z'],
@@ -328,6 +328,12 @@ describe('supported source presentation', () => {
     }
     expect(changelog).toContain('## 0.8.1');
     expect(changelog).not.toContain('## Unreleased');
+    expect(changelog).toContain('Wrench v0.16.5');
+    expect(changelog).toContain('`beeper-local@2.3.0`');
+    expect(changelog).toContain('32 reviewed operations comprise 27 through the pinned');
+    expect(changelog).toContain('five fixed Desktop reads');
+    expect(changelog).toContain('declaration of 0.6.1 is provenance only');
+    expect(changelog).toContain('Message Like Me owns no Beeper operation');
     expect(privacyGuide).toContain('never turn that missing evidence into a');
     expect(renderedSourcesPage).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
     expect(renderedSourcesPage).toContain('not evidence of no reactions');

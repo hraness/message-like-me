@@ -2,6 +2,14 @@
 
 ## 0.8.1
 
+- Verify the Beeper bundle boundary at Wrench v0.16.5 and adapter
+  `beeper-local@2.3.0`: 32 reviewed operations comprise 27 through the pinned
+  CLI 0.6.2 executable and five fixed Desktop reads. The tagged source package
+  declaration of 0.6.1 is provenance only; export remains internal and bounded,
+  and Message Like Me owns no Beeper operation, credential, or live session.
+- Make the exact public `@hraness/message-like-me@0.8.1` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
 - Document that the Wrench v0.16.5 and official Wacli v0.15.0 WhatsApp
   producer omits reaction-shaped rows and reports `reaction-state-unproven`
   when current active or removed state cannot be established.

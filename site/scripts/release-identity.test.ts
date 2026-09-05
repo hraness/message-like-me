@@ -32,9 +32,10 @@ describe("release identity", () => {
     const repositoryRoot = resolve(siteRoot, "..");
     const packageRelease = await packageVersion(resolve(repositoryRoot, "package.json"));
     const exactInstall = `bun add --global @hraness/message-like-me@${packageRelease}`;
-    const [readme, page] = await Promise.all([
+    const [readme, page, changelog] = await Promise.all([
       Bun.file(resolve(repositoryRoot, "README.md")).text(),
       Bun.file(resolve(siteRoot, "app", "page.tsx")).text(),
+      Bun.file(resolve(repositoryRoot, "CHANGELOG.md")).text(),
     ]);
 
     expect(readme).toContain(exactInstall);
@@ -44,5 +45,10 @@ describe("release identity", () => {
     expect(readme).not.toContain("github:hraness/message-like-me#");
     expect(page).not.toContain("github:hraness/message-like-me#");
     expect(readme).not.toContain("is not published to npm");
+    expect(changelog).toContain(
+      `exact public \`@hraness/message-like-me@${packageRelease}\` npm package`,
+    );
+    expect(changelog).toContain("same reviewed bytes mirrored in the");
+    expect(changelog).toContain("immutable GitHub Release");
   });
 });

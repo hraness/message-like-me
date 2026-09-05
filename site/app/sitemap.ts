@@ -4,7 +4,7 @@ import { absoluteUrl } from './_lib/site';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const existingContentLastModified = new Date('2026-08-27T00:00:00Z');
-  const sourceIntegrationLastModified = new Date('2026-09-04T00:00:00Z');
+  const sourceIntegrationLastModified = new Date('2026-09-05T00:00:00Z');
   return [
     { url: absoluteUrl('/'), lastModified: sourceIntegrationLastModified, changeFrequency: 'weekly', priority: 1 },
     { url: absoluteUrl('/sources'), lastModified: sourceIntegrationLastModified, changeFrequency: 'monthly', priority: 0.9 },
