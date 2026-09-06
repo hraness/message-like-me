@@ -274,7 +274,10 @@ When an established protected ref predates reviewed workflow-control changes:
    to the exact App-authored `error`, then prove the writer is denied with one exact
    `GH013: Repository rule violations found for refs/heads/website-production.`
    payload and one exact `remote: - Required status check "message-like-me/website-production-authority" is errored.`
-   reason. Mutable
+   reason. Before exact comparison, normalize only one consistent known Git
+   non-TTY display suffix: zero, one, or eight ASCII spaces on both semantic
+   remote lines. Any other trailing byte, suffix length, or mixed framing is a
+   rejection. Mutable
    Git progress, transport ordering, and helper-label framing are diagnostic
    only; the hash-pinned helper's fixed executable, remote, arguments, and
    refspec bind the operation.
@@ -325,7 +328,10 @@ the split credential contract:
    rejected with exactly one `GH013: Repository rule violations found for
    refs/heads/website-production-writer-canary.` payload and exactly one
    `remote: - Required status check "message-like-me/website-production-writer-canary-authority" is errored.`
-   reason.
+   reason. Before exact comparison, normalize only one consistent known Git
+   non-TTY display suffix: zero, one, or eight ASCII spaces on both semantic
+   remote lines. Any other trailing byte, suffix length, or mixed framing is a
+   rejection.
    Mutable Git progress, transport ordering, and helper-label framing are
    diagnostic only; the hash-pinned helper's fixed executable, remote,
    arguments, and refspec bind the operation.

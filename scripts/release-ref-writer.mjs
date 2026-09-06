@@ -60,10 +60,15 @@ function exactStableTag(value) {
 
 function boundedDiagnostic(value, token) {
   if (typeof value !== "string") return "";
-  const redacted = value.replaceAll(token, "[redacted]").trim();
-  return Buffer.byteLength(redacted, "utf8") <= MAX_DIAGNOSTIC_BYTES
-    ? redacted
-    : `${Buffer.from(redacted, "utf8").subarray(0, MAX_DIAGNOSTIC_BYTES).toString("utf8")}…`;
+  const redacted = value.replaceAll(token, "[redacted]");
+  const framed = redacted.endsWith("\r\n")
+    ? redacted.slice(0, -2)
+    : redacted.endsWith("\n")
+      ? redacted.slice(0, -1)
+      : redacted;
+  return Buffer.byteLength(framed, "utf8") <= MAX_DIAGNOSTIC_BYTES
+    ? framed
+    : `${Buffer.from(framed, "utf8").subarray(0, MAX_DIAGNOSTIC_BYTES).toString("utf8")}…`;
 }
 
 function protectedRefPushArguments(
@@ -153,6 +158,24 @@ function parseRequiredStatusErroredDenial(error, input) {
   const requiredStatusLines = lines.filter((line) => line.includes("Required status check "));
   const exactViolation = `GH013: Repository rule violations found for ${input.protectedRef}.`;
   const exactReason = `remote: - Required status check "${input.context}" is errored.`;
+  const withoutKnownGitDisplaySuffix = (line) => {
+    const suffixLength = line.endsWith("        ") ? 8 : line.endsWith(" ") ? 1 : 0;
+    return Object.freeze({
+      line: suffixLength === 0 ? line : line.slice(0, -suffixLength),
+      suffixLength,
+    });
+  };
+  const violation = violationLines.length === 1
+    ? withoutKnownGitDisplaySuffix(
+      violationLines[0].slice(violationLines[0].indexOf(violationMarker)),
+    )
+    : Object.freeze({ line: "", suffixLength: -1 });
+  const ruleReason = ruleReasonLines.length === 1
+    ? withoutKnownGitDisplaySuffix(ruleReasonLines[0])
+    : Object.freeze({ line: "", suffixLength: -1 });
+  const requiredStatus = requiredStatusLines.length === 1
+    ? withoutKnownGitDisplaySuffix(requiredStatusLines[0])
+    : Object.freeze({ line: "", suffixLength: -1 });
   if (
     message.split(violationMarker).length !== 2 ||
     message.split(ruleReasonMarker).length !== 2 ||
@@ -160,9 +183,11 @@ function parseRequiredStatusErroredDenial(error, input) {
     violationLines.length !== 1 ||
     ruleReasonLines.length !== 1 ||
     requiredStatusLines.length !== 1 ||
-    violationLines[0].slice(violationLines[0].indexOf(violationMarker)) !== exactViolation ||
-    ruleReasonLines[0] !== exactReason ||
-    requiredStatusLines[0] !== exactReason
+    violation.line !== exactViolation ||
+    ruleReason.line !== exactReason ||
+    requiredStatus.line !== exactReason ||
+    violation.suffixLength !== ruleReason.suffixLength ||
+    ruleReason.suffixLength !== requiredStatus.suffixLength
   ) {
     fail(input.failureMessage);
   }
