@@ -40,6 +40,8 @@ export function verifiedReleaseFetchArguments(
   verifiedTag: string,
 ): readonly string[];
 
+export function websiteProductionBaselineFetchArguments(): readonly string[];
+
 export function advanceWebsiteProductionRef(options: Readonly<{
   environment: RefWriterEnvironment;
   expectedOldSha: string;

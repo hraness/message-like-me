@@ -20,7 +20,7 @@ const STABLE_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const MAX_TOKEN_BYTES = 4096;
 const MAX_DIAGNOSTIC_BYTES = 4096;
 const GIT_TIMEOUT_MILLISECONDS = 60_000;
-const CANARY_FETCH_DEPTH = MAXIMUM_WORKFLOW_RANGE_COMMITS + 1;
+const PROTECTED_FETCH_DEPTH = MAXIMUM_WORKFLOW_RANGE_COMMITS + 1;
 const STERILE_REF_PREFIX = "refs/message-like-me-release-writer";
 const ASKPASS = `#!/bin/sh
 case "$1" in
@@ -231,7 +231,10 @@ export function verifiedReleaseFetchArguments(verifiedTag) {
     "fetch",
     "--no-tags",
     "--no-recurse-submodules",
-    "--depth=1",
+    // The complete-history gate bounds a promotion to MAXIMUM_WORKFLOW_RANGE_COMMITS
+    // newly reachable commits, so this depth always reaches the current
+    // production commit and lets Git prove the push is a fast-forward locally.
+    `--depth=${String(PROTECTED_FETCH_DEPTH)}`,
     FIXED_REMOTE,
     `refs/tags/${tag}`,
   ]);
@@ -254,10 +257,16 @@ function protectedBranchFetchArguments(remoteRef, localRef) {
     "fetch",
     "--no-tags",
     "--no-recurse-submodules",
-    `--depth=${String(CANARY_FETCH_DEPTH)}`,
+    `--depth=${String(PROTECTED_FETCH_DEPTH)}`,
     FIXED_REMOTE,
     `${remoteRef}:${localRef}`,
   ]);
+}
+
+const PRODUCTION_BASELINE_LOCAL_REF = `${STERILE_REF_PREFIX}/production`;
+
+export function websiteProductionBaselineFetchArguments() {
+  return protectedBranchFetchArguments(PRODUCTION_REF, PRODUCTION_BASELINE_LOCAL_REF);
 }
 
 function runGit(
@@ -518,8 +527,9 @@ export function advanceWebsiteProductionRef(options) {
   }
   const token = exactToken(options.environment.MLM_RELEASE_REF_TOKEN);
   const verifiedSha = exactSha(options.verifiedSha, "verified release SHA");
+  const expectedOldSha = exactSha(options.expectedOldSha, "expected website-production SHA");
   const fetchArguments = verifiedReleaseFetchArguments(options.verifiedTag);
-  const pushArguments = websiteProductionPushArguments(options.expectedOldSha, verifiedSha);
+  const pushArguments = websiteProductionPushArguments(expectedOldSha, verifiedSha);
   return withSterileRepository(
     options.spawnImplementation,
     token,
@@ -547,6 +557,43 @@ export function advanceWebsiteProductionRef(options) {
     ) {
       fail("fetched release tag does not peel to the verified release SHA");
     }
+    // Without the current production commit in the sterile repository, Git
+    // cannot prove ancestry and reports a leased fast-forward as "(forced
+    // update)", which the receipt parser rightly refuses to attribute.
+    runGit(
+      options.spawnImplementation,
+      websiteProductionBaselineFetchArguments(),
+      authenticatedGitEnvironment,
+      "exact website-production baseline fetch",
+      token,
+      sterile.root,
+    );
+    if (
+      exactSterileCommit(
+        options.spawnImplementation,
+        `${PRODUCTION_BASELINE_LOCAL_REF}^{commit}`,
+        "sterile website-production baseline commit",
+        token,
+        sterile,
+      ) !== expectedOldSha
+    ) {
+      fail("fetched website-production baseline does not match the expected old SHA");
+    }
+    runGit(
+      options.spawnImplementation,
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "merge-base",
+        "--is-ancestor",
+        expectedOldSha,
+        verifiedSha,
+      ],
+      sterile.commonEnvironment,
+      "website-production fast-forward ancestry",
+      token,
+      sterile.root,
+    );
     const pushResult = runGit(
       options.spawnImplementation,
       pushArguments,
@@ -556,7 +603,7 @@ export function advanceWebsiteProductionRef(options) {
       sterile.root,
     );
     return parseProtectedRefPushReceipt(pushResult, {
-      expectedOldSha: options.expectedOldSha,
+      expectedOldSha,
       label: "website-production Git push",
       protectedRef: PRODUCTION_REF,
       targetSha: verifiedSha,

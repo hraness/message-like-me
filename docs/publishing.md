@@ -550,10 +550,15 @@ recovery. Both paths use the same checks. That workflow:
 5. sandwiches the fresh writer job with separate read-only immutable Release,
    Latest, annotated-tag, reviewed-ancestry, public-artifact, and workflow-source
    admissions; proves `website-production` can fast-forward; then fetches only
-   `refs/tags/<verified-tag>` from the fixed HTTPS repository at depth one,
-   with tag following and submodule recursion disabled. It peels
-   `FETCH_HEAD^{commit}` without checking out or executing tagged code and
-   requires the result to equal `verified_sha` before using only the writer
+   `refs/tags/<verified-tag>` from the fixed HTTPS repository, with tag
+   following and submodule recursion disabled, to the same bounded depth the
+   complete-history gate allows so the sterile repository holds the current
+   production commit. It peels `FETCH_HEAD^{commit}` without checking out or
+   executing tagged code and requires the result to equal `verified_sha`, then
+   fetches `refs/heads/website-production` into a sterile local ref, requires
+   it to equal the expected old SHA, and proves `merge-base --is-ancestor`
+   locally so Git reports the push as a fast-forward rather than a forced
+   update, before using only the writer
    job's `GITHUB_TOKEN`, passed as `MLM_RELEASE_REF_TOKEN`, to push exactly
    `<verified-sha>:refs/heads/website-production` with
    `--force-with-lease=refs/heads/website-production:<expected-old-sha>`. The

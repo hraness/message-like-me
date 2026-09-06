@@ -12,6 +12,7 @@ import {
   parseWebsiteProductionRequiredStatusDenial,
   proveWebsiteProductionCanaryStaleLease,
   verifiedReleaseFetchArguments,
+  websiteProductionBaselineFetchArguments,
   websiteProductionPushArguments,
 } from "./release-ref-writer.mjs";
 
@@ -245,7 +246,8 @@ describe("website-production Git writer", () => {
           const bootstrap = sterileBootstrapResult(calls);
           if (bootstrap !== undefined) return bootstrap;
           if (calls === 4) return gitResult(`${verifiedSha}\n`);
-          if (calls === 5) return gitResult("", 1, stderr);
+          if (calls === 6) return gitResult(`${previousSha}\n`);
+          if (calls === 8) return gitResult("", 1, stderr);
           return gitResult();
         },
         verifiedSha,
@@ -254,7 +256,7 @@ describe("website-production Git writer", () => {
     } catch (error) {
       denial = parseWebsiteProductionRequiredStatusDenial(error);
     }
-    expect(calls).toBe(5);
+    expect(calls).toBe(8);
     expect(denial).toEqual({
       classification: "required-status-errored",
       diagnosticSha256: createHash("sha256").update(wrapped.message, "utf8").digest("hex"),
@@ -281,7 +283,8 @@ describe("website-production Git writer", () => {
           const bootstrap = sterileBootstrapResult(calls);
           if (bootstrap !== undefined) return bootstrap;
           if (calls === 4) return gitResult(`${verifiedSha}\n`);
-          if (calls === 5) return gitResult("", 1, stderr);
+          if (calls === 6) return gitResult(`${previousSha}\n`);
+          if (calls === 8) return gitResult("", 1, stderr);
           return gitResult();
         },
         verifiedSha,
@@ -290,7 +293,7 @@ describe("website-production Git writer", () => {
     } catch (error) {
       failure = error;
     }
-    expect(calls).toBe(5);
+    expect(calls).toBe(8);
     expect(() => parseWebsiteProductionRequiredStatusDenial(failure)).toThrow(
       "production push failure is not the exact required-status-errored ruleset denial",
     );
@@ -351,9 +354,29 @@ describe("website-production Git writer", () => {
       "fetch",
       "--no-tags",
       "--no-recurse-submodules",
-      "--depth=1",
+      "--depth=251",
       "https://github.com/hraness/message-like-me.git",
       "refs/tags/v0.8.0",
+    ]);
+    expect(websiteProductionBaselineFetchArguments()).toEqual([
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "credential.helper=",
+      "-c",
+      "http.extraHeader=",
+      "-c",
+      "http.sslVerify=true",
+      "-c",
+      "http.followRedirects=false",
+      "-c",
+      "http.proxy=",
+      "fetch",
+      "--no-tags",
+      "--no-recurse-submodules",
+      "--depth=251",
+      "https://github.com/hraness/message-like-me.git",
+      "refs/heads/website-production:refs/message-like-me-release-writer/production",
     ]);
     for (const value of ["", "0.8.0", "v01.2.3", "v1.2", "v1.2.3\nmain"] as const) {
       expect(() => verifiedReleaseFetchArguments(value)).toThrow(
@@ -413,6 +436,8 @@ describe("website-production Git writer", () => {
           : sterileBootstrapResult(calls.length);
         if (bootstrap !== undefined) return bootstrap;
         if (calls.length === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls.length === 5 || calls.length === 7) return gitResult();
+        if (calls.length === 6) return gitResult(`${previousSha}\n`);
         return gitResult(
           `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
         );
@@ -434,6 +459,15 @@ describe("website-production Git writer", () => {
       ["config", "--local", "--null", "--list"],
       verifiedReleaseFetchArguments(verifiedTag),
       ["-c", "core.hooksPath=/dev/null", "rev-parse", "--verify", "FETCH_HEAD^{commit}"],
+      websiteProductionBaselineFetchArguments(),
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "rev-parse",
+        "--verify",
+        "refs/message-like-me-release-writer/production^{commit}",
+      ],
+      ["-c", "core.hooksPath=/dev/null", "merge-base", "--is-ancestor", previousSha, verifiedSha],
       websiteProductionPushArguments(previousSha, verifiedSha),
     ]);
     expect(askpass).toContain("x-access-token");
@@ -467,12 +501,15 @@ describe("website-production Git writer", () => {
       GIT_ASKPASS_REQUIRE: "force",
       MLM_RELEASE_REF_TOKEN: token,
     };
-    expect(calls.map((call) => call.cwd)).toEqual(Array(5).fill(sterileRoot));
+    expect(calls.map((call) => call.cwd)).toEqual(Array(8).fill(sterileRoot));
     expect(calls[0]?.environment).toEqual(bootstrapEnvironment);
     expect(calls[1]?.environment).toEqual(commonEnvironment);
     expect(calls[2]?.environment).toEqual(authenticatedEnvironment);
     expect(calls[3]?.environment).toEqual(commonEnvironment);
     expect(calls[4]?.environment).toEqual(authenticatedEnvironment);
+    expect(calls[5]?.environment).toEqual(commonEnvironment);
+    expect(calls[6]?.environment).toEqual(commonEnvironment);
+    expect(calls[7]?.environment).toEqual(authenticatedEnvironment);
     for (const call of calls) {
       expect(Object.keys(call.environment).some((key) => key.startsWith("GIT_CONFIG_KEY_")))
         .toBe(false);
@@ -507,6 +544,8 @@ describe("website-production Git writer", () => {
           if (calls === 1) return gitResult();
           if (calls === 2) return gitResult(config);
           if (calls === 4) return gitResult(`${verifiedSha}\n`);
+          if (calls === 5 || calls === 7) return gitResult();
+          if (calls === 6) return gitResult(`${previousSha}\n`);
           return gitResult(
             `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
           );
@@ -514,7 +553,7 @@ describe("website-production Git writer", () => {
         verifiedSha,
         verifiedTag,
       });
-      expect(calls).toBe(5);
+      expect(calls).toBe(8);
       expect(receipt.classification).toBe("fast-forward");
     }
 
@@ -555,7 +594,8 @@ describe("website-production Git writer", () => {
           return result;
         }
         if (calls === 4) return gitResult(`${verifiedSha}\n`);
-        return calls === 3
+        if (calls === 6) return gitResult(`${previousSha}\n`);
+        return calls === 3 || calls === 5 || calls === 7
           ? gitResult()
           : gitResult(
             `To https://github.com/hraness/message-like-me.git\n \t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}..${verifiedSha.slice(0, 7)}\nDone\n`,
@@ -564,7 +604,7 @@ describe("website-production Git writer", () => {
       verifiedSha,
       verifiedTag,
     });
-    expect(calls).toBe(5);
+    expect(calls).toBe(8);
     expect(inspectedConfig).toContain("core.repositoryformatversion\n0\0");
     expect(inspectedConfig).toContain("core.bare\ntrue\0");
     expect(receipt.classification).toBe("fast-forward");
@@ -624,7 +664,8 @@ describe("website-production Git writer", () => {
         const bootstrap = sterileBootstrapResult(calls);
         if (bootstrap !== undefined) return bootstrap;
         if (calls === 4) return gitResult(`${verifiedSha}\n`);
-        if (calls === 5) {
+        if (calls === 6) return gitResult(`${previousSha}\n`);
+        if (calls === 8) {
           return gitResult(
             `To https://github.com/hraness/message-like-me.git\n=\t${verifiedSha}:refs/heads/website-production\t[up to date]\nDone\n`,
           );
@@ -634,7 +675,74 @@ describe("website-production Git writer", () => {
       verifiedSha,
       verifiedTag,
     })).toThrow("was not one attributable fast-forward update");
-    expect(calls).toBe(5);
+    expect(calls).toBe(8);
+  });
+
+  test("rejects a forced-update receipt even when the leased push succeeded", () => {
+    let calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation() {
+        calls += 1;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls === 6) return gitResult(`${previousSha}\n`);
+        if (calls === 8) {
+          return gitResult(
+            `To https://github.com/hraness/message-like-me.git\n+\t${verifiedSha}:refs/heads/website-production\t${previousSha.slice(0, 7)}...${verifiedSha.slice(0, 7)} (forced update)\nDone\n`,
+          );
+        }
+        return gitResult();
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("was not one attributable fast-forward update");
+    expect(calls).toBe(8);
+  });
+
+  test("refuses to push when the fetched baseline is not the expected old SHA or not an ancestor", () => {
+    let calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation() {
+        calls += 1;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls === 6) return gitResult(`${"4".repeat(40)}\n`);
+        return gitResult();
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("fetched website-production baseline does not match the expected old SHA");
+    expect(calls).toBe(6);
+
+    calls = 0;
+    expect(() => advanceWebsiteProductionRef({
+      environment: { MLM_RELEASE_REF_TOKEN: token },
+      expectedOldSha: previousSha,
+      repository: "hraness/message-like-me",
+      spawnImplementation(_command, arguments_) {
+        calls += 1;
+        const bootstrap = sterileBootstrapResult(calls);
+        if (bootstrap !== undefined) return bootstrap;
+        if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls === 6) return gitResult(`${previousSha}\n`);
+        if (calls === 7) {
+          expect(arguments_).toContain("--is-ancestor");
+          return gitResult("", 1);
+        }
+        return gitResult();
+      },
+      verifiedSha,
+      verifiedTag,
+    })).toThrow("website-production fast-forward ancestry");
+    expect(calls).toBe(7);
   });
 
   test("rejects bare, empty, remote-tracking, wildcard, creation, deletion, and multi-ref shapes", () => {
@@ -681,14 +789,15 @@ describe("website-production Git writer", () => {
         if (calls === 1) askpassPath = join(String(options.cwd), "askpass.sh");
         const bootstrap = sterileBootstrapResult(calls);
         if (bootstrap !== undefined) return bootstrap;
-        if (calls === 3) return gitResult();
+        if (calls === 3 || calls === 5 || calls === 7) return gitResult();
         if (calls === 4) return gitResult(`${verifiedSha}\n`);
+        if (calls === 6) return gitResult(`${previousSha}\n`);
         return gitResult("", 1, `stale info accidentally contained ${token}`);
       },
       verifiedSha,
       verifiedTag,
     })).toThrow("stale info accidentally contained [redacted]");
-    expect(calls).toBe(5);
+    expect(calls).toBe(8);
     expect(await Bun.file(askpassPath).exists()).toBe(false);
   });
 });
