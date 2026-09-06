@@ -91,6 +91,23 @@ export interface ProductionAuthorityFinalApi {
   getRules(): Promise<ProductionAuthorityRulesApiClosure>;
 }
 
+export interface ProductionAuthorityFinalReceipt {
+  readonly attestation: ProductionAuthorityAttestedReceipt;
+  readonly consumption: ProductionAuthorityConsumedReceipt;
+  readonly denial: unknown;
+  readonly finalRef: unknown;
+  readonly postStatusRef: unknown;
+  readonly precondition: ProductionAuthorityConsumedReceipt;
+  readonly promotion: unknown;
+  readonly rules: ProductionAuthorityRulesReceipt;
+  readonly schema: "message-like-me-production-authority-final-v2";
+  readonly terminalStatus: Readonly<{
+    serverDate: string;
+    statusId: number;
+    statusNodeId: string;
+  }>;
+}
+
 export function encodeProductionAuthorityPhaseReceipt(value: unknown): string;
 export function decodeProductionAuthorityPhaseReceipt(
   value: unknown,
@@ -171,4 +188,4 @@ export function finalizeProductionAuthority(input: Readonly<{
       toSha: string;
     }>;
   }>;
-}>): Promise<unknown>;
+}>): Promise<Readonly<ProductionAuthorityFinalReceipt>>;

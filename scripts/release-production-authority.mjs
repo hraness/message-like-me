@@ -662,10 +662,10 @@ function normalizeProductionDenialReceipt(value) {
   exactKeys(denial, ["classification", "diagnosticSha256"], "production writer denial");
   const verifiedTag = string(receipt.verifiedTag, "production denial verified tag");
   if (
-    receipt.schema !== "message-like-me-production-required-status-denial-v1" ||
+    receipt.schema !== "message-like-me-production-required-status-denial-v2" ||
     receipt.productionRef !== PRODUCTION_REF ||
     receipt.repository !== EXPECTED_REPOSITORY ||
-    denial.classification !== "required-status-missing" ||
+    denial.classification !== "required-status-errored" ||
     !STABLE_TAG.test(verifiedTag)
   ) {
     fail("production writer denial receipt has the wrong boundary");
@@ -673,7 +673,7 @@ function normalizeProductionDenialReceipt(value) {
   return Object.freeze({
     baselineDigest: sha256(receipt.baselineDigest, "production denial baseline digest"),
     denial: Object.freeze({
-      classification: "required-status-missing",
+      classification: "required-status-errored",
       diagnosticSha256: sha256(
         denial.diagnosticSha256,
         "production denial diagnostic digest",
@@ -688,7 +688,7 @@ function normalizeProductionDenialReceipt(value) {
     productionRef: PRODUCTION_REF,
     repository: EXPECTED_REPOSITORY,
     rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
-    schema: "message-like-me-production-required-status-denial-v1",
+    schema: "message-like-me-production-required-status-denial-v2",
     verifiedSha: sha(receipt.verifiedSha, "production denial verified SHA"),
     verifiedTag,
   });
@@ -966,7 +966,7 @@ export async function finalizeProductionAuthority({
     precondition,
     promotion: admittedPromotion,
     rules,
-    schema: "message-like-me-production-authority-final-v1",
+    schema: "message-like-me-production-authority-final-v2",
     terminalStatus: Object.freeze({
       serverDate: terminalStatus.serverDate,
       statusId: consumed.status.statusId,

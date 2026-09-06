@@ -1008,17 +1008,17 @@ function normalizeWriterCanaryPhaseReceipt(value) {
       normalized.statusRevocation.lastObservationServerDate,
     ], "writer canary terminalized phase");
   } else if (phase === "writer-denied") {
-    const schema = "message-like-me-production-writer-canary-writer-denied-v1";
+    const schema = "message-like-me-production-writer-canary-writer-denied-v2";
     const base = normalizedPhaseBase(receipt, phase, schema);
     const denial = expectRecord(receipt.denial, "writer canary writer denial");
     const refReadback = expectRecord(receipt.refReadback, "writer canary denial ref readback");
-    if (denial.classification !== "required-status-missing") {
+    if (denial.classification !== "required-status-errored") {
       fail("writer canary writer denial classification is not exact");
     }
     normalized = Object.freeze({
       ...base,
       denial: Object.freeze({
-        classification: "required-status-missing",
+        classification: "required-status-errored",
         diagnosticSha256: exactSha256(
           denial.diagnosticSha256,
           "writer canary writer denial digest",
@@ -1414,7 +1414,8 @@ function admittedCanaryFromEnvironment(environment) {
 }
 
 function phaseReceipt(admitted, phase, payload) {
-  const schema = `message-like-me-production-writer-canary-${phase}-v1`;
+  const version = phase === "writer-denied" ? "v2" : "v1";
+  const schema = `message-like-me-production-writer-canary-${phase}-${version}`;
   return normalizeWriterCanaryPhaseReceipt(Object.freeze({
     ...canaryPhaseBase(admitted, phase, schema),
     ...payload,
@@ -1439,7 +1440,7 @@ export async function terminalizeWriterCanary({ admitted, proveAppRefDenied, ter
   });
 }
 
-export async function denyWriterCanaryWithoutStatus({ admitted, advanceRef, api, environment, verifyRange, workingDirectory }) {
+export async function denyWriterCanaryWithoutSuccess({ admitted, advanceRef, api, environment, verifyRange, workingDirectory }) {
   const fresh = assertFreshPreflight(admitted, await createWriterCanaryPreflight({
     api,
     environment,
@@ -1680,7 +1681,7 @@ async function liveTerminalize(environment) {
 async function liveWriterDenial(environment) {
   const admitted = admittedCanaryFromEnvironment(environment);
   const api = writerApiFromEnvironment(environment);
-  return denyWriterCanaryWithoutStatus({
+  return denyWriterCanaryWithoutSuccess({
     admitted,
     advanceRef: (fresh) => advanceCanaryFromWriterEnvironment(environment, fresh),
     api,
@@ -1894,7 +1895,7 @@ export async function finalizeWriterCanary({ admitted, api, phases }) {
     repositoryId: EXPECTED_REPOSITORY_ID,
     runAttempt: 1,
     runId: admitted.runId,
-    schema: "message-like-me-production-writer-canary-final-v1",
+    schema: "message-like-me-production-writer-canary-final-v2",
     targetSha: admitted.targetSha,
     terminalStatus,
     terminalRules,

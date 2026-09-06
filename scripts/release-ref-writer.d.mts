@@ -27,12 +27,12 @@ export function websiteProductionCanaryStaleLeasePushArguments(
 ): readonly string[];
 
 export function parseWebsiteProductionCanaryRequiredStatusDenial(error: unknown): Readonly<{
-  classification: "required-status-missing";
+  classification: "required-status-errored";
   diagnosticSha256: string;
 }>;
 
 export function parseWebsiteProductionRequiredStatusDenial(error: unknown): Readonly<{
-  classification: "required-status-missing";
+  classification: "required-status-errored";
   diagnosticSha256: string;
 }>;
 
@@ -96,7 +96,7 @@ export function proveWebsiteProductionRequiredStatusDenialFromEnvironment(input:
   verifiedSha: string;
   verifiedTag: string;
 }>): Readonly<{
-  classification: "required-status-missing";
+  classification: "required-status-errored";
   diagnosticSha256: string;
 }>;
 

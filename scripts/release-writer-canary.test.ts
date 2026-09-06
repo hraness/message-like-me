@@ -11,7 +11,7 @@ import {
   createWriterCanaryPreflight,
   decodeWriterCanaryPhaseReceipt,
   decodeWriterCanaryPreflightReceipt,
-  denyWriterCanaryWithoutStatus,
+  denyWriterCanaryWithoutSuccess,
   encodeWriterCanaryPhaseReceipt,
   encodeWriterCanaryPreflightReceipt,
   finalizeWriterCanary,
@@ -574,11 +574,11 @@ describe("persistent production-ref writer canary", () => {
         return { serverDate: "2026-09-05T04:00:06.000Z", sha: input.oldSha };
       },
     };
-    const writerDenied = await denyWriterCanaryWithoutStatus({
+    const writerDenied = await denyWriterCanaryWithoutSuccess({
       admitted,
       async advanceRef() {
         throw new Error(
-          'website-production writer canary Git push failed: remote: error: GH013: Repository rule violations found for refs/heads/website-production-writer-canary. Required status check "message-like-me/website-production-writer-canary-authority" is expected',
+          'website-production writer canary Git push failed: remote: error: GH013: Repository rule violations found for refs/heads/website-production-writer-canary.\nremote:\nremote: - Required status check "message-like-me/website-production-writer-canary-authority" is errored.\nremote:',
         );
       },
       api: deniedApi,
@@ -712,7 +712,7 @@ describe("persistent production-ref writer canary", () => {
     expect(final).toMatchObject({
       finalRef: { sha: input.targetSha },
       postStatusRef: { sha: input.targetSha },
-      schema: "message-like-me-production-writer-canary-final-v1",
+      schema: "message-like-me-production-writer-canary-final-v2",
       terminalRules: {
         rules: {
           authority: { doNotEnforceOnCreate: false, strict: false },
@@ -722,6 +722,10 @@ describe("persistent production-ref writer canary", () => {
     for (const phase of [terminalized, writerDenied, attested, advanced, consumed]) {
       expect(decodeWriterCanaryPhaseReceipt(encodeWriterCanaryPhaseReceipt(phase))).toEqual(phase);
     }
+    expect(() => encodeWriterCanaryPhaseReceipt({
+      ...writerDenied,
+      schema: "message-like-me-production-writer-canary-writer-denied-v1",
+    })).toThrow("writer canary writer-denied receipt has the wrong authority boundary");
 
     await expect(finalizeWriterCanary({
       admitted,
