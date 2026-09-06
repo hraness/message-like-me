@@ -26,16 +26,22 @@
   established ref for an immutable annotated release commit in reviewed
   `main` history. A fresh dependency-free, hash-pinned job may mint a
   one-repository `statuses:write` plus `metadata:read` App token only after
-  complete history proves every newly reachable commit preserves the
-  production baseline's `.github/workflows` tree and the exact npm package and
-  immutable, artifact-complete Latest GitHub Release pass external admission.
+  complete history proves either a no-digest range that preserves the
+  production baseline's `.github/workflows` tree, or an exact independently
+  reviewed v2 receipt and digest for every ordered workflow-tree transition,
+  and after the exact npm package and immutable, artifact-complete Latest GitHub
+  Release pass external admission.
   The App is the ruleset-pinned source of one exact-SHA success status and has
   no ref-write permission or bypass. Its success token is revoked before the
   same job's scoped `GITHUB_TOKEN` makes one exact leased fast-forward. A fresh
   status-only token then consumes the authorization with a proven terminal
-  non-success status and is revoked separately. A workflow-control
-  epoch uses the separately approved bootstrap, permanent App downgrade, and
-  key rotation in the publishing runbook. Already-exact recovery stays
+  non-success status and is revoked separately. A workflow-control epoch uses
+  the publishing runbook's transition-scoped v2 digest: a no-digest attempt
+  fails before key admission and publishes the complete ordered commit and
+  workflow-tree inventory; a fresh manual attempt-1 dispatch may carry only the
+  independently reviewed exact digest and must recompute it before and after
+  environment admission. It never expands the status App, uses a temporary
+  broad credential, or moves the ref out of band. Already-exact recovery stays
   read-only and outside the key environment. Treat `main` and pull requests as
   preview sources. If an interrupted writer may leave success current, freeze
   both writer workflows and follow the target-bound, 36-day-inventory,

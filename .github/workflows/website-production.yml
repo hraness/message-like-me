@@ -1,5 +1,5 @@
 name: Promote website production
-run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0}', inputs.release_tag) }}
+run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine') }}
 
 on:
   workflow_run:
@@ -11,6 +11,11 @@ on:
         description: Exact immutable Latest release tag to promote
         required: true
         type: string
+      control_epoch_digest:
+        description: Exact reviewed production control-epoch v2 digest; leave empty for a routine unchanged-workflow range
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -27,6 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
+      control_epoch_digest: ${{ steps.request.outputs.control_epoch_digest }}
       release_run_attempt: ${{ steps.request.outputs.release_run_attempt }}
       release_run_id: ${{ steps.request.outputs.release_run_id }}
       verified_sha: ${{ steps.identity.outputs.sha }}
@@ -42,7 +48,9 @@ jobs:
           EVENT_REPOSITORY: ${{ github.event.repository.full_name }}
           EVENT_SHA: ${{ github.sha }}
           EXPECTED_RELEASE_WORKFLOW_ID: ${{ vars.MLM_RELEASE_WORKFLOW_ID }}
+          GITHUB_RUN_ATTEMPT_EXACT: ${{ github.run_attempt }}
           GH_TOKEN: ${{ github.token }}
+          INPUT_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
@@ -67,8 +75,13 @@ jobs:
           release_sha=""
           release_run_id=""
           release_run_attempt=""
+          control_epoch_digest=""
           case "$EVENT_NAME" in
             workflow_run)
+              if [[ -n "$INPUT_CONTROL_EPOCH_DIGEST" ]]; then
+                echo "::error::Automatic production cannot accept a control-epoch digest"
+                exit 1
+              fi
               if [[ ! "$EXPECTED_RELEASE_WORKFLOW_ID" =~ ^[1-9][0-9]*$ || "$UPSTREAM_WORKFLOW_ID" != "$EXPECTED_RELEASE_WORKFLOW_ID" ]]; then
                 echo "::error::Upstream workflow ID is not the checked Release workflow ID"
                 exit 1
@@ -92,6 +105,13 @@ jobs:
               ;;
             workflow_dispatch)
               requested_tag="$INPUT_RELEASE_TAG"
+              if [[ -n "$INPUT_CONTROL_EPOCH_DIGEST" ]]; then
+                if [[ ! "$INPUT_CONTROL_EPOCH_DIGEST" =~ ^[0-9a-f]{64}$ || "$GITHUB_RUN_ATTEMPT_EXACT" != "1" ]]; then
+                  echo "::error::Control epoch requires one lowercase SHA-256 digest on manual attempt 1"
+                  exit 1
+                fi
+                control_epoch_digest="$INPUT_CONTROL_EPOCH_DIGEST"
+              fi
               ;;
             *)
               echo "::error::Unsupported website production trigger $EVENT_NAME"
@@ -108,6 +128,7 @@ jobs:
             echo "::error::Promotion workflow source $EVENT_SHA is not the checked current main $current_main_sha"
             exit 1
           fi
+          printf 'control_epoch_digest=%s\n' "$control_epoch_digest" >> "$GITHUB_OUTPUT"
           printf 'release_run_attempt=%s\n' "$release_run_attempt" >> "$GITHUB_OUTPUT"
           printf 'release_run_id=%s\n' "$release_run_id" >> "$GITHUB_OUTPUT"
           printf 'requested_tag=%s\n' "$requested_tag" >> "$GITHUB_OUTPUT"
@@ -216,6 +237,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
         run: node ./scripts/release-provider-outcome.mjs baseline
+      - name: Reject a control epoch for an already-exact production ref
+        env:
+          ADVANCE_REQUIRED: ${{ steps.baseline.outputs.advance_required }}
+          CONTROL_EPOCH_DIGEST: ${{ needs.verify.outputs.control_epoch_digest }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$CONTROL_EPOCH_DIGEST" && "$ADVANCE_REQUIRED" != "true" ]]; then
+            echo "::error::Control-epoch digest is forbidden for already-exact production"
+            exit 1
+          fi
 
   advance_production_ref_preflight:
     name: Re-admit authority before the production-ref writer
@@ -227,6 +258,17 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      control_epoch_changes: ${{ steps.workflow_admission.outputs.control_epoch_changes }}
+      control_epoch_digest: ${{ steps.workflow_admission.outputs.control_epoch_digest }}
+      control_epoch_domain: ${{ steps.workflow_admission.outputs.control_epoch_domain }}
+      control_epoch_inventory: ${{ steps.workflow_admission.outputs.control_epoch_inventory }}
+      control_epoch_old_sha: ${{ steps.workflow_admission.outputs.control_epoch_old_sha }}
+      control_epoch_ref: ${{ steps.workflow_admission.outputs.control_epoch_ref }}
+      control_epoch_tag: ${{ steps.workflow_admission.outputs.control_epoch_tag }}
+      control_epoch_target_sha: ${{ steps.workflow_admission.outputs.control_epoch_target_sha }}
+      control_epoch_title: ${{ steps.workflow_admission.outputs.control_epoch_title }}
+      control_epoch_workflow_sha: ${{ steps.workflow_admission.outputs.control_epoch_workflow_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -251,16 +293,27 @@ jobs:
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: node ./scripts/release-provider-outcome.mjs revalidate-authority
       - name: Prove the complete workflow-control range before environment admission
+        id: workflow_admission
         env:
+          CONTROL_EPOCH_DIGEST: ${{ needs.verify.outputs.control_epoch_digest }}
+          CURRENT_MAIN_SHA: ${{ needs.verify.outputs.workflow_sha }}
           DEFAULT_BRANCH: main
           EXPECTED_OLD_SHA: ${{ needs.provider_baseline.outputs.ref_sha }}
+          GITHUB_ACTIONS: "true"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: refs/heads/main
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
           RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: |
           set -euo pipefail
           node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$VERIFIED_TAG" "$RECOVERY_WORKFLOW_SHA" "$VERIFIED_SHA" >/dev/null
-          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" >/dev/null
+          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" --admit-production
       - name: Revalidate public artifacts before production-ref mutation
         env:
           DEFAULT_BRANCH: main
@@ -305,11 +358,11 @@ jobs:
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -322,25 +375,35 @@ jobs:
       - name: Re-prove the complete workflow-control range before reading the key
         id: workflow_range
         env:
+          CONTROL_EPOCH_DIGEST: ${{ needs.verify.outputs.control_epoch_digest }}
+          CURRENT_MAIN_SHA: ${{ needs.verify.outputs.workflow_sha }}
           DEFAULT_BRANCH: main
           EXPECTED_OLD_SHA: ${{ needs.provider_baseline.outputs.ref_sha }}
+          GITHUB_ACTIONS: "true"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: refs/heads/main
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_SHA: ${{ needs.verify.outputs.workflow_sha }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
           RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: |
           set -euo pipefail
           node --experimental-strip-types ./scripts/release-ref-authority.ts promotion "$VERIFIED_TAG" "$RECOVERY_WORKFLOW_SHA" "$VERIFIED_SHA" >/dev/null
-          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" >> "$GITHUB_OUTPUT"
+          node ./scripts/release-workflow-range.mjs "$EXPECTED_OLD_SHA" "$VERIFIED_SHA" --admit-production
       - name: Re-pin the complete TCB before the App-only precondition
         id: pre_precondition_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -369,11 +432,11 @@ jobs:
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -402,11 +465,11 @@ jobs:
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -435,11 +498,11 @@ jobs:
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -472,11 +535,11 @@ jobs:
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
           PRODUCTION_AUTHORITY_SHA256: 1f7ffb6c9dc8a65e023a1b0052007ff1b1ff8c8328596ca37872cf1fb8a3efca
-          PROVIDER_SHA256: ce0d3ec4915670d16aa2f318e28f637c417d94e9620deeec929975aa91ea837f
+          PROVIDER_SHA256: 3e1675eda6b2066f10ac0e31938109283088c8486e068b41648c2c0ccb4efb00
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"

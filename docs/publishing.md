@@ -164,51 +164,53 @@ App-pinned status context, integration ID, enforcement state, and empty bypass
 sets before admitting a release. Any drift blocks promotion until it is reviewed
 and repaired out of band.
 
-### Bootstrap one workflow-control epoch
+### Review one workflow-control epoch
 
-The routine promotion is intentionally incapable of crossing a change to
+Routine promotion remains incapable of silently crossing a change to
 `.github/workflows/**`. Its complete-history gate rejects that range before the
-key environment even though GitHub may allow a contents-capable token to move a
-ref to an existing workflow-changing commit. The permanent App has only
-`statuses:write` plus `metadata:read`; it cannot move any ref. The checked
-workflow must never mint persistent App `contents` or `workflows` authority or
-treat permission omission alone as the workflow-control boundary.
+key environment. A reviewed workflow change uses the v2 control-epoch digest;
+it does not use an out-of-band ref write or broaden either credential. The
+permanent App remains exactly `statuses:write` plus `metadata:read`, and only the
+job-scoped `GITHUB_TOKEN` may perform the existing explicit-lease ref move after
+the pinned App status exists.
 
-When an already-established `website-production` ref predates reviewed workflow
-control changes, perform one separately approved control-epoch bootstrap after
-the target's immutable Release and public npm bytes have passed admission:
+When an established protected ref predates reviewed workflow-control changes:
 
-1. Record the exact current production SHA, exact release SHA, annotated tag,
-   immutable Latest Release, ruleset readbacks, and the complete reviewed commit
-   range. Let the routine promotion fail at its workflow-range gate; do not
-   approve the key environment for that rejected run.
-2. In an owner-operated, out-of-band procedure, explicitly authorize a single
-   control-epoch credential selected to numeric repository ID `1342143606` with
-   only the temporary permissions needed to post the pinned status and move the
-   workflow-changing ref. Keep that credential out of Actions and preserve the
-   required-status-check and ref-lifecycle rulesets.
-3. Post the exact App-sourced success status for the release SHA, then use the
-   same fixed repository, exact annotated-tag target, and nonempty
-   `--force-with-lease=refs/heads/website-production:<expected-old-sha>` contract
-   to make exactly one fast-forward. Immediately replace the success with the
-   terminal non-success status, revoke the credential, and prove the ref is the
-   exact release SHA. Never leave a reusable success context behind.
-4. Restore and read back the permanent App's exact `statuses:write` plus
-   `metadata:read` closure, absence of `contents` and `workflows` authority, and
-   singleton repository set. Generate a fresh App private key, replace
-   `MLM_RELEASE_APP_PRIVATE_KEY`, and delete the control-epoch key. Routine
-   automation must remain paused until both the App downgrade and key rotation
-   are proven.
-5. Dispatch `Promote website production` for the same immutable tag. Because
-   the external bootstrap made the ref already exact, recovery stays outside
-   `production-ref-writer-key`, mints no token, and accepts only the bounded
-   exact-SHA Vercel Production outcome that postdates the Release.
+1. Keep the workflow disabled except during each separately bound dispatch. Record the
+   exact protected-ref SHA, target SHA, current workflow-source SHA, repository
+   ID, tag coordinate, ruleset readbacks, and public release admission. Dispatch
+   the production or canary workflow once with an empty
+   `control_epoch_digest`. That run must fail at the complete-history gate before
+   the contents-writer environment is admitted and before any status-only App
+   token is minted.
+2. Preserve the failed step summary and outputs. They must contain the exact v2
+   domain, protected ref, old SHA, target SHA, current workflow-source SHA, tag
+   (or canary `no-tag` sentinel), ordered old-through-workflow-source commit inventory,
+   every corresponding `.github/workflows` tree OID, the derived ordered change
+   list, and the canonical lowercase SHA-256 digest. Independently reconstruct
+   that inventory from only the governed refs and review every workflow-tree
+   transition. Do not trust the digest without reviewing its complete preimage.
+3. Dispatch one fresh manual attempt 1 from exact current `main` with that exact
+   digest. Automatic `workflow_run` events, rerun attempts, already-exact refs,
+   and unchanged-workflow ranges must reject any digest. The gate recomputes the
+   complete inventory and digest before environment admission; any source, tag,
+   ref, target, ancestry, inventory, or digest drift fails closed.
+4. After the protected environment admits the job, the hash-pinned helper
+   recomputes and revalidates the same transition before reading the key. The
+   normal split-authority sequence then applies unchanged: terminalize the
+   status, prove the writer is denied, post and read back one App-authored
+   success, revoke that App token, make one exact non-force fast-forward with a
+   nonempty expected-old lease, replace success with the terminal non-success
+   status using a separately minted status-only token, revoke it, and complete
+   the read-only provider outcome gate.
 
-That bootstrap closes one workflow-control epoch; it is not precedent for a
-routine broad token, a persistent ref bypass, or an unleased manual ref move.
-Any later release whose newly reachable history contains a workflow-tree change
-starts a new control epoch and requires its own explicit review and
-authorization.
+The digest is scoped to one exact transition and is never permission to reuse a
+stale run, skip fresh ref and source readbacks, expand the App, add a personal
+token or deploy key, recreate a protected ref, force a move, or mutate a
+ruleset. If a run is interrupted, follow the quarantine and cleanup procedure;
+never treat the digest as retry authority. A later range with any different
+coordinate or inventory requires a new no-digest rejection and independent
+review.
 
 ### Prove the split status-and-writer boundary before product release
 
@@ -217,14 +219,18 @@ release, precreate persistent ref
 `refs/heads/website-production-writer-canary` at the reviewed control commit.
 Apply separate active rulesets with the same no-bypass protections and the same
 App-pinned required status check to that exact canary ref. Prove every side of
-the split credential contract after the App downgrade and key rotation:
+the split credential contract:
 
-1. The negative workflow-delta canary targets a reviewed descendant that
-   changes `.github/workflows/**`. The complete-history gate must reject it
-   before environment admission and before token minting. Permission omission
-   is not the gate: record the complete-history rejection itself.
-2. The positive non-workflow canary targets a reviewed descendant for which
+1. The workflow-delta canary targets exact current `main`, which changes
+   `.github/workflows/**`. First prove the empty-digest rejection before
+   environment admission, independently review the complete v2 receipt, then
+   prove that one fresh manual attempt 1 with its exact digest recomputes the
+   transition before and after environment admission and advances only that
+   target. Permission omission is not the gate: retain both runs and their exact
+   receipts as evidence.
+2. A later positive non-workflow canary targets a reviewed descendant for which
    every newly reachable commit preserves the baseline workflow-tree OID. Prove
+   it accepts no digest and uses the unchanged v1 routine receipt. Prove
    the status-only App token cannot update the ref and the job-scoped writer
    token cannot update it before the exact App-sourced success exists.
 3. Post one success status on the exact positive target under context
@@ -394,17 +400,23 @@ recovery. Both paths use the same checks. That workflow:
 3. enters `production-ref-writer-key` with `deployment:false` only when the
    baseline and a separate read-only preflight prove that the ref must advance.
    That preflight first imports complete exact governed history and enumerates
-   every commit newly reachable in `<expected-old>..<verified-release>`, capped
-   at 250 commits. It rejects shallow or incomplete history, non-fast-forwards,
-   malformed or oversized inventories, and any commit whose
-   `.github/workflows` tree OID differs from the expected-old baseline. Checking
-   every newly reachable commit catches merge-side changes and an edit followed
-   by a revert even when the two endpoint trees match. The fresh secret-bearing
-   job installs no dependencies; in a step that does not receive the private
-   key, it verifies hard-coded SHA-256 pins for the seven reviewed helpers,
-   repeats the exact complete-history proof, and emits a bounded receipt binding
-   the expected-old SHA, release SHA, commit count and digest, and baseline
-   workflow-tree OID. The promotion helper validates that receipt before it may
+   every commit from the expected-old protected-ref SHA through the exact
+   current workflow-source SHA, capped at 250 newly reachable commits. It proves
+   the tagged release target is an advancing ancestor inside that range and
+   rejects shallow or incomplete history, non-fast-forwards, and malformed or
+   oversized inventories. Checking every ordered `.github/workflows` tree OID
+   catches merge-side changes and an edit followed by a revert even when two
+   endpoint trees match. If every tree preserves the baseline, any supplied
+   digest is forbidden and the frozen v1 receipt binds the expected-old and
+   release SHAs, transition commit count and digest, and baseline workflow-tree
+   OID. If any tree changes, the empty-digest attempt publishes the full v2
+   inventory, derived tree transitions, current workflow source, tagged target,
+   and canonical digest, then rejects before the writer environment. Only a
+   fresh manual attempt 1 carrying that independently reviewed exact digest may
+   continue. The secret-bearing job installs no dependencies; in a step that
+   does not receive the private key, it verifies hard-coded SHA-256 pins for the
+   seven reviewed helpers and recomputes the selected v1 or v2 receipt before
+   reading the key. The promotion helper validates that receipt before it may
    enter the App-token lifecycle. A checked local helper then signs a
    bounded RS256 App JWT, authenticates the exact App ID, client ID, slug, and
    organization owner, then reads the checked installation ID and requires its
@@ -605,9 +617,10 @@ exact existing npm version and immutable artifact-complete Latest Release. It
 never creates, replaces, or edits an npm version or GitHub Release.
 
 If `website-production` still precedes the release commit, recovery performs
-the same checked explicit-lease fast-forward only when every newly reachable
-commit preserves the baseline workflow-tree OID, and requires one new provider
-outcome.
+the same checked explicit-lease fast-forward and requires one new provider
+outcome. A baseline-preserving range uses the frozen v1 no-digest receipt; a
+workflow-changing range requires the exact independently reviewed v2 digest and
+recomputes its old-through-current-workflow-source inventory before authority.
 If the ref is already exact, the baseline marks advancement false, skips the
 entire `production-ref-writer-key` job, and mints no App token. A separate
 read-only job accepts only the unique latest exact-SHA Production deployment in
@@ -616,9 +629,10 @@ itself must be provider-accepted. A newer terminal failure, error, or inactive
 attempt blocks recovery instead of allowing an older success to be reused.
 Recovery then repeats the terminal authority readbacks. A missing ref is a hard
 failure and must not be recreated by the workflow. If the desired transition
-crosses any workflow change, use the separately approved control-epoch
-bootstrap above; after that exact external advancement, the already-exact
-recovery path supplies the provider proof without reading the App key.
+crosses any workflow change, use the reviewed v2 control-epoch digest above.
+The exact-digest attempt performs the normal checked lease advancement; it does
+not externally advance the ref. A later already-exact recovery, if needed,
+supplies only the provider proof and remains outside the key environment.
 
 When a tag run fails after its exact draft or immutable Release exists, preserve
 its evidence and rerun that same workflow. Re-running only failed jobs is
@@ -629,5 +643,5 @@ the same tag, commit, deterministic draft, and tarball; npm provenance must bind
 the same run ID and an allowed actual positive attempt. Correct only the failed
 control and use the website recovery path after public admission succeeds. Do
 not retag, delete the immutable Release or exact residual draft, manually move
-`website-production` outside the one separately approved control-epoch
-bootstrap, redeploy from Vercel, or weaken a ruleset to make the run pass.
+`website-production`, reuse a stale control-epoch digest as retry authority,
+redeploy from Vercel, or weaken a ruleset to make the run pass.

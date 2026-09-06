@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -22,6 +22,11 @@ import {
   type WriterCanaryStatusEvidence,
   WriterCanaryWorkflowDeltaError,
 } from "./release-writer-canary.mjs";
+import {
+  CONTROL_EPOCH_CANARY_NO_TAG,
+  controlEpochDigest,
+  describeControlEpoch,
+} from "./release-workflow-range.mjs";
 import {
   RELEASE_CANARY_STATUS_CONTEXT,
 } from "./release-status-attester.mjs";
@@ -77,8 +82,9 @@ function fixture(workflowChange = false) {
   return Object.freeze({ oldSha, repository, targetSha: git(repository, ["rev-parse", "HEAD"]) });
 }
 
-function environment(targetSha: string) {
+function environment(targetSha: string, controlEpochDigest = "") {
   return Object.freeze({
+    CONTROL_EPOCH_DIGEST: controlEpochDigest,
     GITHUB_ACTIONS: "true",
     GITHUB_API_URL: "https://api.github.com",
     GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -375,7 +381,7 @@ describe("persistent production-ref writer canary", () => {
     )).toEqual({ runAttempt: 1, runId: 9001, workflowId });
   });
 
-  test("creates a canary-specific complete-range receipt and rejects workflow drift", async () => {
+  test("creates a routine receipt, rejects the first control epoch, accepts its digest, then resumes routine ranges", async () => {
     const input = fixture();
     const receipt = await createWriterCanaryPreflight({
       api: api(input.oldSha, input.targetSha),
@@ -412,21 +418,130 @@ describe("persistent production-ref writer canary", () => {
     }
     expect(workflowDelta).toBeInstanceOf(WriterCanaryWorkflowDeltaError);
     expect((workflowDelta as WriterCanaryWorkflowDeltaError).receipt).toMatchObject({
+      controlEpoch: {
+        domain: "message-like-me/control-epoch/canary/v2",
+        protectedRef: "refs/heads/website-production-writer-canary",
+        tag: CONTROL_EPOCH_CANARY_NO_TAG,
+      },
       expectedOldSha: changed.oldSha,
       finalSha: changed.oldSha,
       offendingCommit: changed.targetSha,
-      schema: "message-like-me-production-writer-canary-workflow-delta-v1",
+      schema: "message-like-me-production-writer-canary-control-epoch-rejection-v2",
       targetSha: changed.targetSha,
+    });
+    const controlEpoch = describeControlEpoch({
+      currentMainSha: changed.targetSha,
+      mode: "canary",
+      previousSha: changed.oldSha,
+      protectedRef: "refs/heads/website-production-writer-canary",
+      repository: "hraness/message-like-me",
+      repositoryId,
+      tag: CONTROL_EPOCH_CANARY_NO_TAG,
+      targetSha: changed.targetSha,
+      workflowSha: changed.targetSha,
+      workingDirectory: changed.repository,
+    });
+    const accepted = await createWriterCanaryPreflight({
+      api: api(changed.oldSha, changed.targetSha),
+      environment: environment(changed.targetSha, controlEpoch.digest),
+      workingDirectory: changed.repository,
+    });
+    expect(accepted.range).toEqual(controlEpoch);
+    expect(decodeWriterCanaryPreflightReceipt(
+      encodeWriterCanaryPreflightReceipt(accepted),
+    )).toEqual(accepted);
+
+    writeFileSync(join(changed.repository, "after-control.txt"), "routine after control\n", "utf8");
+    git(changed.repository, ["add", "--all"]);
+    git(changed.repository, ["commit", "--no-gpg-sign", "-m", "routine after control"]);
+    const laterTarget = git(changed.repository, ["rev-parse", "HEAD"]);
+    const later = await createWriterCanaryPreflight({
+      api: api(changed.targetSha, laterTarget),
+      environment: environment(laterTarget),
+      workingDirectory: changed.repository,
+    });
+    expect(later.range).toMatchObject({
+      previousSha: changed.targetSha,
+      schema: "message-like-me-canary-workflow-range-v1",
+      verifiedSha: laterTarget,
     });
   });
 
-  test("runs the isolated terminalize, deny, attest, advance, consume, and final phases", async () => {
-    const input = fixture();
+  test("transports a maximum 250-commit control receipt through canary outputs", async () => {
+    const changed = fixture(true);
+    const controlEpoch = describeControlEpoch({
+      currentMainSha: changed.targetSha,
+      mode: "canary",
+      previousSha: changed.oldSha,
+      protectedRef: "refs/heads/website-production-writer-canary",
+      repository: "hraness/message-like-me",
+      repositoryId,
+      tag: CONTROL_EPOCH_CANARY_NO_TAG,
+      targetSha: changed.targetSha,
+      workflowSha: changed.targetSha,
+      workingDirectory: changed.repository,
+    });
+    const syntheticCommits = Array.from(
+      { length: 249 },
+      (_, index) => (index + 10_000).toString(16).padStart(40, "0"),
+    );
+    const commitShas = [changed.oldSha, ...syntheticCommits, changed.targetSha];
+    const inventory = commitShas.map((commitSha, index) => ({
+      commitSha,
+      workflowTreeOid: (index + 20_000).toString(16).padStart(40, "0"),
+    }));
+    const changes = inventory.slice(1).map((entry, index) => ({
+      commitSha: entry.commitSha,
+      previousWorkflowTreeOid: inventory[index]!.workflowTreeOid,
+      workflowTreeOid: entry.workflowTreeOid,
+    }));
+    const unsignedRange = {
+      ...controlEpoch,
+      changes,
+      digest: "0".repeat(64),
+      inventory,
+    };
+    const maximalRange = {
+      ...unsignedRange,
+      digest: controlEpochDigest(unsignedRange),
+    };
     const admitted = await createWriterCanaryPreflight({
-      api: api(input.oldSha, input.targetSha),
-      environment: environment(input.targetSha),
+      api: api(changed.oldSha, changed.targetSha),
+      environment: environment(changed.targetSha, controlEpoch.digest),
+      verifyRange: () => maximalRange,
+      workingDirectory: changed.repository,
+    });
+    const encoded = encodeWriterCanaryPreflightReceipt(admitted);
+    expect(Buffer.byteLength(encoded, "utf8")).toBeGreaterThan(64 * 1024);
+    expect(Buffer.byteLength(encoded, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(decodeWriterCanaryPreflightReceipt(encoded)).toEqual(admitted);
+
+    const source = readFileSync(join(import.meta.dir, "release-writer-canary.mjs"), "utf8");
+    expect(source).toContain('if (Buffer.byteLength(encoded, "utf8") > MAX_RECEIPT_BYTES)');
+    expect(source).not.toContain('if (Buffer.byteLength(encoded, "utf8") > 64 * 1024)');
+  });
+
+  test("runs the isolated terminalize, deny, attest, advance, consume, and final phases", async () => {
+    const input = fixture(true);
+    const controlEpoch = describeControlEpoch({
+      currentMainSha: input.targetSha,
+      mode: "canary",
+      previousSha: input.oldSha,
+      protectedRef: "refs/heads/website-production-writer-canary",
+      repository: "hraness/message-like-me",
+      repositoryId,
+      tag: CONTROL_EPOCH_CANARY_NO_TAG,
+      targetSha: input.targetSha,
+      workflowSha: input.targetSha,
       workingDirectory: input.repository,
     });
+    const controlEnvironment = environment(input.targetSha, controlEpoch.digest);
+    const admitted = await createWriterCanaryPreflight({
+      api: api(input.oldSha, input.targetSha),
+      environment: controlEnvironment,
+      workingDirectory: input.repository,
+    });
+    expect(admitted.range).toEqual(controlEpoch);
     const terminalized = await terminalizeWriterCanary({
       admitted,
       async proveAppRefDenied() {
@@ -467,7 +582,7 @@ describe("persistent production-ref writer canary", () => {
         );
       },
       api: deniedApi,
-      environment: environment(input.targetSha),
+      environment: controlEnvironment,
       workingDirectory: input.repository,
     });
     const attestationStatus = status(
@@ -528,7 +643,7 @@ describe("persistent production-ref writer canary", () => {
         },
       },
       attestationReceipt: encodeWriterCanaryPhaseReceipt(attested),
-      environment: environment(input.targetSha),
+      environment: controlEnvironment,
       async proveStaleLease() {
         throw new Error("stale authority reached the stale-lease probe");
       },
@@ -548,7 +663,7 @@ describe("persistent production-ref writer canary", () => {
       },
       api: advanceApi,
       attestationReceipt: encodeWriterCanaryPhaseReceipt(attested),
-      environment: environment(input.targetSha),
+      environment: controlEnvironment,
       async proveStaleLease() {
         return { classification: "stale-info" as const, diagnosticSha256: "b".repeat(64) };
       },

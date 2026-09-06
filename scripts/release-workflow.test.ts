@@ -423,6 +423,7 @@ test("site promotion gates complete workflow history before App attestation and 
     "types: [completed]",
     "workflow_dispatch:",
     "release_tag:",
+    "control_epoch_digest:",
     "permissions:\n  contents: read",
     "group: website-production-promotion",
     "cancel-in-progress: false",
@@ -451,6 +452,9 @@ test("site promotion gates complete workflow history before App attestation and 
     "release-provider-outcome.mjs baseline",
     "advance_production_ref_preflight:",
     "Prove the complete workflow-control range before environment admission",
+    "--admit-production",
+    "control_epoch_inventory:",
+    "control_epoch_changes:",
     "write_production_ref:",
     "advance_production_ref:",
     "if: needs.provider_baseline.outputs.advance_required == 'true'",
@@ -528,8 +532,8 @@ test("site promotion gates complete workflow history before App attestation and 
   expect(providerHelper).not.toContain("withReleaseAppTokenFromEnvironment");
   expect(providerHelper).not.toContain("withReleaseAuthorityStatusFromEnvironment");
   expect(providerHelper).not.toContain("MLM_RELEASE_APP_TOKEN");
-  expect(providerHelper).toContain("assertWorkflowRangeReceipt(workflowRangeReceipt");
-  expect(providerHelper.indexOf("assertWorkflowRangeReceipt(workflowRangeReceipt"))
+  expect(providerHelper).toContain("assertProductionWorkflowAdmissionReceipt(workflowRangeReceipt");
+  expect(providerHelper.indexOf("assertProductionWorkflowAdmissionReceipt(workflowRangeReceipt"))
     .toBeLessThan(providerHelper.lastIndexOf("advanceWebsiteProductionRefFromEnvironment"));
   const revalidateAuthorityCommand = providerHelper.slice(
     providerHelper.indexOf('if (command === "revalidate-authority")'),
@@ -540,10 +544,13 @@ test("site promotion gates complete workflow history before App attestation and 
     providerHelper.indexOf('if (command === "wait")'),
   );
   expect(revalidateAuthorityCommand).not.toContain("workflowRangeReceipt");
-  expect(promoteCommand).toContain("decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT)");
+  expect(promoteCommand).toContain("decodeWorkflowAdmissionReceipt(process.env.WORKFLOW_RANGE_RECEIPT)");
   expect(workflowRangeHelper).toContain('`${oldCommit}..${newCommit}`');
   expect(workflowRangeHelper).toContain("MAXIMUM_WORKFLOW_RANGE_COMMITS = 250");
   expect(workflowRangeHelper).toContain("trees.findIndex((tree) => tree !== baselineTree)");
+  expect(workflowRangeHelper).toContain("message-like-me/control-epoch/production/v2");
+  expect(workflowRangeHelper).toContain("message-like-me/control-epoch/canary/v2");
+  expect(workflowRangeHelper).toContain("decodeWorkflowRangeReceipt(value)");
   expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
   expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
@@ -658,7 +665,7 @@ test("production, canary, and cleanup keep status and ref authority split", asyn
     expect(workflow).not.toMatch(/__[A-Z0-9_]+__/u);
   }
   expect(productionWorkflow).toContain(
-    "run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0}', inputs.release_tag) }}",
+    "run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine') }}",
   );
   for (const predicate of [
     "if: ${{ steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' }}",
@@ -673,8 +680,10 @@ test("production, canary, and cleanup keep status and ref authority split", asyn
   expect(productionWorkflow).toContain("release-provider-outcome.mjs finalize-authority");
 
   expect(canaryWorkflow).toContain(
-    "run-name: Prove writer canary target ${{ github.workflow_sha }}",
+    "run-name: Prove writer canary target ${{ github.workflow_sha }} / control ${{ inputs.control_epoch_digest || 'routine' }}",
   );
+  expect(canaryWorkflow).toContain("control_epoch_digest:");
+  expect(canaryWorkflow).toContain("CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}");
   expect(canary).toContain("RELEASE_CANARY_STATUS_CONTEXT");
   expect(statusAttester).toContain(
     "message-like-me/website-production-writer-canary-authority",
@@ -760,7 +769,8 @@ test("repository guides describe the separate release and production writers", a
   expect(rootGuide).toContain("Build the\n  package once, publish the immutable Latest GitHub Release");
   expect(rootGuide).toContain("tarball\n  plus `SHA256SUMS` first");
   expect(rootGuide).toContain("fresh dependency-free, hash-pinned promotion job");
-  expect(rootGuide).toContain("every commit newly reachable from\n  the expected-old production SHA preserves its `.github/workflows` tree OID");
+  expect(rootGuide).toContain("complete non-shallow history. The complete range must either preserve the\n  baseline `.github/workflows` tree OID with no digest");
+  expect(rootGuide).toContain("match the exact\n  independently reviewed v2 control-epoch receipt and digest");
   expect(rootGuide).toContain("`statuses:write` plus `metadata:read`");
   expect(rootGuide).toContain("status App must have neither `contents:write` nor\n  `workflows:write`");
   expect(rootGuide).toContain("Already-exact recovery must not enter the key environment");
@@ -768,12 +778,21 @@ test("repository guides describe the separate release and production writers", a
   expect(rootGuide).toContain("65-minute token-expiry quarantine");
   expect(rootGuide).toContain("every incomplete cleanup receipt as continued quarantine");
   expect(siteGuide).toContain("dedicated\n  current-`main` production workflow is the sole routine writer");
-  expect(siteGuide).toContain("exact npm package and\n  immutable, artifact-complete Latest GitHub Release");
+  expect(siteGuide).toContain("exact npm package and immutable, artifact-complete Latest GitHub");
   expect(siteGuide).toContain("fresh dependency-free, hash-pinned job");
   expect(siteGuide).toContain("`statuses:write` plus `metadata:read` App token");
+  expect(siteGuide).toContain("a no-digest range that preserves the\n  production baseline's `.github/workflows` tree");
+  expect(siteGuide).toContain("exact independently\n  reviewed v2 receipt and digest");
   expect(siteGuide).toContain("The App is the ruleset-pinned source of one exact-SHA success status");
   expect(siteGuide).toContain("same job's scoped `GITHUB_TOKEN`");
-  expect(siteGuide).toContain("A workflow-control\n  epoch uses the separately approved bootstrap");
+  expect(rootGuide).toContain("transition-scoped v2 digest protocol");
+  expect(rootGuide).toContain("one no-digest run must fail before key admission");
+  expect(rootGuide).toContain("independently reviewed exact digest");
+  expect(rootGuide).toContain("Never expand the status App");
+  expect(siteGuide).toContain("publishing runbook's transition-scoped v2 digest");
+  expect(siteGuide).toContain("a no-digest attempt\n  fails before key admission");
+  expect(siteGuide).toContain("independently reviewed exact digest");
+  expect(siteGuide).toContain("never expands the status App");
   expect(siteGuide).toContain("Already-exact recovery stays\n  read-only and outside the key environment");
   expect(siteGuide).toContain("target-bound, 36-day-inventory");
   expect(siteGuide).toContain("Incomplete or absent evidence never\n  permits a retry");
@@ -828,13 +847,24 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "code-owner",
     "precreate persistent ref",
     "website-production-writer-canary",
-    "one separately approved control-epoch bootstrap",
-    "permanent App's exact `statuses:write` plus\n   `metadata:read` closure",
-    "Generate a fresh App private key",
-    "negative workflow-delta canary",
-    "positive non-workflow canary",
+    "Review one workflow-control epoch",
+    "v2 control-epoch digest",
+    "does not use an out-of-band ref write or broaden either credential",
+    "`control_epoch_digest`",
+    "must fail at the complete-history gate before",
+    "ordered old-through-workflow-source commit inventory",
+    "canonical lowercase SHA-256 digest",
+    "Do not trust the digest without reviewing its complete preimage",
+    "Automatic `workflow_run` events, rerun attempts, already-exact refs",
+    "complete inventory and digest before environment admission",
+    "recomputes and revalidates the same transition before reading the key",
+    "never treat the digest as retry authority",
+    "workflow-delta canary",
+    "empty-digest rejection before",
+    "fresh manual attempt 1 with its exact digest",
+    "later positive non-workflow canary",
     "complete-history gate",
-    "capped\n   at 250 commits",
+    "capped at 250 newly reachable commits",
     "merge-side changes and an edit followed",
     "seven reviewed helpers",
     "--force-with-lease",

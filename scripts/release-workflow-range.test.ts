@@ -1,15 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import {
+  assertCanaryControlEpochReceipt,
+  assertProductionControlEpochReceipt,
   assertWorkflowRangeReceipt,
+  CONTROL_EPOCH_CANARY_NO_TAG,
+  ControlEpochAdmissionError,
+  decodeControlEpochReceipt,
+  decodeWorkflowAdmissionReceipt,
   decodeWorkflowRangeReceipt,
+  describeControlEpoch,
+  encodeControlEpochReceipt,
+  encodeWorkflowAdmissionReceipt,
   encodeWorkflowRangeReceipt,
   MAXIMUM_WORKFLOW_RANGE_COMMITS,
+  verifyCanaryWorkflowAdmission,
   verifyWorkflowRange,
+  verifyProductionWorkflowAdmission,
   type WorkflowRangeGitResult,
   type WorkflowRangeGitRunner,
 } from "./release-workflow-range.mjs";
@@ -288,5 +299,349 @@ describe("complete workflow-control range", () => {
       verifiedSha: negativeSha,
       workingDirectory: negativeCanary.repository,
     })).toThrow("changes .github/workflows");
+  });
+});
+
+function controlEpochFixture() {
+  const input = fixture();
+  writeFileSync(input.workflow, "name: control-epoch\n", "utf8");
+  const targetSha = commit(input.repository, "workflow control epoch");
+  git(input.repository, ["tag", "--annotate", "v1.2.3", "--message", "v1.2.3", targetSha]);
+  return Object.freeze({ ...input, targetSha });
+}
+
+function productionAdmission(
+  input: ReturnType<typeof controlEpochFixture>,
+  overrides: Readonly<Record<string, unknown>> = {},
+) {
+  return {
+    controlEpochDigest: undefined,
+    currentMainSha: input.targetSha,
+    eventName: "workflow_dispatch",
+    eventRef: "refs/heads/main",
+    eventSha: input.targetSha,
+    githubActions: "true",
+    previousSha: input.oldSha,
+    protectedRef: "refs/heads/website-production",
+    repository: "hraness/message-like-me",
+    repositoryId: 1_342_143_606,
+    runAttempt: 1,
+    tag: "v1.2.3",
+    targetSha: input.targetSha,
+    workflowSha: input.targetSha,
+    workingDirectory: input.repository,
+    ...overrides,
+  } as const;
+}
+
+describe("v2 workflow-control epochs", () => {
+  test("keeps the frozen v1 decoder and routine semantics separate", () => {
+    const input = fixture();
+    writeFileSync(join(input.repository, "routine.txt"), "routine\n", "utf8");
+    const targetSha = commit(input.repository, "routine");
+    git(input.repository, ["tag", "--annotate", "v1.2.3", "--message", "v1.2.3", targetSha]);
+    const receipt = verifyWorkflowRange({
+      previousSha: input.oldSha,
+      verifiedSha: targetSha,
+      workingDirectory: input.repository,
+    });
+    expect(Object.keys(receipt).sort()).toEqual([
+      "newCommitCount",
+      "newCommitDigest",
+      "previousSha",
+      "productionRef",
+      "schema",
+      "verifiedSha",
+      "workflowTreeOid",
+    ]);
+    const encoded = encodeWorkflowRangeReceipt(receipt);
+    expect(decodeWorkflowRangeReceipt(encoded)).toEqual(receipt);
+    expect(decodeWorkflowAdmissionReceipt(encoded)).toEqual(receipt);
+    expect(() => verifyProductionWorkflowAdmission({
+      ...productionAdmission({ ...input, targetSha }),
+      controlEpochDigest: "1".repeat(64),
+      tag: "v1.2.3",
+    })).toThrow("forbidden for a routine");
+  });
+
+  test("binds every production coordinate and emits a distinct v2 receipt", () => {
+    const input = controlEpochFixture();
+    const described = describeControlEpoch({
+      ...productionAdmission(input),
+      mode: "production",
+    });
+    expect(described).toMatchObject({
+      domain: "message-like-me/control-epoch/production/v2",
+      previousSha: input.oldSha,
+      protectedRef: "refs/heads/website-production",
+      repositoryId: 1_342_143_606,
+      schema: "message-like-me-production-control-epoch-v2",
+      tag: "v1.2.3",
+      targetSha: input.targetSha,
+      workflowSha: input.targetSha,
+    });
+    expect(described.inventory.map((entry) => entry.commitSha)).toEqual([
+      input.oldSha,
+      input.targetSha,
+    ]);
+    expect(described.changes).toHaveLength(1);
+
+    let missing: unknown;
+    try {
+      verifyProductionWorkflowAdmission(productionAdmission(input));
+    } catch (error) {
+      missing = error;
+    }
+    expect(missing).toBeInstanceOf(ControlEpochAdmissionError);
+    expect((missing as ControlEpochAdmissionError).receipt).toEqual(described);
+
+    const expectedTransition = {
+      previousSha: input.oldSha,
+      tag: "v1.2.3",
+      targetSha: input.targetSha,
+      workflowSha: input.targetSha,
+    } as const;
+    const accepted = assertProductionControlEpochReceipt(
+      verifyProductionWorkflowAdmission(productionAdmission(input, {
+        controlEpochDigest: described.digest,
+      })),
+      expectedTransition,
+    );
+    expect(accepted).toEqual(described);
+    const encoded = encodeControlEpochReceipt(accepted);
+    expect(decodeControlEpochReceipt(encoded)).toEqual(accepted);
+    expect(encodeWorkflowAdmissionReceipt(accepted)).toBe(encoded);
+    expect(decodeWorkflowAdmissionReceipt(encoded)).toEqual(accepted);
+    expect(assertProductionControlEpochReceipt(accepted, expectedTransition)).toEqual(accepted);
+    expect(() => decodeWorkflowRangeReceipt(encoded)).toThrow();
+  });
+
+  test("inventories through a newer workflow source while binding an older release target", () => {
+    const input = controlEpochFixture();
+    writeFileSync(input.workflow, "name: later-control-source\n", "utf8");
+    const workflowSha = commit(input.repository, "later workflow control source");
+    const admission = productionAdmission(input, {
+      currentMainSha: workflowSha,
+      eventSha: workflowSha,
+      workflowSha,
+    });
+    const described = describeControlEpoch({ ...admission, mode: "production" });
+
+    expect(described.targetSha).toBe(input.targetSha);
+    expect(described.workflowSha).toBe(workflowSha);
+    expect(described.inventory.map((entry) => entry.commitSha)).toEqual([
+      input.oldSha,
+      input.targetSha,
+      workflowSha,
+    ]);
+    expect(described.changes.map((entry) => entry.commitSha)).toEqual([
+      input.targetSha,
+      workflowSha,
+    ]);
+    expect(verifyProductionWorkflowAdmission({
+      ...admission,
+      controlEpochDigest: described.digest,
+    })).toEqual(described);
+  });
+
+  test("requires a digest when only the newer executing workflow source changes controls", () => {
+    const input = fixture();
+    writeFileSync(join(input.repository, "release.txt"), "product release\n", "utf8");
+    const targetSha = commit(input.repository, "product-only release target");
+    git(input.repository, ["tag", "--annotate", "v1.2.3", "--message", "v1.2.3", targetSha]);
+    writeFileSync(input.workflow, "name: post-release-control-source\n", "utf8");
+    const workflowSha = commit(input.repository, "post-release workflow control source");
+    const admission = productionAdmission({ ...input, targetSha }, {
+      currentMainSha: workflowSha,
+      eventSha: workflowSha,
+      workflowSha,
+    });
+
+    let rejected: unknown;
+    try {
+      verifyProductionWorkflowAdmission(admission);
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected).toBeInstanceOf(ControlEpochAdmissionError);
+    expect((rejected as ControlEpochAdmissionError).receipt).toMatchObject({
+      previousSha: input.oldSha,
+      targetSha,
+      workflowSha,
+    });
+    expect((rejected as ControlEpochAdmissionError).receipt.inventory.map((entry) => entry.commitSha))
+      .toEqual([input.oldSha, targetSha, workflowSha]);
+    expect((rejected as ControlEpochAdmissionError).receipt.changes.map((entry) => entry.commitSha))
+      .toEqual([workflowSha]);
+  });
+
+  test("persists the rejected CLI review before exact-digest attempt-1 admission", () => {
+    const input = controlEpochFixture();
+    const output = join(input.root, "github-output.txt");
+    const summary = join(input.root, "github-summary.md");
+    writeFileSync(output, "", "utf8");
+    writeFileSync(summary, "", "utf8");
+    const script = join(import.meta.dir, "release-workflow-range.mjs");
+    const environment = {
+      ...process.env,
+      CONTROL_EPOCH_DIGEST: "",
+      CURRENT_MAIN_SHA: input.targetSha,
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_OUTPUT: output,
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_REPOSITORY: "hraness/message-like-me",
+      GITHUB_REPOSITORY_ID: "1342143606",
+      GITHUB_RUN_ATTEMPT: "1",
+      GITHUB_SHA: input.targetSha,
+      GITHUB_STEP_SUMMARY: summary,
+      GITHUB_WORKFLOW_SHA: input.targetSha,
+      VERIFIED_TAG: "v1.2.3",
+    };
+    const invoke = (digest: string) => spawnSync(
+      process.execPath,
+      [script, input.oldSha, input.targetSha, "--admit-production"],
+      {
+        cwd: input.repository,
+        encoding: "utf8",
+        env: { ...environment, CONTROL_EPOCH_DIGEST: digest },
+        maxBuffer: 512 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 30_000,
+      },
+    );
+    const outputValue = (body: string, name: string) => body
+      .split("\n")
+      .find((line) => line.startsWith(`${name}=`))
+      ?.slice(name.length + 1);
+
+    const rejected = invoke("");
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain("exact reviewed control-epoch digest");
+    const rejectedOutput = readFileSync(output, "utf8");
+    const digest = outputValue(rejectedOutput, "control_epoch_digest");
+    expect(digest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(outputValue(rejectedOutput, "control_epoch_old_sha")).toBe(input.oldSha);
+    expect(outputValue(rejectedOutput, "control_epoch_target_sha")).toBe(input.targetSha);
+    expect(outputValue(rejectedOutput, "control_epoch_workflow_sha")).toBe(input.targetSha);
+    expect(JSON.parse(outputValue(rejectedOutput, "control_epoch_inventory") ?? "null"))
+      .toHaveLength(2);
+    expect(outputValue(rejectedOutput, "receipt")).toBeUndefined();
+    expect(readFileSync(summary, "utf8")).toContain(`Control epoch ${String(digest)}`);
+    expect(git(input.repository, ["status", "--short"]).byteLength).toBe(0);
+
+    writeFileSync(output, "", "utf8");
+    writeFileSync(summary, "", "utf8");
+    const accepted = invoke(String(digest));
+    expect(accepted.status).toBe(0);
+    const acceptedOutput = readFileSync(output, "utf8");
+    const encoded = outputValue(acceptedOutput, "receipt");
+    expect(encoded).toBeDefined();
+    expect(decodeWorkflowAdmissionReceipt(encoded)).toMatchObject({
+      digest,
+      previousSha: input.oldSha,
+      targetSha: input.targetSha,
+      workflowSha: input.targetSha,
+    });
+    expect(readFileSync(summary, "utf8")).toContain("Changed from preceding row");
+    expect(git(input.repository, ["status", "--short"]).byteLength).toBe(0);
+  });
+
+  test("domain-separates canary with an explicit no-tag sentinel", () => {
+    const input = controlEpochFixture();
+    const base = productionAdmission(input);
+    const canary = describeControlEpoch({
+      ...base,
+      mode: "canary",
+      protectedRef: "refs/heads/website-production-writer-canary",
+      tag: CONTROL_EPOCH_CANARY_NO_TAG,
+    });
+    const production = describeControlEpoch({ ...base, mode: "production" });
+    expect(canary).toMatchObject({
+      domain: "message-like-me/control-epoch/canary/v2",
+      protectedRef: "refs/heads/website-production-writer-canary",
+      schema: "message-like-me-canary-control-epoch-v2",
+      tag: "no-tag",
+    });
+    expect(canary.digest).not.toBe(production.digest);
+    const accepted = verifyCanaryWorkflowAdmission({
+      ...base,
+      controlEpochDigest: canary.digest,
+      protectedRef: "refs/heads/website-production-writer-canary",
+      tag: CONTROL_EPOCH_CANARY_NO_TAG,
+    });
+    expect(assertCanaryControlEpochReceipt(accepted, {
+      previousSha: input.oldSha,
+      targetSha: input.targetSha,
+      workflowSha: input.targetSha,
+    })).toEqual(canary);
+  });
+
+  test("rejects digest and execution-boundary substitution before authority", () => {
+    const input = controlEpochFixture();
+    const receipt = describeControlEpoch({ ...productionAdmission(input), mode: "production" });
+    for (const overrides of [
+      { controlEpochDigest: "0".repeat(64) },
+      { controlEpochDigest: receipt.digest, eventName: "workflow_run" },
+      { controlEpochDigest: receipt.digest, eventRef: "refs/heads/not-main" },
+      { controlEpochDigest: receipt.digest, eventSha: "1".repeat(40) },
+      { controlEpochDigest: receipt.digest, githubActions: "false" },
+      { controlEpochDigest: receipt.digest, runAttempt: 2 },
+    ]) {
+      expect(() => verifyProductionWorkflowAdmission(productionAdmission(input, overrides))).toThrow();
+    }
+    expect(() => describeControlEpoch({
+      ...productionAdmission(input),
+      mode: "production",
+      currentMainSha: "1".repeat(40),
+    })).toThrow("drifted");
+    expect(() => describeControlEpoch({
+      ...productionAdmission(input),
+      mode: "canary",
+    })).toThrow("protected ref");
+    expect(() => describeControlEpoch({
+      ...productionAdmission(input),
+      mode: "production",
+      repositoryId: 1,
+    })).toThrow("1342143606");
+    expect(() => verifyProductionWorkflowAdmission(productionAdmission(input, {
+      controlEpochDigest: receipt.digest,
+      previousSha: input.targetSha,
+    }))).toThrow("advancing transition");
+  });
+
+  test("rejects wrong tag, old, target, inventory, and digest in decoded receipts", () => {
+    const input = controlEpochFixture();
+    const receipt = describeControlEpoch({ ...productionAdmission(input), mode: "production" });
+    expect(() => assertProductionControlEpochReceipt(receipt, {
+      previousSha: "1".repeat(40),
+      tag: receipt.tag,
+      targetSha: receipt.targetSha,
+      workflowSha: receipt.workflowSha,
+    })).toThrow("does not bind");
+    expect(() => assertProductionControlEpochReceipt(receipt, {
+      previousSha: receipt.previousSha,
+      tag: "v9.9.9",
+      targetSha: receipt.targetSha,
+      workflowSha: receipt.workflowSha,
+    })).toThrow("does not bind");
+    const mutations = [
+      { ...receipt, digest: "0".repeat(64) },
+      { ...receipt, domain: "message-like-me/control-epoch/canary/v2" },
+      { ...receipt, protectedRef: "refs/heads/website-production-writer-canary" },
+      { ...receipt, repositoryId: 1 },
+      { ...receipt, targetSha: "2".repeat(40) },
+      { ...receipt, workflowSha: "3".repeat(40) },
+      {
+        ...receipt,
+        inventory: receipt.inventory.map((entry, index) => index === 1
+          ? { ...entry, workflowTreeOid: "4".repeat(40) }
+          : entry),
+      },
+    ];
+    for (const mutation of mutations) {
+      const encoded = Buffer.from(JSON.stringify(mutation), "utf8").toString("base64url");
+      expect(() => decodeControlEpochReceipt(encoded)).toThrow();
+    }
   });
 });

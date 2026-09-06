@@ -20,8 +20,8 @@ import {
   productionAuthorityReceiptDigest,
 } from "./release-production-authority.mjs";
 import {
-  assertWorkflowRangeReceipt,
-  decodeWorkflowRangeReceipt,
+  assertProductionWorkflowAdmissionReceipt,
+  decodeWorkflowAdmissionReceipt,
 } from "./release-workflow-range.mjs";
 
 const BASELINE_SCHEMA = "message-like-me-provider-baseline-v1";
@@ -1625,9 +1625,11 @@ export async function proveProductionRequiredStatusDenial({
   ) {
     fail("production denial does not bind its baseline and terminal precondition");
   }
-  assertWorkflowRangeReceipt(workflowRangeReceipt, {
+  assertProductionWorkflowAdmissionReceipt(workflowRangeReceipt, {
     previousSha: baseline.refSha,
-    verifiedSha: sha,
+    tag,
+    targetSha: sha,
+    workflowSha: recoveryWorkflowSha,
   });
   const workflowSource = Object.freeze({
     defaultBranch,
@@ -1732,9 +1734,11 @@ export async function promoteWebsiteProduction({
     mode = "already-exact";
   } else {
     mode = "advanced";
-    assertWorkflowRangeReceipt(workflowRangeReceipt, {
+    assertProductionWorkflowAdmissionReceipt(workflowRangeReceipt, {
       previousSha: prePatchRef.sha,
-      verifiedSha: sha,
+      tag,
+      targetSha: sha,
+      workflowSha: recoveryWorkflowSha,
     });
     await readFastForwardComparison(api, coordinate, prePatchRef.sha, sha);
     await revalidateWorkflowSource(api, coordinate, workflowSource);
@@ -2520,7 +2524,7 @@ async function main() {
       repository: process.env.GITHUB_REPOSITORY,
       verifiedSha: process.env.VERIFIED_SHA,
       verifiedTag: process.env.VERIFIED_TAG,
-      workflowRangeReceipt: decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT),
+      workflowRangeReceipt: decodeWorkflowAdmissionReceipt(process.env.WORKFLOW_RANGE_RECEIPT),
     });
     writeReceiptOutput(receipt);
     return;
@@ -2559,7 +2563,7 @@ async function main() {
       verifiedSha: process.env.VERIFIED_SHA,
       verifiedTag: process.env.VERIFIED_TAG,
       workflowRangeReceipt: expectedMode === "advanced"
-        ? decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT)
+        ? decodeWorkflowAdmissionReceipt(process.env.WORKFLOW_RANGE_RECEIPT)
         : undefined,
     });
     if (receipt.mode !== expectedMode) {

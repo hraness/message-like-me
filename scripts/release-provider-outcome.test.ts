@@ -25,6 +25,7 @@ import {
   encodeProductionAuthorityPhaseReceipt,
   productionAuthorityReceiptDigest,
 } from "./release-production-authority.mjs";
+import { controlEpochDigest } from "./release-workflow-range.mjs";
 
 const releaseWorkflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
 const productionWorkflowUrl = new URL("../.github/workflows/website-production.yml", import.meta.url);
@@ -136,6 +137,46 @@ const providerWorkflowRangeReceipt = Object.freeze({
   verifiedSha: providerVerifiedSha,
   workflowTreeOid: "5".repeat(40),
 });
+
+function providerProductionControlEpochReceipt(overrides: Readonly<{
+  digest?: string;
+  tag?: string;
+  workflowSha?: string;
+}> = {}) {
+  const workflowSha = overrides.workflowSha ?? providerVerifiedSha;
+  const inventory = workflowSha === providerVerifiedSha
+    ? [
+      { commitSha: providerPreviousSha, workflowTreeOid: "5".repeat(40) },
+      { commitSha: providerVerifiedSha, workflowTreeOid: "6".repeat(40) },
+    ]
+    : [
+      { commitSha: providerPreviousSha, workflowTreeOid: "5".repeat(40) },
+      { commitSha: providerVerifiedSha, workflowTreeOid: "6".repeat(40) },
+      { commitSha: workflowSha, workflowTreeOid: "7".repeat(40) },
+    ];
+  const changes = inventory.slice(1).map((entry, index) => ({
+    commitSha: entry.commitSha,
+    previousWorkflowTreeOid: inventory[index]!.workflowTreeOid,
+    workflowTreeOid: entry.workflowTreeOid,
+  }));
+  const unsigned = {
+    changes,
+    domain: "message-like-me/control-epoch/production/v2",
+    inventory,
+    previousSha: providerPreviousSha,
+    protectedRef: "refs/heads/website-production",
+    repository: providerRepository,
+    repositoryId: 1_342_143_606,
+    schema: "message-like-me-production-control-epoch-v2",
+    tag: overrides.tag ?? providerTag,
+    targetSha: providerVerifiedSha,
+    workflowSha,
+  };
+  return Object.freeze({
+    ...unsigned,
+    digest: overrides.digest ?? controlEpochDigest(unsigned),
+  });
+}
 
 const productionAuthorityContext =
   "message-like-me/website-production-authority" as const;
@@ -1003,7 +1044,7 @@ async function providerReceipts(mode: "advanced" | "already-exact"): Promise<Rea
 
 
 describe("release-bound site control", () => {
-  test("decodes the workflow-range receipt only on the executable promote path", async () => {
+  test("decodes the workflow-admission receipt only on the executable promote path", async () => {
     const malformedWorkflowRangeReceipt = "***";
     const authority = await runProviderCommand("revalidate-authority", {
       DEFAULT_BRANCH: "main",
@@ -1053,7 +1094,7 @@ describe("release-bound site control", () => {
     });
     expect(promotion.exitCode).not.toBe(0);
     expect(promotion.stdout).toBe("");
-    expect(promotion.stderr).toContain("Encoded workflow-range receipt is missing or malformed");
+    expect(promotion.stderr).toContain("Encoded workflow admission receipt is missing or malformed");
     expect(promotion.stderr).not.toContain("expectedMode is not defined");
   });
 
@@ -1128,9 +1169,11 @@ esac
       EVENT_REPOSITORY: providerRepository,
       EVENT_SHA: workflowSha,
       EXPECTED_RELEASE_WORKFLOW_ID: "12345",
+      GITHUB_RUN_ATTEMPT_EXACT: "1",
       GH_TOKEN: "read-only-test-token",
       GITHUB_OUTPUT: output,
       GITHUB_REPOSITORY: providerRepository,
+      INPUT_CONTROL_EPOCH_DIGEST: "",
       INPUT_RELEASE_TAG: "",
       PATH: `${bin}:/usr/bin:/bin`,
       STUB_DEFAULT_BRANCH: "main",
@@ -1157,7 +1200,7 @@ esac
       const workflowRun = await runCase({});
       expect(workflowRun.exitCode).toBe(0);
       expect(await readFile(output, "utf8")).toBe(
-        `release_run_attempt=2\nrelease_run_id=67890\nrequested_tag=v0.8.0\nupstream_sha=${releaseSha}\nworkflow_sha=${workflowSha}\n`,
+        `control_epoch_digest=\nrelease_run_attempt=2\nrelease_run_id=67890\nrequested_tag=v0.8.0\nupstream_sha=${releaseSha}\nworkflow_sha=${workflowSha}\n`,
       );
 
       const recovery = await runCase({
@@ -1176,8 +1219,26 @@ esac
       });
       expect(recovery.exitCode).toBe(0);
       expect(await readFile(output, "utf8")).toBe(
-        `release_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
+        `control_epoch_digest=\nrelease_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
       );
+
+      const controlDigest = "a".repeat(64);
+      const control = await runCase({
+        EVENT_NAME: "workflow_dispatch",
+        INPUT_CONTROL_EPOCH_DIGEST: controlDigest,
+        INPUT_RELEASE_TAG: "v0.8.0",
+      });
+      expect(control.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toContain(`control_epoch_digest=${controlDigest}\n`);
+      const automaticControl = await runCase({ INPUT_CONTROL_EPOCH_DIGEST: controlDigest });
+      expect(automaticControl.exitCode).not.toBe(0);
+      const retriedControl = await runCase({
+        EVENT_NAME: "workflow_dispatch",
+        GITHUB_RUN_ATTEMPT_EXACT: "2",
+        INPUT_CONTROL_EPOCH_DIGEST: controlDigest,
+        INPUT_RELEASE_TAG: "v0.8.0",
+      });
+      expect(retriedControl.exitCode).not.toBe(0);
 
       for (const rejectedEnvironment of [
         { DEFAULT_BRANCH: "trunk" },
@@ -1823,7 +1884,7 @@ esac
     }, providerRepository)).rejects.toThrow("simulated provider API failure");
   });
 
-  test("stabilizes the baseline and admits external-bootstrap already-exact recovery", async () => {
+  test("stabilizes the baseline and admits already-exact recovery", async () => {
     const baselineDeployment = providerDeployment(
       10,
       "2026-08-29T13:00:00Z",
@@ -2201,6 +2262,85 @@ esac
     expect(rulesIndex).toBeGreaterThanOrEqual(0);
     expect(statusIndex).toBeGreaterThan(rulesIndex);
     expect(pushIndex).toBeGreaterThan(statusIndex);
+
+    const controlEpoch = providerProductionControlEpochReceipt();
+    const controlDenialApi = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerVerifiedSha),
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      serverDates: [providerPromotionServerDate],
+      statuses: terminalBaselineStatus(),
+    });
+    const controlDenial = await proveProductionRequiredStatusDenial({
+      api: controlDenialApi,
+      baselineReceipt: baseline,
+      defaultBranch: "main",
+      denyRef: async () => ({
+        classification: "required-status-missing" as const,
+        diagnosticSha256: "e".repeat(64),
+      }),
+      eventName: "workflow_dispatch",
+      preconditionReceipt: encodeProductionAuthorityPhaseReceipt(phases.precondition),
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+      workflowRangeReceipt: controlEpoch,
+    });
+    const controlPromotionApi = new ProviderApiFixture({
+      defaultBranchShaSnapshots: Array.from({ length: 8 }, () => providerVerifiedSha),
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      serverDates: [providerPromotionServerDate],
+      statuses: terminalBaselineStatus(),
+    });
+    await expect(promoteWebsiteProductionRaw({
+      advanceRef: new ProviderRefWriterFixture(controlPromotionApi).advanceRef,
+      api: controlPromotionApi,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(phases.attestation),
+      baselineReceipt: baseline,
+      denialReceipt: controlDenial,
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+      workflowRangeReceipt: controlEpoch,
+    })).resolves.toMatchObject({ mode: "advanced", verifiedSha: providerVerifiedSha });
+    expect(controlPromotionApi.calls.filter((call) => call.startsWith("GIT PUSH "))).toEqual([
+      `GIT PUSH ${providerRepository} ${providerPreviousSha} ${providerVerifiedSha} ${providerTag}`,
+    ]);
+
+    for (const rejectedReceipt of [
+      providerProductionControlEpochReceipt({ workflowSha: "8".repeat(40) }),
+      providerProductionControlEpochReceipt({ tag: "v9.9.9" }),
+      providerProductionControlEpochReceipt({ digest: "0".repeat(64) }),
+    ]) {
+      let writerCalls = 0;
+      await expect(promoteWebsiteProductionRaw({
+        advanceRef: async () => {
+          writerCalls += 1;
+          throw new Error("control receipt rejection must precede the writer");
+        },
+        api: new ProviderApiFixture({
+          deployments: [[baselineDeployment]],
+          refSha: providerPreviousSha,
+          statuses: terminalBaselineStatus(),
+        }),
+        attestationReceipt: encodeProductionAuthorityPhaseReceipt(phases.attestation),
+        baselineReceipt: baseline,
+        denialReceipt: controlDenial,
+        defaultBranch: "main",
+        eventName: "workflow_dispatch",
+        recoveryWorkflowSha: providerVerifiedSha,
+        repository: providerRepository,
+        verifiedSha: providerVerifiedSha,
+        verifiedTag: providerTag,
+        workflowRangeReceipt: rejectedReceipt,
+      })).rejects.toThrow();
+      expect(writerCalls).toBe(0);
+    }
   });
 
   test("fails promotion closed on comparison, ref, and lease races", async () => {
