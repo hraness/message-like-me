@@ -1392,7 +1392,7 @@ function parseProductionDenialReceipt(value) {
   const denial = expectRecord(receipt.denial, "production writer denial");
   expectExactKeys(denial, ["classification", "diagnosticSha256"], "production writer denial");
   if (
-    receipt.schema !== "message-like-me-production-required-status-denial-v2" ||
+    receipt.schema !== "message-like-me-production-required-status-denial-v3" ||
     receipt.productionRef !== PRODUCTION_REF ||
     denial.classification !== "required-status-errored"
   ) {
@@ -1416,7 +1416,7 @@ function parseProductionDenialReceipt(value) {
     productionRef: PRODUCTION_REF,
     repository: expectRepository(receipt.repository),
     rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
-    schema: "message-like-me-production-required-status-denial-v2",
+    schema: "message-like-me-production-required-status-denial-v3",
     verifiedSha: expectSha(receipt.verifiedSha, "production denial verified SHA"),
     verifiedTag: expectStableTag(receipt.verifiedTag, "production denial verified tag"),
   });
@@ -1673,7 +1673,7 @@ export async function proveProductionRequiredStatusDenial({
     productionRef: PRODUCTION_REF,
     repository: coordinate,
     rules,
-    schema: "message-like-me-production-required-status-denial-v2",
+    schema: "message-like-me-production-required-status-denial-v3",
     verifiedSha: sha,
     verifiedTag: tag,
   }));

@@ -1008,7 +1008,7 @@ function normalizeWriterCanaryPhaseReceipt(value) {
       normalized.statusRevocation.lastObservationServerDate,
     ], "writer canary terminalized phase");
   } else if (phase === "writer-denied") {
-    const schema = "message-like-me-production-writer-canary-writer-denied-v2";
+    const schema = "message-like-me-production-writer-canary-writer-denied-v3";
     const base = normalizedPhaseBase(receipt, phase, schema);
     const denial = expectRecord(receipt.denial, "writer canary writer denial");
     const refReadback = expectRecord(receipt.refReadback, "writer canary denial ref readback");
@@ -1414,7 +1414,7 @@ function admittedCanaryFromEnvironment(environment) {
 }
 
 function phaseReceipt(admitted, phase, payload) {
-  const version = phase === "writer-denied" ? "v2" : "v1";
+  const version = phase === "writer-denied" ? "v3" : "v1";
   const schema = `message-like-me-production-writer-canary-${phase}-${version}`;
   return normalizeWriterCanaryPhaseReceipt(Object.freeze({
     ...canaryPhaseBase(admitted, phase, schema),
@@ -1895,7 +1895,7 @@ export async function finalizeWriterCanary({ admitted, api, phases }) {
     repositoryId: EXPECTED_REPOSITORY_ID,
     runAttempt: 1,
     runId: admitted.runId,
-    schema: "message-like-me-production-writer-canary-final-v2",
+    schema: "message-like-me-production-writer-canary-final-v3",
     targetSha: admitted.targetSha,
     terminalStatus,
     terminalRules,

@@ -115,7 +115,7 @@ export interface ProductionRequiredStatusDenialReceipt {
   readonly productionRef: "refs/heads/website-production";
   readonly repository: "hraness/message-like-me";
   readonly rules: unknown;
-  readonly schema: "message-like-me-production-required-status-denial-v2";
+  readonly schema: "message-like-me-production-required-status-denial-v3";
   readonly verifiedSha: string;
   readonly verifiedTag: string;
 }
