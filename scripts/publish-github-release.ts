@@ -54,6 +54,11 @@ const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest(
 const expectedTitle = `Message Like Me ${tagArgument}`;
 const expectedBody =
   `Automated public release of @hraness/message-like-me@${manifest.version} from ${tagArgument}.`;
+// GitHub's release list lags `gh release create` by a few seconds (v0.8.1,
+// v0.8.2, and v0.8.3 each missed the draft on the first read). Bound the
+// read-after-write wait; ambiguity and shape checks in findDraft still fail closed.
+const DRAFT_VISIBILITY_ATTEMPTS = 6;
+const DRAFT_VISIBILITY_DELAY_MILLISECONDS = 5_000;
 
 async function readBoundedCommandOutput(
   stream: ReadableStream<Uint8Array>,
@@ -367,7 +372,12 @@ if (existing.exitCode === 0 && existingResponse.status === 200) {
       "--title", expectedTitle,
       "--verify-tag",
     ]);
-    draft = await findDraft();
+    // The release list can lag the create call by a few seconds; bound the
+    // read-after-write wait instead of failing on the first empty inventory.
+    for (let attempt = 1; draft === null && attempt <= DRAFT_VISIBILITY_ATTEMPTS; attempt += 1) {
+      if (attempt > 1) await Bun.sleep(DRAFT_VISIBILITY_DELAY_MILLISECONDS);
+      draft = await findDraft();
+    }
     if (draft === null) throw new Error(`GitHub did not create the exact draft for ${tagArgument}.`);
   }
   const completeDraft = await completeDraftAssets(draft);
