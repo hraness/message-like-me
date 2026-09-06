@@ -19581,7 +19581,29 @@ async function readStablePrivateFile(path, label, maximumBytes) {
     if (!sameFile4(before2, opened)) {
       throw new CliError("unsafe-path", `${label} changed before it was read`);
     }
-    const bytes = await handle.readFile();
+    const bytes = new Uint8Array(opened.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read({
+        buffer: bytes,
+        offset,
+        length: bytes.byteLength - offset,
+        position: offset
+      });
+      if (bytesRead === 0)
+        break;
+      offset += bytesRead;
+    }
+    let extraBytes = 0;
+    if (offset === bytes.byteLength) {
+      const result = await handle.read({
+        buffer: new Uint8Array(1),
+        offset: 0,
+        length: 1,
+        position: offset
+      });
+      extraBytes = result.bytesRead;
+    }
     const afterHandle = await handle.stat();
     let afterPath;
     try {
@@ -19589,9 +19611,9 @@ async function readStablePrivateFile(path, label, maximumBytes) {
     } catch (error) {
       throw new CliError("unsafe-path", `${label} changed while it was read`, { cause: error });
     }
-    if (bytes.byteLength !== opened.size || !sameFile4(opened, afterHandle) || !sameFile4(opened, afterPath))
+    if (offset !== opened.size || extraBytes !== 0 || !sameFile4(opened, afterHandle) || !sameFile4(opened, afterPath))
       throw new CliError("unsafe-path", `${label} changed while it was read`);
-    return Uint8Array.from(bytes);
+    return bytes;
   } finally {
     await handle.close();
   }

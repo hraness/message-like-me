@@ -62,7 +62,26 @@ export async function readStablePrivateFile(
     if (!sameFile(before, opened)) {
       throw new CliError("unsafe-path", `${label} changed before it was read`);
     }
-    const bytes = await handle.readFile();
+    // A later growth must not enlarge the allocation or the admitted read.
+    const bytes = new Uint8Array(opened.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read({
+        buffer: bytes,
+        offset,
+        length: bytes.byteLength - offset,
+        position: offset,
+      });
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    let extraBytes = 0;
+    if (offset === bytes.byteLength) {
+      const result = await handle.read({
+        buffer: new Uint8Array(1), offset: 0, length: 1, position: offset,
+      });
+      extraBytes = result.bytesRead;
+    }
     const afterHandle = await handle.stat();
     let afterPath: Awaited<ReturnType<typeof lstat>>;
     try {
@@ -71,11 +90,12 @@ export async function readStablePrivateFile(
       throw new CliError("unsafe-path", `${label} changed while it was read`, { cause: error });
     }
     if (
-      bytes.byteLength !== opened.size
+      offset !== opened.size
+      || extraBytes !== 0
       || !sameFile(opened, afterHandle)
       || !sameFile(opened, afterPath)
     ) throw new CliError("unsafe-path", `${label} changed while it was read`);
-    return Uint8Array.from(bytes);
+    return bytes;
   } finally {
     await handle.close();
   }
