@@ -183,26 +183,108 @@ When an established protected ref predates reviewed workflow-control changes:
    `control_epoch_digest`. That run must fail at the complete-history gate before
    the contents-writer environment is admitted and before any status-only App
    token is minted.
-2. Preserve the failed step summary and outputs. They must contain the exact v2
+2. Preserve the failed step summary. It must contain the exact v2
    domain, protected ref, old SHA, target SHA, current workflow-source SHA, tag
    (or canary `no-tag` sentinel), ordered old-through-workflow-source commit inventory,
    every corresponding `.github/workflows` tree OID, the derived ordered change
    list, and the canonical lowercase SHA-256 digest. Independently reconstruct
    that inventory from only the governed refs and review every workflow-tree
-   transition. Do not trust the digest without reviewing its complete preimage.
+   transition. Failed-step command-file outputs are not retrievable review
+   evidence. Do not trust the digest without reviewing its complete preimage.
+   In a disposable, complete, non-shallow clone populated only with the exact
+   advertised `main`, protected branch, and (for production) stable annotated-tag
+   refs, substitute the recorded values and reconstruct the ordered inventory:
+
+   ```sh
+   protected_ref=refs/heads/website-production # use the canary ref for a canary run
+   old_sha=<40-hex-protected-ref-sha>
+   target_sha=<40-hex-target-sha>
+   workflow_sha=<40-hex-current-main-sha>
+   tag=<stable-tag-or-no-tag>
+
+   test "$(git rev-parse --is-shallow-repository)" = false
+   test "$(git rev-parse --verify "${protected_ref}^{commit}")" = "$old_sha"
+   test "$(git rev-parse --verify 'refs/heads/main^{commit}')" = "$workflow_sha"
+   git merge-base --is-ancestor "$old_sha" "$target_sha"
+   git merge-base --is-ancestor "$target_sha" "$workflow_sha"
+   if [ "$tag" = no-tag ]; then
+     test "$target_sha" = "$workflow_sha"
+   else
+     test "$(git rev-parse --verify "refs/tags/${tag}^{commit}")" = "$target_sha"
+   fi
+   test "$(git rev-list --count "$old_sha..$workflow_sha")" -le 250
+   {
+     printf '%s\n' "$old_sha"
+     git rev-list --topo-order --reverse "$old_sha..$workflow_sha"
+   } | while IFS= read -r commit_sha; do
+     printf '%s %s\n' "$commit_sha" \
+       "$(git rev-parse --verify "${commit_sha}:.github/workflows")"
+   done
+   ```
+
+   Compare every printed commit/tree pair, in order, with the failed-run summary;
+   adjacent rows with different tree OIDs must exactly match its changed-row
+   markers. The target must appear in that inventory. Then use the reviewed
+   helper from that same audited workflow-source checkout to reconstruct the
+   canonical receipt and digest:
+
+   ```sh
+   MODE=production \
+   PREVIOUS_SHA="$old_sha" \
+   TARGET_SHA="$target_sha" \
+   WORKFLOW_SHA="$workflow_sha" \
+   PROTECTED_REF="$protected_ref" \
+   VERIFIED_TAG="$tag" \
+   node --input-type=module -e '
+     import { describeControlEpoch } from "./scripts/release-workflow-range.mjs";
+     const receipt = describeControlEpoch({
+       currentMainSha: process.env.WORKFLOW_SHA,
+       mode: process.env.MODE,
+       previousSha: process.env.PREVIOUS_SHA,
+       protectedRef: process.env.PROTECTED_REF,
+       repository: "hraness/message-like-me",
+       repositoryId: 1342143606,
+       tag: process.env.VERIFIED_TAG,
+       targetSha: process.env.TARGET_SHA,
+       workflowSha: process.env.WORKFLOW_SHA,
+     });
+     process.stdout.write(JSON.stringify(receipt) + "\n");
+   '
+   ```
+
+   The resulting JSON's domain, ref, coordinates, ordered `inventory`, derived
+   `changes`, and `digest` must exactly match the human-readable failed-step
+   summary. Use `MODE=canary`, the canary ref, `tag=no-tag`, and a target equal to
+   the workflow source for a canary review. Do not fetch an unbounded ref
+   namespace, hand-assemble a digest, use a different checkout, or reorder the
+   inventory.
 3. Dispatch one fresh manual attempt 1 from exact current `main` with that exact
    digest. Automatic `workflow_run` events, rerun attempts, already-exact refs,
    and unchanged-workflow ranges must reject any digest. The gate recomputes the
    complete inventory and digest before environment admission; any source, tag,
    ref, target, ancestry, inventory, or digest drift fails closed.
-4. After the protected environment admits the job, the hash-pinned helper
+4. Before approving `production-ref-writer-key`, compare the fresh run title,
+   tag, v2 domain, protected ref, old SHA, target SHA, workflow-source SHA,
+   ordered inventory, change list, and digest with both the independently
+   reviewed failed-run summary and the locally reconstructed receipt. Reject the
+   environment admission if any field or ordered
+   inventory row differs. After approval, the hash-pinned helper
    recomputes and revalidates the same transition before reading the key. The
-   normal split-authority sequence then applies unchanged: terminalize the
-   status, prove the writer is denied, post and read back one App-authored
-   success, revoke that App token, make one exact non-force fast-forward with a
-   nonempty expected-old lease, replace success with the terminal non-success
-   status using a separately minted status-only token, revoke it, and complete
-   the read-only provider outcome gate.
+   normal split-authority sequence then applies unchanged: terminalize the status,
+   prove the writer is denied, post and read back one App-authored success,
+   revoke that App token, make one exact non-force fast-forward with a nonempty
+   expected-old lease, replace success with the terminal non-success status
+   using a separately minted status-only token, revoke it, and complete the
+   read-only provider outcome gate.
+5. After provider success, read back the protected ref at the exact target and
+   treat that target's `.github/workflows` tree OID as the baseline for the next
+   routine range. Re-read the permanent App's exact `statuses:write` plus
+   `metadata:read` permissions, absence of `contents` and `workflows` authority,
+   singleton `{hraness/message-like-me}` repository selection, and the terminal
+   non-success status. A completed epoch requires no key rotation because it
+   created or replaced no credential and every short-lived App token was revoked;
+   an interrupted run still follows the separate quarantine and cleanup
+   procedure.
 
 The digest is scoped to one exact transition and is never permission to reuse a
 stale run, skip fresh ref and source readbacks, expand the App, add a personal

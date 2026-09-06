@@ -1229,9 +1229,25 @@ esac
         INPUT_RELEASE_TAG: "v0.8.0",
       });
       expect(control.exitCode).toBe(0);
-      expect(await readFile(output, "utf8")).toContain(`control_epoch_digest=${controlDigest}\n`);
+      expect(await readFile(output, "utf8")).toBe(
+        `control_epoch_digest=${controlDigest}\nrelease_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
+      );
+      for (const malformedDigest of [
+        controlDigest.toUpperCase(),
+        "a".repeat(63),
+        `${controlDigest}\npoison`,
+      ]) {
+        const malformedControl = await runCase({
+          EVENT_NAME: "workflow_dispatch",
+          INPUT_CONTROL_EPOCH_DIGEST: malformedDigest,
+          INPUT_RELEASE_TAG: "v0.8.0",
+        });
+        expect(malformedControl.exitCode).not.toBe(0);
+        expect(await Bun.file(output).exists()).toBe(false);
+      }
       const automaticControl = await runCase({ INPUT_CONTROL_EPOCH_DIGEST: controlDigest });
       expect(automaticControl.exitCode).not.toBe(0);
+      expect(await Bun.file(output).exists()).toBe(false);
       const retriedControl = await runCase({
         EVENT_NAME: "workflow_dispatch",
         GITHUB_RUN_ATTEMPT_EXACT: "2",
@@ -1239,6 +1255,7 @@ esac
         INPUT_RELEASE_TAG: "v0.8.0",
       });
       expect(retriedControl.exitCode).not.toBe(0);
+      expect(await Bun.file(output).exists()).toBe(false);
 
       for (const rejectedEnvironment of [
         { DEFAULT_BRANCH: "trunk" },

@@ -424,6 +424,9 @@ test("site promotion gates complete workflow history before App attestation and 
     "workflow_dispatch:",
     "release_tag:",
     "control_epoch_digest:",
+    "INPUT_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}",
+    "control_epoch_digest: ${{ steps.request.outputs.control_epoch_digest }}",
+    "Control epoch requires one lowercase SHA-256 digest on manual attempt 1",
     "permissions:\n  contents: read",
     "group: website-production-promotion",
     "cancel-in-progress: false",
@@ -591,17 +594,29 @@ test("site promotion gates complete workflow history before App attestation and 
     createHash("sha256").update(workflowRangeHelper).digest("hex"),
   );
   expect(workflow.match(/release-provider-outcome\.mjs revalidate-authority/gu)?.length).toBeGreaterThanOrEqual(6);
+  expect(workflow.match(/^\s+CONTROL_EPOCH_DIGEST: \$\{\{ needs\.verify\.outputs\.control_epoch_digest \}\}$/gmu))
+    .toHaveLength(3);
   expect(workflow.match(/check-public-release\.ts/gu)?.length).toBeGreaterThanOrEqual(8);
   expect(workflow.match(/timeout-minutes: 15/gu)?.length).toBeGreaterThanOrEqual(3);
   expect(workflow.match(/timeout-minutes: 25/gu)?.length).toBeGreaterThanOrEqual(3);
   expect(workflow.match(/timeout-minutes: 40/gu)?.length).toBe(1);
 
+  const baselineStart = workflow.indexOf("\n  provider_baseline:\n");
+  const preflightStart = workflow.indexOf("\n  advance_production_ref_preflight:\n");
   const writerStart = workflow.indexOf("\n  write_production_ref:\n");
   const writerEnd = workflow.indexOf("\n  advance_production_ref:\n");
+  const baselineJob = workflow.slice(baselineStart, preflightStart);
+  const preflightJob = workflow.slice(preflightStart, writerStart);
   const writerJob = workflow.slice(writerStart, writerEnd);
   const workflowOutsideWriter = workflow.slice(0, writerStart) + workflow.slice(writerEnd);
+  expect(baselineStart).toBeGreaterThan(0);
+  expect(preflightStart).toBeGreaterThan(baselineStart);
   expect(writerStart).toBeGreaterThan(0);
   expect(writerEnd).toBeGreaterThan(writerStart);
+  for (const exactDigestConsumer of [baselineJob, preflightJob, writerJob]) {
+    expect(exactDigestConsumer.match(/^\s+CONTROL_EPOCH_DIGEST: \$\{\{ needs\.verify\.outputs\.control_epoch_digest \}\}$/gmu))
+      .toHaveLength(1);
+  }
   expect(writerJob).toContain("production-ref-writer-key");
   expect(writerJob).toContain("permissions:\n      contents: write");
   expect(writerJob).toContain("MLM_RELEASE_APP_PRIVATE_KEY");
@@ -855,6 +870,10 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "ordered old-through-workflow-source commit inventory",
     "canonical lowercase SHA-256 digest",
     "Do not trust the digest without reviewing its complete preimage",
+    "const receipt = describeControlEpoch({",
+    "Before approving `production-ref-writer-key`",
+    "tree OID as the baseline for the next",
+    "completed epoch requires no key rotation",
     "Automatic `workflow_run` events, rerun attempts, already-exact refs",
     "complete inventory and digest before environment admission",
     "recomputes and revalidates the same transition before reading the key",
