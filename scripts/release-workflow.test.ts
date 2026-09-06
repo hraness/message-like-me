@@ -423,6 +423,12 @@ test("site promotion gates complete workflow history before App attestation and 
     "types: [completed]",
     "workflow_dispatch:",
     "release_tag:",
+    "control_epoch_digest:",
+    "INPUT_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}",
+    "Automatic promotion cannot accept a control epoch",
+    'INPUT_CONTROL_EPOCH_DIGEST:-}" =~ ^[0-9a-f]{64}$',
+    "control_epoch_digest: ${{ steps.request.outputs.control_epoch_digest }}",
+    "CONTROL_EPOCH_DIGEST: ${{ needs.verify.outputs.control_epoch_digest }}",
     "permissions:\n  contents: read",
     "group: website-production-promotion",
     "cancel-in-progress: false",
@@ -543,7 +549,10 @@ test("site promotion gates complete workflow history before App attestation and 
   expect(promoteCommand).toContain("decodeWorkflowRangeReceipt(process.env.WORKFLOW_RANGE_RECEIPT)");
   expect(workflowRangeHelper).toContain('`${oldCommit}..${newCommit}`');
   expect(workflowRangeHelper).toContain("MAXIMUM_WORKFLOW_RANGE_COMMITS = 250");
-  expect(workflowRangeHelper).toContain("trees.findIndex((tree) => tree !== baselineTree)");
+  expect(workflowRangeHelper).toContain("trees[index] !== trees[index - 1]");
+  expect(workflowRangeHelper).toContain("controlEpochDigest !== epochDigest");
+  expect(workflowRangeHelper).toContain("Control-epoch acceptance applies only to the production ref.");
+  expect(workflowRangeHelper).toContain('process.env.CONTROL_EPOCH_DIGEST');
   expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
   expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
@@ -773,7 +782,7 @@ test("repository guides describe the separate release and production writers", a
   expect(siteGuide).toContain("`statuses:write` plus `metadata:read` App token");
   expect(siteGuide).toContain("The App is the ruleset-pinned source of one exact-SHA success status");
   expect(siteGuide).toContain("same job's scoped `GITHUB_TOKEN`");
-  expect(siteGuide).toContain("A workflow-control\n  epoch uses the separately approved bootstrap");
+  expect(siteGuide).toContain("A workflow-control\n  epoch uses the separately approved acceptance");
   expect(siteGuide).toContain("Already-exact recovery stays\n  read-only and outside the key environment");
   expect(siteGuide).toContain("target-bound, 36-day-inventory");
   expect(siteGuide).toContain("Incomplete or absent evidence never\n  permits a retry");
@@ -828,9 +837,12 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "code-owner",
     "precreate persistent ref",
     "website-production-writer-canary",
-    "one separately approved control-epoch bootstrap",
+    "one separately approved control-epoch acceptance",
+    "--describe-control-epoch",
+    "`control_epoch_digest` set to that exact digest",
+    "The automatic\n   `workflow_run` path cannot carry a digest",
     "permanent App's exact `statuses:write` plus\n   `metadata:read` closure",
-    "Generate a fresh App private key",
+    "No key rotation is required because\n   no credential left the checked workflow",
     "negative workflow-delta canary",
     "positive non-workflow canary",
     "complete-history gate",

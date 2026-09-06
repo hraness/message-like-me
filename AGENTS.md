@@ -141,9 +141,10 @@
   status-only token to replace the success with a proven terminal non-success
   status before revoking the second token. The status App must have neither `contents:write` nor
   `workflows:write`, and it must not be a ref-ruleset bypass actor. A reviewed
-  workflow-control epoch requires the separately approved out-of-band bootstrap
-  in the runbook, followed by App downgrade, key rotation, and already-exact
-  recovery. Require the bounded read-only provider outcome gate to finish.
+  workflow-control epoch requires the separately approved digest-pinned
+  acceptance in the runbook: a manual dispatch carrying the reviewed
+  control-epoch digest through the same key environment, with no extra
+  credential. Require the bounded read-only provider outcome gate to finish.
   Already-exact recovery must not enter the key environment. Recovery may
   revalidate only an existing immutable, artifact-complete Latest Release and
   exact npm version and must never create either one. A later positive attempt

@@ -34,8 +34,8 @@
   same job's scoped `GITHUB_TOKEN` makes one exact leased fast-forward. A fresh
   status-only token then consumes the authorization with a proven terminal
   non-success status and is revoked separately. A workflow-control
-  epoch uses the separately approved bootstrap, permanent App downgrade, and
-  key rotation in the publishing runbook. Already-exact recovery stays
+  epoch uses the separately approved acceptance in the publishing runbook: a
+  manual dispatch carrying the reviewed control-epoch digest. Already-exact recovery stays
   read-only and outside the key environment. Treat `main` and pull requests as
   preview sources. If an interrupted writer may leave success current, freeze
   both writer workflows and follow the target-bound, 36-day-inventory,

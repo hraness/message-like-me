@@ -7,8 +7,10 @@ import { spawnSync } from "node:child_process";
 import {
   assertWorkflowRangeReceipt,
   decodeWorkflowRangeReceipt,
+  describeControlEpoch,
   encodeWorkflowRangeReceipt,
   MAXIMUM_WORKFLOW_RANGE_COMMITS,
+  verifyCanaryWorkflowRange,
   verifyWorkflowRange,
   type WorkflowRangeGitResult,
   type WorkflowRangeGitRunner,
@@ -288,5 +290,142 @@ describe("complete workflow-control range", () => {
       verifiedSha: negativeSha,
       workingDirectory: negativeCanary.repository,
     })).toThrow("changes .github/workflows");
+  });
+});
+
+describe("control-epoch acceptance", () => {
+  test("describes a workflow-changing range and accepts only its exact digest", () => {
+    const input = fixture();
+    writeFileSync(input.workflow, "name: changed\n", "utf8");
+    const changeSha = commit(input.repository, "workflow change");
+    writeFileSync(join(input.repository, "product.txt"), "after\n", "utf8");
+    const verifiedSha = commit(input.repository, "product after change");
+    const changedTree = text(input.repository, ["rev-parse", `${changeSha}:.github/workflows`]);
+
+    const description = describeControlEpoch({
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    });
+    expect(description).toEqual({
+      changes: [{ commit: changeSha, workflowTreeOid: changedTree }],
+      digest: description.digest,
+      newCommitCount: 2,
+      previousSha: input.oldSha,
+      verifiedSha,
+    });
+    expect(description.digest).toMatch(/^[0-9a-f]{64}$/u);
+
+    expect(() => verifyWorkflowRange({
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    })).toThrow(`Commit ${changeSha} changes .github/workflows; use the reviewed control-epoch bootstrap.`);
+    expect(() => verifyWorkflowRange({
+      controlEpochDigest: "0".repeat(64),
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    })).toThrow("does not match");
+    expect(() => verifyWorkflowRange({
+      controlEpochDigest: description.digest.toUpperCase(),
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    })).toThrow("not one SHA-256");
+
+    const accepted = verifyWorkflowRange({
+      controlEpochDigest: description.digest,
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    });
+    expect(accepted).toMatchObject({
+      controlEpoch: description.digest,
+      newCommitCount: 2,
+      previousSha: input.oldSha,
+      verifiedSha,
+      workflowTreeOid: changedTree,
+    });
+    const encoded = encodeWorkflowRangeReceipt(accepted);
+    expect(decodeWorkflowRangeReceipt(encoded)).toEqual(accepted);
+    expect(assertWorkflowRangeReceipt(decodeWorkflowRangeReceipt(encoded), {
+      previousSha: input.oldSha,
+      verifiedSha,
+    })).toEqual(accepted);
+    expect(() => decodeWorkflowRangeReceipt(encodeWorkflowRangeReceipt({
+      ...accepted,
+      productionRef: "refs/heads/website-production-writer-canary",
+      schema: "message-like-me-canary-workflow-range-v1",
+    }))).toThrow("outside the production ref");
+
+    const productOnly = fixture();
+    writeFileSync(join(productOnly.repository, "product.txt"), "only\n", "utf8");
+    const productSha = commit(productOnly.repository, "product only");
+    const routine = verifyWorkflowRange({
+      previousSha: productOnly.oldSha,
+      verifiedSha: productSha,
+      workingDirectory: productOnly.repository,
+    });
+    expect(routine.controlEpoch).toBeNull();
+    expect(() => describeControlEpoch({
+      previousSha: productOnly.oldSha,
+      verifiedSha: productSha,
+      workingDirectory: productOnly.repository,
+    })).toThrow("routine promotion applies");
+    expect(() => verifyWorkflowRange({
+      controlEpochDigest: "1".repeat(64),
+      previousSha: productOnly.oldSha,
+      verifiedSha: productSha,
+      workingDirectory: productOnly.repository,
+    })).toThrow("requires a workflow-tree change");
+    expect(() => verifyCanaryWorkflowRange({
+      controlEpochDigest: description.digest,
+      previousSha: input.oldSha,
+      verifiedSha,
+      workingDirectory: input.repository,
+    })).toThrow("only to the production ref");
+  });
+
+  test("carries the digest through the command line only by environment", () => {
+    const input = fixture();
+    writeFileSync(input.workflow, "name: changed-cli\n", "utf8");
+    const verifiedSha = commit(input.repository, "workflow change");
+    const script = join(import.meta.dir, "release-workflow-range.mjs");
+    const run = (arguments_: readonly string[], environment: Record<string, string>) => spawnSync(
+      "node",
+      [script, ...arguments_],
+      {
+        cwd: input.repository,
+        encoding: "utf8",
+        env: { ...process.env, GITHUB_REPOSITORY: "hraness/message-like-me", ...environment },
+        timeout: 30_000,
+      },
+    );
+    const described = run([input.oldSha, verifiedSha, "--describe-control-epoch"], {});
+    expect(described.status).toBe(0);
+    const digest = /^control_epoch=([0-9a-f]{64})$/mu.exec(described.stdout)?.[1];
+    expect(digest).toBeDefined();
+    expect(described.stdout).toContain(`workflow_change=${verifiedSha} `);
+
+    const rejected = run([input.oldSha, verifiedSha], { CONTROL_EPOCH_DIGEST: "" });
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain("changes .github/workflows");
+
+    const accepted = run([input.oldSha, verifiedSha], { CONTROL_EPOCH_DIGEST: digest as string });
+    expect(accepted.status).toBe(0);
+    const receipt = decodeWorkflowRangeReceipt(/^receipt=(.+)$/mu.exec(accepted.stdout)?.[1]);
+    expect(receipt.controlEpoch).toBe(digest as string);
+
+    const canary = run([input.oldSha, verifiedSha, "--canary"], { CONTROL_EPOCH_DIGEST: digest as string });
+    expect(canary.status).toBe(1);
+    expect(canary.stderr).toContain("only to the production ref");
+
+    const describedWithDigest = run(
+      [input.oldSha, verifiedSha, "--describe-control-epoch"],
+      { CONTROL_EPOCH_DIGEST: digest as string },
+    );
+    expect(describedWithDigest.status).toBe(1);
+    expect(describedWithDigest.stderr).toContain("does not accept a digest");
   });
 });

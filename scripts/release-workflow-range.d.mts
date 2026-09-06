@@ -9,6 +9,7 @@ export type WorkflowRangeGitRunner = (
 ) => WorkflowRangeGitResult;
 
 type WorkflowRangeReceiptFields = Readonly<{
+  controlEpoch: string | null;
   newCommitCount: number;
   newCommitDigest: string;
   previousSha: string;
@@ -33,13 +34,30 @@ export type WorkflowRangeReceipt =
 export const MAXIMUM_WORKFLOW_RANGE_COMMITS: 250;
 
 export function verifyWorkflowRange(input: Readonly<{
+  controlEpochDigest?: string;
   previousSha: string;
   runner?: WorkflowRangeGitRunner;
   verifiedSha: string;
   workingDirectory?: string;
 }>): ProductionWorkflowRangeReceipt;
 
+export type ControlEpochDescription = Readonly<{
+  changes: readonly Readonly<{ commit: string; workflowTreeOid: string }>[];
+  digest: string;
+  newCommitCount: number;
+  previousSha: string;
+  verifiedSha: string;
+}>;
+
+export function describeControlEpoch(input: Readonly<{
+  previousSha: string;
+  runner?: WorkflowRangeGitRunner;
+  verifiedSha: string;
+  workingDirectory?: string;
+}>): ControlEpochDescription;
+
 export function verifyCanaryWorkflowRange(input: Readonly<{
+  controlEpochDigest?: string;
   previousSha: string;
   runner?: WorkflowRangeGitRunner;
   verifiedSha: string;

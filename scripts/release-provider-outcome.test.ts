@@ -128,6 +128,7 @@ const providerAuthority = Object.freeze({
   verifiedTag: providerTag,
 });
 const providerWorkflowRangeReceipt = Object.freeze({
+  controlEpoch: null,
   newCommitCount: 1,
   newCommitDigest: "4".repeat(64),
   previousSha: providerPreviousSha,
@@ -1157,10 +1158,10 @@ esac
       const workflowRun = await runCase({});
       expect(workflowRun.exitCode).toBe(0);
       expect(await readFile(output, "utf8")).toBe(
-        `release_run_attempt=2\nrelease_run_id=67890\nrequested_tag=v0.8.0\nupstream_sha=${releaseSha}\nworkflow_sha=${workflowSha}\n`,
+        `control_epoch_digest=\nrelease_run_attempt=2\nrelease_run_id=67890\nrequested_tag=v0.8.0\nupstream_sha=${releaseSha}\nworkflow_sha=${workflowSha}\n`,
       );
 
-      const recovery = await runCase({
+      const dispatchEnvironment = Object.freeze({
         EVENT_NAME: "workflow_dispatch",
         INPUT_RELEASE_TAG: "v0.8.0",
         UPSTREAM_CONCLUSION: "",
@@ -1174,10 +1175,32 @@ esac
         UPSTREAM_WORKFLOW_ID: "",
         UPSTREAM_WORKFLOW_NAME: "",
       });
+      const recovery = await runCase(dispatchEnvironment);
       expect(recovery.exitCode).toBe(0);
       expect(await readFile(output, "utf8")).toBe(
-        `release_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
+        `control_epoch_digest=\nrelease_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
       );
+
+      const epochDigest = "c".repeat(64);
+      const acceptance = await runCase({
+        ...dispatchEnvironment,
+        INPUT_CONTROL_EPOCH_DIGEST: epochDigest,
+      });
+      expect(acceptance.exitCode).toBe(0);
+      expect(await readFile(output, "utf8")).toBe(
+        `control_epoch_digest=${epochDigest}\nrelease_run_attempt=\nrelease_run_id=\nrequested_tag=v0.8.0\nupstream_sha=\nworkflow_sha=${workflowSha}\n`,
+      );
+
+      for (const rejectedDigestEnvironment of [
+        { INPUT_CONTROL_EPOCH_DIGEST: epochDigest },
+        { ...dispatchEnvironment, INPUT_CONTROL_EPOCH_DIGEST: epochDigest.toUpperCase() },
+        { ...dispatchEnvironment, INPUT_CONTROL_EPOCH_DIGEST: epochDigest.slice(1) },
+        { ...dispatchEnvironment, INPUT_CONTROL_EPOCH_DIGEST: `${epochDigest}\n` },
+      ] as const) {
+        const rejected = await runCase(rejectedDigestEnvironment);
+        expect(rejected.exitCode).not.toBe(0);
+        expect(await Bun.file(output).exists()).toBe(false);
+      }
 
       for (const rejectedEnvironment of [
         { DEFAULT_BRANCH: "trunk" },
