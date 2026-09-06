@@ -140,10 +140,14 @@
   App token. Require that App to be the pinned source of one exact-SHA success
   status, prove its readback, and revoke that token. Let only the same job's
   scoped `GITHUB_TOKEN` first prove denial while the exact App context is
-  terminal `error`; accept only GitHub's singular GH013 reason for the exact
-  protected ref and context ending `is errored.`, never the contradictory
-  `is expected` or a missing-status interpretation. Then let that same job's
-  scoped `GITHUB_TOKEN` perform the leased ref move, then mint a separate
+  terminal `error`; accept only GitHub's singular exact GH013 violation payload
+  for the protected ref plus the singular exact `remote: -` reason for the
+  context ending `is errored.`. Treat mutable Git progress, transport ordering,
+  and helper-label framing as diagnostics rather than proof; the fixed Git
+  executable, remote, arguments, and refspec bind the operation. Never accept
+  the contradictory `is expected` or a missing-status interpretation. Then
+  let that same job's scoped `GITHUB_TOKEN` perform the leased ref move, then
+  mint a separate
   status-only token to replace the success with a proven terminal non-success
   status before revoking the second token. The status App must have neither `contents:write` nor
   `workflows:write`, and it must not be a ref-ruleset bypass actor. A reviewed

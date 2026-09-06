@@ -712,7 +712,7 @@ describe("persistent production-ref writer canary", () => {
     expect(final).toMatchObject({
       finalRef: { sha: input.targetSha },
       postStatusRef: { sha: input.targetSha },
-      schema: "message-like-me-production-writer-canary-final-v2",
+      schema: "message-like-me-production-writer-canary-final-v3",
       terminalRules: {
         rules: {
           authority: { doNotEnforceOnCreate: false, strict: false },
@@ -724,7 +724,7 @@ describe("persistent production-ref writer canary", () => {
     }
     expect(() => encodeWriterCanaryPhaseReceipt({
       ...writerDenied,
-      schema: "message-like-me-production-writer-canary-writer-denied-v1",
+      schema: "message-like-me-production-writer-canary-writer-denied-v2",
     })).toThrow("writer canary writer-denied receipt has the wrong authority boundary");
 
     await expect(finalizeWriterCanary({

@@ -100,7 +100,7 @@ export interface ProductionAuthorityFinalReceipt {
   readonly precondition: ProductionAuthorityConsumedReceipt;
   readonly promotion: unknown;
   readonly rules: ProductionAuthorityRulesReceipt;
-  readonly schema: "message-like-me-production-authority-final-v2";
+  readonly schema: "message-like-me-production-authority-final-v3";
   readonly terminalStatus: Readonly<{
     serverDate: string;
     statusId: number;

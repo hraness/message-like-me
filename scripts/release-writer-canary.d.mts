@@ -181,7 +181,7 @@ export interface WriterCanaryTerminalizedReceipt extends WriterCanaryPhaseBase<"
   readonly statusRevocation: WriterCanaryRevocationReceipt;
 }
 
-export interface WriterCanaryWriterDeniedReceipt extends WriterCanaryPhaseBase<"writer-denied", "message-like-me-production-writer-canary-writer-denied-v2"> {
+export interface WriterCanaryWriterDeniedReceipt extends WriterCanaryPhaseBase<"writer-denied", "message-like-me-production-writer-canary-writer-denied-v3"> {
   readonly denial: Readonly<{ classification: "required-status-errored"; diagnosticSha256: string }>;
   readonly refReadback: WriterCanaryRefReadback;
   readonly rules: WriterCanaryRulesApiClosureReceipt;
@@ -246,7 +246,7 @@ export interface WriterCanaryFinalReceipt {
   readonly repositoryId: 1342143606;
   readonly runAttempt: 1;
   readonly runId: number;
-  readonly schema: "message-like-me-production-writer-canary-final-v2";
+  readonly schema: "message-like-me-production-writer-canary-final-v3";
   readonly targetSha: string;
   readonly terminalStatus: Readonly<{
     serverDate: string;

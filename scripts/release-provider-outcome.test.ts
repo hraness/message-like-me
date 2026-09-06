@@ -379,7 +379,7 @@ function providerAuthorityPhases(baseline: unknown) {
         lifecycle: providerPromotionServerDate,
       }),
     }),
-    schema: "message-like-me-production-required-status-denial-v2" as const,
+    schema: "message-like-me-production-required-status-denial-v3" as const,
     verifiedSha: providerVerifiedSha,
     verifiedTag: providerTag,
   });
@@ -2240,7 +2240,7 @@ esac
     });
     expect(denial).toMatchObject({
       previousSha: providerPreviousSha,
-      schema: "message-like-me-production-required-status-denial-v2",
+      schema: "message-like-me-production-required-status-denial-v3",
       verifiedSha: providerVerifiedSha,
     });
 
@@ -2422,7 +2422,7 @@ esac
       baselineReceipt: baseline,
       denialReceipt: {
         ...authority.denial,
-        schema: "message-like-me-production-required-status-denial-v1",
+        schema: "message-like-me-production-required-status-denial-v2",
       },
       defaultBranch: "main",
       eventName: "workflow_dispatch",

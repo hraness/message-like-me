@@ -34,12 +34,14 @@
   The App is the ruleset-pinned source of one exact-SHA success status and has
   no ref-write permission or bypass. Its success token is revoked before the
   writer moves the ref. Before success exists, the exact App context is read
-  back as terminal `error`, and the writer-denial proof accepts only one GH013
-  reason for the exact protected ref and context ending `is errored.`; `is
-  expected`, missing-status, ambiguous, or differently bound prose is not
-  acceptable evidence. The same job's scoped `GITHUB_TOKEN` makes one exact
-  leased fast-forward. A fresh
-  status-only token then consumes the authorization with a proven terminal
+  back as terminal `error`, and the writer-denial proof accepts only one exact
+  GH013 violation payload for the protected ref plus one exact `remote: -`
+  reason for the context ending `is errored.`. Mutable Git progress, transport
+  ordering, and helper-label framing are not proof; the fixed writer command
+  binds the operation. `is expected`, missing-status, ambiguous, or differently
+  bound semantic payloads are not acceptable evidence. The same job's scoped `GITHUB_TOKEN`
+  makes one exact leased fast-forward. A fresh status-only token
+  then consumes the authorization with a proven terminal
   non-success status and is revoked separately. A workflow-control epoch uses
   the publishing runbook's transition-scoped v2 digest: a no-digest attempt
   fails before key admission and publishes the complete ordered commit and

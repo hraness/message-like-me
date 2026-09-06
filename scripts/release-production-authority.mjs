@@ -662,7 +662,7 @@ function normalizeProductionDenialReceipt(value) {
   exactKeys(denial, ["classification", "diagnosticSha256"], "production writer denial");
   const verifiedTag = string(receipt.verifiedTag, "production denial verified tag");
   if (
-    receipt.schema !== "message-like-me-production-required-status-denial-v2" ||
+    receipt.schema !== "message-like-me-production-required-status-denial-v3" ||
     receipt.productionRef !== PRODUCTION_REF ||
     receipt.repository !== EXPECTED_REPOSITORY ||
     denial.classification !== "required-status-errored" ||
@@ -688,7 +688,7 @@ function normalizeProductionDenialReceipt(value) {
     productionRef: PRODUCTION_REF,
     repository: EXPECTED_REPOSITORY,
     rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
-    schema: "message-like-me-production-required-status-denial-v2",
+    schema: "message-like-me-production-required-status-denial-v3",
     verifiedSha: sha(receipt.verifiedSha, "production denial verified SHA"),
     verifiedTag,
   });
@@ -966,7 +966,7 @@ export async function finalizeProductionAuthority({
     precondition,
     promotion: admittedPromotion,
     rules,
-    schema: "message-like-me-production-authority-final-v2",
+    schema: "message-like-me-production-authority-final-v3",
     terminalStatus: Object.freeze({
       serverDate: terminalStatus.serverDate,
       statusId: consumed.status.statusId,

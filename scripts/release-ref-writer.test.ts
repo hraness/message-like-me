@@ -70,6 +70,17 @@ function requiredStatusError(
   ].join("\n"));
 }
 
+function alternateTransportRequiredStatusError(protectedRef: string, context: string) {
+  return new Error([
+    "website-production writer invocation failed: remote: Enumerating objects: 1, done.",
+    "remote: Review all repository rules before retrying this push.",
+    `git transport: remote: error: GH013: Repository rule violations found for ${protectedRef}.`,
+    "remote: diagnostic transport trailer",
+    `remote: - Required status check "${context}" is errored.`,
+    "error: failed to push some refs to 'https://github.com/hraness/message-like-me.git'",
+  ].join("\n"));
+}
+
 describe("required-status-errored GitHub denial", () => {
   const canaryLabel = "website-production writer canary Git push";
   const canaryRef = "refs/heads/website-production-writer-canary";
@@ -93,18 +104,42 @@ describe("required-status-errored GitHub denial", () => {
     });
   });
 
-  test("rejects old, ambiguous, or differently bound GitHub denial prose", () => {
+  test("accepts the exact semantic denial across mutable Git transport framing", () => {
+    expect(parseWebsiteProductionCanaryRequiredStatusDenial(
+      alternateTransportRequiredStatusError(canaryRef, canaryContext),
+    )).toEqual({
+      classification: "required-status-errored",
+      diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(parseWebsiteProductionRequiredStatusDenial(
+      alternateTransportRequiredStatusError(productionRef, productionContext),
+    )).toEqual({
+      classification: "required-status-errored",
+      diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+  });
+
+  test("rejects old, ambiguous, duplicated, or differently bound GitHub denial prose", () => {
+    const exactCanary = requiredStatusError(canaryLabel, canaryRef, canaryContext).message;
+    const canaryViolation = `GH013: Repository rule violations found for ${canaryRef}.`;
+    const canaryReason = `remote: - Required status check "${canaryContext}" is errored.`;
     const rejectedCanary = [
       requiredStatusError(canaryLabel, canaryRef, canaryContext, "expected."),
       requiredStatusError(canaryLabel, productionRef, canaryContext),
       requiredStatusError(canaryLabel, canaryRef, productionContext),
       requiredStatusError(canaryLabel, canaryRef, canaryContext, "pending."),
       requiredStatusError(canaryLabel, canaryRef, canaryContext, "errored"),
-      requiredStatusError(productionLabel, canaryRef, canaryContext),
       new Error(requiredStatusError(canaryLabel, canaryRef, canaryContext).message.replace("GH013: ", "")),
-      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Required status check "another/context" is errored.`),
-      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Required status check "${canaryContext}" is errored.`),
-      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Changes must be made through a pull request.`),
+      new Error(`${exactCanary}\nremote: error: ${canaryViolation}`),
+      new Error(exactCanary.replace(canaryViolation, `GH013: ambiguous ${canaryViolation}`)),
+      new Error(exactCanary.replace(canaryViolation, `${canaryViolation} trailing prose`)),
+      new Error(`${exactCanary}\nremote: - Required status check "another/context" is errored.`),
+      new Error(`${exactCanary}\n${canaryReason}`),
+      new Error(`${exactCanary}\nremote: - Changes must be made through a pull request.`),
+      new Error(exactCanary.replace(
+        canaryReason,
+        `${canaryReason}\nremote: diagnostic says Required status check "another/context" is errored.`,
+      )),
     ];
     for (const error of rejectedCanary) {
       expect(() => parseWebsiteProductionCanaryRequiredStatusDenial(error)).toThrow(
@@ -114,9 +149,6 @@ describe("required-status-errored GitHub denial", () => {
 
     expect(() => parseWebsiteProductionRequiredStatusDenial(
       requiredStatusError(productionLabel, canaryRef, productionContext),
-    )).toThrow("production push failure is not the exact required-status-errored ruleset denial");
-    expect(() => parseWebsiteProductionRequiredStatusDenial(
-      requiredStatusError(canaryLabel, productionRef, productionContext),
     )).toThrow("production push failure is not the exact required-status-errored ruleset denial");
   });
 });

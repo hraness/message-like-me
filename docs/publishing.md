@@ -271,9 +271,13 @@ When an established protected ref predates reviewed workflow-control changes:
    inventory row differs. After approval, the hash-pinned helper
    recomputes and revalidates the same transition before reading the key. The
    normal split-authority sequence then applies unchanged: terminalize the status
-   to the exact App-authored `error`, then prove the writer is denied with one
-   GH013 reason for `refs/heads/website-production` and exactly
-   `Required status check "message-like-me/website-production-authority" is errored.`
+   to the exact App-authored `error`, then prove the writer is denied with one exact
+   `GH013: Repository rule violations found for refs/heads/website-production.`
+   payload and one exact `remote: - Required status check "message-like-me/website-production-authority" is errored.`
+   reason. Mutable
+   Git progress, transport ordering, and helper-label framing are diagnostic
+   only; the hash-pinned helper's fixed executable, remote, arguments, and
+   refspec bind the operation.
    Post and read back one App-authored success,
    revoke that App token, make one exact non-force fast-forward with a nonempty
    expected-old lease, replace success with the terminal non-success status
@@ -318,10 +322,15 @@ the split credential contract:
    it accepts no digest and uses the unchanged v1 routine receipt. Prove
    the status-only App token cannot update the ref. After posting and reading
    back the App-authored terminal `error`, prove the job-scoped writer token is
-   rejected with exactly one GH013 reason for the exact canary ref and context:
-   `Required status check "message-like-me/website-production-writer-canary-authority" is errored.`
+   rejected with exactly one `GH013: Repository rule violations found for
+   refs/heads/website-production-writer-canary.` payload and exactly one
+   `remote: - Required status check "message-like-me/website-production-writer-canary-authority" is errored.`
+   reason.
+   Mutable Git progress, transport ordering, and helper-label framing are
+   diagnostic only; the hash-pinned helper's fixed executable, remote,
+   arguments, and refspec bind the operation.
    An `is expected` reason, a missing-status interpretation, another state,
-   branch, context, writer label, or multiple required-status reasons is not
+   branch, context, duplicate GH013 payload, or multiple rule reasons is not
    this proof. The writer must remain unable to update until the exact
    App-sourced success exists.
 3. Post one success status on the exact positive target under context

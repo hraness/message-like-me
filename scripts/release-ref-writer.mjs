@@ -145,16 +145,23 @@ export function websiteProductionCanaryStaleLeasePushArguments(staleExpectedSha)
 function parseRequiredStatusErroredDenial(error, input) {
   const message = error instanceof Error ? error.message : String(error);
   const lines = message.replaceAll("\r\n", "\n").split("\n");
+  const violationMarker = "GH013:";
+  const ruleReasonMarker = "remote: - ";
+  const requiredStatusMarker = "Required status check ";
   const violationLines = lines.filter((line) => line.includes("GH013:"));
-  const ruleReasonLines = lines.filter((line) => line.startsWith("remote: - "));
+  const ruleReasonLines = lines.filter((line) => line.includes(ruleReasonMarker));
   const requiredStatusLines = lines.filter((line) => line.includes("Required status check "));
-  const exactViolation = `${input.writerLabel} failed: remote: error: GH013: Repository rule violations found for ${input.protectedRef}.`;
+  const exactViolation = `GH013: Repository rule violations found for ${input.protectedRef}.`;
   const exactReason = `remote: - Required status check "${input.context}" is errored.`;
   if (
+    message.split(violationMarker).length !== 2 ||
+    message.split(ruleReasonMarker).length !== 2 ||
+    message.split(requiredStatusMarker).length !== 2 ||
     violationLines.length !== 1 ||
     ruleReasonLines.length !== 1 ||
     requiredStatusLines.length !== 1 ||
-    lines[0] !== exactViolation ||
+    violationLines[0].slice(violationLines[0].indexOf(violationMarker)) !== exactViolation ||
+    ruleReasonLines[0] !== exactReason ||
     requiredStatusLines[0] !== exactReason
   ) {
     fail(input.failureMessage);
@@ -170,7 +177,6 @@ export function parseWebsiteProductionCanaryRequiredStatusDenial(error) {
     context: "message-like-me/website-production-writer-canary-authority",
     failureMessage: "writer canary push failure is not the exact required-status-errored ruleset denial",
     protectedRef: CANARY_REF,
-    writerLabel: "website-production writer canary Git push",
   });
 }
 
@@ -179,7 +185,6 @@ export function parseWebsiteProductionRequiredStatusDenial(error) {
     context: "message-like-me/website-production-authority",
     failureMessage: "production push failure is not the exact required-status-errored ruleset denial",
     protectedRef: PRODUCTION_REF,
-    writerLabel: "website-production Git push",
   });
 }
 
