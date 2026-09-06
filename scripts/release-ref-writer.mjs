@@ -142,37 +142,44 @@ export function websiteProductionCanaryStaleLeasePushArguments(staleExpectedSha)
   );
 }
 
-export function parseWebsiteProductionCanaryRequiredStatusDenial(error) {
+function parseRequiredStatusErroredDenial(error, input) {
   const message = error instanceof Error ? error.message : String(error);
+  const lines = message.replaceAll("\r\n", "\n").split("\n");
+  const violationLines = lines.filter((line) => line.includes("GH013:"));
+  const ruleReasonLines = lines.filter((line) => line.startsWith("remote: - "));
+  const requiredStatusLines = lines.filter((line) => line.includes("Required status check "));
+  const exactViolation = `${input.writerLabel} failed: remote: error: GH013: Repository rule violations found for ${input.protectedRef}.`;
+  const exactReason = `remote: - Required status check "${input.context}" is errored.`;
   if (
-    !message.includes("GH013: Repository rule violations found") ||
-    !message.includes("website-production-writer-canary") ||
-    !message.includes(
-      'Required status check "message-like-me/website-production-writer-canary-authority" is expected',
-    )
+    violationLines.length !== 1 ||
+    ruleReasonLines.length !== 1 ||
+    requiredStatusLines.length !== 1 ||
+    lines[0] !== exactViolation ||
+    requiredStatusLines[0] !== exactReason
   ) {
-    fail("writer canary push failure is not the exact missing-status ruleset denial");
+    fail(input.failureMessage);
   }
   return Object.freeze({
-    classification: "required-status-missing",
+    classification: "required-status-errored",
     diagnosticSha256: createHash("sha256").update(message, "utf8").digest("hex"),
   });
 }
 
+export function parseWebsiteProductionCanaryRequiredStatusDenial(error) {
+  return parseRequiredStatusErroredDenial(error, {
+    context: "message-like-me/website-production-writer-canary-authority",
+    failureMessage: "writer canary push failure is not the exact required-status-errored ruleset denial",
+    protectedRef: CANARY_REF,
+    writerLabel: "website-production writer canary Git push",
+  });
+}
+
 export function parseWebsiteProductionRequiredStatusDenial(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  if (
-    !message.includes("GH013: Repository rule violations found") ||
-    !message.includes("website-production") ||
-    !message.includes(
-      'Required status check "message-like-me/website-production-authority" is expected',
-    )
-  ) {
-    fail("production push failure is not the exact missing-status ruleset denial");
-  }
-  return Object.freeze({
-    classification: "required-status-missing",
-    diagnosticSha256: createHash("sha256").update(message, "utf8").digest("hex"),
+  return parseRequiredStatusErroredDenial(error, {
+    context: "message-like-me/website-production-authority",
+    failureMessage: "production push failure is not the exact required-status-errored ruleset denial",
+    protectedRef: PRODUCTION_REF,
+    writerLabel: "website-production Git push",
   });
 }
 

@@ -7,6 +7,8 @@ import { join } from "node:path";
 
 import {
   advanceWebsiteProductionRef,
+  parseWebsiteProductionCanaryRequiredStatusDenial,
+  parseWebsiteProductionRequiredStatusDenial,
   proveWebsiteProductionCanaryStaleLease,
   verifiedReleaseFetchArguments,
   websiteProductionPushArguments,
@@ -51,6 +53,73 @@ function sterileBootstrapResult(call: number) {
   if (call === 2) return gitResult(exactBareRepositoryConfig);
   return undefined;
 }
+
+function requiredStatusError(
+  writerLabel: string,
+  protectedRef: string,
+  context: string,
+  state = "errored.",
+) {
+  return new Error([
+    `${writerLabel} failed: remote: error: GH013: Repository rule violations found for ${protectedRef}.`,
+    "remote: Review all repository rules at https://github.com/hraness/message-like-me/rules?ref=refs%2Fheads%2Fmain",
+    "remote:",
+    `remote: - Required status check "${context}" is ${state}`,
+    "remote:",
+    "error: failed to push some refs to 'https://github.com/hraness/message-like-me.git'",
+  ].join("\n"));
+}
+
+describe("required-status-errored GitHub denial", () => {
+  const canaryLabel = "website-production writer canary Git push";
+  const canaryRef = "refs/heads/website-production-writer-canary";
+  const canaryContext = "message-like-me/website-production-writer-canary-authority";
+  const productionLabel = "website-production Git push";
+  const productionRef = "refs/heads/website-production";
+  const productionContext = "message-like-me/website-production-authority";
+
+  test("accepts only GitHub's exact errored required-status reason for each protected ref", () => {
+    expect(parseWebsiteProductionCanaryRequiredStatusDenial(
+      requiredStatusError(canaryLabel, canaryRef, canaryContext),
+    )).toEqual({
+      classification: "required-status-errored",
+      diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(parseWebsiteProductionRequiredStatusDenial(
+      requiredStatusError(productionLabel, productionRef, productionContext),
+    )).toEqual({
+      classification: "required-status-errored",
+      diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+  });
+
+  test("rejects old, ambiguous, or differently bound GitHub denial prose", () => {
+    const rejectedCanary = [
+      requiredStatusError(canaryLabel, canaryRef, canaryContext, "expected."),
+      requiredStatusError(canaryLabel, productionRef, canaryContext),
+      requiredStatusError(canaryLabel, canaryRef, productionContext),
+      requiredStatusError(canaryLabel, canaryRef, canaryContext, "pending."),
+      requiredStatusError(canaryLabel, canaryRef, canaryContext, "errored"),
+      requiredStatusError(productionLabel, canaryRef, canaryContext),
+      new Error(requiredStatusError(canaryLabel, canaryRef, canaryContext).message.replace("GH013: ", "")),
+      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Required status check "another/context" is errored.`),
+      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Required status check "${canaryContext}" is errored.`),
+      new Error(`${requiredStatusError(canaryLabel, canaryRef, canaryContext).message}\nremote: - Changes must be made through a pull request.`),
+    ];
+    for (const error of rejectedCanary) {
+      expect(() => parseWebsiteProductionCanaryRequiredStatusDenial(error)).toThrow(
+        "writer canary push failure is not the exact required-status-errored ruleset denial",
+      );
+    }
+
+    expect(() => parseWebsiteProductionRequiredStatusDenial(
+      requiredStatusError(productionLabel, canaryRef, productionContext),
+    )).toThrow("production push failure is not the exact required-status-errored ruleset denial");
+    expect(() => parseWebsiteProductionRequiredStatusDenial(
+      requiredStatusError(canaryLabel, productionRef, productionContext),
+    )).toThrow("production push failure is not the exact required-status-errored ruleset denial");
+  });
+});
 
 describe("website-production Git writer", () => {
   test("builds one fixed refspec with one nonempty exact explicit lease", () => {

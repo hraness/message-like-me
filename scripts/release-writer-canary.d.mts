@@ -181,8 +181,8 @@ export interface WriterCanaryTerminalizedReceipt extends WriterCanaryPhaseBase<"
   readonly statusRevocation: WriterCanaryRevocationReceipt;
 }
 
-export interface WriterCanaryWriterDeniedReceipt extends WriterCanaryPhaseBase<"writer-denied", "message-like-me-production-writer-canary-writer-denied-v1"> {
-  readonly denial: Readonly<{ classification: "required-status-missing"; diagnosticSha256: string }>;
+export interface WriterCanaryWriterDeniedReceipt extends WriterCanaryPhaseBase<"writer-denied", "message-like-me-production-writer-canary-writer-denied-v2"> {
+  readonly denial: Readonly<{ classification: "required-status-errored"; diagnosticSha256: string }>;
   readonly refReadback: WriterCanaryRefReadback;
   readonly rules: WriterCanaryRulesApiClosureReceipt;
 }
@@ -246,7 +246,7 @@ export interface WriterCanaryFinalReceipt {
   readonly repositoryId: 1342143606;
   readonly runAttempt: 1;
   readonly runId: number;
-  readonly schema: "message-like-me-production-writer-canary-final-v1";
+  readonly schema: "message-like-me-production-writer-canary-final-v2";
   readonly targetSha: string;
   readonly terminalStatus: Readonly<{
     serverDate: string;
@@ -301,7 +301,7 @@ export function terminalizeWriterCanary(input: Readonly<{
     receipt: WriterCanaryPreflightReceipt,
   ): Promise<Readonly<WriterCanaryTerminalStatusResult>>;
 }>): Promise<Readonly<WriterCanaryTerminalizedReceipt>>;
-export function denyWriterCanaryWithoutStatus(input: Readonly<{
+export function denyWriterCanaryWithoutSuccess(input: Readonly<{
   admitted: WriterCanaryPreflightReceipt;
   advanceRef(
     receipt: WriterCanaryPreflightReceipt,

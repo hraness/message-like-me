@@ -346,7 +346,7 @@ function providerAuthorityPhases(baseline: unknown) {
   const denial = Object.freeze({
     baselineDigest: normalize(baseline),
     denial: Object.freeze({
-      classification: "required-status-missing" as const,
+      classification: "required-status-errored" as const,
       diagnosticSha256: "d".repeat(64),
     }),
     observedAt: providerPromotionServerDate,
@@ -379,7 +379,7 @@ function providerAuthorityPhases(baseline: unknown) {
         lifecycle: providerPromotionServerDate,
       }),
     }),
-    schema: "message-like-me-production-required-status-denial-v1" as const,
+    schema: "message-like-me-production-required-status-denial-v2" as const,
     verifiedSha: providerVerifiedSha,
     verifiedTag: providerTag,
   });
@@ -2192,7 +2192,7 @@ esac
     );
   });
 
-  test("proves required-status denial before the exact attested write", async () => {
+  test("proves required-status-errored denial before the exact attested write", async () => {
     const baselineDeployment = providerDeployment(10, "2026-08-29T13:00:00Z", {
       sha: providerPreviousSha,
     });
@@ -2226,7 +2226,7 @@ esac
           verifiedTag: providerTag,
         });
         return {
-          classification: "required-status-missing" as const,
+          classification: "required-status-errored" as const,
           diagnosticSha256: "d".repeat(64),
         };
       },
@@ -2240,7 +2240,7 @@ esac
     });
     expect(denial).toMatchObject({
       previousSha: providerPreviousSha,
-      schema: "message-like-me-production-required-status-denial-v1",
+      schema: "message-like-me-production-required-status-denial-v2",
       verifiedSha: providerVerifiedSha,
     });
 
@@ -2293,7 +2293,7 @@ esac
       baselineReceipt: baseline,
       defaultBranch: "main",
       denyRef: async () => ({
-        classification: "required-status-missing" as const,
+        classification: "required-status-errored" as const,
         diagnosticSha256: "e".repeat(64),
       }),
       eventName: "workflow_dispatch",
@@ -2409,6 +2409,30 @@ esac
       workflowRangeReceipt: providerWorkflowRangeReceipt,
     })).rejects.toThrow("does not bind the required-status denial proof");
     expect(malformedDenial.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
+
+    const legacyDenial = new ProviderApiFixture({
+      deployments: [[baselineDeployment]],
+      refSha: providerPreviousSha,
+      statuses: terminalBaselineStatus(),
+    });
+    await expect(promoteWebsiteProductionRaw({
+      advanceRef: new ProviderRefWriterFixture(legacyDenial).advanceRef,
+      api: legacyDenial,
+      attestationReceipt: encodeProductionAuthorityPhaseReceipt(authority.attestation),
+      baselineReceipt: baseline,
+      denialReceipt: {
+        ...authority.denial,
+        schema: "message-like-me-production-required-status-denial-v1",
+      },
+      defaultBranch: "main",
+      eventName: "workflow_dispatch",
+      recoveryWorkflowSha: providerVerifiedSha,
+      repository: providerRepository,
+      verifiedSha: providerVerifiedSha,
+      verifiedTag: providerTag,
+      workflowRangeReceipt: providerWorkflowRangeReceipt,
+    })).rejects.toThrow("production writer denial receipt has the wrong boundary");
+    expect(legacyDenial.calls.some((call) => call.startsWith("GIT PUSH "))).toBe(false);
 
     const staleLatest = new ProviderApiFixture({
       latestSnapshots: [providerLatest({ tag_name: "v0.7.9" })],

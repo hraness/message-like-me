@@ -103,6 +103,23 @@ export function createProviderBaseline(input: Readonly<{
   verifiedSha: string;
 }>): Promise<unknown>;
 
+export interface ProductionRequiredStatusDenialReceipt {
+  readonly baselineDigest: string;
+  readonly denial: Readonly<{
+    classification: "required-status-errored";
+    diagnosticSha256: string;
+  }>;
+  readonly observedAt: string;
+  readonly preconditionSha256: string;
+  readonly previousSha: string;
+  readonly productionRef: "refs/heads/website-production";
+  readonly repository: "hraness/message-like-me";
+  readonly rules: unknown;
+  readonly schema: "message-like-me-production-required-status-denial-v2";
+  readonly verifiedSha: string;
+  readonly verifiedTag: string;
+}
+
 type ProviderPromotionCommon = Readonly<{
   api: ReleaseProviderApi;
   baselineReceipt: unknown;
@@ -149,7 +166,7 @@ export function proveProductionRequiredStatusDenial(input: Readonly<{
     verifiedSha: string,
     verifiedTag: string,
   ): Promise<Readonly<{
-    classification: "required-status-missing";
+    classification: "required-status-errored";
     diagnosticSha256: string;
   }>>;
   eventName: string;
@@ -159,7 +176,7 @@ export function proveProductionRequiredStatusDenial(input: Readonly<{
   verifiedSha: string;
   verifiedTag: string;
   workflowRangeReceipt: unknown;
-}>): Promise<unknown>;
+}>): Promise<Readonly<ProductionRequiredStatusDenialReceipt>>;
 
 export function promoteWebsiteProduction(
   input: ProviderPromotionCommon &

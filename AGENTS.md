@@ -139,6 +139,10 @@
   Mint only the numeric one-repository `statuses:write` plus `metadata:read`
   App token. Require that App to be the pinned source of one exact-SHA success
   status, prove its readback, and revoke that token. Let only the same job's
+  scoped `GITHUB_TOKEN` first prove denial while the exact App context is
+  terminal `error`; accept only GitHub's singular GH013 reason for the exact
+  protected ref and context ending `is errored.`, never the contradictory
+  `is expected` or a missing-status interpretation. Then let that same job's
   scoped `GITHUB_TOKEN` perform the leased ref move, then mint a separate
   status-only token to replace the success with a proven terminal non-success
   status before revoking the second token. The status App must have neither `contents:write` nor

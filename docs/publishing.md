@@ -270,8 +270,11 @@ When an established protected ref predates reviewed workflow-control changes:
    environment admission if any field or ordered
    inventory row differs. After approval, the hash-pinned helper
    recomputes and revalidates the same transition before reading the key. The
-   normal split-authority sequence then applies unchanged: terminalize the status,
-   prove the writer is denied, post and read back one App-authored success,
+   normal split-authority sequence then applies unchanged: terminalize the status
+   to the exact App-authored `error`, then prove the writer is denied with one
+   GH013 reason for `refs/heads/website-production` and exactly
+   `Required status check "message-like-me/website-production-authority" is errored.`
+   Post and read back one App-authored success,
    revoke that App token, make one exact non-force fast-forward with a nonempty
    expected-old lease, replace success with the terminal non-success status
    using a separately minted status-only token, revoke it, and complete the
@@ -313,8 +316,14 @@ the split credential contract:
 2. A later positive non-workflow canary targets a reviewed descendant for which
    every newly reachable commit preserves the baseline workflow-tree OID. Prove
    it accepts no digest and uses the unchanged v1 routine receipt. Prove
-   the status-only App token cannot update the ref and the job-scoped writer
-   token cannot update it before the exact App-sourced success exists.
+   the status-only App token cannot update the ref. After posting and reading
+   back the App-authored terminal `error`, prove the job-scoped writer token is
+   rejected with exactly one GH013 reason for the exact canary ref and context:
+   `Required status check "message-like-me/website-production-writer-canary-authority" is errored.`
+   An `is expected` reason, a missing-status interpretation, another state,
+   branch, context, writer label, or multiple required-status reasons is not
+   this proof. The writer must remain unable to update until the exact
+   App-sourced success exists.
 3. Post one success status on the exact positive target under context
    `message-like-me/website-production-writer-canary-authority`, prove its exact
    readback, and revoke that short-lived status-only token. With the success

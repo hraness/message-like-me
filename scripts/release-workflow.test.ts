@@ -403,6 +403,7 @@ test("site promotion gates complete workflow history before App attestation and 
     workflow,
     appTokenHelper,
     providerHelper,
+    productionAuthorityHelper,
     refWriterHelper,
     statusAttesterHelper,
     workflowRangeHelper,
@@ -411,6 +412,7 @@ test("site promotion gates complete workflow history before App attestation and 
     readFile(join(WORKFLOWS, "website-production.yml"), "utf8"),
     readFile(APP_TOKEN_HELPER, "utf8"),
     readFile(PROVIDER_HELPER, "utf8"),
+    readFile(PRODUCTION_AUTHORITY_HELPER, "utf8"),
     readFile(REF_WRITER_HELPER, "utf8"),
     readFile(STATUS_ATTESTER_HELPER, "utf8"),
     readFile(WORKFLOW_RANGE, "utf8"),
@@ -561,6 +563,13 @@ test("site promotion gates complete workflow history before App attestation and 
   expect(refWriterHelper).toContain("verifiedTag: input.verifiedTag");
   expect(refWriterHelper).toContain("MLM_RELEASE_REF_TOKEN");
   expect(refWriterHelper).not.toContain("MLM_RELEASE_APP_TOKEN");
+  expect(refWriterHelper).toContain('classification: "required-status-errored"');
+  expect(refWriterHelper).toContain('is errored.');
+  expect(refWriterHelper).not.toContain('is expected');
+  expect(providerHelper).toContain("message-like-me-production-required-status-denial-v2");
+  expect(providerHelper).not.toContain("message-like-me-production-required-status-denial-v1");
+  expect(productionAuthorityHelper).toContain("message-like-me-production-authority-final-v2");
+  expect(productionAuthorityHelper).not.toContain("message-like-me-production-authority-final-v1");
   expect(statusAttesterHelper).toContain("message-like-me/website-production-authority");
   expect(statusAttesterHelper).not.toContain("MLM_RELEASE_REF_TOKEN");
   expect(statusAttesterHelper).toContain('state: "success"');
@@ -700,6 +709,10 @@ test("production, canary, and cleanup keep status and ref authority split", asyn
   expect(canaryWorkflow).toContain("control_epoch_digest:");
   expect(canaryWorkflow).toContain("CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}");
   expect(canary).toContain("RELEASE_CANARY_STATUS_CONTEXT");
+  expect(canary).toContain("message-like-me-production-writer-canary-writer-denied-v2");
+  expect(canary).toContain("message-like-me-production-writer-canary-final-v2");
+  expect(canary).not.toContain("message-like-me-production-writer-canary-writer-denied-v1");
+  expect(canary).not.toContain("message-like-me-production-writer-canary-final-v1");
   expect(statusAttester).toContain(
     "message-like-me/website-production-writer-canary-authority",
   );
@@ -788,6 +801,8 @@ test("repository guides describe the separate release and production writers", a
   expect(rootGuide).toContain("match the exact\n  independently reviewed v2 control-epoch receipt and digest");
   expect(rootGuide).toContain("`statuses:write` plus `metadata:read`");
   expect(rootGuide).toContain("status App must have neither `contents:write` nor\n  `workflows:write`");
+  expect(rootGuide).toContain("protected ref and context ending `is errored.`");
+  expect(rootGuide).toContain("`is expected` or a missing-status interpretation");
   expect(rootGuide).toContain("Already-exact recovery must not enter the key environment");
   expect(rootGuide).toContain("36-day complete attempt inventory");
   expect(rootGuide).toContain("65-minute token-expiry quarantine");
@@ -800,6 +815,8 @@ test("repository guides describe the separate release and production writers", a
   expect(siteGuide).toContain("exact independently\n  reviewed v2 receipt and digest");
   expect(siteGuide).toContain("The App is the ruleset-pinned source of one exact-SHA success status");
   expect(siteGuide).toContain("same job's scoped `GITHUB_TOKEN`");
+  expect(siteGuide).toContain("context ending `is errored.`");
+  expect(siteGuide).toContain("missing-status, ambiguous, or differently bound prose");
   expect(rootGuide).toContain("transition-scoped v2 digest protocol");
   expect(rootGuide).toContain("one no-digest run must fail before key admission");
   expect(rootGuide).toContain("independently reviewed exact digest");
@@ -855,6 +872,8 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "{hraness/message-like-me}",
     "GitHub Actions Integration `15368`",
     "message-like-me/website-production-authority",
+    "Required status check \"message-like-me/website-production-authority\" is errored.",
+    "multiple required-status reasons",
     "has no update restriction or bypass actor",
     "external release gate, not as inputs the promotion workflow may administer",
     "must not create, replace, patch, disable, or broaden a ruleset",
