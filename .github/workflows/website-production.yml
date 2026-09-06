@@ -360,7 +360,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -401,7 +401,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -434,7 +434,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -467,7 +467,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -500,7 +500,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -537,7 +537,7 @@ jobs:
           PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
           PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: 74110e5ddfbb2512384a9ac677a1124b2b0a4f13894f9721060fda4740a9b8f2
+          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
           WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
@@ -756,6 +756,11 @@ jobs:
     needs:
       - verify
       - select_promotion
+    if: >-
+      ${{ always() &&
+          !cancelled() &&
+          needs.verify.result == 'success' &&
+          needs.select_promotion.result == 'success' }}
     permissions:
       contents: read
     runs-on: ubuntu-24.04
@@ -800,6 +805,13 @@ jobs:
       - provider_baseline
       - select_promotion
       - post_promotion_admission
+    if: >-
+      ${{ always() &&
+          !cancelled() &&
+          needs.verify.result == 'success' &&
+          needs.provider_baseline.result == 'success' &&
+          needs.select_promotion.result == 'success' &&
+          needs.post_promotion_admission.result == 'success' }}
     permissions:
       contents: read
       deployments: read
@@ -854,11 +866,22 @@ jobs:
     needs:
       - verify
       - provider_outcome
+    if: ${{ always() && !cancelled() }}
     permissions:
       contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      - name: Bind the complete terminal admission chain
+        env:
+          PROVIDER_OUTCOME_RESULT: ${{ needs.provider_outcome.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERIFY_RESULT" != "success" || "$PROVIDER_OUTCOME_RESULT" != "success" ]]; then
+            echo "::error::Production promotion did not complete every required admission job"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
