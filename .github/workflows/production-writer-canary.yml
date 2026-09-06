@@ -1,8 +1,17 @@
 name: Prove production ref writer canary
-run-name: Prove writer canary target ${{ github.workflow_sha }}
+run-name: Prove writer canary target ${{ github.workflow_sha }} / control ${{ inputs.control_epoch_digest || 'routine' }}
 
 on:
   workflow_dispatch:
+    inputs:
+      control_epoch_digest:
+        description: Exact reviewed canary control-epoch v2 digest; leave empty for a routine unchanged-workflow range
+        required: false
+        type: string
+        default: ""
+
+env:
+  CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}
 
 permissions:
   contents: read
@@ -20,6 +29,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
+      control_epoch_changes: ${{ steps.preflight.outputs.control_epoch_changes }}
+      control_epoch_digest: ${{ steps.preflight.outputs.control_epoch_digest }}
+      control_epoch_domain: ${{ steps.preflight.outputs.control_epoch_domain }}
+      control_epoch_inventory: ${{ steps.preflight.outputs.control_epoch_inventory }}
+      control_epoch_old_sha: ${{ steps.preflight.outputs.control_epoch_old_sha }}
+      control_epoch_ref: ${{ steps.preflight.outputs.control_epoch_ref }}
+      control_epoch_tag: ${{ steps.preflight.outputs.control_epoch_tag }}
+      control_epoch_target_sha: ${{ steps.preflight.outputs.control_epoch_target_sha }}
+      control_epoch_title: ${{ steps.preflight.outputs.control_epoch_title }}
+      control_epoch_workflow_sha: ${{ steps.preflight.outputs.control_epoch_workflow_sha }}
       expected_old_sha: ${{ steps.preflight.outputs.expected_old_sha }}
       receipt: ${{ steps.preflight.outputs.receipt }}
       target_sha: ${{ steps.preflight.outputs.target_sha }}
@@ -41,7 +60,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
-      - name: Bind the persistent canary to one unchanged-workflow current-main range
+      - name: Bind the persistent canary to one routine or reviewed current-main range
         id: preflight
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,10 +108,10 @@ jobs:
         id: pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -112,10 +131,10 @@ jobs:
         id: pre_terminalize_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -139,10 +158,10 @@ jobs:
         id: post_terminalize_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -163,10 +182,10 @@ jobs:
         id: pre_attest_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -190,10 +209,10 @@ jobs:
         id: post_attest_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -216,10 +235,10 @@ jobs:
         if: ${{ always() && steps.pin.outcome == 'success' && steps.revalidate.outcome == 'success' && steps.pre_terminalize_pin.outcome == 'success' && steps.terminalize.outcome != 'skipped' }}
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -263,10 +282,10 @@ jobs:
       - name: Pin every finalizer dependency after protected execution
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
+          CANARY_SHA256: 4cd819f3e1b5dcdedd1cf7bbe16d83aaddefe891d5614bd1eb5fba331b124132
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
-          STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
+          STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
+          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"

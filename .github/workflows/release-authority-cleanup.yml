@@ -57,7 +57,7 @@ jobs:
       - name: Pin the cleanup admission helper to reviewed bytes
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CLEANUP_SHA256: ac204e30e66b2356f35611f63e6f12a841ffc092f97cd7c62bbe22180af4c5ae
+          CLEANUP_SHA256: b55a84c97faf88ee55e9b5066c1113f716ebf7985916e58f3c5e628cd251bc96
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -103,7 +103,7 @@ jobs:
       - name: Pin the cleanup helper before post-approval revalidation
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CLEANUP_SHA256: ac204e30e66b2356f35611f63e6f12a841ffc092f97cd7c62bbe22180af4c5ae
+          CLEANUP_SHA256: b55a84c97faf88ee55e9b5066c1113f716ebf7985916e58f3c5e628cd251bc96
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -127,7 +127,7 @@ jobs:
         id: app_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CLEANUP_SHA256: ac204e30e66b2356f35611f63e6f12a841ffc092f97cd7c62bbe22180af4c5ae
+          CLEANUP_SHA256: b55a84c97faf88ee55e9b5066c1113f716ebf7985916e58f3c5e628cd251bc96
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -177,7 +177,7 @@ jobs:
         if: ${{ always() }}
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          CLEANUP_SHA256: ac204e30e66b2356f35611f63e6f12a841ffc092f97cd7c62bbe22180af4c5ae
+          CLEANUP_SHA256: b55a84c97faf88ee55e9b5066c1113f716ebf7985916e58f3c5e628cd251bc96
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"

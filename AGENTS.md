@@ -132,8 +132,10 @@
   private key inside the main-only `production-ref-writer-key` environment and
   expose it only to a fresh dependency-free, hash-pinned promotion job. Before
   environment admission, and again in that job before reading the key, require
-  complete non-shallow history and prove that every commit newly reachable from
-  the expected-old production SHA preserves its `.github/workflows` tree OID.
+  complete non-shallow history. The complete range must either preserve the
+  baseline `.github/workflows` tree OID with no digest, or match the exact
+  independently reviewed v2 control-epoch receipt and digest for every ordered
+  commit and workflow-tree transition.
   Mint only the numeric one-repository `statuses:write` plus `metadata:read`
   App token. Require that App to be the pinned source of one exact-SHA success
   status, prove its readback, and revoke that token. Let only the same job's
@@ -141,10 +143,14 @@
   status-only token to replace the success with a proven terminal non-success
   status before revoking the second token. The status App must have neither `contents:write` nor
   `workflows:write`, and it must not be a ref-ruleset bypass actor. A reviewed
-  workflow-control epoch requires the separately approved digest-pinned
-  acceptance in the runbook: a manual dispatch carrying the reviewed
-  control-epoch digest through the same key environment, with no extra
-  credential. Require the bounded read-only provider outcome gate to finish.
+  workflow-control epoch requires the transition-scoped v2 digest protocol in
+  the runbook: one no-digest run must fail before key admission while publishing
+  the complete ordered commit and workflow-tree inventory, and one fresh manual
+  attempt-1 dispatch may carry only the independently reviewed exact digest.
+  Recompute that inventory before environment admission and again before
+  reading the key. Never expand the status App, mint a temporary broad
+  credential, or move the ref out of band. Require the bounded read-only
+  provider outcome gate to finish.
   Already-exact recovery must not enter the key environment. Recovery may
   revalidate only an existing immutable, artifact-complete Latest Release and
   exact npm version and must never create either one. A later positive attempt

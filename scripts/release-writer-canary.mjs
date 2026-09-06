@@ -15,14 +15,15 @@ import {
   proveWebsiteProductionCanaryStaleLeaseFromEnvironment,
 } from "./release-ref-writer.mjs";
 import {
-  parseReleaseCanaryStatusResponse,
   RELEASE_CANARY_STATUS_CONTEXT,
-  releaseCanaryStatusRequest,
+  withReleaseCanaryAttestationFromEnvironment,
   withReleaseCanaryTerminalStatusFromEnvironment,
 } from "./release-status-attester.mjs";
 import {
-  assertCanaryWorkflowRangeReceipt,
-  verifyCanaryWorkflowRange,
+  assertCanaryWorkflowAdmissionReceipt,
+  ControlEpochAdmissionError,
+  verifyCanaryWorkflowAdmission,
+  writeControlEpochReview,
 } from "./release-workflow-range.mjs";
 
 const EXPECTED_REPOSITORY = "hraness/message-like-me";
@@ -46,7 +47,7 @@ const CANARY_RECEIPT_SCHEMA = "message-like-me-production-writer-canary-v1";
 const SHA = /^[0-9a-f]{40}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
-const MAX_RECEIPT_BYTES = 16 * 1024;
+const MAX_RECEIPT_BYTES = 128 * 1024;
 const REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 const HTTP_DATE = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/u;
 
@@ -386,6 +387,10 @@ function parseWriterCanaryRulesApiClosure(value, label) {
 }
 
 export function parseWriterCanaryEnvironment(environment) {
+  const controlEpochDigest = environment.CONTROL_EPOCH_DIGEST;
+  if (controlEpochDigest !== undefined && typeof controlEpochDigest !== "string") {
+    fail("CONTROL_EPOCH_DIGEST is malformed");
+  }
   const repositoryId = exactPositiveInteger(
     exactEnvironmentString(environment, "GITHUB_REPOSITORY_ID"),
     "GITHUB_REPOSITORY_ID",
@@ -413,6 +418,7 @@ export function parseWriterCanaryEnvironment(environment) {
   }
   return Object.freeze({
     apiUrl: exactApiUrl(environment.GITHUB_API_URL),
+    controlEpochDigest: controlEpochDigest === "" ? undefined : controlEpochDigest,
     repository: EXPECTED_REPOSITORY,
     repositoryId: EXPECTED_REPOSITORY_ID,
     runAttempt: 1,
@@ -499,7 +505,7 @@ function exactLocalHead(workingDirectory) {
 export async function createWriterCanaryPreflight({
   api,
   environment,
-  verifyRange = verifyCanaryWorkflowRange,
+  verifyRange = verifyCanaryWorkflowAdmission,
   workingDirectory = process.cwd(),
 }) {
   const coordinate = parseWriterCanaryEnvironment(environment);
@@ -524,14 +530,23 @@ export async function createWriterCanaryPreflight({
   let range;
   try {
     range = verifyRange({
+      controlEpochDigest: coordinate.controlEpochDigest,
+      currentMainSha: targetSha,
+      eventName: "workflow_dispatch",
+      eventRef: MAIN_REF,
+      eventSha: coordinate.workflowSha,
+      githubActions: "true",
       previousSha: expectedOldSha,
-      verifiedSha: targetSha,
+      protectedRef: CANARY_REF,
+      repository: EXPECTED_REPOSITORY,
+      repositoryId: EXPECTED_REPOSITORY_ID,
+      runAttempt: coordinate.runAttempt,
+      targetSha,
+      workflowSha: coordinate.workflowSha,
       workingDirectory,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const match = /^Commit ([0-9a-f]{40}) changes \.github\/workflows; use the reviewed control-epoch bootstrap\.$/u.exec(message);
-    if (match === null) throw error;
+    if (!(error instanceof ControlEpochAdmissionError)) throw error;
     const finalCanaryReceipt = parseApiReceipt(
       await api.getRef(CANARY_REF),
       "writer canary workflow-delta ref readback",
@@ -550,11 +565,12 @@ export async function createWriterCanaryPreflight({
     }
     throw new WriterCanaryWorkflowDeltaError(Object.freeze({
       canaryServerDate: canaryReceipt.serverDate,
+      controlEpoch: error.receipt,
       context: RELEASE_CANARY_STATUS_CONTEXT,
       expectedOldSha,
       finalSha,
       mainServerDate: mainReceipt.serverDate,
-      offendingCommit: match[1],
+      offendingCommit: error.receipt.changes[0]?.commitSha,
       productionRef: CANARY_REF,
       readbackServerDate: finalCanaryReceipt.serverDate,
       repository: EXPECTED_REPOSITORY,
@@ -562,11 +578,11 @@ export async function createWriterCanaryPreflight({
       runAttempt: run.runAttempt,
       runId: run.runId,
       runServerDate: runReceipt.serverDate,
-      schema: "message-like-me-production-writer-canary-workflow-delta-v1",
+      schema: "message-like-me-production-writer-canary-control-epoch-rejection-v2",
       targetSha,
       workflowId: run.workflowId,
       workflowSha: coordinate.workflowSha,
-    }));
+    }), error.receipt);
   }
   const rulesClosure = parseWriterCanaryRulesApiClosure(
     await api.getRules(),
@@ -604,18 +620,20 @@ export async function createWriterCanaryPreflight({
 }
 
 export class WriterCanaryWorkflowDeltaError extends Error {
-  constructor(receipt) {
-    super("writer canary rejected a workflow-changing range before key admission");
+  constructor(receipt, controlEpoch) {
+    super("writer canary requires an exact v2 control-epoch digest before key admission");
     this.name = "WriterCanaryWorkflowDeltaError";
+    this.controlEpoch = controlEpoch;
     this.receipt = receipt;
   }
 }
 
 function normalizedPreflightReceipt(value) {
   const receipt = expectRecord(value, "writer canary preflight receipt");
-  const range = assertCanaryWorkflowRangeReceipt(receipt.range, {
+  const range = assertCanaryWorkflowAdmissionReceipt(receipt.range, {
     previousSha: exactSha(receipt.expectedOldSha, "writer canary expected-old SHA"),
-    verifiedSha: exactSha(receipt.targetSha, "writer canary target SHA"),
+    targetSha: exactSha(receipt.targetSha, "writer canary target SHA"),
+    workflowSha: exactSha(receipt.workflowSha, "writer canary workflow SHA"),
   });
   if (
     receipt.schema !== CANARY_RECEIPT_SCHEMA ||
@@ -1590,30 +1608,8 @@ async function livePreflight(environment) {
 async function createCanaryAttestationFromEnvironment(environment, admitted) {
   assertAppOnlyProcess(environment);
   let revocation;
-  const status = await withReleaseAppTokenFromEnvironment(
+  const status = await withReleaseCanaryAttestationFromEnvironment(
     { ...environment, TARGET: admitted.targetSha },
-    async (token, app) => {
-      const request = releaseCanaryStatusRequest(admitted.targetSha, "success");
-      const response = await fetch(new URL(request.endpoint, exactApiUrl(environment.GITHUB_API_URL)), {
-        body: JSON.stringify(request.body),
-        headers: githubHeaders(token, true),
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
-      });
-      if (response.redirected !== false || response.headers.get("location") !== null) {
-        fail("writer canary attestation POST redirected");
-      }
-      if (response.status !== 201) {
-        await readBoundedBytes(response, "writer canary attestation error response");
-        fail(`writer canary attestation POST returned HTTP ${String(response.status)}`);
-      }
-      return parseReleaseCanaryStatusResponse(
-        await readBoundedJson(response, "writer canary attestation response"),
-        response.headers.get("date"),
-        { app, state: "success", targetSha: admitted.targetSha },
-      );
-    },
     async (receipt) => {
       revocation = receipt;
     },
@@ -1697,6 +1693,9 @@ async function liveRevalidate(environment) {
   const api = writerApiFromEnvironment(environment);
   const fresh = await createWriterCanaryPreflight({ api, environment });
   assertFreshPreflight(admitted, fresh);
+  if (fresh.range.schema === "message-like-me-canary-control-epoch-v2") {
+    writeControlEpochReview(fresh.range);
+  }
   return Object.freeze({
     admittedPreflightSha256: writerCanaryPreflightDigest(admitted),
     admittedPreflightSemanticSha256: writerCanaryPreflightSemanticDigest(admitted),
@@ -1934,7 +1933,7 @@ function receiptDigest(value) {
 
 function encodeBoundedReceipt(value) {
   const encoded = Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
-  if (Buffer.byteLength(encoded, "utf8") > 64 * 1024) {
+  if (Buffer.byteLength(encoded, "utf8") > MAX_RECEIPT_BYTES) {
     fail("writer canary result receipt exceeds its byte bound");
   }
   return encoded;
@@ -1982,6 +1981,9 @@ async function main() {
   }
   if (command === "preflight") {
     const receipt = await livePreflight(process.env);
+    if (receipt.range.schema === "message-like-me-canary-control-epoch-v2") {
+      writeControlEpochReview(receipt.range);
+    }
     writeOutput("expected_old_sha", receipt.expectedOldSha);
     writeOutput("target_sha", receipt.targetSha);
     writeOutput("receipt", encodeWriterCanaryPreflightReceipt(receipt));
@@ -2003,6 +2005,7 @@ const invokedPath = process.argv[1];
 if (typeof invokedPath === "string" && pathToFileURL(invokedPath).href === import.meta.url) {
   main().catch((error) => {
     if (error instanceof WriterCanaryWorkflowDeltaError) {
+      writeControlEpochReview(error.controlEpoch);
       persistReceipt(error.receipt);
     }
     const message = error instanceof Error ? error.message : String(error);

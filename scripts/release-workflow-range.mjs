@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const WORKFLOW_PATH = ".github/workflows";
@@ -9,15 +10,25 @@ const PRODUCTION_REF = "refs/heads/website-production";
 const CANARY_REF = "refs/heads/website-production-writer-canary";
 const PRODUCTION_RECEIPT_SCHEMA = "message-like-me-workflow-range-v1";
 const CANARY_RECEIPT_SCHEMA = "message-like-me-canary-workflow-range-v1";
+const EXPECTED_REPOSITORY = "hraness/message-like-me";
+const EXPECTED_REPOSITORY_ID = 1_342_143_606;
+const MAIN_REF = "refs/heads/main";
+const PRODUCTION_CONTROL_EPOCH_DOMAIN = "message-like-me/control-epoch/production/v2";
+const CANARY_CONTROL_EPOCH_DOMAIN = "message-like-me/control-epoch/canary/v2";
+const PRODUCTION_CONTROL_EPOCH_SCHEMA = "message-like-me-production-control-epoch-v2";
+const CANARY_CONTROL_EPOCH_SCHEMA = "message-like-me-canary-control-epoch-v2";
+export const CONTROL_EPOCH_CANARY_NO_TAG = "no-tag";
 const MAXIMUM_GIT_OUTPUT_BYTES = 256 * 1024;
 const GIT_TIMEOUT_MILLISECONDS = 120_000;
 const WORKFLOW_TREE_CHUNK_SIZE = 64;
 const MAXIMUM_ENCODED_RECEIPT_BYTES = 4 * 1024;
+const MAXIMUM_ENCODED_CONTROL_EPOCH_RECEIPT_BYTES = 128 * 1024;
 export const MAXIMUM_WORKFLOW_RANGE_COMMITS = 250;
 
 const SHA = /^[0-9a-f]{40}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
+const STABLE_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 
 function fail(message) {
   throw new Error(message);
@@ -193,7 +204,6 @@ function readWorkflowTreeOids(runner, commits) {
 function normalizedWorkflowRangeReceipt(value) {
   const receipt = expectRecord(value, "workflow-range receipt");
   expectExactKeys(receipt, [
-    "controlEpoch",
     "newCommitCount",
     "newCommitDigest",
     "previousSha",
@@ -216,17 +226,7 @@ function normalizedWorkflowRangeReceipt(value) {
   if (typeof receipt.newCommitDigest !== "string" || !SHA256.test(receipt.newCommitDigest)) {
     fail("workflow-range receipt has an invalid commit digest.");
   }
-  if (
-    receipt.controlEpoch !== null
-    && (typeof receipt.controlEpoch !== "string" || !SHA256.test(receipt.controlEpoch))
-  ) {
-    fail("workflow-range receipt has an invalid control-epoch digest.");
-  }
-  if (receipt.controlEpoch !== null && productionRef !== PRODUCTION_REF) {
-    fail("workflow-range receipt accepts a control epoch outside the production ref.");
-  }
   return Object.freeze({
-    controlEpoch: receipt.controlEpoch,
     newCommitCount: receipt.newCommitCount,
     newCommitDigest: receipt.newCommitDigest,
     previousSha: expectSha(receipt.previousSha, "workflow-range receipt previousSha"),
@@ -237,7 +237,7 @@ function normalizedWorkflowRangeReceipt(value) {
   });
 }
 
-function workflowRangeInventory({
+function verifyProtectedWorkflowRange({
   previousSha,
   productionRef,
   runner,
@@ -278,74 +278,21 @@ function workflowRangeInventory({
     /^[a-z]+$/u,
   );
   if (type !== "tree") fail("Baseline workflow path is not a Git tree.");
-  const changes = [];
-  for (let index = 1; index < allCommits.length; index += 1) {
-    if (trees[index] !== trees[index - 1]) {
-      changes.push(Object.freeze({ commit: allCommits[index], workflowTreeOid: trees[index] }));
-    }
-  }
-  const epochDigest = createHash("sha256")
-    .update(allCommits.map((commit, index) => `${commit} ${trees[index]}\n`).join(""), "utf8")
-    .digest("hex");
-  return Object.freeze({
-    baselineTree,
-    changes: Object.freeze(changes),
-    commits,
-    epochDigest,
-    newCommit,
-    oldCommit,
-    protectedRef,
-    verifiedTree: trees[trees.length - 1],
-  });
-}
-
-function verifyProtectedWorkflowRange({ controlEpochDigest, ...input }) {
-  const inventory = workflowRangeInventory(input);
-  const { baselineTree, changes, commits, epochDigest, newCommit, oldCommit, protectedRef } = inventory;
-  let controlEpoch = null;
-  if (controlEpochDigest !== undefined) {
-    if (protectedRef !== PRODUCTION_REF) {
-      fail("Control-epoch acceptance applies only to the production ref.");
-    }
-    if (typeof controlEpochDigest !== "string" || !SHA256.test(controlEpochDigest)) {
-      fail("Control-epoch digest is not one SHA-256 hex digest.");
-    }
-    if (changes.length === 0) {
-      fail("Control-epoch acceptance requires a workflow-tree change in the newly reachable range.");
-    }
-    if (controlEpochDigest !== epochDigest) {
-      fail("Control-epoch digest does not match the newly reachable workflow-tree inventory.");
-    }
-    controlEpoch = epochDigest;
-  } else if (changes.length > 0) {
-    const changedCommit = changes[0]?.commit;
-    fail(`Commit ${String(changedCommit)} changes ${WORKFLOW_PATH}; use the reviewed control-epoch bootstrap.`);
+  const changedIndex = trees.findIndex((tree) => tree !== baselineTree);
+  if (changedIndex >= 0) {
+    const changedCommit = allCommits[changedIndex];
+    fail(`Commit ${String(changedCommit)} changes ${WORKFLOW_PATH}; use the reviewed control-epoch digest.`);
   }
 
   return normalizedWorkflowRangeReceipt(Object.freeze({
-    controlEpoch,
     newCommitCount: commits.length,
     newCommitDigest: createHash("sha256").update(`${commits.join("\n")}\n`, "utf8").digest("hex"),
     previousSha: oldCommit,
     productionRef: protectedRef,
     schema: schemaForProtectedRef(protectedRef),
     verifiedSha: newCommit,
-    workflowTreeOid: controlEpoch === null ? baselineTree : inventory.verifiedTree,
+    workflowTreeOid: baselineTree,
   }));
-}
-
-export function describeControlEpoch(input) {
-  const inventory = workflowRangeInventory({ ...input, productionRef: PRODUCTION_REF });
-  if (inventory.changes.length === 0) {
-    fail("Newly reachable range changes no workflow tree; the routine promotion applies.");
-  }
-  return Object.freeze({
-    changes: inventory.changes,
-    digest: inventory.epochDigest,
-    newCommitCount: inventory.commits.length,
-    previousSha: inventory.oldCommit,
-    verifiedSha: inventory.newCommit,
-  });
 }
 
 export function verifyWorkflowRange(input) {
@@ -419,37 +366,592 @@ export function decodeWorkflowRangeReceipt(value) {
   return normalizedWorkflowRangeReceipt(decoded);
 }
 
+function exactString(value, label) {
+  if (typeof value !== "string" || value.length === 0) fail(`${label} is missing or malformed.`);
+  return value;
+}
+
+function exactPositiveInteger(value, label) {
+  const parsed = typeof value === "string" && /^[1-9][0-9]*$/u.test(value)
+    ? Number(value)
+    : value;
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) fail(`${label} is not one positive integer.`);
+  return parsed;
+}
+
+function controlEpochBoundary(mode) {
+  if (mode === "production") {
+    return Object.freeze({
+      domain: PRODUCTION_CONTROL_EPOCH_DOMAIN,
+      protectedRef: PRODUCTION_REF,
+      schema: PRODUCTION_CONTROL_EPOCH_SCHEMA,
+    });
+  }
+  if (mode === "canary") {
+    return Object.freeze({
+      domain: CANARY_CONTROL_EPOCH_DOMAIN,
+      protectedRef: CANARY_REF,
+      schema: CANARY_CONTROL_EPOCH_SCHEMA,
+    });
+  }
+  fail("control-epoch mode is not exact production or canary.");
+}
+
+function controlEpochModeForReceipt(receipt) {
+  if (
+    receipt.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
+    && receipt.domain === PRODUCTION_CONTROL_EPOCH_DOMAIN
+    && receipt.protectedRef === PRODUCTION_REF
+  ) return "production";
+  if (
+    receipt.schema === CANARY_CONTROL_EPOCH_SCHEMA
+    && receipt.domain === CANARY_CONTROL_EPOCH_DOMAIN
+    && receipt.protectedRef === CANARY_REF
+  ) return "canary";
+  fail("control-epoch receipt has the wrong domain, schema, or protected ref.");
+}
+
+function readControlEpochInventory({ inventoryEndSha, previousSha, runner, workingDirectory }) {
+  const oldCommit = expectSha(previousSha, "control-epoch previous SHA");
+  const inventoryEndCommit = expectSha(inventoryEndSha, "control-epoch inventory-end SHA");
+  if (oldCommit === inventoryEndCommit) fail("control-epoch verification requires one advancing transition.");
+  const git = runner ?? createDefaultGitRunner(workingDirectory);
+  const shallow = exactSingleLine(
+    command(git, ["rev-parse", "--is-shallow-repository"], "Control-epoch shallow-state check"),
+    "Control-epoch shallow-state check",
+    /^(?:false|true)$/u,
+  );
+  if (shallow !== "false") fail("Control epoch requires complete, non-shallow Git history.");
+  exactCommit(git, oldCommit, "Control-epoch previous commit identity");
+  exactCommit(git, inventoryEndCommit, "Control-epoch inventory-end commit identity");
+  if (git(["merge-base", "--is-ancestor", oldCommit, inventoryEndCommit]).exitCode !== 0) {
+    fail("Control epoch does not prove complete fast-forward ancestry.");
+  }
+  const commits = parseNewCommits(command(
+    git,
+    ["rev-list", "--topo-order", "--reverse", `${oldCommit}..${inventoryEndCommit}`],
+    "Control-epoch commit inventory",
+  ), inventoryEndCommit);
+  const orderedCommits = Object.freeze([oldCommit, ...commits]);
+  const trees = readWorkflowTreeOids(git, orderedCommits);
+  const baselineTree = trees[0];
+  if (baselineTree === undefined) fail("Control-epoch baseline workflow tree is unavailable.");
+  const type = exactSingleLine(
+    command(git, ["cat-file", "-t", baselineTree], "Control-epoch baseline workflow tree type"),
+    "Control-epoch baseline workflow tree type",
+    /^[a-z]+$/u,
+  );
+  if (type !== "tree") fail("Control-epoch baseline workflow path is not a Git tree.");
+  const inventory = Object.freeze(orderedCommits.map((commitSha, index) => Object.freeze({
+    commitSha,
+    workflowTreeOid: trees[index],
+  })));
+  return Object.freeze({ git, inventory, inventoryEndCommit, oldCommit });
+}
+
+function controlEpochChanges(inventory) {
+  const changes = [];
+  for (let index = 1; index < inventory.length; index += 1) {
+    const previous = inventory[index - 1];
+    const current = inventory[index];
+    if (previous === undefined || current === undefined) fail("Control-epoch inventory is incomplete.");
+    if (current.workflowTreeOid !== previous.workflowTreeOid) {
+      changes.push(Object.freeze({
+        commitSha: current.commitSha,
+        previousWorkflowTreeOid: previous.workflowTreeOid,
+        workflowTreeOid: current.workflowTreeOid,
+      }));
+    }
+  }
+  if (changes.length === 0) fail("Control-epoch receipt has no ordered workflow change.");
+  return Object.freeze(changes);
+}
+
+function controlEpochPreimage(value) {
+  return Object.freeze({
+    domain: value.domain,
+    repositoryId: value.repositoryId,
+    protectedRef: value.protectedRef,
+    previousSha: value.previousSha,
+    targetSha: value.targetSha,
+    workflowSha: value.workflowSha,
+    tag: value.tag,
+    inventory: value.inventory,
+  });
+}
+
+export function controlEpochDigest(value) {
+  const preimage = controlEpochPreimage(value);
+  return createHash("sha256").update(JSON.stringify(preimage), "utf8").digest("hex");
+}
+
+function normalizedControlEpochReceipt(value) {
+  const receipt = expectRecord(value, "control-epoch receipt");
+  expectExactKeys(receipt, [
+    "changes",
+    "digest",
+    "domain",
+    "inventory",
+    "previousSha",
+    "protectedRef",
+    "repository",
+    "repositoryId",
+    "schema",
+    "tag",
+    "targetSha",
+    "workflowSha",
+  ], "control-epoch receipt");
+  const mode = controlEpochModeForReceipt(receipt);
+  if (receipt.repository !== EXPECTED_REPOSITORY || receipt.repositoryId !== EXPECTED_REPOSITORY_ID) {
+    fail("control-epoch receipt has the wrong repository boundary.");
+  }
+  const previousSha = expectSha(receipt.previousSha, "control-epoch receipt previousSha");
+  const targetSha = expectSha(receipt.targetSha, "control-epoch receipt targetSha");
+  const workflowSha = expectSha(receipt.workflowSha, "control-epoch receipt workflowSha");
+  const tag = exactString(receipt.tag, "control-epoch receipt tag");
+  if (mode === "production" ? !STABLE_TAG.test(tag) : tag !== CONTROL_EPOCH_CANARY_NO_TAG) {
+    fail("control-epoch receipt has the wrong production tag or canary no-tag sentinel.");
+  }
+  if (!Array.isArray(receipt.inventory) || receipt.inventory.length < 2 || receipt.inventory.length > MAXIMUM_WORKFLOW_RANGE_COMMITS + 1) {
+    fail("control-epoch receipt has an invalid inventory bound.");
+  }
+  const seen = new Set();
+  const inventory = Object.freeze(receipt.inventory.map((entry, index) => {
+    const item = expectRecord(entry, `control-epoch inventory[${String(index)}]`);
+    expectExactKeys(item, ["commitSha", "workflowTreeOid"], `control-epoch inventory[${String(index)}]`);
+    const commitSha = expectSha(item.commitSha, `control-epoch inventory[${String(index)}].commitSha`);
+    if (seen.has(commitSha)) fail("control-epoch receipt inventory repeats a commit.");
+    seen.add(commitSha);
+    return Object.freeze({
+      commitSha,
+      workflowTreeOid: expectSha(
+        item.workflowTreeOid,
+        `control-epoch inventory[${String(index)}].workflowTreeOid`,
+      ),
+    });
+  }));
+  if (
+    previousSha === targetSha
+    || inventory[0]?.commitSha !== previousSha
+    || inventory.at(-1)?.commitSha !== workflowSha
+    || !inventory.some((entry) => entry.commitSha === targetSha)
+  ) {
+    fail("control-epoch receipt inventory does not bind its old, target, and workflow-source SHAs.");
+  }
+  const baselineTree = inventory[0]?.workflowTreeOid;
+  if (baselineTree === undefined || !inventory.slice(1).some((entry) => entry.workflowTreeOid !== baselineTree)) {
+    fail("control-epoch receipt does not contain an actual workflow-tree change.");
+  }
+  const changes = controlEpochChanges(inventory);
+  if (JSON.stringify(receipt.changes) !== JSON.stringify(changes)) {
+    fail("control-epoch receipt ordered changes do not match its inventory.");
+  }
+  const normalized = Object.freeze({
+    changes,
+    digest: exactString(receipt.digest, "control-epoch receipt digest"),
+    domain: receipt.domain,
+    inventory,
+    previousSha,
+    protectedRef: receipt.protectedRef,
+    repository: EXPECTED_REPOSITORY,
+    repositoryId: EXPECTED_REPOSITORY_ID,
+    schema: receipt.schema,
+    tag,
+    targetSha,
+    workflowSha,
+  });
+  if (!SHA256.test(normalized.digest) || controlEpochDigest(normalized) !== normalized.digest) {
+    fail("control-epoch receipt digest does not bind its complete preimage.");
+  }
+  return normalized;
+}
+
+function exactControlEpochTag(mode, tag, targetSha, git) {
+  if (mode === "canary") {
+    if (tag !== CONTROL_EPOCH_CANARY_NO_TAG) {
+      fail("Canary control epoch requires the exact no-tag sentinel.");
+    }
+    return tag;
+  }
+  if (typeof tag !== "string" || !STABLE_TAG.test(tag)) {
+    fail("Production control epoch requires one stable annotated tag.");
+  }
+  const tagRef = `refs/tags/${tag}`;
+  const type = exactSingleLine(
+    command(git, ["cat-file", "-t", tagRef], "Control-epoch annotated tag type"),
+    "Control-epoch annotated tag type",
+    /^[a-z]+$/u,
+  );
+  if (type !== "tag") fail("Production control-epoch tag is not annotated.");
+  const commit = exactSingleLine(
+    command(git, ["rev-parse", "--verify", `${tagRef}^{commit}`], "Control-epoch tag target"),
+    "Control-epoch tag target",
+    SHA,
+  );
+  if (commit !== targetSha) fail("Production control-epoch tag does not target the exact release SHA.");
+  return tag;
+}
+
+function inspectControlEpochCoordinate({
+  currentMainSha,
+  mode,
+  previousSha,
+  protectedRef,
+  repository,
+  repositoryId,
+  runner,
+  tag,
+  targetSha,
+  verifiedSha,
+  workflowSha,
+  workingDirectory = process.cwd(),
+}) {
+  const boundary = controlEpochBoundary(mode);
+  if (protectedRef !== boundary.protectedRef) fail("control-epoch protected ref does not match its mode.");
+  if (repository !== EXPECTED_REPOSITORY || exactPositiveInteger(repositoryId, "control-epoch repository ID") !== EXPECTED_REPOSITORY_ID) {
+    fail("control epoch must run for exact repository ID 1342143606.");
+  }
+  const target = expectSha(targetSha ?? verifiedSha, "control-epoch target SHA");
+  const source = expectSha(workflowSha, "control-epoch workflow source SHA");
+  const currentMain = expectSha(currentMainSha, "control-epoch current-main SHA");
+  if (source !== currentMain) fail("control-epoch workflow source drifted from exact current main.");
+  const range = readControlEpochInventory({
+    inventoryEndSha: source,
+    previousSha,
+    runner,
+    workingDirectory,
+  });
+  exactCommit(range.git, target, "Control-epoch target commit identity");
+  const head = exactSingleLine(
+    command(range.git, ["rev-parse", "--verify", "HEAD^{commit}"], "Control-epoch checkout identity"),
+    "Control-epoch checkout identity",
+    SHA,
+  );
+  if (head !== source) fail("control-epoch checkout is not the current workflow source SHA.");
+  if (target === range.oldCommit || range.git(["merge-base", "--is-ancestor", range.oldCommit, target]).exitCode !== 0) {
+    fail("control-epoch target is not an advancing descendant of the protected-ref baseline.");
+  }
+  if (range.git(["merge-base", "--is-ancestor", target, source]).exitCode !== 0) {
+    fail("control-epoch target is not in current workflow-source history.");
+  }
+  if (mode === "canary" && target !== source) {
+    fail("canary control epoch target is not the current workflow source SHA.");
+  }
+  const exactTag = exactControlEpochTag(mode, tag, target, range.git);
+  return Object.freeze({ boundary, exactTag, range, source, target });
+}
+
+function controlEpochReceiptFromInspection({ boundary, exactTag, range, source, target }) {
+  const base = Object.freeze({
+    changes: controlEpochChanges(range.inventory),
+    domain: boundary.domain,
+    inventory: range.inventory,
+    previousSha: range.oldCommit,
+    protectedRef: boundary.protectedRef,
+    repository: EXPECTED_REPOSITORY,
+    repositoryId: EXPECTED_REPOSITORY_ID,
+    schema: boundary.schema,
+    tag: exactTag,
+    targetSha: target,
+    workflowSha: source,
+  });
+  return normalizedControlEpochReceipt(Object.freeze({
+    ...base,
+    digest: controlEpochDigest(base),
+  }));
+}
+
+export function describeControlEpoch(input) {
+  return controlEpochReceiptFromInspection(inspectControlEpochCoordinate(input));
+}
+
+export class ControlEpochAdmissionError extends Error {
+  constructor(message, receipt) {
+    super(message);
+    this.name = "ControlEpochAdmissionError";
+    this.receipt = receipt;
+  }
+}
+
+function verifyProtectedWorkflowAdmission(input) {
+  const inspection = inspectControlEpochCoordinate(input);
+  const baselineTree = inspection.range.inventory[0]?.workflowTreeOid;
+  if (baselineTree === undefined) fail("control-epoch baseline workflow tree is unavailable.");
+  const hasWorkflowChange = inspection.range.inventory
+    .slice(1)
+    .some((entry) => entry.workflowTreeOid !== baselineTree);
+  const rawDigest = input.controlEpochDigest;
+  const hasDigest = rawDigest !== undefined && rawDigest !== "";
+  if (!hasWorkflowChange) {
+    const routine = input.mode === "canary"
+      ? verifyCanaryWorkflowRange({
+        previousSha: input.previousSha,
+        runner: input.runner,
+        verifiedSha: input.targetSha ?? input.verifiedSha,
+        workingDirectory: input.workingDirectory,
+      })
+      : verifyWorkflowRange({
+        previousSha: input.previousSha,
+        runner: input.runner,
+        verifiedSha: input.targetSha ?? input.verifiedSha,
+        workingDirectory: input.workingDirectory,
+      });
+    if (hasDigest) fail("Control-epoch digest is forbidden for a routine unchanged-workflow range.");
+    return routine;
+  }
+  const receipt = controlEpochReceiptFromInspection(inspection);
+  if (!hasDigest) {
+    throw new ControlEpochAdmissionError(
+      "Workflow-changing range requires its exact reviewed control-epoch digest before key admission.",
+      receipt,
+    );
+  }
+  if (typeof rawDigest !== "string" || !SHA256.test(rawDigest)) {
+    throw new ControlEpochAdmissionError("Control-epoch digest is not one lowercase SHA-256 digest.", receipt);
+  }
+  if (rawDigest !== receipt.digest) {
+    throw new ControlEpochAdmissionError("Control-epoch digest does not match the complete bound inventory.", receipt);
+  }
+  if (
+    input.githubActions !== "true"
+    || input.eventName !== "workflow_dispatch"
+    || input.eventRef !== MAIN_REF
+    || expectSha(input.eventSha, "control-epoch event SHA") !== receipt.workflowSha
+    || exactPositiveInteger(input.runAttempt, "control-epoch run attempt") !== 1
+  ) {
+    throw new ControlEpochAdmissionError(
+      "Control epoch is not one manual attempt-1 dispatch from exact current main.",
+      receipt,
+    );
+  }
+  return receipt;
+}
+
+export function verifyProductionWorkflowAdmission(input) {
+  return verifyProtectedWorkflowAdmission({
+    ...input,
+    mode: "production",
+    protectedRef: input.protectedRef ?? PRODUCTION_REF,
+  });
+}
+
+export function verifyCanaryWorkflowAdmission(input) {
+  return verifyProtectedWorkflowAdmission({
+    ...input,
+    mode: "canary",
+    protectedRef: input.protectedRef ?? CANARY_REF,
+    tag: input.tag ?? CONTROL_EPOCH_CANARY_NO_TAG,
+  });
+}
+
+export function assertProductionControlEpochReceipt(value, expected) {
+  const receipt = normalizedControlEpochReceipt(value);
+  if (
+    controlEpochModeForReceipt(receipt) !== "production"
+    || receipt.previousSha !== expectSha(expected.previousSha, "expected control-epoch previous SHA")
+    || receipt.targetSha !== expectSha(expected.targetSha ?? expected.verifiedSha, "expected control-epoch target SHA")
+    || receipt.workflowSha !== expectSha(expected.workflowSha, "expected control-epoch workflow SHA")
+    || receipt.tag !== expected.tag
+  ) fail("production control-epoch receipt does not bind the expected transition.");
+  return receipt;
+}
+
+export function assertCanaryControlEpochReceipt(value, expected) {
+  const receipt = normalizedControlEpochReceipt(value);
+  if (
+    controlEpochModeForReceipt(receipt) !== "canary"
+    || receipt.previousSha !== expectSha(expected.previousSha, "expected canary control-epoch previous SHA")
+    || receipt.targetSha !== expectSha(expected.targetSha ?? expected.verifiedSha, "expected canary control-epoch target SHA")
+    || receipt.workflowSha !== expectSha(expected.workflowSha, "expected canary control-epoch workflow SHA")
+    || receipt.tag !== CONTROL_EPOCH_CANARY_NO_TAG
+  ) fail("canary control-epoch receipt does not bind the expected transition.");
+  return receipt;
+}
+
+export function encodeControlEpochReceipt(value) {
+  const receipt = normalizedControlEpochReceipt(value);
+  const encoded = Buffer.from(JSON.stringify(receipt), "utf8").toString("base64url");
+  if (Buffer.byteLength(encoded, "utf8") > MAXIMUM_ENCODED_CONTROL_EPOCH_RECEIPT_BYTES) {
+    fail("Encoded control-epoch receipt exceeds its byte bound.");
+  }
+  return encoded;
+}
+
+export function decodeControlEpochReceipt(value) {
+  if (
+    typeof value !== "string"
+    || value.length === 0
+    || Buffer.byteLength(value, "utf8") > MAXIMUM_ENCODED_CONTROL_EPOCH_RECEIPT_BYTES
+    || !BASE64URL.test(value)
+  ) fail("Encoded control-epoch receipt is missing or malformed.");
+  try {
+    const bytes = Buffer.from(value, "base64url");
+    if (bytes.toString("base64url") !== value) fail("Encoded control-epoch receipt is noncanonical.");
+    return normalizedControlEpochReceipt(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Encoded control-epoch")) throw error;
+    if (error instanceof Error && error.message.startsWith("control-epoch")) throw error;
+    fail("Encoded control-epoch receipt is not canonical JSON.");
+  }
+}
+
+export function encodeWorkflowAdmissionReceipt(value) {
+  if (isRecord(value) && (
+    value.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
+    || value.schema === CANARY_CONTROL_EPOCH_SCHEMA
+  )) return encodeControlEpochReceipt(value);
+  return encodeWorkflowRangeReceipt(value);
+}
+
+export function decodeWorkflowAdmissionReceipt(value) {
+  if (typeof value !== "string" || value.length === 0 || !BASE64URL.test(value)) {
+    fail("Encoded workflow admission receipt is missing or malformed.");
+  }
+  let decoded;
+  try {
+    const bytes = Buffer.from(value, "base64url");
+    if (bytes.toString("base64url") !== value) fail("Encoded workflow admission receipt is noncanonical.");
+    decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Encoded workflow admission")) throw error;
+    fail("Encoded workflow admission receipt is not canonical JSON.");
+  }
+  return isRecord(decoded) && (
+    decoded.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
+    || decoded.schema === CANARY_CONTROL_EPOCH_SCHEMA
+  )
+    ? decodeControlEpochReceipt(value)
+    : decodeWorkflowRangeReceipt(value);
+}
+
+export function assertProductionWorkflowAdmissionReceipt(value, expected) {
+  if (isRecord(value) && value.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA) {
+    return assertProductionControlEpochReceipt(value, expected);
+  }
+  return assertWorkflowRangeReceipt(value, {
+    previousSha: expected.previousSha,
+    verifiedSha: expected.targetSha ?? expected.verifiedSha,
+  });
+}
+
+export function assertCanaryWorkflowAdmissionReceipt(value, expected) {
+  if (isRecord(value) && value.schema === CANARY_CONTROL_EPOCH_SCHEMA) {
+    return assertCanaryControlEpochReceipt(value, expected);
+  }
+  return assertCanaryWorkflowRangeReceipt(value, {
+    previousSha: expected.previousSha,
+    verifiedSha: expected.targetSha ?? expected.verifiedSha,
+  });
+}
+
+function writeOutput(name, value) {
+  const line = `${name}=${String(value)}\n`;
+  const output = process.env.GITHUB_OUTPUT;
+  if (typeof output === "string" && output.length > 0) appendFileSync(output, line, { encoding: "utf8" });
+  else process.stdout.write(line);
+}
+
+export function writeControlEpochReview(value) {
+  const receipt = normalizedControlEpochReceipt(value);
+  const title = `Control epoch ${receipt.digest} for ${receipt.protectedRef}`;
+  writeOutput("control_epoch_title", title);
+  writeOutput("control_epoch_domain", receipt.domain);
+  writeOutput("control_epoch_ref", receipt.protectedRef);
+  writeOutput("control_epoch_old_sha", receipt.previousSha);
+  writeOutput("control_epoch_target_sha", receipt.targetSha);
+  writeOutput("control_epoch_workflow_sha", receipt.workflowSha);
+  writeOutput("control_epoch_tag", receipt.tag);
+  writeOutput("control_epoch_digest", receipt.digest);
+  writeOutput("control_epoch_inventory", JSON.stringify(receipt.inventory));
+  writeOutput("control_epoch_changes", JSON.stringify(receipt.changes));
+  writeOutput("control_epoch_receipt", encodeControlEpochReceipt(receipt));
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (typeof summary === "string" && summary.length > 0) {
+    const changeCommits = new Set(receipt.changes.map((entry) => entry.commitSha));
+    const rows = receipt.inventory.map((entry, index) =>
+      `| ${String(index)} | \`${entry.commitSha}\` | \`${entry.workflowTreeOid}\` | ${changeCommits.has(entry.commitSha) ? "yes" : "no"} |`
+    ).join("\n");
+    appendFileSync(summary, [
+      `\n## ${title}`,
+      "",
+      `- Domain: \`${receipt.domain}\``,
+      `- Protected ref: \`${receipt.protectedRef}\``,
+      `- Old SHA: \`${receipt.previousSha}\``,
+      `- Target SHA: \`${receipt.targetSha}\``,
+      `- Workflow source SHA: \`${receipt.workflowSha}\``,
+      `- Tag: \`${receipt.tag}\``,
+      `- Digest: \`${receipt.digest}\``,
+      "",
+      "| Order | Commit | `.github/workflows` tree | Changed from preceding row |",
+      "| ---: | --- | --- | :---: |",
+      rows,
+      "",
+    ].join("\n"), { encoding: "utf8" });
+  }
+  process.stdout.write(`::notice title=${title}::domain=${receipt.domain} old=${receipt.previousSha} target=${receipt.targetSha} workflow=${receipt.workflowSha} tag=${receipt.tag}\n`);
+  return receipt;
+}
+
+function admissionInputFromEnvironment(mode, previousSha, targetSha) {
+  return Object.freeze({
+    controlEpochDigest: process.env.CONTROL_EPOCH_DIGEST,
+    currentMainSha: process.env.CURRENT_MAIN_SHA ?? process.env.GITHUB_SHA,
+    eventName: process.env.GITHUB_EVENT_NAME,
+    eventRef: process.env.GITHUB_REF,
+    eventSha: process.env.GITHUB_SHA,
+    githubActions: process.env.GITHUB_ACTIONS,
+    mode,
+    previousSha,
+    protectedRef: controlEpochBoundary(mode).protectedRef,
+    repository: process.env.GITHUB_REPOSITORY,
+    repositoryId: process.env.GITHUB_REPOSITORY_ID,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    tag: mode === "production" ? process.env.VERIFIED_TAG : CONTROL_EPOCH_CANARY_NO_TAG,
+    targetSha,
+    workflowSha: process.env.GITHUB_WORKFLOW_SHA,
+  });
+}
+
 function main() {
   const [previousSha, verifiedSha, mode, ...extra] = process.argv.slice(2);
   if (previousSha === undefined || verifiedSha === undefined || extra.length > 0) {
-    fail("Usage: release-workflow-range.mjs PREVIOUS_SHA VERIFIED_SHA [--canary|--describe-control-epoch]");
+    fail("Usage: release-workflow-range.mjs PREVIOUS_SHA VERIFIED_SHA [--canary|--admit-production|--admit-canary]");
   }
-  if (process.env.GITHUB_REPOSITORY !== "hraness/message-like-me") {
+  if (process.env.GITHUB_REPOSITORY !== EXPECTED_REPOSITORY) {
     fail("Workflow range must run for exact repository hraness/message-like-me.");
   }
-  if (mode !== undefined && mode !== "--canary" && mode !== "--describe-control-epoch") {
-    fail("workflow-range mode is not exact production, canary, or describe");
+  if (
+    mode !== undefined
+    && mode !== "--canary"
+    && mode !== "--admit-production"
+    && mode !== "--admit-canary"
+  ) {
+    fail("workflow-range mode is not exact production, canary, or control-epoch admission");
   }
-  const rawDigest = process.env.CONTROL_EPOCH_DIGEST;
-  const controlEpochDigest = rawDigest === undefined || rawDigest === "" ? undefined : rawDigest;
-  if (mode === "--describe-control-epoch") {
-    if (controlEpochDigest !== undefined) {
-      fail("Control-epoch description does not accept a digest.");
+  if (mode === "--admit-production" || mode === "--admit-canary") {
+    const admissionMode = mode === "--admit-production" ? "production" : "canary";
+    let receipt;
+    try {
+      const input = admissionInputFromEnvironment(admissionMode, previousSha, verifiedSha);
+      receipt = admissionMode === "production"
+        ? verifyProductionWorkflowAdmission(input)
+        : verifyCanaryWorkflowAdmission(input);
+    } catch (error) {
+      if (error instanceof ControlEpochAdmissionError) writeControlEpochReview(error.receipt);
+      throw error;
     }
-    const description = describeControlEpoch({ previousSha, verifiedSha });
-    process.stdout.write(`control_epoch=${description.digest}\n`);
-    process.stdout.write(`new_commit_count=${String(description.newCommitCount)}\n`);
-    for (const change of description.changes) {
-      process.stdout.write(`workflow_change=${change.commit} ${change.workflowTreeOid}\n`);
-    }
+    if (isRecord(receipt) && (
+      receipt.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
+      || receipt.schema === CANARY_CONTROL_EPOCH_SCHEMA
+    )) writeControlEpochReview(receipt);
+    writeOutput("receipt", encodeWorkflowAdmissionReceipt(receipt));
     return;
-  }
-  if (mode === "--canary" && controlEpochDigest !== undefined) {
-    fail("Control-epoch acceptance applies only to the production ref.");
   }
   const receipt = mode === "--canary"
     ? verifyCanaryWorkflowRange({ previousSha, verifiedSha })
-    : verifyWorkflowRange({ controlEpochDigest, previousSha, verifiedSha });
+    : verifyWorkflowRange({ previousSha, verifiedSha });
   process.stdout.write(`receipt=${encodeWorkflowRangeReceipt(receipt)}\n`);
 }
 

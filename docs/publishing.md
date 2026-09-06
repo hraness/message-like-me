@@ -164,60 +164,135 @@ App-pinned status context, integration ID, enforcement state, and empty bypass
 sets before admitting a release. Any drift blocks promotion until it is reviewed
 and repaired out of band.
 
-### Accept one workflow-control epoch
+### Review one workflow-control epoch
 
-The routine promotion is intentionally incapable of crossing a change to
+Routine promotion remains incapable of silently crossing a change to
 `.github/workflows/**`. Its complete-history gate rejects that range before the
-key environment even though GitHub may allow a contents-capable token to move a
-ref to an existing workflow-changing commit. The permanent App has only
-`statuses:write` plus `metadata:read`; it cannot move any ref. The checked
-workflow must never mint persistent App `contents` or `workflows` authority or
-treat permission omission alone as the workflow-control boundary.
+key environment. A reviewed workflow change uses the v2 control-epoch digest;
+it does not use an out-of-band ref write or broaden either credential. The
+permanent App remains exactly `statuses:write` plus `metadata:read`, and only the
+job-scoped `GITHUB_TOKEN` may perform the existing explicit-lease ref move after
+the pinned App status exists.
 
-When an already-established `website-production` ref predates reviewed workflow
-control changes, perform one separately approved control-epoch acceptance after
-the target's immutable Release and public npm bytes have passed admission. The
-acceptance runs inside the checked current-`main` workflow, mints no extra
-credential, and leaves the rulesets, the App, and the key environment unchanged:
+When an established protected ref predates reviewed workflow-control changes:
 
-1. Record the exact current production SHA, exact release SHA, annotated tag,
-   immutable Latest Release, ruleset readbacks, and the complete reviewed commit
-   range. Let the routine promotion fail at its workflow-range gate; do not
-   approve the key environment for that rejected run.
-2. From a complete, non-shallow clone of reviewed `main`, describe the range:
+1. Keep the workflow disabled except during each separately bound dispatch. Record the
+   exact protected-ref SHA, target SHA, current workflow-source SHA, repository
+   ID, tag coordinate, ruleset readbacks, and public release admission. Dispatch
+   the production or canary workflow once with an empty
+   `control_epoch_digest`. That run must fail at the complete-history gate before
+   the contents-writer environment is admitted and before any status-only App
+   token is minted.
+2. Preserve the failed step summary. It must contain the exact v2
+   domain, protected ref, old SHA, target SHA, current workflow-source SHA, tag
+   (or canary `no-tag` sentinel), ordered old-through-workflow-source commit inventory,
+   every corresponding `.github/workflows` tree OID, the derived ordered change
+   list, and the canonical lowercase SHA-256 digest. Independently reconstruct
+   that inventory from only the governed refs and review every workflow-tree
+   transition. Failed-step command-file outputs are not retrievable review
+   evidence. Do not trust the digest without reviewing its complete preimage.
+   In a disposable, complete, non-shallow clone populated only with the exact
+   advertised `main`, protected branch, and (for production) stable annotated-tag
+   refs, substitute the recorded values and reconstruct the ordered inventory:
 
    ```sh
-   GITHUB_REPOSITORY=hraness/message-like-me \
-     node scripts/release-workflow-range.mjs <production-sha> <release-sha> --describe-control-epoch
+   protected_ref=refs/heads/website-production # use the canary ref for a canary run
+   old_sha=<40-hex-protected-ref-sha>
+   target_sha=<40-hex-target-sha>
+   workflow_sha=<40-hex-current-main-sha>
+   tag=<stable-tag-or-no-tag>
+
+   test "$(git rev-parse --is-shallow-repository)" = false
+   test "$(git rev-parse --verify "${protected_ref}^{commit}")" = "$old_sha"
+   test "$(git rev-parse --verify 'refs/heads/main^{commit}')" = "$workflow_sha"
+   git merge-base --is-ancestor "$old_sha" "$target_sha"
+   git merge-base --is-ancestor "$target_sha" "$workflow_sha"
+   if [ "$tag" = no-tag ]; then
+     test "$target_sha" = "$workflow_sha"
+   else
+     test "$(git rev-parse --verify "refs/tags/${tag}^{commit}")" = "$target_sha"
+   fi
+   test "$(git rev-list --count "$old_sha..$workflow_sha")" -le 250
+   {
+     printf '%s\n' "$old_sha"
+     git rev-list --topo-order --reverse "$old_sha..$workflow_sha"
+   } | while IFS= read -r commit_sha; do
+     printf '%s %s\n' "$commit_sha" \
+       "$(git rev-parse --verify "${commit_sha}:.github/workflows")"
+   done
    ```
 
-   It prints `control_epoch=<sha256>` over every newly reachable commit paired
-   with its `.github/workflows` tree OID, then one `workflow_change=` line per
-   commit whose workflow tree differs from its predecessor. Review each listed
-   commit as a reviewed pull request on `main`. A shallow clone, a non-ancestor
-   range, or a range without a workflow change fails closed.
-3. Dispatch `Promote website production` with `release_tag` set to the immutable
-   tag and `control_epoch_digest` set to that exact digest. The automatic
-   `workflow_run` path cannot carry a digest. The verify job admits only one
-   lowercase SHA-256 hex value, and both range steps recompute the inventory
-   and accept the transition only when the digest matches exactly. The receipt
-   records the accepted digest under `controlEpoch`, and its `workflowTreeOid`
-   becomes the release commit's workflow tree, the baseline for every later
-   routine promotion.
-4. Approve `production-ref-writer-key` for that run only after reading the run
-   title, tag, digest, and range description again. The writer job then
-   performs the same App-only attestation, leased fast-forward, and terminal
-   consumption as a routine promotion.
-5. Read back that the ref is the exact release SHA and that the permanent App's exact `statuses:write` plus
-   `metadata:read` closure, absence of `contents` and `workflows` authority, and
-   singleton repository set are unchanged. No key rotation is required because
-   no credential left the checked workflow.
+   Compare every printed commit/tree pair, in order, with the failed-run summary;
+   adjacent rows with different tree OIDs must exactly match its changed-row
+   markers. The target must appear in that inventory. Then use the reviewed
+   helper from that same audited workflow-source checkout to reconstruct the
+   canonical receipt and digest:
 
-That acceptance closes one workflow-control epoch; it is not precedent for a
-routine broad token, a persistent ref bypass, or an unleased manual ref move.
-Any later release whose newly reachable history contains a workflow-tree change
-starts a new control epoch and requires its own explicit review, digest, and
-authorization.
+   ```sh
+   MODE=production \
+   PREVIOUS_SHA="$old_sha" \
+   TARGET_SHA="$target_sha" \
+   WORKFLOW_SHA="$workflow_sha" \
+   PROTECTED_REF="$protected_ref" \
+   VERIFIED_TAG="$tag" \
+   node --input-type=module -e '
+     import { describeControlEpoch } from "./scripts/release-workflow-range.mjs";
+     const receipt = describeControlEpoch({
+       currentMainSha: process.env.WORKFLOW_SHA,
+       mode: process.env.MODE,
+       previousSha: process.env.PREVIOUS_SHA,
+       protectedRef: process.env.PROTECTED_REF,
+       repository: "hraness/message-like-me",
+       repositoryId: 1342143606,
+       tag: process.env.VERIFIED_TAG,
+       targetSha: process.env.TARGET_SHA,
+       workflowSha: process.env.WORKFLOW_SHA,
+     });
+     process.stdout.write(JSON.stringify(receipt) + "\n");
+   '
+   ```
+
+   The resulting JSON's domain, ref, coordinates, ordered `inventory`, derived
+   `changes`, and `digest` must exactly match the human-readable failed-step
+   summary. Use `MODE=canary`, the canary ref, `tag=no-tag`, and a target equal to
+   the workflow source for a canary review. Do not fetch an unbounded ref
+   namespace, hand-assemble a digest, use a different checkout, or reorder the
+   inventory.
+3. Dispatch one fresh manual attempt 1 from exact current `main` with that exact
+   digest. Automatic `workflow_run` events, rerun attempts, already-exact refs,
+   and unchanged-workflow ranges must reject any digest. The gate recomputes the
+   complete inventory and digest before environment admission; any source, tag,
+   ref, target, ancestry, inventory, or digest drift fails closed.
+4. Before approving `production-ref-writer-key`, compare the fresh run title,
+   tag, v2 domain, protected ref, old SHA, target SHA, workflow-source SHA,
+   ordered inventory, change list, and digest with both the independently
+   reviewed failed-run summary and the locally reconstructed receipt. Reject the
+   environment admission if any field or ordered
+   inventory row differs. After approval, the hash-pinned helper
+   recomputes and revalidates the same transition before reading the key. The
+   normal split-authority sequence then applies unchanged: terminalize the status,
+   prove the writer is denied, post and read back one App-authored success,
+   revoke that App token, make one exact non-force fast-forward with a nonempty
+   expected-old lease, replace success with the terminal non-success status
+   using a separately minted status-only token, revoke it, and complete the
+   read-only provider outcome gate.
+5. After provider success, read back the protected ref at the exact target and
+   treat that target's `.github/workflows` tree OID as the baseline for the next
+   routine range. Re-read the permanent App's exact `statuses:write` plus
+   `metadata:read` permissions, absence of `contents` and `workflows` authority,
+   singleton `{hraness/message-like-me}` repository selection, and the terminal
+   non-success status. A completed epoch requires no key rotation because it
+   created or replaced no credential and every short-lived App token was revoked;
+   an interrupted run still follows the separate quarantine and cleanup
+   procedure.
+
+The digest is scoped to one exact transition and is never permission to reuse a
+stale run, skip fresh ref and source readbacks, expand the App, add a personal
+token or deploy key, recreate a protected ref, force a move, or mutate a
+ruleset. If a run is interrupted, follow the quarantine and cleanup procedure;
+never treat the digest as retry authority. A later range with any different
+coordinate or inventory requires a new no-digest rejection and independent
+review.
 
 ### Prove the split status-and-writer boundary before product release
 
@@ -226,14 +301,18 @@ release, precreate persistent ref
 `refs/heads/website-production-writer-canary` at the reviewed control commit.
 Apply separate active rulesets with the same no-bypass protections and the same
 App-pinned required status check to that exact canary ref. Prove every side of
-the split credential contract after the App downgrade and key rotation:
+the split credential contract:
 
-1. The negative workflow-delta canary targets a reviewed descendant that
-   changes `.github/workflows/**`. The complete-history gate must reject it
-   before environment admission and before token minting. Permission omission
-   is not the gate: record the complete-history rejection itself.
-2. The positive non-workflow canary targets a reviewed descendant for which
+1. The workflow-delta canary targets exact current `main`, which changes
+   `.github/workflows/**`. First prove the empty-digest rejection before
+   environment admission, independently review the complete v2 receipt, then
+   prove that one fresh manual attempt 1 with its exact digest recomputes the
+   transition before and after environment admission and advances only that
+   target. Permission omission is not the gate: retain both runs and their exact
+   receipts as evidence.
+2. A later positive non-workflow canary targets a reviewed descendant for which
    every newly reachable commit preserves the baseline workflow-tree OID. Prove
+   it accepts no digest and uses the unchanged v1 routine receipt. Prove
    the status-only App token cannot update the ref and the job-scoped writer
    token cannot update it before the exact App-sourced success exists.
 3. Post one success status on the exact positive target under context
@@ -403,17 +482,23 @@ recovery. Both paths use the same checks. That workflow:
 3. enters `production-ref-writer-key` with `deployment:false` only when the
    baseline and a separate read-only preflight prove that the ref must advance.
    That preflight first imports complete exact governed history and enumerates
-   every commit newly reachable in `<expected-old>..<verified-release>`, capped
-   at 250 commits. It rejects shallow or incomplete history, non-fast-forwards,
-   malformed or oversized inventories, and any commit whose
-   `.github/workflows` tree OID differs from the expected-old baseline. Checking
-   every newly reachable commit catches merge-side changes and an edit followed
-   by a revert even when the two endpoint trees match. The fresh secret-bearing
-   job installs no dependencies; in a step that does not receive the private
-   key, it verifies hard-coded SHA-256 pins for the seven reviewed helpers,
-   repeats the exact complete-history proof, and emits a bounded receipt binding
-   the expected-old SHA, release SHA, commit count and digest, and baseline
-   workflow-tree OID. The promotion helper validates that receipt before it may
+   every commit from the expected-old protected-ref SHA through the exact
+   current workflow-source SHA, capped at 250 newly reachable commits. It proves
+   the tagged release target is an advancing ancestor inside that range and
+   rejects shallow or incomplete history, non-fast-forwards, and malformed or
+   oversized inventories. Checking every ordered `.github/workflows` tree OID
+   catches merge-side changes and an edit followed by a revert even when two
+   endpoint trees match. If every tree preserves the baseline, any supplied
+   digest is forbidden and the frozen v1 receipt binds the expected-old and
+   release SHAs, transition commit count and digest, and baseline workflow-tree
+   OID. If any tree changes, the empty-digest attempt publishes the full v2
+   inventory, derived tree transitions, current workflow source, tagged target,
+   and canonical digest, then rejects before the writer environment. Only a
+   fresh manual attempt 1 carrying that independently reviewed exact digest may
+   continue. The secret-bearing job installs no dependencies; in a step that
+   does not receive the private key, it verifies hard-coded SHA-256 pins for the
+   seven reviewed helpers and recomputes the selected v1 or v2 receipt before
+   reading the key. The promotion helper validates that receipt before it may
    enter the App-token lifecycle. A checked local helper then signs a
    bounded RS256 App JWT, authenticates the exact App ID, client ID, slug, and
    organization owner, then reads the checked installation ID and requires its
@@ -614,9 +699,10 @@ exact existing npm version and immutable artifact-complete Latest Release. It
 never creates, replaces, or edits an npm version or GitHub Release.
 
 If `website-production` still precedes the release commit, recovery performs
-the same checked explicit-lease fast-forward only when every newly reachable
-commit preserves the baseline workflow-tree OID, and requires one new provider
-outcome.
+the same checked explicit-lease fast-forward and requires one new provider
+outcome. A baseline-preserving range uses the frozen v1 no-digest receipt; a
+workflow-changing range requires the exact independently reviewed v2 digest and
+recomputes its old-through-current-workflow-source inventory before authority.
 If the ref is already exact, the baseline marks advancement false, skips the
 entire `production-ref-writer-key` job, and mints no App token. A separate
 read-only job accepts only the unique latest exact-SHA Production deployment in
@@ -625,10 +711,10 @@ itself must be provider-accepted. A newer terminal failure, error, or inactive
 attempt blocks recovery instead of allowing an older success to be reused.
 Recovery then repeats the terminal authority readbacks. A missing ref is a hard
 failure and must not be recreated by the workflow. If the desired transition
-crosses any workflow change, use the separately approved control-epoch
-acceptance above; that dispatch carries the reviewed digest through the same
-key environment, and a later already-exact recovery supplies the provider proof
-without reading the App key.
+crosses any workflow change, use the reviewed v2 control-epoch digest above.
+The exact-digest attempt performs the normal checked lease advancement; it does
+not externally advance the ref. A later already-exact recovery, if needed,
+supplies only the provider proof and remains outside the key environment.
 
 When a tag run fails after its exact draft or immutable Release exists, preserve
 its evidence and rerun that same workflow. Re-running only failed jobs is
@@ -639,5 +725,5 @@ the same tag, commit, deterministic draft, and tarball; npm provenance must bind
 the same run ID and an allowed actual positive attempt. Correct only the failed
 control and use the website recovery path after public admission succeeds. Do
 not retag, delete the immutable Release or exact residual draft, manually move
-`website-production` outside the one separately approved control-epoch
-acceptance, redeploy from Vercel, or weaken a ruleset to make the run pass.
+`website-production`, reuse a stale control-epoch digest as retry authority,
+redeploy from Vercel, or weaken a ruleset to make the run pass.

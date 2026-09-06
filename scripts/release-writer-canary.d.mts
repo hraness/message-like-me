@@ -1,4 +1,7 @@
-import type { CanaryWorkflowRangeReceipt } from "./release-workflow-range.mjs";
+import type {
+  CanaryControlEpochReceipt,
+  CanaryWorkflowAdmissionReceipt,
+} from "./release-workflow-range.mjs";
 
 export type GitHubApiReceipt = Readonly<{ body: unknown; serverDate: string }>;
 
@@ -22,7 +25,7 @@ export interface WriterCanaryPreflightReceipt {
   readonly expectedOldSha: string;
   readonly mainServerDate: string;
   readonly productionRef: "refs/heads/website-production-writer-canary";
-  readonly range: CanaryWorkflowRangeReceipt;
+  readonly range: CanaryWorkflowAdmissionReceipt;
   readonly repository: "hraness/message-like-me";
   readonly repositoryId: 1342143606;
   readonly rules: WriterCanaryRulesReceipt;
@@ -257,15 +260,31 @@ export interface WriterCanaryFinalReceipt {
 }
 
 export class WriterCanaryWorkflowDeltaError extends Error {
+  readonly controlEpoch: CanaryControlEpochReceipt;
   readonly receipt: Readonly<Record<string, unknown>>;
 }
 
 export function parseWriterCanaryRules(value: unknown): Readonly<WriterCanaryRulesReceipt>;
-export function parseWriterCanaryEnvironment(environment: Readonly<Record<string, unknown>>): Readonly<{ apiUrl: URL; repository: "hraness/message-like-me"; repositoryId: 1342143606; runAttempt: 1; runId: number; workflowSha: string }>;
+export function parseWriterCanaryEnvironment(environment: Readonly<Record<string, unknown>>): Readonly<{ apiUrl: URL; controlEpochDigest?: string; repository: "hraness/message-like-me"; repositoryId: 1342143606; runAttempt: 1; runId: number; workflowSha: string }>;
 export function parseWriterCanaryRef(value: unknown, expectedRef: string): string;
 export function parseWriterCanaryRun(value: unknown, expected: Readonly<{ runId: number; workflowSha: string }>): Readonly<{ runAttempt: 1; runId: number; workflowId: number }>;
 
-type VerifyRange = (input: Readonly<{ previousSha: string; verifiedSha: string; workingDirectory: string }>) => CanaryWorkflowRangeReceipt;
+type VerifyRange = (input: Readonly<{
+  controlEpochDigest?: string;
+  currentMainSha: string;
+  eventName: "workflow_dispatch";
+  eventRef: "refs/heads/main";
+  eventSha: string;
+  githubActions: "true";
+  previousSha: string;
+  protectedRef: "refs/heads/website-production-writer-canary";
+  repository: "hraness/message-like-me";
+  repositoryId: 1342143606;
+  runAttempt: 1;
+  targetSha: string;
+  workflowSha: string;
+  workingDirectory: string;
+}>) => CanaryWorkflowAdmissionReceipt;
 
 export function createWriterCanaryPreflight(input: Readonly<{ api: WriterCanaryPreflightApi; environment: Readonly<Record<string, unknown>>; verifyRange?: VerifyRange; workingDirectory?: string }>): Promise<Readonly<WriterCanaryPreflightReceipt>>;
 export function encodeWriterCanaryPreflightReceipt(value: unknown): string;
