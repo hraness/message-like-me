@@ -25,13 +25,15 @@ const beeperProducerSummary =
   `Verified producer Wrench v${BEEPER_COMPATIBILITY.producerVersion} uses ` +
   `${BEEPER_COMPATIBILITY.adapterId} adapter v${BEEPER_COMPATIBILITY.adapterVersion}. ` +
   `Its ${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations comprise ` +
-  `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through the pinned Beeper CLI and ` +
-  `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} fixed Desktop reads.`;
+  `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through one pinned Beeper CLI ` +
+  `${BEEPER_COMPATIBILITY.providerCliVersion} executable, including supported actions and ` +
+  `writes, plus ${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} fixed Desktop loopback reads.`;
 
 const beeperProvenanceSummary =
-  `The pinned executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}. ` +
-  `At that tag, ${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} declares ` +
-  `v${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion}; that source value is ` +
+  `The pinned executable reports v${BEEPER_COMPATIBILITY.providerCliVersion} and is ` +
+  `runtime authority. At the upstream tag, ` +
+  `${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} declares ` +
+  `v${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion}; that source-package value is ` +
   'provenance only and never overrides the executable runtime identity.';
 
 const whatsappProducerSummary =
@@ -53,7 +55,8 @@ export default function SourcesPage() {
             Message Like Me supports {MESSAGING_HISTORY_SOURCES.length} messaging-history
             inputs and one optional Contacts enrichment source. The messaging inputs
             normalize into one private local corpus; Contacts adds exact labels in the
-            same private local store. Every path is read-only and bounded by its source contract.
+            same private local store. Every ingest path is read-only with respect to its
+            source and bounded by its source contract.
           </p>
         </header>
 
@@ -76,11 +79,11 @@ export default function SourcesPage() {
         <section className="beeper-workflow" aria-labelledby="beeper-workflow-title">
           <div className="beeper-workflow-intro">
             <p className="eyebrow">Beeper via Wrench</p>
-            <h2 id="beeper-workflow-title">Wrench exports. Message Like Me verifies.</h2>
+            <h2 id="beeper-workflow-title">Bring Beeper history into the same private evidence corpus.</h2>
             <p>
-              Wrench handles the bounded provider observation. Message Like Me handles
-              strict local verification, normalization, measurement, and drafts-only
-              evidence. The two tools do not share credentials or a live session.
+              Wrench turns bounded Beeper reads into a finished private bundle. Message
+              Like Me verifies that bundle into the same local corpus as its other
+              read-only sources. The two tools do not share credentials or a live session.
             </p>
           </div>
           <ol className="workflow-steps">
@@ -108,12 +111,12 @@ export default function SourcesPage() {
             </li>
           </ol>
           <aside className="beeper-boundary" aria-label="Beeper operation boundary">
-            <strong>What this does not mean:</strong> Message Like Me owns zero of Wrench’s{' '}
-            {BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations.
-            It receives only the finished bundle: no Beeper credential, live session,
-            provider call, or send capability crosses the handoff. The command above enters
-            Wrench’s separate internal bounded export; it does not expose Beeper’s raw export
-            arguments or establish complete-history coverage.
+            <strong>What this does not mean:</strong> Message Like Me receives no provider
+            credential or live session, never calls Wrench or a Beeper operation, and never
+            sends. It owns zero of Wrench’s {BEEPER_COMPATIBILITY.reviewedOperationCount}{' '}
+            reviewed Beeper operations and receives only the finished bundle. The command above
+            enters Wrench’s separate internal bounded export; it does not expose Beeper’s
+            raw export arguments or establish complete-history coverage.
           </aside>
           <div className="source-links">
             <a href="https://wrench.rip/providers/beeper/">Inspect Wrench’s Beeper surface ↗</a>

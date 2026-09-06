@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import RootLayout from '../app/layout.tsx';
+import { GET as getLlmsText } from '../app/llms.txt/route.ts';
 import HomePage from '../app/page.tsx';
 import sitemap from '../app/sitemap.ts';
 import SourcesPage from '../app/sources/page.tsx';
@@ -113,7 +115,7 @@ describe('supported source presentation', () => {
   test('pins the native WhatsApp Wrench/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.5',
+      producerVersion: '0.16.7',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
       bundleSchemaVersion: '2',
@@ -133,12 +135,12 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Wrench',
-      producerVersion: '0.16.5',
+      producerVersion: '0.16.7',
       adapterId: 'beeper-local',
-      adapterVersion: '2.3.0',
+      adapterVersion: '2.4.0',
       reviewedOperationCount: 32,
-      pinnedCliOperationCount: 27,
-      fixedDesktopReadOperationCount: 5,
+      pinnedCliOperationCount: 26,
+      fixedDesktopReadOperationCount: 6,
       providerCliVersion: '0.6.2',
       providerCliSourcePackagePath: 'packages/cli/package.json',
       providerCliSourceDeclaredVersion: '0.6.1',
@@ -156,15 +158,25 @@ describe('supported source presentation', () => {
 
     const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-wrench');
     expect(beeper?.name).toBe('Beeper via Wrench');
-    expect(beeper?.boundary).toContain('owns zero Beeper operations');
-    expect(beeper?.boundary).toContain('credentials, or live sessions');
+    expect(beeper?.summary).toBe(
+      'Adds a finished Beeper bundle from Wrench v0.16.7 and adapter 2.4.0 to the private local evidence corpus.',
+    );
+    expect(beeper?.boundary).toContain('All 32 reviewed operations stay in Wrench');
+    expect(beeper?.boundary).toContain('26 through one pinned Beeper CLI 0.6.2 executable');
+    expect(beeper?.boundary).toContain('including supported actions and writes');
+    expect(beeper?.boundary).toContain('plus six fixed Desktop loopback reads');
+    expect(beeper?.boundary).toContain('receives no provider credentials');
+    expect(beeper?.boundary).toContain('calls no Wrench or Beeper operation');
     expect(beeper?.boundary).toContain('never sends');
     expect(beeper?.boundary).toContain('does not claim complete history');
+    expect(`${beeper?.summary}\n${beeper?.boundary}`).not.toMatch(/Wrench v0\.16\.(?:1|5)/u);
   });
 
   test('publishes the catalog across human and machine discovery surfaces', async () => {
     const renderedHomePage = renderToStaticMarkup(HomePage());
     const renderedSourcesPage = renderToStaticMarkup(SourcesPage());
+    const renderedRootLayout = renderToStaticMarkup(RootLayout({ children: null }));
+    const modelText = await getLlmsText().text();
     const [
       home,
       sourcesPage,
@@ -204,27 +216,27 @@ describe('supported source presentation', () => {
       'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
     );
     expect(sourcesPage).toContain('Beeper via Wrench');
-    expect(sourcesPage).toContain('Message Like Me owns zero');
+    expect(sourcesPage).toContain('It owns zero of Wrench’s');
     expect(renderedSourcesPage).toContain(
-      'Wrench v0.16.5 uses beeper-local adapter v2.3.0',
+      'Wrench v0.16.7 uses beeper-local adapter v2.4.0',
     );
     expect(renderedSourcesPage).toContain(
-      'Wrench exports. Message Like Me verifies.',
+      'Bring Beeper history into the same private evidence corpus.',
     );
     expect(renderedSourcesPage).toContain(
-      '32 reviewed Beeper operations comprise 27 through the pinned Beeper CLI and 5 fixed Desktop reads',
+      '32 reviewed Beeper operations comprise 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads',
     );
     expect(renderedSourcesPage).toContain(
-      'The pinned executable reports v0.6.2. At that tag, packages/cli/package.json declares v0.6.1',
+      'The pinned executable reports v0.6.2 and is runtime authority. At the upstream tag, packages/cli/package.json declares v0.6.1',
     );
     expect(renderedSourcesPage).toContain(
-      'that source value is provenance only and never overrides the executable runtime identity',
+      'that source-package value is provenance only and never overrides the executable runtime identity',
     );
     expect(renderedSourcesPage).toContain(
-      'Message Like Me owns zero of Wrench’s 32 reviewed Beeper operations',
+      'Message Like Me receives no provider credential or live session, never calls Wrench or a Beeper operation, and never sends',
     );
     expect(renderedSourcesPage).toContain(
-      'no Beeper credential, live session, provider call, or send capability crosses the handoff',
+      'It owns zero of Wrench’s 32 reviewed Beeper operations and receives only the finished bundle',
     );
     expect(renderedSourcesPage).toContain(
       'Wrench’s separate internal bounded export',
@@ -232,18 +244,19 @@ describe('supported source presentation', () => {
     expect(renderedSourcesPage).toContain(
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
-    expect(renderedSourcesPage).toContain('Current support in v0.8.2');
+    expect(renderedSourcesPage).toContain('Every ingest path is read-only with respect to its source');
+    expect(renderedSourcesPage).toContain('Current support in v0.8.3');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.2/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.3/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
       'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.2/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.3/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -274,24 +287,14 @@ describe('supported source presentation', () => {
       expect(copy).toMatch(providerCliPattern);
       expect(copy).toContain(`beeper-local@${BEEPER_COMPATIBILITY.adapterVersion}`);
       expect(copy).toContain(`${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations`);
-      expect(copy).toMatch(
-        new RegExp(
-          `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} use the pinned\\s+CLI`,
-          'u',
-        ),
-      );
-      expect(copy).toMatch(
-        new RegExp(
-          `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} use fixed Desktop`,
-          'u',
-        ),
-      );
+      expect(copy).toMatch(/26 (?:run )?through one pinned Beeper CLI 0\.6\.2 executable/u);
+      expect(copy).toMatch(/including supported actions\s+and writes/u);
+      expect(copy).toMatch(/plus\s+six fixed Desktop loopback reads/u);
       expect(copy).toContain(BEEPER_COMPATIBILITY.providerCliSourcePackagePath);
       expect(copy).toContain(`declares \`${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion}\``);
       expect(copy).toMatch(/provenance\s+only/u);
-      expect(copy).toContain('executable runtime identity');
-      expect(copy).toMatch(/internal bounded\s+export/u);
-      expect(copy).toContain('Message Like Me owns');
+      expect(copy).toMatch(/executable\s+runtime identity/u);
+      expect(copy).toMatch(/internal\s+bounded\s+export/u);
       expect(copy).toContain(`source ID \`${BEEPER_COMPATIBILITY.sourceId}\``);
       expect(copy).toContain(
         `source-transform version \`${BEEPER_COMPATIBILITY.sourceTransformVersion}\``,
@@ -326,8 +329,21 @@ describe('supported source presentation', () => {
     for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
       expect(copy).toMatch(/unobservable|observability limit/u);
     }
-    expect(changelog).toContain('## 0.8.2');
+    expect(changelog).toContain('## 0.8.3 (2026-09-05)');
     expect(changelog).not.toContain('## Unreleased');
+    const currentChangelog = changelog.slice(
+      changelog.indexOf('## 0.8.3'),
+      changelog.indexOf('## 0.8.2'),
+    );
+    expect(currentChangelog).toContain('`@hraness/wrench@0.16.7`');
+    expect(currentChangelog).toContain('`beeper-local@2.4.0`');
+    expect(currentChangelog).toContain('32 operations: 26 run through one');
+    expect(currentChangelog).toContain('including supported actions and writes');
+    expect(currentChangelog).toContain('plus six fixed');
+    expect(currentChangelog).toMatch(/0\.6\.1\s+declaration is provenance only/u);
+    expect(currentChangelog).toContain('executable 0.6.2 is runtime authority');
+    expect(currentChangelog).not.toMatch(/Wrench v0\.16\.(?:1|5)/u);
+    expect(changelog).toContain('## 0.8.1');
     expect(changelog).toContain('Wrench v0.16.5');
     expect(changelog).toContain('`beeper-local@2.3.0`');
     expect(changelog).toContain('32 reviewed operations comprise 27 through the pinned');
@@ -346,18 +362,38 @@ describe('supported source presentation', () => {
     ]) {
       expect(renderedSourcesPage).toContain(coordinate);
     }
-    for (const coordinate of [
-      `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
-      `adapter ${BEEPER_COMPATIBILITY.adapterId} v${BEEPER_COMPATIBILITY.adapterVersion}`,
-      `${BEEPER_COMPATIBILITY.reviewedOperationCount} Beeper operations`,
-      `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} use its pinned CLI ${BEEPER_COMPATIBILITY.providerCliVersion} executable`,
-      `${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} use fixed Desktop reads`,
-      `${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} value ${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion} is provenance only`,
-      'Message Like Me owns zero Beeper operations, provider credentials, or live sessions',
-      'does not claim complete history',
+    for (const exactModelClaim of [
+      'Beeper via Wrench lets users bring a finished private bundle into the same local evidence corpus as other sources.',
+      'Wrench v0.16.7 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
+      'The executable’s reported 0.6.2 is runtime authority; the upstream tagged packages/cli/package.json declaration of 0.6.1 is provenance only.',
+      'Message Like Me receives no provider credentials, never calls Wrench or Beeper operations, and never sends; it does not claim complete history.',
+      'Every ingest path is read-only with respect to its source.',
     ]) {
-      expect(llms).toContain(coordinate);
+      expect(modelText).toContain(exactModelClaim);
     }
+    expect(modelText).not.toMatch(/Wrench v0\.16\.(?:1|5)/u);
+
+    const jsonLdSource = /<script type="application\/ld\+json">([^<]+)<\/script>/u
+      .exec(renderedRootLayout)?.[1];
+    expect(jsonLdSource).toBeDefined();
+    const jsonLd = JSON.parse(jsonLdSource ?? '{}') as {
+      '@graph'?: Array<{ '@type'?: string; featureList?: unknown; softwareVersion?: unknown }>;
+    };
+    const softwareApplication = jsonLd['@graph']?.find(
+      (entry) => entry['@type'] === 'SoftwareApplication',
+    );
+    expect(softwareApplication?.softwareVersion).toBe('0.8.3');
+    expect(softwareApplication?.featureList).toEqual([
+      'Read-only Apple Messages history ingestion',
+      'Caller-owned X data archive direct-message ingestion',
+      'Every ingest path is read-only with respect to its source',
+      'Finished Beeper bundle from Wrench v0.16.7 and adapter beeper-local v2.4.0; all 32 reviewed operations stay in Wrench (26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads)',
+      'Beeper CLI executable 0.6.2 is runtime authority; upstream tagged packages/cli/package.json declaration 0.6.1 is provenance only',
+      'No provider credentials, Wrench or Beeper operation calls, or sending',
+      'Native WhatsApp bundle ingestion via Wrench and official Wacli',
+      'Optional macOS Contacts label enrichment',
+      'Local deterministic measurement and drafts-only Agent Skill',
+    ]);
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);
