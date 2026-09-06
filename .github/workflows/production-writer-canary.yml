@@ -92,7 +92,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -115,7 +115,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -142,7 +142,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -166,7 +166,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -193,7 +193,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -219,7 +219,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -266,7 +266,7 @@ jobs:
           CANARY_SHA256: 79cd68f8e9db2fd24f89e2c6956f35370a932a02a3d82ecdf8dc7158f991a4e9
           REF_WRITER_SHA256: 30710ab2db7d47176d2736a189455765a51574a5b692674bb18edfa7d3ca1c59
           STATUS_ATTESTER_SHA256: 13f7cd223a048227e474eb3748af128d0e76b8ea26731fa5d6146038a93a7f98
-          WORKFLOW_RANGE_SHA256: 99b94188a26f1dbbe2b5103729ab54ffcc639be5196f9e388443a6b9a0f26844
+          WORKFLOW_RANGE_SHA256: b6e1244d7132b90096ed8dc64bf7cc5060f06be192393dc18553a8fbb61e2b34
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"

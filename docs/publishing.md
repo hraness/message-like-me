@@ -164,7 +164,7 @@ App-pinned status context, integration ID, enforcement state, and empty bypass
 sets before admitting a release. Any drift blocks promotion until it is reviewed
 and repaired out of band.
 
-### Bootstrap one workflow-control epoch
+### Accept one workflow-control epoch
 
 The routine promotion is intentionally incapable of crossing a change to
 `.github/workflows/**`. Its complete-history gate rejects that range before the
@@ -175,39 +175,48 @@ workflow must never mint persistent App `contents` or `workflows` authority or
 treat permission omission alone as the workflow-control boundary.
 
 When an already-established `website-production` ref predates reviewed workflow
-control changes, perform one separately approved control-epoch bootstrap after
-the target's immutable Release and public npm bytes have passed admission:
+control changes, perform one separately approved control-epoch acceptance after
+the target's immutable Release and public npm bytes have passed admission. The
+acceptance runs inside the checked current-`main` workflow, mints no extra
+credential, and leaves the rulesets, the App, and the key environment unchanged:
 
 1. Record the exact current production SHA, exact release SHA, annotated tag,
    immutable Latest Release, ruleset readbacks, and the complete reviewed commit
    range. Let the routine promotion fail at its workflow-range gate; do not
    approve the key environment for that rejected run.
-2. In an owner-operated, out-of-band procedure, explicitly authorize a single
-   control-epoch credential selected to numeric repository ID `1342143606` with
-   only the temporary permissions needed to post the pinned status and move the
-   workflow-changing ref. Keep that credential out of Actions and preserve the
-   required-status-check and ref-lifecycle rulesets.
-3. Post the exact App-sourced success status for the release SHA, then use the
-   same fixed repository, exact annotated-tag target, and nonempty
-   `--force-with-lease=refs/heads/website-production:<expected-old-sha>` contract
-   to make exactly one fast-forward. Immediately replace the success with the
-   terminal non-success status, revoke the credential, and prove the ref is the
-   exact release SHA. Never leave a reusable success context behind.
-4. Restore and read back the permanent App's exact `statuses:write` plus
-   `metadata:read` closure, absence of `contents` and `workflows` authority, and
-   singleton repository set. Generate a fresh App private key, replace
-   `MLM_RELEASE_APP_PRIVATE_KEY`, and delete the control-epoch key. Routine
-   automation must remain paused until both the App downgrade and key rotation
-   are proven.
-5. Dispatch `Promote website production` for the same immutable tag. Because
-   the external bootstrap made the ref already exact, recovery stays outside
-   `production-ref-writer-key`, mints no token, and accepts only the bounded
-   exact-SHA Vercel Production outcome that postdates the Release.
+2. From a complete, non-shallow clone of reviewed `main`, describe the range:
 
-That bootstrap closes one workflow-control epoch; it is not precedent for a
+   ```sh
+   GITHUB_REPOSITORY=hraness/message-like-me \
+     node scripts/release-workflow-range.mjs <production-sha> <release-sha> --describe-control-epoch
+   ```
+
+   It prints `control_epoch=<sha256>` over every newly reachable commit paired
+   with its `.github/workflows` tree OID, then one `workflow_change=` line per
+   commit whose workflow tree differs from its predecessor. Review each listed
+   commit as a reviewed pull request on `main`. A shallow clone, a non-ancestor
+   range, or a range without a workflow change fails closed.
+3. Dispatch `Promote website production` with `release_tag` set to the immutable
+   tag and `control_epoch_digest` set to that exact digest. The automatic
+   `workflow_run` path cannot carry a digest. The verify job admits only one
+   lowercase SHA-256 hex value, and both range steps recompute the inventory
+   and accept the transition only when the digest matches exactly. The receipt
+   records the accepted digest under `controlEpoch`, and its `workflowTreeOid`
+   becomes the release commit's workflow tree, the baseline for every later
+   routine promotion.
+4. Approve `production-ref-writer-key` for that run only after reading the run
+   title, tag, digest, and range description again. The writer job then
+   performs the same App-only attestation, leased fast-forward, and terminal
+   consumption as a routine promotion.
+5. Read back that the ref is the exact release SHA and that the permanent App's exact `statuses:write` plus
+   `metadata:read` closure, absence of `contents` and `workflows` authority, and
+   singleton repository set are unchanged. No key rotation is required because
+   no credential left the checked workflow.
+
+That acceptance closes one workflow-control epoch; it is not precedent for a
 routine broad token, a persistent ref bypass, or an unleased manual ref move.
 Any later release whose newly reachable history contains a workflow-tree change
-starts a new control epoch and requires its own explicit review and
+starts a new control epoch and requires its own explicit review, digest, and
 authorization.
 
 ### Prove the split status-and-writer boundary before product release
@@ -617,8 +626,9 @@ attempt blocks recovery instead of allowing an older success to be reused.
 Recovery then repeats the terminal authority readbacks. A missing ref is a hard
 failure and must not be recreated by the workflow. If the desired transition
 crosses any workflow change, use the separately approved control-epoch
-bootstrap above; after that exact external advancement, the already-exact
-recovery path supplies the provider proof without reading the App key.
+acceptance above; that dispatch carries the reviewed digest through the same
+key environment, and a later already-exact recovery supplies the provider proof
+without reading the App key.
 
 When a tag run fails after its exact draft or immutable Release exists, preserve
 its evidence and rerun that same workflow. Re-running only failed jobs is
@@ -630,4 +640,4 @@ the same run ID and an allowed actual positive attempt. Correct only the failed
 control and use the website recovery path after public admission succeeds. Do
 not retag, delete the immutable Release or exact residual draft, manually move
 `website-production` outside the one separately approved control-epoch
-bootstrap, redeploy from Vercel, or weaken a ruleset to make the run pass.
+acceptance, redeploy from Vercel, or weaken a ruleset to make the run pass.
