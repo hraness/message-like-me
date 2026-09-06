@@ -142,7 +142,10 @@
   scoped `GITHUB_TOKEN` first prove denial while the exact App context is
   terminal `error`; accept only GitHub's singular exact GH013 violation payload
   for the protected ref plus the singular exact `remote: -` reason for the
-  context ending `is errored.`. Treat mutable Git progress, transport ordering,
+  context ending `is errored.`. Before exact comparison, normalize only one
+  consistent known Git non-TTY display suffix: zero, one, or eight ASCII
+  spaces on both semantic remote lines. Reject every other trailing byte,
+  suffix length, or mixed framing. Treat mutable Git progress, transport ordering,
   and helper-label framing as diagnostics rather than proof; the fixed Git
   executable, remote, arguments, and refspec bind the operation. Never accept
   the contradictory `is expected` or a missing-status interpretation. Then

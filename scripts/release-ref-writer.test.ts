@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -59,12 +60,13 @@ function requiredStatusError(
   protectedRef: string,
   context: string,
   state = "errored.",
+  gitDisplaySuffix = "",
 ) {
   return new Error([
-    `${writerLabel} failed: remote: error: GH013: Repository rule violations found for ${protectedRef}.`,
-    "remote: Review all repository rules at https://github.com/hraness/message-like-me/rules?ref=refs%2Fheads%2Fmain",
+    `${writerLabel} failed: remote: error: GH013: Repository rule violations found for ${protectedRef}.${gitDisplaySuffix}`,
+    `remote: Review all repository rules at https://github.com/hraness/message-like-me/rules?ref=refs%2Fheads%2Fmain${gitDisplaySuffix}`,
     "remote:",
-    `remote: - Required status check "${context}" is ${state}`,
+    `remote: - Required status check "${context}" is ${state}${gitDisplaySuffix}`,
     "remote:",
     "error: failed to push some refs to 'https://github.com/hraness/message-like-me.git'",
   ].join("\n"));
@@ -119,6 +121,71 @@ describe("required-status-errored GitHub denial", () => {
     });
   });
 
+  test("accepts only Git's known non-TTY display suffixes without changing the semantic proof", () => {
+    for (const gitDisplaySuffix of [" ", "        "] as const) {
+      const canaryError = requiredStatusError(
+        canaryLabel,
+        canaryRef,
+        canaryContext,
+        "errored.",
+        gitDisplaySuffix,
+      );
+      expect(parseWebsiteProductionCanaryRequiredStatusDenial(canaryError)).toEqual({
+        classification: "required-status-errored",
+        diagnosticSha256: createHash("sha256").update(canaryError.message, "utf8").digest("hex"),
+      });
+      expect(parseWebsiteProductionRequiredStatusDenial(
+        requiredStatusError(productionLabel, productionRef, productionContext, "errored.", gitDisplaySuffix),
+      )).toEqual({
+        classification: "required-status-errored",
+        diagnosticSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      });
+    }
+  });
+
+  test("rejects every other trailing transport mutation", () => {
+    for (const suffix of [
+      "  ",
+      "       ",
+      "         ",
+      "                ",
+      "\t",
+      "\u00a0",
+      "\u001b[K",
+      " trailing prose",
+      " trailing prose        ",
+    ] as const) {
+      expect(() => parseWebsiteProductionCanaryRequiredStatusDenial(
+        requiredStatusError(canaryLabel, canaryRef, canaryContext, "errored.", suffix),
+      )).toThrow(
+        "writer canary push failure is not the exact required-status-errored ruleset denial",
+      );
+      expect(() => parseWebsiteProductionRequiredStatusDenial(
+        requiredStatusError(productionLabel, productionRef, productionContext, "errored.", suffix),
+      )).toThrow(
+        "production push failure is not the exact required-status-errored ruleset denial",
+      );
+    }
+
+    const exact = requiredStatusError(canaryLabel, canaryRef, canaryContext).message;
+    const violation = `GH013: Repository rule violations found for ${canaryRef}.`;
+    const reason = `remote: - Required status check "${canaryContext}" is errored.`;
+    for (const [violationSuffix, reasonSuffix] of [
+      ["        ", ""],
+      ["", " "],
+      [" ", "        "],
+      ["        ", " "],
+    ] as const) {
+      expect(() => parseWebsiteProductionCanaryRequiredStatusDenial(
+        new Error(exact
+          .replace(violation, `${violation}${violationSuffix}`)
+          .replace(reason, `${reason}${reasonSuffix}`)),
+      )).toThrow(
+        "writer canary push failure is not the exact required-status-errored ruleset denial",
+      );
+    }
+  });
+
   test("rejects old, ambiguous, duplicated, or differently bound GitHub denial prose", () => {
     const exactCanary = requiredStatusError(canaryLabel, canaryRef, canaryContext).message;
     const canaryViolation = `GH013: Repository rule violations found for ${canaryRef}.`;
@@ -154,6 +221,81 @@ describe("required-status-errored GitHub denial", () => {
 });
 
 describe("website-production Git writer", () => {
+  test("preserves Git's known sideband suffix through the bounded failure wrapper", () => {
+    const protectedRef = "refs/heads/website-production";
+    const context = "message-like-me/website-production-authority";
+    const writerLabel = "website-production Git push";
+    const wrapped = requiredStatusError(
+      writerLabel,
+      protectedRef,
+      context,
+      "errored.",
+      "        ",
+    );
+    const stderr = wrapped.message.slice(`${writerLabel} failed: `.length);
+    let calls = 0;
+    let denial: unknown;
+    try {
+      advanceWebsiteProductionRef({
+        environment: { MLM_RELEASE_REF_TOKEN: token },
+        expectedOldSha: previousSha,
+        repository: "hraness/message-like-me",
+        spawnImplementation() {
+          calls += 1;
+          const bootstrap = sterileBootstrapResult(calls);
+          if (bootstrap !== undefined) return bootstrap;
+          if (calls === 4) return gitResult(`${verifiedSha}\n`);
+          if (calls === 5) return gitResult("", 1, stderr);
+          return gitResult();
+        },
+        verifiedSha,
+        verifiedTag,
+      });
+    } catch (error) {
+      denial = parseWebsiteProductionRequiredStatusDenial(error);
+    }
+    expect(calls).toBe(5);
+    expect(denial).toEqual({
+      classification: "required-status-errored",
+      diagnosticSha256: createHash("sha256").update(wrapped.message, "utf8").digest("hex"),
+    });
+  });
+
+  test("does not erase an unknown suffix at the terminal stderr boundary", () => {
+    const protectedRef = "refs/heads/website-production";
+    const context = "message-like-me/website-production-authority";
+    const stderr = [
+      `remote: error: GH013: Repository rule violations found for ${protectedRef}.`,
+      `remote: - Required status check "${context}" is errored.  `,
+      "",
+    ].join("\n");
+    let calls = 0;
+    let failure: unknown;
+    try {
+      advanceWebsiteProductionRef({
+        environment: { MLM_RELEASE_REF_TOKEN: token },
+        expectedOldSha: previousSha,
+        repository: "hraness/message-like-me",
+        spawnImplementation() {
+          calls += 1;
+          const bootstrap = sterileBootstrapResult(calls);
+          if (bootstrap !== undefined) return bootstrap;
+          if (calls === 4) return gitResult(`${verifiedSha}\n`);
+          if (calls === 5) return gitResult("", 1, stderr);
+          return gitResult();
+        },
+        verifiedSha,
+        verifiedTag,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(calls).toBe(5);
+    expect(() => parseWebsiteProductionRequiredStatusDenial(failure)).toThrow(
+      "production push failure is not the exact required-status-errored ruleset denial",
+    );
+  });
+
   test("builds one fixed refspec with one nonempty exact explicit lease", () => {
     const arguments_ = websiteProductionPushArguments(previousSha, verifiedSha);
     expect(arguments_).toEqual([

@@ -36,7 +36,10 @@
   writer moves the ref. Before success exists, the exact App context is read
   back as terminal `error`, and the writer-denial proof accepts only one exact
   GH013 violation payload for the protected ref plus one exact `remote: -`
-  reason for the context ending `is errored.`. Mutable Git progress, transport
+  reason for the context ending `is errored.`. Before exact comparison, normalize
+  only one consistent known Git non-TTY display suffix: zero, one, or eight
+  ASCII spaces on both semantic remote lines. Reject every other trailing byte,
+  suffix length, or mixed framing. Mutable Git progress, transport
   ordering, and helper-label framing are not proof; the fixed writer command
   binds the operation. `is expected`, missing-status, ambiguous, or differently
   bound semantic payloads are not acceptable evidence. The same job's scoped `GITHUB_TOKEN`

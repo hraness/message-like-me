@@ -802,6 +802,8 @@ test("repository guides describe the separate release and production writers", a
   expect(rootGuide).toContain("`statuses:write` plus `metadata:read`");
   expect(rootGuide).toContain("status App must have neither `contents:write` nor\n  `workflows:write`");
   expect(rootGuide).toContain("singular exact GH013 violation payload\n  for the protected ref");
+  expect(rootGuide).toContain("known Git non-TTY display suffix: zero, one, or eight ASCII\n  spaces");
+  expect(rootGuide).toContain("Reject every other trailing byte,\n  suffix length, or mixed framing");
   expect(rootGuide).toContain("transport ordering,\n  and helper-label framing as diagnostics rather than proof");
   expect(rootGuide).toContain("`is expected` or a missing-status interpretation");
   expect(rootGuide).toContain("Already-exact recovery must not enter the key environment");
@@ -817,6 +819,8 @@ test("repository guides describe the separate release and production writers", a
   expect(siteGuide).toContain("The App is the ruleset-pinned source of one exact-SHA success status");
   expect(siteGuide).toContain("same job's scoped `GITHUB_TOKEN`");
   expect(siteGuide).toContain("context ending `is errored.`");
+  expect(siteGuide).toContain("known Git non-TTY display suffix: zero, one, or eight\n  ASCII spaces");
+  expect(siteGuide).toContain("Reject every other trailing byte,\n  suffix length, or mixed framing");
   expect(siteGuide).toContain("transport\n  ordering, and helper-label framing are not proof");
   expect(siteGuide).toContain("missing-status, ambiguous, or differently\n  bound semantic payloads");
   expect(rootGuide).toContain("transition-scoped v2 digest protocol");
@@ -876,6 +880,8 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "message-like-me/website-production-authority",
     "GH013: Repository rule violations found for refs/heads/website-production.",
     "remote: - Required status check \"message-like-me/website-production-authority\" is errored.",
+    "zero, one, or eight ASCII spaces",
+    "Any other trailing byte, suffix length, or mixed framing is a",
     "duplicate GH013 payload",
     "multiple rule reasons",
     "has no update restriction or bypass actor",
