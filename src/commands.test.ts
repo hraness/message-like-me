@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runCommand } from "./commands.ts";
+import { CliError, errorMessage, exitCodeFor } from "./errors.ts";
+import { PrivatePublicationError } from "./private-publication.ts";
 import { main } from "./cli.ts";
 import {
   WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
@@ -14,6 +17,7 @@ import { canonicalJson, sha256 } from "./canonical-json.ts";
 import type { EnsoulMessagesSourcePacketV1 } from "./ensoul-source-v1.ts";
 import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey } from "./paths.ts";
+import * as privateJson from "./private-json.ts";
 import { LocalStore } from "./store.ts";
 import { syntheticProfileV2 } from "./test-fixtures.ts";
 import {
@@ -465,6 +469,21 @@ describe("messagelikeme CLI", () => {
       };
       expect(handoff.wrench).toMatchObject({ routeRef, contextRef });
       expect(handoff.turn.bubbles[0]!.text).toBe(privateBody);
+
+      const recoveredPath = join(root, "committed-before-audit.json");
+      const auditFailure = new CliError("internal", "Synthetic post-commit audit failure");
+      const auditRead = spyOn(LocalStore.prototype, "handoffAudit").mockImplementationOnce(() => { throw auditFailure; });
+      try {
+        let failed: unknown;
+        try { await runCommand(["--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
+          "--request", requestPath, "--wrench-context", contextPath, "--draft", draftPath, "--output", recoveredPath, "--json"], capture.io); }
+        catch (error) { failed = error; }
+        expect(failed).toBeInstanceOf(PrivatePublicationError);
+        expect(errorMessage(failed)).toBe(auditFailure.message);
+        expect((failed as PrivatePublicationError).publications[0]).toMatchObject({ receipt: "committed", cleanup: "retained" });
+        expect(await readFile(recoveredPath, "utf8")).toBe(await readFile(handoffPath, "utf8"));
+        expect(auditRead).toHaveBeenCalledTimes(2);
+      } finally { auditRead.mockRestore(); }
 
       capture.clear();
       expect(await main([
@@ -1109,5 +1128,134 @@ describe("messagelikeme CLI", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("Effect command lifetime and receipt recovery", () => {
+  for (const mode of ["before-commit", "after-commit", "confirmation-fails", "stdout-fails"] as const) {
+    test(`preserves private publication and CLI failure behavior when ${mode}`, async () => {
+      const root = await mkdtemp(join(tmpdir(), "message-like-me-command-scope-"));
+      const paths = await initializeDataPaths(dataPaths(join(root, "state")));
+      const initial = LocalStore.open(paths.database);
+      initial.replaceCorpus(corpus(), "2026-08-21T11:00:00.000Z");
+      initial.close();
+      const originalRecord = LocalStore.prototype.recordStudyPacket;
+      const originalClose = LocalStore.prototype.close;
+      const sentinel = new CliError("conflict", "Synthetic durable receipt failure");
+      const record = spyOn(LocalStore.prototype, "recordStudyPacket").mockImplementation(function (this: LocalStore, receipt) {
+        if (mode === "after-commit" || mode === "stdout-fails") originalRecord.call(this, receipt);
+        if (mode !== "stdout-fails") throw sentinel;
+      });
+      const close = spyOn(LocalStore.prototype, "close").mockImplementation(function (this: LocalStore) { originalClose.call(this); });
+      const confirm = mode === "confirmation-fails"
+        ? spyOn(LocalStore.prototype, "studyPacketReceiptStatus").mockImplementation(() => { throw new Error("Synthetic readback unavailable"); })
+        : null;
+      const output = join(root, "packet.json");
+      const capture = ioCapture();
+      const io = mode === "stdout-fails" ? { ...capture.io, stdout: () => { throw sentinel; } } : capture.io;
+      try {
+        let caught: unknown;
+        try { await runCommand(["--data-dir", paths.root, "study", "prepare", "contact_0123456789abcdef", "--output", output, "--json"], io); }
+        catch (error) { caught = error; }
+        expect(errorMessage(caught)).toBe(sentinel.message);
+        expect(exitCodeFor(caught)).toBe(4);
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(record).toHaveBeenCalledTimes(1);
+        expect(capture.stdout()).toBe("");
+        expect(capture.stderr()).toBe("");
+        if (mode === "stdout-fails") {
+          expect(caught).toBe(sentinel);
+        } else {
+          expect(caught).toBeInstanceOf(PrivatePublicationError);
+          const reports = (caught as PrivatePublicationError).publications;
+          expect(reports).toHaveLength(1);
+          expect(reports[0]).toMatchObject({
+            receipt: mode === "before-commit" ? "absent" : mode === "after-commit" ? "committed" : "unproven",
+            cleanup: mode === "before-commit" ? "removed" : "retained",
+          });
+          expect(JSON.stringify(reports)).not.toContain(root);
+          expect(JSON.stringify(reports)).not.toContain("synthetic plan");
+        }
+        if (mode === "before-commit") await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+        else expect(JSON.parse(await readFile(output, "utf8")).schemaVersion).toBeDefined();
+        const readback = new Database(paths.database, { readonly: true });
+        try {
+          expect((readback.query("SELECT count(*) AS count FROM study_packets").get() as { count: number }).count).toBe(mode === "after-commit" || mode === "stdout-fails" ? 1 : 0);
+        } finally { readback.close(); }
+      } finally {
+        record.mockRestore(); close.mockRestore(); confirm?.mockRestore();
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test("does not acquire a store for help and closes once with historical close-error precedence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-close-"));
+    const capture = ioCapture();
+    const open = spyOn(LocalStore, "open");
+    try {
+      await runCommand(["--help"], capture.io);
+      expect(open).not.toHaveBeenCalled();
+      await runCommand(["--data-dir", root, "init"], capture.io);
+      open.mockClear();
+      const originalClose = LocalStore.prototype.close;
+      const failure = new CliError("internal", "Synthetic close failure");
+      const close = spyOn(LocalStore.prototype, "close").mockImplementation(function (this: LocalStore) {
+        originalClose.call(this); throw failure;
+      });
+      try {
+        await expect(runCommand(["--data-dir", root, "contacts", "show", "unknown"], capture.io)).rejects.toBe(failure);
+        expect(open).toHaveBeenCalledTimes(1);
+        expect(close).toHaveBeenCalledTimes(1);
+      } finally { close.mockRestore(); }
+    } finally { open.mockRestore(); await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+describe("typed command failure translations", () => {
+  for (const stage of ["request", "context", "draft", "verify", "receipt"] as const) {
+    test(`redacts a native private reader failure at ${stage}`, async () => {
+      const detail = "Synthetic private reader detail must stay in the cause";
+      const raw = new Error(detail);
+      const request = { schemaVersion: 1, format: "message-like-me.agent-message-handoff-request", routeCandidateId: `route_${"a".repeat(64)}` };
+      const context = { schemaVersion: 1, format: "wrench.messaging-context-binding",
+        contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+        contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+        routeRef: "synthetic_route", contextRef: "synthetic_context", exactDataRevision: "a".repeat(64), latestMessageRevision: "b".repeat(64),
+        validatedAt: "2026-08-21T11:59:00.000Z", expiresAt: "2026-08-21T12:10:00.000Z" };
+      const reader = spyOn(privateJson, "readStablePrivateJson").mockImplementation(async (path) => {
+        if (path.endsWith(`${stage}.json`) || stage === "verify" || stage === "receipt") throw raw;
+        return path.endsWith("request.json") ? request : context;
+      });
+      const capture = ioCapture();
+      const args = stage === "verify" ? ["handoff", "verify", "/synthetic/verify.json", "--json"]
+        : stage === "receipt" ? ["handoff", "record", "synthetic_handoff", "--wrench-receipt", "/synthetic/receipt.json", "--json"]
+        : ["handoff", "prepare", "synthetic_contact", "--request", "/synthetic/request.json", "--wrench-context", "/synthetic/context.json", "--draft", "/synthetic/draft.json", "--output", "/synthetic/output.json", "--json"];
+      try {
+        expect(await main(args, capture.io)).toBe(7);
+        const label = stage === "verify" ? "Private handoff file" : stage === "receipt" ? "Private Wrench receipt file" : "Private handoff input";
+        expect(capture.stderr()).toBe(`${label} could not be validated safely\n`);
+        expect(capture.stderr()).not.toContain(detail);
+        expect(capture.stdout()).toBe("");
+        expect(reader).toHaveBeenCalledTimes(stage === "draft" ? 3 : stage === "context" ? 2 : 1);
+      } finally { reader.mockRestore(); }
+    });
+  }
+
+  test("preserves Ensoul usage translation for a failed or invalid injected clock", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-clock-"));
+    const paths = await initializeDataPaths(dataPaths(join(root, "state")));
+    const store = LocalStore.open(paths.database);
+    store.replaceCorpus(corpus(), "2026-08-21T11:00:00.000Z");
+    store.close();
+    try {
+      for (const now of [() => { throw new Error("Synthetic clock failure"); }, () => new Date(Number.NaN)]) {
+        const capture = ioCapture();
+        expect(await main(["--data-dir", paths.root, "ensoul", "prepare", "contact_0123456789abcdef", "--subject", "owner", "--output", join(root, "packet.json"), "--json"], { ...capture.io, now })).toBe(2);
+        expect(capture.stdout()).toBe("");
+        expect(capture.stderr()).toMatch(/^(?:Synthetic clock failure|Clock returned an invalid time)\n$/u);
+        await expect(stat(join(root, "packet.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

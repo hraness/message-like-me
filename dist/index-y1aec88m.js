@@ -12,9 +12,5 @@ function canonicalJson(value) {
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
-function prettyJson(value) {
-  return `${JSON.stringify(value, null, 2)}
-`;
-}
 
-export { canonicalJson, sha256, prettyJson };
+export { canonicalJson, sha256 };

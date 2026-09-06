@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test";
-import { chmod, lstat, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { describe, expect, spyOn, test } from "bun:test";
+import { chmod, link, lstat, mkdir, readdir, rename, writeFile, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import * as nativeFs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   atomicWritePrivate,
+  publishPrivateArtifact,
+  discardPrivatePublication,
   dataPaths,
   defaultDataDirectory,
   initializeDataPaths,
@@ -94,4 +97,82 @@ describe("private local paths", () => {
       await rm(parent, { recursive: true, force: true });
     }
   });
+});
+
+describe("private publication custody", () => {
+  test("discards only a publication obtained from the native publisher", async () => {
+    const root = await mkdtemp(join(tmpdir(), "message-like-me-custody-"));
+    try {
+      const file = join(root, "packet.json");
+      const publication = await publishPrivateArtifact(file, "synthetic packet");
+      expect(Object.keys(publication).sort()).toEqual(["bytesSha256", "pathSha256"]);
+      expect(await discardPrivatePublication({ ...publication })).toBe("retained-unproven");
+      expect(await readFile(file, "utf8")).toBe("synthetic packet");
+      expect(await discardPrivatePublication(publication)).toBe("removed");
+      expect(await discardPrivatePublication(publication)).toBe("missing");
+      expect(await readdir(root)).toEqual([]);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  for (const replacement of ["inode", "symlink", "content", "mode", "hardlink", "directory"] as const) {
+    test(`retains an observed ${replacement} change without deleting the replacement`, async () => {
+      const root = await mkdtemp(join(tmpdir(), "message-like-me-custody-change-"));
+      const parent = join(root, "private");
+      const file = join(parent, "packet.json");
+      try {
+        const publication = await publishPrivateArtifact(file, "synthetic packet");
+        const sentinel = join(root, "sentinel");
+        await writeFile(sentinel, "unchanged sentinel", { mode: 0o600 });
+        if (replacement === "inode") {
+          await rename(file, join(parent, "original"));
+          await writeFile(file, "replacement", { mode: 0o600 });
+        } else if (replacement === "symlink") {
+          await rm(file); await symlink(sentinel, file);
+        } else if (replacement === "content") {
+          await writeFile(file, "changed packet!!");
+        } else if (replacement === "mode") {
+          await chmod(file, 0o644);
+        } else if (replacement === "hardlink") {
+          await link(file, join(parent, "additional-link"));
+        } else {
+          await rename(parent, join(root, "original-parent"));
+          await mkdir(parent, { mode: 0o700 });
+          await writeFile(file, "replacement", { mode: 0o600 });
+        }
+        expect(await discardPrivatePublication(publication)).toBe("retained-changed");
+        expect(await lstat(file)).toBeDefined();
+        expect(await readFile(sentinel, "utf8")).toBe("unchanged sentinel");
+      } finally { await rm(root, { recursive: true, force: true }); }
+    });
+  }
+});
+
+test("bounds the cleanup hash read when a file grows after the identity sample", async () => {
+  const root = await mkdtemp(join(tmpdir(), "message-like-me-custody-growth-"));
+  const file = join(root, "packet.json");
+  const body = "s".repeat(70_000);
+  let grew = false;
+  let bytesRequested = 0;
+  const originalRead = nativeFs.readSync;
+  try {
+    const publication = await publishPrivateArtifact(file, body);
+    const read = spyOn(nativeFs, "readSync").mockImplementation((descriptor: number, buffer: NodeJS.ArrayBufferView,
+      offset?: number | nativeFs.ReadOptions, length?: number, position?: nativeFs.ReadPosition | null) => {
+      if (typeof offset !== "number") return originalRead(descriptor, buffer, offset);
+      if (length === undefined) throw new Error("Synthetic bounded-read fixture requires a length");
+      if (!grew) {
+        grew = true;
+        nativeFs.appendFileSync(file, "extra bytes");
+      }
+      expect(buffer.byteLength).toBeLessThanOrEqual(64 * 1024);
+      bytesRequested += length;
+      return originalRead(descriptor, buffer, offset, length, position ?? null);
+    });
+    try {
+      expect(await discardPrivatePublication(publication)).toBe("retained-changed");
+      expect(grew).toBe(true);
+      expect(bytesRequested).toBe(body.length + 1);
+      expect(await readFile(file, "utf8")).toBe(`${body}extra bytes`);
+    } finally { read.mockRestore(); }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

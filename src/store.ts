@@ -4293,6 +4293,51 @@ export class LocalStore {
     });
   }
 
+  studyPacketReceiptStatus(receipt: Parameters<LocalStore["recordStudyPacket"]>[0]): "absent" | "committed" | "different" {
+    const stored = get<{
+      contact_id: string; corpus_revision: string; scope_id: string | null; evidence_revision: string | null;
+      example_ids_json: string | null; evidence_json: string | null; created_at: string; private_path: string;
+    }>(this.#database, `
+      SELECT contact_id,corpus_revision,scope_id,evidence_revision,example_ids_json,evidence_json,created_at,private_path
+      FROM study_packets WHERE sha256=?
+    `, receipt.sha256);
+    if (stored === null) return "absent";
+    const scope = analysisScope(this.#database, receipt.contactId);
+    const examples = receipt.exampleIds === undefined ? null : canonicalJson(studyExampleIds(receipt.exampleIds, "study packet exampleIds"));
+    const evidence = receipt.evidence === undefined ? null : canonicalJson(studyEvidenceManifest(receipt.evidence, "study packet evidence"));
+    return stored.contact_id === receipt.contactId && stored.corpus_revision === receipt.corpusRevision
+      && stored.scope_id === scope?.id && stored.evidence_revision === receipt.evidenceRevision
+      && stored.example_ids_json === examples && stored.evidence_json === evidence
+      && stored.created_at === receipt.createdAt && stored.private_path === receipt.privatePath
+      ? "committed" : "different";
+  }
+
+  preparedHandoffReceiptStatus(value: unknown): "absent" | "committed" | "different" {
+    const handoff = parseAgentMessageHandoffV1(value);
+    const exists = get<{ handoff_id: string }>(this.#database,
+      "SELECT handoff_id FROM agent_message_handoffs WHERE handoff_id=?", handoff.handoffId);
+    if (exists === null) return "absent";
+    const audit = this.handoffAudit(handoff.handoffId);
+    return audit.handoffSha256 === handoff.integrity.canonicalSha256
+      && audit.contactIdSha256 === sha256(handoff.contact.contactId)
+      && audit.routeCandidateIdSha256 === sha256(handoff.contact.routeCandidateId)
+      && audit.sourceIdSha256 === sha256(handoff.contact.sourceId)
+      && audit.conversationIdSha256 === sha256(handoff.contact.conversationId)
+      && audit.corpusRevision === handoff.evidence.corpusRevision
+      && audit.sourceRevision === handoff.evidence.sourceRevision
+      && audit.profileState === handoff.evidence.profileState
+      && audit.profileEvidenceRevision === handoff.evidence.profileEvidenceRevision
+      && audit.wrenchContractHash === handoff.wrench.contractHash
+      && audit.routeRefSha256 === sha256(handoff.wrench.routeRef)
+      && audit.contextRefSha256 === sha256(handoff.wrench.contextRef)
+      && audit.exactDataRevisionSha256 === handoff.wrench.exactDataRevision
+      && audit.latestMessageRevisionSha256 === handoff.wrench.latestMessageRevision
+      && audit.turnDigest === wrenchMessagingTurnDigestV1(handoff)
+      && audit.partCount === handoff.turn.bubbles.length
+      && audit.createdAt === handoff.createdAt && audit.expiresAt === handoff.expiresAt
+      ? "committed" : "different";
+  }
+
   applyProfile(profile: StyleProfile, appliedAt: string): void {
     const parsedProfile = parseStyleProfile(profile);
     transaction(this.#database, () => {
