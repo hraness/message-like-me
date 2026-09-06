@@ -498,6 +498,8 @@ test("site promotion gates complete workflow history before App attestation and 
     "deployments: read",
     "timeout-minutes: 40",
     "release-provider-outcome.mjs wait",
+    "final_public_admission:",
+    "Re-admit exact public artifacts after provider success",
   ] as const) {
     expect(workflow).toContain(required);
   }
@@ -558,6 +560,10 @@ test("site promotion gates complete workflow history before App attestation and 
   expect(workflowRangeHelper).toContain("decodeWorkflowRangeReceipt(value)");
   expect(refWriterHelper).toContain("verifiedReleaseFetchArguments");
   expect(refWriterHelper).toContain('"FETCH_HEAD^{commit}"');
+  expect(refWriterHelper).toContain('`--depth=${String(PROTECTED_REF_ANCESTRY_FETCH_DEPTH)}`');
+  expect(refWriterHelper).toContain('"website-production fast-forward ancestry"');
+  expect(refWriterHelper).toContain('"merge-base"');
+  expect(refWriterHelper).toContain('"--is-ancestor"');
   expect(refWriterHelper).toContain('`refs/tags/${tag}`');
   expect(refWriterHelper).toContain("GIT_LFS_SKIP_SMUDGE");
   expect(refWriterHelper).toContain("verifiedTag: input.verifiedTag");
@@ -650,10 +656,38 @@ test("site promotion gates complete workflow history before App attestation and 
 
   const existingStart = workflow.indexOf("\n  confirm_existing_production_ref:\n");
   const selectStart = workflow.indexOf("\n  select_promotion:\n");
+  const postPromotionStart = workflow.indexOf("\n  post_promotion_admission:\n");
+  const providerOutcomeStart = workflow.indexOf("\n  provider_outcome:\n");
+  const finalPublicStart = workflow.indexOf("\n  final_public_admission:\n");
   const existingJob = workflow.slice(existingStart, selectStart);
+  const selectJob = workflow.slice(selectStart, postPromotionStart);
+  const postPromotionJob = workflow.slice(postPromotionStart, providerOutcomeStart);
+  const providerOutcomeJob = workflow.slice(providerOutcomeStart, finalPublicStart);
+  const finalPublicJob = workflow.slice(finalPublicStart);
   expect(existingJob).not.toContain("environment:");
   expect(existingJob).not.toContain("MLM_RELEASE_APP_");
   expect(existingJob).not.toContain("MLM_RELEASE_REF_TOKEN");
+  expect(selectJob).toContain(
+    "${{ always() &&\n          needs.verify.result == 'success' &&\n          needs.provider_baseline.result == 'success' }}",
+  );
+  expect(postPromotionJob).toContain(
+    "${{ always() &&\n          !cancelled() &&\n          needs.verify.result == 'success' &&\n          needs.select_promotion.result == 'success' }}",
+  );
+  expect(providerOutcomeJob).toContain(
+    "${{ always() &&\n          !cancelled() &&\n          needs.verify.result == 'success' &&\n          needs.provider_baseline.result == 'success' &&\n          needs.select_promotion.result == 'success' &&\n          needs.post_promotion_admission.result == 'success' }}",
+  );
+  expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() }}");
+  expect(finalPublicJob).toContain("Bind the complete terminal admission chain");
+  expect(finalPublicJob).toContain(
+    "PROVIDER_OUTCOME_RESULT: ${{ needs.provider_outcome.result }}",
+  );
+  expect(finalPublicJob).toContain("VERIFY_RESULT: ${{ needs.verify.result }}");
+  expect(finalPublicJob).toContain(
+    '[[ "$VERIFY_RESULT" != "success" || "$PROVIDER_OUTCOME_RESULT" != "success" ]]',
+  );
+  expect(finalPublicJob).toContain(
+    "Production promotion did not complete every required admission job",
+  );
 });
 
 test("production, canary, and cleanup keep status and ref authority split", async () => {
@@ -916,6 +950,10 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "merge-side changes and an edit followed",
     "seven reviewed helpers",
     "--force-with-lease",
+    "The sterile writer fetches only the exact verified tag, with one more commit of\nhistory than the admitted workflow range",
+    "the push receipt must still report one\nordinary fast-forward rather than a forced update",
+    "The final public\nadmission runs as a terminal sentinel",
+    "a skipped tail cannot make the workflow green",
     "GIT_ASKPASS",
     "stale leases all fail without mutation",
     "completed\n`workflow_run`",

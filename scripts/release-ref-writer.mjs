@@ -20,7 +20,7 @@ const STABLE_TAG = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const MAX_TOKEN_BYTES = 4096;
 const MAX_DIAGNOSTIC_BYTES = 4096;
 const GIT_TIMEOUT_MILLISECONDS = 60_000;
-const CANARY_FETCH_DEPTH = MAXIMUM_WORKFLOW_RANGE_COMMITS + 1;
+const PROTECTED_REF_ANCESTRY_FETCH_DEPTH = MAXIMUM_WORKFLOW_RANGE_COMMITS + 1;
 const STERILE_REF_PREFIX = "refs/message-like-me-release-writer";
 const ASKPASS = `#!/bin/sh
 case "$1" in
@@ -231,7 +231,7 @@ export function verifiedReleaseFetchArguments(verifiedTag) {
     "fetch",
     "--no-tags",
     "--no-recurse-submodules",
-    "--depth=1",
+    `--depth=${String(PROTECTED_REF_ANCESTRY_FETCH_DEPTH)}`,
     FIXED_REMOTE,
     `refs/tags/${tag}`,
   ]);
@@ -254,7 +254,7 @@ function protectedBranchFetchArguments(remoteRef, localRef) {
     "fetch",
     "--no-tags",
     "--no-recurse-submodules",
-    `--depth=${String(CANARY_FETCH_DEPTH)}`,
+    `--depth=${String(PROTECTED_REF_ANCESTRY_FETCH_DEPTH)}`,
     FIXED_REMOTE,
     `${remoteRef}:${localRef}`,
   ]);
@@ -547,6 +547,21 @@ export function advanceWebsiteProductionRef(options) {
     ) {
       fail("fetched release tag does not peel to the verified release SHA");
     }
+    runGit(
+      options.spawnImplementation,
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "merge-base",
+        "--is-ancestor",
+        exactSha(options.expectedOldSha, "expected website-production SHA"),
+        verifiedSha,
+      ],
+      sterile.commonEnvironment,
+      "website-production fast-forward ancestry",
+      token,
+      sterile.root,
+    );
     const pushResult = runGit(
       options.spawnImplementation,
       pushArguments,

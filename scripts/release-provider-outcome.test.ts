@@ -1456,7 +1456,9 @@ esac
     const postflightJob = job("advance_production_ref");
     const existingJob = job("confirm_existing_production_ref");
     const selectJob = job("select_promotion");
+    const postPromotionJob = job("post_promotion_admission");
     const providerJob = job("provider_outcome");
+    const finalPublicJob = job("final_public_admission");
     const permissions = (jobText: string): readonly string[] => {
       const match = /\n    permissions:\n((?:      [a-z-]+: (?:read|write)\n)+)/u.exec(jobText);
       if (match?.[1] === undefined) throw new Error("Workflow job has no exact permission block");
@@ -1526,7 +1528,13 @@ esac
     expect(selectJob).toContain("Bind exactly one promotion path");
     expect(selectJob).toContain("ADVANCE_RESULT");
     expect(selectJob).toContain("EXISTING_RESULT");
+    expect(postPromotionJob).toContain(
+      "${{ always() &&\n          !cancelled() &&\n          needs.verify.result == 'success' &&\n          needs.select_promotion.result == 'success' }}",
+    );
     expect(providerJob).toContain("- select_promotion");
+    expect(providerJob).toContain(
+      "${{ always() &&\n          !cancelled() &&\n          needs.verify.result == 'success' &&\n          needs.provider_baseline.result == 'success' &&\n          needs.select_promotion.result == 'success' &&\n          needs.post_promotion_admission.result == 'success' }}",
+    );
     expect(providerJob).toContain("timeout-minutes: 40");
     expect(permissions(providerJob)).toEqual(["contents: read", "deployments: read"]);
     expect(providerJob).not.toContain("contents: write");
@@ -1540,6 +1548,23 @@ esac
     expect(providerJob).toContain(
       "RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}",
     );
+    expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() }}");
+    expect(finalPublicJob).not.toContain("continue-on-error");
+    expect(finalPublicJob.indexOf("Bind the complete terminal admission chain"))
+      .toBeLessThan(finalPublicJob.indexOf("actions/checkout@"));
+    const terminalAdmissionScript = workflowStepScript(
+      workflow,
+      "Bind the complete terminal admission chain",
+    );
+    for (const verifyResult of ["success", "skipped", "failure", "cancelled", ""] as const) {
+      for (const providerResult of ["success", "skipped", "failure", "cancelled", ""] as const) {
+        const result = await runWorkflowScript(terminalAdmissionScript, {
+          PROVIDER_OUTCOME_RESULT: providerResult,
+          VERIFY_RESULT: verifyResult,
+        });
+        expect(result.exitCode).toBe(verifyResult === "success" && providerResult === "success" ? 0 : 1);
+      }
+    }
     expect(helper).toContain("defaultBranch: process.env.DEFAULT_BRANCH");
     expect(helper).toContain("eventName: process.env.EVENT_NAME");
     expect(helper).toContain("recoveryWorkflowSha: process.env.RECOVERY_WORKFLOW_SHA");

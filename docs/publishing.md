@@ -727,6 +727,15 @@ the same checked explicit-lease fast-forward and requires one new provider
 outcome. A baseline-preserving range uses the frozen v1 no-digest receipt; a
 workflow-changing range requires the exact independently reviewed v2 digest and
 recomputes its old-through-current-workflow-source inventory before authority.
+The sterile writer fetches only the exact verified tag, with one more commit of
+history than the admitted workflow range, and proves the expected production
+commit is its ancestor before pushing. Missing ancestry or a non-fast-forward
+target fails before the ref can move; the push receipt must still report one
+ordinary fast-forward rather than a forced update. Because exactly one of the
+advance and already-exact jobs is intentionally skipped, every job after path
+selection has an explicit skip-aware status condition. The final public
+admission runs as a terminal sentinel and fails unless verification and provider
+admission both succeeded, so a skipped tail cannot make the workflow green.
 If the ref is already exact, the baseline marks advancement false, skips the
 entire `production-ref-writer-key` job, and mints no App token. A separate
 read-only job accepts only the unique latest exact-SHA Production deployment in
