@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.3 (2026-09-06)
+
+- Let Beeper users bring a finished private Wrench bundle into the same local
+  evidence corpus as Apple Messages and the other supported sources. The exact
+  public producer is `@hraness/wrench@0.16.7` with adapter
+  `beeper-local@2.4.0`.
+- Pin the reviewed Beeper surface at 32 operations: 26 run through one Beeper
+  CLI 0.6.2 executable, including supported actions and writes, plus six fixed
+  Desktop loopback reads. The upstream tagged source package's 0.6.1
+  declaration is provenance only; executable 0.6.2 is runtime authority.
+- State the process boundary consistently: Message Like Me receives no provider
+  credentials, never calls Wrench or Beeper operations, never sends, and keeps
+  every ingest path read-only with respect to its source.
+- Make the exact public `@hraness/message-like-me@0.8.3` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
+
 ## 0.8.2
 
 - Fix the automated release admission so the npm provenance signer policy

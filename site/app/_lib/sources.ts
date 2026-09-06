@@ -1,11 +1,11 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.16.5',
+  producerVersion: '0.16.7',
   adapterId: 'beeper-local',
-  adapterVersion: '2.3.0',
+  adapterVersion: '2.4.0',
   reviewedOperationCount: 32,
-  pinnedCliOperationCount: 27,
-  fixedDesktopReadOperationCount: 5,
+  pinnedCliOperationCount: 26,
+  fixedDesktopReadOperationCount: 6,
   providerCliVersion: '0.6.2',
   providerCliSourcePackagePath: 'packages/cli/package.json',
   providerCliSourceDeclaredVersion: '0.6.1',
@@ -17,7 +17,7 @@ export const BEEPER_COMPATIBILITY = Object.freeze({
 
 export const WHATSAPP_COMPATIBILITY = Object.freeze({
   producer: 'Wrench',
-  producerVersion: '0.16.5',
+  producerVersion: '0.16.7',
   providerCli: 'Wacli',
   providerCliVersion: '0.15.0',
   bundleSchemaVersion: '2',
@@ -68,9 +68,9 @@ export const SUPPORTED_SOURCES = Object.freeze([
     mode: 'Bounded local bundle',
     status: 'Supported',
     summary:
-      'Ingests a verified, bounded Beeper observation exported by Wrench v0.16.5.',
+      'Adds a finished Beeper bundle from Wrench v0.16.7 and adapter 2.4.0 to the private local evidence corpus.',
     boundary:
-      'Message Like Me owns zero Beeper operations, credentials, or live sessions; it never sends and does not claim complete history.',
+      'All 32 reviewed operations stay in Wrench: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads. Message Like Me receives no provider credentials, calls no Wrench or Beeper operation, never sends, and does not claim complete history.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
   },
   {

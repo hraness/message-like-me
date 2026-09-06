@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 
+import { BEEPER_COMPATIBILITY } from './_lib/sources';
 import {
   absoluteUrl,
   GITHUB_URL,
@@ -115,7 +116,10 @@ const structuredData = {
       featureList: [
         'Read-only Apple Messages history ingestion',
         'Caller-owned X data archive direct-message ingestion',
-        'Bounded Beeper bundle ingestion via Wrench',
+        'Every ingest path is read-only with respect to its source',
+        `Finished Beeper bundle from Wrench v${BEEPER_COMPATIBILITY.producerVersion} and adapter ${BEEPER_COMPATIBILITY.adapterId} v${BEEPER_COMPATIBILITY.adapterVersion}; all ${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed operations stay in Wrench (${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through one pinned Beeper CLI ${BEEPER_COMPATIBILITY.providerCliVersion} executable, including supported actions and writes, plus ${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} fixed Desktop loopback reads)`,
+        `Beeper CLI executable ${BEEPER_COMPATIBILITY.providerCliVersion} is runtime authority; upstream tagged ${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} declaration ${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion} is provenance only`,
+        'No provider credentials, Wrench or Beeper operation calls, or sending',
         'Native WhatsApp bundle ingestion via Wrench and official Wacli',
         'Optional macOS Contacts label enrichment',
         'Local deterministic measurement and drafts-only Agent Skill',

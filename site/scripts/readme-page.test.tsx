@@ -14,8 +14,17 @@ test('renders the complete README with one source-owned heading and working anch
   expect(html).toContain('src="https://skills.sh/b/hraness/message-like-me"');
   expect(html).toContain('href="#install-and-first-run"');
   expect(html).toContain('<h2 id="install-and-first-run">Install and first run</h2>');
+  expect(html).toMatch(
+    /Beeper users can bring a bounded observation from supported connected accounts\s+into the same private evidence layer as Apple Messages\./u,
+  );
+  expect(html).toContain(
+    '<td>A finished local bundle from Wrench v0.16.7 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads</td>',
+  );
+  expect(html).toContain(
+    'Message Like Me receives no provider credentials, never calls Wrench or a Beeper operation, and never sends',
+  );
   expect(html).toContain('"headline":"Message Like Me"');
-  expect(html).toContain('"dateModified":"2026-09-05"');
+  expect(html).toContain('"dateModified":"2026-09-06"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 
