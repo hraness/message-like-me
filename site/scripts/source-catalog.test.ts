@@ -32,9 +32,9 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-05T00:00:00.000Z'],
-      ['/sources', '2026-09-05T00:00:00.000Z'],
-      ['/docs', '2026-09-05T00:00:00.000Z'],
+      ['/', '2026-09-06T00:00:00.000Z'],
+      ['/sources', '2026-09-06T00:00:00.000Z'],
+      ['/docs', '2026-09-06T00:00:00.000Z'],
       ['/methodology', '2026-08-27T00:00:00.000Z'],
       ['/research', '2026-08-27T00:00:00.000Z'],
       ['/about', '2026-08-27T00:00:00.000Z'],
@@ -329,7 +329,7 @@ describe('supported source presentation', () => {
     for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
       expect(copy).toMatch(/unobservable|observability limit/u);
     }
-    expect(changelog).toContain('## 0.8.3 (2026-09-05)');
+    expect(changelog).toContain('## 0.8.3 (2026-09-06)');
     expect(changelog).not.toContain('## Unreleased');
     const currentChangelog = changelog.slice(
       changelog.indexOf('## 0.8.3'),

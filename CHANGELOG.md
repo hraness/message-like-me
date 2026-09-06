@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.3 (2026-09-05)
+## 0.8.3 (2026-09-06)
 
 - Let Beeper users bring a finished private Wrench bundle into the same local
   evidence corpus as Apple Messages and the other supported sources. The exact

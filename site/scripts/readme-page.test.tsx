@@ -24,7 +24,7 @@ test('renders the complete README with one source-owned heading and working anch
     'Message Like Me receives no provider credentials, never calls Wrench or a Beeper operation, and never sends',
   );
   expect(html).toContain('"headline":"Message Like Me"');
-  expect(html).toContain('"dateModified":"2026-09-05"');
+  expect(html).toContain('"dateModified":"2026-09-06"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 
