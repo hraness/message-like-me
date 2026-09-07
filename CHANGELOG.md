@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.4 (2026-09-06)
+## 0.8.5 (2026-09-06)
 
 - Give each command one scoped owner for its private store, source reads and
   artifact publication. Typed failures retain the existing CLI diagnostics and
@@ -11,9 +11,21 @@
   grows during inspection.
 - Bundle Effect 3.22.1 inside the CLI. Public protocol entrypoints remain pure,
   preserve their declarations, and require no new consumer dependency.
+
+## 0.8.4 (2026-09-06)
+
 - Make the exact public `@hraness/message-like-me@0.8.4` npm package the
   supported default install, with the same reviewed bytes mirrored in the
-  immutable GitHub Release.
+  immutable GitHub Release. The product is unchanged from 0.8.3.
+- Let the GitHub Release writer wait briefly for its freshly created draft
+  instead of failing on the first inventory read, so an automated release no
+  longer needs a manual rerun.
+- Fetch the release tag with one more commit of history than the admitted
+  workflow range and prove the production commit is its ancestor before the
+  leased fast-forward, so Git attributes the push instead of reporting a forced
+  update. Every job after promotion path selection carries an explicit
+  skip-aware condition, and a terminal admission fails unless verification and
+  provider admission both succeeded.
 
 ## 0.8.3 (2026-09-06)
 
