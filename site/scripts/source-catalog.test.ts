@@ -245,18 +245,18 @@ describe('supported source presentation', () => {
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
     expect(renderedSourcesPage).toContain('Every ingest path is read-only with respect to its source');
-    expect(renderedSourcesPage).toContain('Current support in v0.8.4');
+    expect(renderedSourcesPage).toContain('Current support in v0.8.5');
     expect(renderedSourcesPage).toContain(
       'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.4/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.5/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
       'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.4/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.5/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -329,10 +329,10 @@ describe('supported source presentation', () => {
     for (const copy of [readme, changelog, whatsappContract, llms, messagingSkill]) {
       expect(copy).toMatch(/unobservable|observability limit/u);
     }
-    expect(changelog).toContain('## 0.8.4 (2026-09-06)');
+    expect(changelog).toContain('## 0.8.5 (2026-09-06)');
     expect(changelog).toContain('## 0.8.3 (2026-09-06)');
     expect(changelog).not.toContain('## Unreleased');
-    expect(changelog.indexOf('## 0.8.4')).toBeLessThan(changelog.indexOf('## 0.8.3'));
+    expect(changelog.indexOf('## 0.8.5')).toBeLessThan(changelog.indexOf('## 0.8.3'));
     const currentChangelog = changelog.slice(
       changelog.indexOf('## 0.8.3'),
       changelog.indexOf('## 0.8.2'),
@@ -384,7 +384,7 @@ describe('supported source presentation', () => {
     const softwareApplication = jsonLd['@graph']?.find(
       (entry) => entry['@type'] === 'SoftwareApplication',
     );
-    expect(softwareApplication?.softwareVersion).toBe('0.8.4');
+    expect(softwareApplication?.softwareVersion).toBe('0.8.5');
     expect(softwareApplication?.featureList).toEqual([
       'Read-only Apple Messages history ingestion',
       'Caller-owned X data archive direct-message ingestion',

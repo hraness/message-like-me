@@ -188,3 +188,17 @@
 - When a CI or policy gate scans complete Git history, check out the exact governed SHA and fetch only the fully qualified governed refs before scanning. Preserve the complete-history gate and reject unexpected refs instead of importing unrelated concurrent heads.
 - At closeout, record applicable branch, PR, check, merge, release, deployment, and production evidence. Archive only conclusively finished tasks, never from silence alone, and reclaim only freshly revalidated clean merged worktrees through the guarded exact-path flow.
 <!-- hra-local-efficiency:end -->
+
+## Command Effect ownership
+
+- Follow [docs/command-runtime.md](docs/command-runtime.md). Keep `runCommand` as
+  the sole Promise runner and use the declared `CommandPlatform` and
+  `CommandArtifacts` services for native operations and scoped ownership.
+- Keep SQLite callbacks synchronous and retain exact private-path, digest,
+  revision, profile, and handoff laws. Do not infer receipt rollback from an
+  exception or delete a publication whose custody is unproven.
+- Pin the approved Effect build dependency; bundle it into the CLI while keeping
+  all five public JavaScript and declaration graphs independent of Effect.
+- Preserve `check:effect`, `check:public-graphs`, and every existing full gate.
+  Review policy and checker changes independently; do not weaken enforcement to
+  silence a new implementation failure.

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.5 (2026-09-06)
+
+- Make the exact public `@hraness/message-like-me@0.8.5` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
+- Give each command one scoped owner for its private store, source reads and
+  artifact publication. Typed failures retain the existing CLI diagnostics and
+  exit codes; store transactions remain synchronous.
+- Publish private exports through exclusive staging and no-overwrite paths.
+  Reconcile receipt failures before cleanup, retain files whose ownership or
+  publication status cannot be proved, and bound cleanup reads even if a file
+  grows during inspection.
+- Bundle Effect 3.22.1 inside the CLI. Public protocol entrypoints remain pure,
+  preserve their declarations, and require no new consumer dependency.
+- Bound private JSON read allocation to the admitted file size, including
+  short reads and files that grow during inspection.
+
 ## 0.8.4 (2026-09-06)
 
 - Make the exact public `@hraness/message-like-me@0.8.4` npm package the

@@ -46,7 +46,6 @@ export async function buildDist(argv: readonly string[]): Promise<void> {
   await run([
     process.execPath,
     "build",
-    "src/cli.ts",
     "src/index.ts",
     "src/message-bundle-v1.ts",
     "src/message-bundle-v2.ts",
@@ -63,6 +62,13 @@ export async function buildDist(argv: readonly string[]): Promise<void> {
     "--splitting",
     "--packages",
     "external",
+  ]);
+  // Keep command-only resources and their bundled runtime out of every public
+  // protocol entry and shared protocol chunk. Immutable installs need no
+  // separately resolved runtime package.
+  await run([
+    process.execPath, "build", "src/cli.ts", "--outdir", outdir,
+    "--root", "src", "--target", "bun", "--format", "esm",
   ]);
   await run([
     process.execPath,

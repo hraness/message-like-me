@@ -65,3 +65,12 @@ access.
 
 By contributing, you agree that your contribution is licensed under the MIT
 License.
+
+## Command runtime changes
+
+Read [the command runtime and private-publication contract](docs/command-runtime.md)
+before changing command services, scope ownership, or receipt recovery. Run
+`bun run check:effect` when editing a governed Effect module or its policy, and
+retain the complete `bun run check` gate. Changes to the architecture checker,
+its policy, or a public protocol graph require independent review. Expected
+failures must stay explicit; adapters do not grant network or messaging authority.
