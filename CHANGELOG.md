@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.6 (2026-09-07)
+
+- Make the exact public `@hraness/message-like-me@0.8.6` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
+- Give the paired Message Like Me and Ensoul skill installer one command-owned
+  lifecycle through copying, backup, publication and sequential recovery.
+- Bound physical inventories and verify copied bytes before publication. Retain
+  unknown or substituted entries during cleanup, and preserve missing project
+  directory creation beneath a verified physical ancestor.
+- Keep both installed skills after publication succeeds, even when backup cleanup
+  or output confirmation fails. Report incomplete cleanup with fixed diagnostics
+  that omit private data while preserving the original failure.
+- Strengthen the development Effect checker with generator alias and wrapper
+  regressions. Public protocol graphs and local-only behavior remain unchanged.
+
 ## 0.8.5 (2026-09-06)
 
 - Make the exact public `@hraness/message-like-me@0.8.5` npm package the

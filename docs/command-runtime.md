@@ -18,7 +18,8 @@ failures retain the original error as a cause in the closed `CommandFailure`
 union. Native adapters translate source-specific failures at the same boundaries
 as before. The runtime has a narrow compatibility bridge for existing pure
 validators that throw `CliError`; other defects remain defects. CLI text, stdout
-formatting, diagnostics, and exit-code selection are unchanged.
+formatting and exit-code selection are unchanged. The paired skill installer adds
+the bounded residual diagnostics described below.
 
 ## Publication and receipt recovery
 
@@ -60,12 +61,51 @@ Effect and TypeScript do not remove that operating-system limitation. Directory
 sync failures after removal are reported as `removed-unconfirmed`. The runtime
 never claims that uncertain cleanup succeeded.
 
+## Paired skill installation
+
+The existing command runtime directly composes the fixed `message-like-me` and
+`ensoul` installer. Its program owns preflight, exclusive directory lock, private
+transaction directory, copies, backups, both publish renames, recovery, cleanup,
+and output. Both publish acknowledgements commit the pair immediately. Backup
+cleanup, path confirmation, or stdout failure afterward never rolls it back.
+There is no automatic retry or additional runtime. Admitted native work and
+sequential recovery remain masked until the actual filesystem promises settle.
+
+Before creating missing installation parents, read-only preflight rejects
+conflicts, observed source/target overlap, symlinked installation parents, and
+nonphysical source entries. Project anchors resolve existing aliases first;
+missing project directories are then created in order beneath the observed
+physical ancestor. Requested paths allow 4,096 UTF-8 bytes and at most 64 missing
+project components. These directories are retained on later failure. Each
+skill inventory permits at most 64 entries, eight levels, 256 KiB per file, and
+2 MiB total. These bounds also apply to the old directory on forced replacement.
+Copied types, bytes, and digests must match the admitted source before publication.
+Copies explicitly refuse existing entries. A cooperating installer's existing
+lock is never reclaimed; an ambiguous acquisition is left for inspection.
+
+Before publication and cleanup the adapter rechecks observed physical parents
+and entry identities. Recovery runs in reverse pair order; independent actions
+continue after cleanup failure. Restoration requires an absent destination and
+the observed backup. Cleanup removes individually observed leaves and then empty
+directories, retaining unknown or substituted entries. Creating missing parent
+directories is not rolled back. This is observation-bound custody, not a kernel
+conditional unlink, cross-process atomic visibility, hostile same-user race
+immunity, or crash recovery.
+
+Clean success stdout is unchanged. Residual cleanup or a postcommit output
+failure adds one stderr warning containing only fixed skill, phase, and commit
+state labels. Private cleanup causes remain internal. The original primary
+rejection, including `undefined`, `null`, or `false`, wins over cleanup and a
+failed warning writer. A successful install with failed warning output instead
+reports that output failure; it does not repeat installation.
+
 ## Enforced architecture and distribution
 
 `bun run check:effect` uses the repository's TypeScript compiler API and the
 reviewed policy in `scripts/check-effect-architecture.ts`. Only `commands.ts`
 may execute a runtime; native calls belong in `command-platform.ts` or
-`command-artifacts.ts`. The checker rejects unclassified Effect modules,
+`command-artifacts.ts`, or `skill-install-platform.ts`. The installer model and
+program compose under that same command owner. The checker rejects unclassified Effect modules,
 floating Effects, erased channels, unsafe assertions, failure-discard shortcuts,
 suppressions, and selected ambient I/O. Its paired fixtures cover common aliases.
 It does not prove purity, linear lifetime safety, domain correctness, foreign

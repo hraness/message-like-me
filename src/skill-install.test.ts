@@ -2,7 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installSkill } from "./skill-install.ts";
+import { runCommand } from "./commands.ts";
+import type { SkillInstallDestinations, SkillInstallOptions } from "./skill-install.ts";
+
+async function installSkill(options: SkillInstallOptions): Promise<SkillInstallDestinations> {
+  let output = "";
+  await runCommand(["skill", "install", "--target", options.target, "--scope", options.scope,
+    ...(options.projectDirectory === undefined ? [] : ["--project", options.projectDirectory]),
+    ...(options.force ? ["--force"] : []), "--json"], {
+    stdout: text => { output += text; }, stderr: () => {}, now: () => new Date(0),
+  });
+  return JSON.parse(output).destinations;
+}
 
 const ENSOUL_BUN_SCRIPTS = [
   "prepare-x-archive.ts",

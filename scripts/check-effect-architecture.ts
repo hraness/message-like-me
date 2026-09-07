@@ -4,8 +4,9 @@ import { createArchitectureProgram, inspectEffectArchitecture } from "./effect-a
 const root = resolve(import.meta.dir, "..");
 export const commandEffectPolicy = {
   root,
-  modules: ["src/commands.ts", "src/command-program.ts", "src/command-platform.ts", "src/command-artifacts.ts"],
-  adapters: ["src/command-platform.ts", "src/command-artifacts.ts"],
+  modules: ["src/commands.ts", "src/command-program.ts", "src/command-platform.ts", "src/command-artifacts.ts",
+    "src/skill-install-model.ts", "src/skill-install-program.ts", "src/skill-install-platform.ts"],
+  adapters: ["src/command-platform.ts", "src/command-artifacts.ts", "src/skill-install-platform.ts"],
   runtimeRoots: ["src/commands.ts"],
   ignoredDirectories: ["scripts"],
 };
