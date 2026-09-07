@@ -10,7 +10,10 @@ import type { CommandIo } from "./io.ts";
 import { dataPaths, initializeDataPaths, loadOrCreateInstallKey, type DataPaths } from "./paths.ts";
 import { readStyleProfile } from "./profile.ts";
 import { readStablePrivateJson } from "./private-json.ts";
-import { bundledSkillPath, installSkill } from "./skill-install.ts";
+import { bundledSkillPath, type SkillInstallOptions } from "./skill-install.ts";
+import type { SkillInstallOutcome } from "./skill-install-model.ts";
+import { installSkillProgram } from "./skill-install-program.ts";
+import { skillInstallPlatformLive } from "./skill-install-platform.ts";
 import { LocalStore } from "./store.ts";
 import { readXArchive } from "./x-archive.ts";
 import { commandFailure, translateAgenticContractError, translateBundleError, translateContactsError, translateIMessageError,
@@ -53,7 +56,7 @@ export interface CommandPlatformService {
   readXArchive(path: string): Effect.Effect<Awaited<ReturnType<typeof readXArchive>>, CommandFailure>;
   readProfile(path: string): Effect.Effect<Awaited<ReturnType<typeof readStyleProfile>>, CommandFailure>;
   readPrivateJson(path: string, label: string, maximumBytes: number): Effect.Effect<unknown, CommandFailure>;
-  installSkill(options: Parameters<typeof installSkill>[0]): Effect.Effect<Awaited<ReturnType<typeof installSkill>>, CommandFailure>;
+  installSkill(options: SkillInstallOptions): Effect.Effect<SkillInstallOutcome>;
 }
 
 export class CommandPlatform extends Context.Tag("@hraness/message-like-me/CommandPlatform")<CommandPlatform, CommandPlatformService>() {}
@@ -146,6 +149,6 @@ export function commandPlatformLive(io: CommandIo,
     readXArchive: (path) => Effect.tryPromise({ try: () => readXArchive(path), catch: (error) => translatedFailure(translateXArchiveError, error) }),
     readProfile: (path) => foreign(() => readStyleProfile(path)),
     readPrivateJson: (path, label, maximumBytes) => foreign(() => readStablePrivateJson(path, label, maximumBytes)),
-    installSkill: (options) => foreign(() => installSkill(options)),
+    installSkill: (options) => installSkillProgram(options).pipe(Effect.provide(skillInstallPlatformLive)),
   });
 }

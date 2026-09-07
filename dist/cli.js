@@ -19637,117 +19637,527 @@ async function readStablePrivateJson(path, label, maximumBytes) {
 }
 
 // src/skill-install.ts
-import { randomBytes as randomBytes2 } from "crypto";
-import { cp, lstat as lstat4, mkdir as mkdir2, realpath as realpath3, rename, rm } from "fs/promises";
-import { homedir as homedir4 } from "os";
-import { dirname as dirname3, join as join7, resolve as resolve5 } from "path";
+import { dirname as dirname3, resolve as resolve5 } from "path";
 import { fileURLToPath } from "url";
-async function exists5(path) {
-  try {
-    await lstat4(path);
-    return true;
-  } catch (error) {
-    if (error.code === "ENOENT")
-      return false;
-    throw error;
-  }
-}
 function bundledSkillPath() {
   return resolve5(dirname3(fileURLToPath(import.meta.url)), "../skills/message-like-me");
 }
 function bundledEnsoulSkillPath() {
   return resolve5(dirname3(fileURLToPath(import.meta.url)), "../skills/ensoul");
 }
-function targetRoot(target, scope5, projectDirectory) {
-  const directory = target === "codex" ? ".codex" : target === "claude" ? ".claude" : ".agents";
-  return scope5 === "user" ? join7(homedir4(), directory, "skills") : join7(resolve5(projectDirectory), directory, "skills");
+
+// src/skill-install-model.ts
+var SKILL_INSTALL_PAIR = ["message-like-me", "ensoul"];
+function skillInstallWarning(outcome) {
+  if (outcome.residuals.length === 0 && !(outcome.committed && outcome.operation._tag === "Failure"))
+    return null;
+  const state = outcome.committed ? "committed" : "not committed";
+  const details = outcome.residuals.map(({ skill, phase }) => `${skill}:${phase}`).join(", ");
+  return `Skill installation ${state}; ${details.length > 0 ? `cleanup incomplete (${details})` : "output confirmation failed"}. Retained installation files need review.
+`;
 }
-async function installSkill(options) {
-  const sources = Object.freeze([
-    Object.freeze({ name: "message-like-me", path: bundledSkillPath() }),
-    Object.freeze({ name: "ensoul", path: bundledEnsoulSkillPath() })
-  ]);
-  for (const source of sources) {
-    if (!await exists5(source.path)) {
-      throw new CliError("not-found", `Bundled ${source.name} skill is missing at ${source.path}`);
-    }
-    const sourceMetadata = await lstat4(source.path);
-    if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isDirectory()) {
-      throw new CliError("unsafe-path", `Bundled ${source.name} skill must be a physical directory`);
-    }
-  }
-  const root = targetRoot(options.target, options.scope, options.projectDirectory ?? process.cwd());
-  await mkdir2(root, { recursive: true, mode: 448 });
-  const destinations = sources.map((source) => Object.freeze({
-    ...source,
-    destination: join7(root, source.name)
-  }));
-  for (const item of destinations) {
-    if (await exists5(item.destination)) {
-      const metadata = await lstat4(item.destination);
-      if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
-        throw new CliError("unsafe-path", `Refusing to replace non-directory ${item.destination}`);
+
+// src/skill-install-program.ts
+class SkillInstallPlatform extends exports_Context.Tag("@hraness/message-like-me/SkillInstallPlatform")() {
+}
+function installSkillProgram(options) {
+  return exports_Effect.uninterruptible(exports_Effect.gen(function* () {
+    const platform2 = yield* SkillInstallPlatform;
+    const prepared = yield* exports_Effect.exit(platform2.preflight(options).pipe(exports_Effect.flatMap((plan) => platform2.transaction(plan))));
+    if (exports_Exit.isFailure(prepared))
+      return { operation: exports_Exit.failCause(prepared.cause), committed: false, residuals: [] };
+    const transaction = prepared.value;
+    let committed = false;
+    const operation = yield* exports_Effect.exit(exports_Effect.gen(function* () {
+      yield* platform2.acquire(transaction);
+      for (const skill of SKILL_INSTALL_PAIR)
+        yield* platform2.copy(transaction, skill);
+      for (const skill of SKILL_INSTALL_PAIR)
+        yield* platform2.backup(transaction, skill);
+      for (const skill of SKILL_INSTALL_PAIR)
+        yield* platform2.publish(transaction, skill);
+      committed = true;
+    }));
+    const residuals = [];
+    const cleanup = (skill, phase) => exports_Effect.gen(function* () {
+      const result = yield* exports_Effect.exit(platform2.cleanup(transaction, skill, phase));
+      if (exports_Exit.isFailure(result))
+        residuals.push({ skill, phase, cause: result.cause });
+    });
+    if (!committed) {
+      for (const skill of [...SKILL_INSTALL_PAIR].reverse()) {
+        yield* cleanup(skill, "rollback-published");
+        yield* cleanup(skill, "restore-backup");
+        yield* cleanup(skill, "stage-cleanup");
       }
-      if (!options.force) {
-        throw new CliError("conflict", `Skill already exists at ${item.destination}; pass --force to replace both bundled skills`);
-      }
+    } else {
+      for (const skill of SKILL_INSTALL_PAIR)
+        yield* cleanup(skill, "backup-cleanup");
     }
-  }
-  const nonce = `${process.pid}.${randomBytes2(8).toString("hex")}`;
-  const state = destinations.map((item) => ({
-    ...item,
-    stage: join7(root, `.${item.name}.install.${nonce}`),
-    backup: join7(root, `.${item.name}.backup.${nonce}`),
-    hadExisting: false,
-    published: false
+    const output = exports_Exit.isFailure(operation) ? exports_Exit.failCause(operation.cause) : yield* exports_Effect.exit(platform2.destinations(transaction));
+    yield* cleanup("pair", "transaction-cleanup");
+    yield* cleanup("pair", "lock-cleanup");
+    return { operation: output, committed, residuals };
   }));
+}
+
+// src/skill-install-platform.ts
+import { createHash as createHash5, randomBytes as randomBytes2 } from "crypto";
+import { constants as constants2 } from "fs";
+import * as fs from "fs/promises";
+import { homedir as homedir4 } from "os";
+import { basename as basename4, dirname as dirname4, join as join7, relative, resolve as resolve6, sep } from "path";
+var MAX_ENTRIES = 64;
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+var MAX_DEPTH = 8;
+var plans = new WeakMap;
+var transactions = new WeakMap;
+var unsafe = () => new CliError("unsafe-path", "Skill installation path changed or cannot be used safely");
+var bounded = () => new CliError("invalid-data", "Skill directory exceeds the supported physical inventory bounds");
+function isMissing(error) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+async function optionalStat(path) {
   try {
-    for (const item of state) {
-      await cp(item.path, item.stage, { recursive: true, errorOnExist: true });
-    }
-    for (const item of state) {
-      if (await exists5(item.destination)) {
-        await rename(item.destination, item.backup);
-        item.hadExisting = true;
-      }
-    }
-    for (const item of state) {
-      await rename(item.stage, item.destination);
-      item.published = true;
-    }
+    return await fs.lstat(path, { bigint: true });
   } catch (error) {
-    for (const item of [...state].reverse()) {
-      if (item.published)
-        await rm(item.destination, { recursive: true, force: true }).catch(() => {
-          return;
-        });
-      if (item.hadExisting) {
-        await rename(item.backup, item.destination).catch(() => {
-          return;
-        });
-      }
-      await rm(item.stage, { recursive: true, force: true }).catch(() => {
-        return;
-      });
-    }
+    if (isMissing(error))
+      return null;
     throw error;
   }
-  for (const item of state) {
-    if (item.hadExisting) {
-      await rm(item.backup, { recursive: true, force: true }).catch(() => {
-        return;
-      });
-    }
+}
+function physical(stat2) {
+  if (typeof process.getuid !== "function" || !stat2.isDirectory() && !stat2.isFile() || stat2.uid !== BigInt(process.getuid()))
+    throw unsafe();
+}
+function same(left3, right3) {
+  return left3.dev === right3.dev && left3.ino === right3.ino && left3.mode === right3.mode && left3.uid === right3.uid && left3.isDirectory() === right3.isDirectory() && (left3.isDirectory() || left3.size === right3.size && left3.nlink === right3.nlink && left3.mtimeNs === right3.mtimeNs && left3.ctimeNs === right3.ctimeNs);
+}
+async function assertIdentity(path, expected) {
+  const actual = await optionalStat(path);
+  if (actual === null || !same(actual, expected))
+    throw unsafe();
+}
+function contains5(parent, child) {
+  const path = relative(parent, child);
+  return path === "" || path !== ".." && !path.startsWith(`..${sep}`) && !path.startsWith(sep);
+}
+
+class ReadCloseFailure {
+  primary;
+  cleanup;
+  constructor(primary, cleanup) {
+    this.primary = primary;
+    this.cleanup = cleanup;
   }
-  return Object.freeze({
-    messageLikeMe: await realpath3(join7(root, "message-like-me")),
-    ensoul: await realpath3(join7(root, "ensoul"))
+}
+function nativeFailure(error) {
+  const cleanup = [];
+  while (error instanceof ReadCloseFailure) {
+    cleanup.push(error.cleanup);
+    error = error.primary;
+  }
+  return cleanup.length === 0 ? commandFailure(error) : { ...commandFailure(error), nativeCleanupCauses: Object.freeze(cleanup.reverse()) };
+}
+async function digestFile(path, expected) {
+  if (expected.size > BigInt(MAX_FILE_BYTES) || expected.size < 0n)
+    throw bounded();
+  const handle = await fs.open(path, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+  let result;
+  try {
+    if (!same(await handle.stat({ bigint: true }), expected))
+      throw unsafe();
+    const hash2 = createHash5("sha256");
+    const buffer = Buffer.alloc(16 * 1024);
+    let count = 0;
+    for (;; ) {
+      const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, Number(expected.size) + 1 - count), count);
+      count += bytesRead;
+      if (count > Number(expected.size))
+        throw unsafe();
+      if (bytesRead === 0)
+        break;
+      hash2.update(buffer.subarray(0, bytesRead));
+    }
+    if (count !== Number(expected.size) || !same(await handle.stat({ bigint: true }), expected))
+      throw unsafe();
+    result = { ok: true, value: hash2.digest("hex") };
+  } catch (error) {
+    result = { ok: false, error };
+  }
+  try {
+    await handle.close();
+  } catch (error) {
+    if (!result.ok)
+      throw new ReadCloseFailure(result.error, error);
+    throw error;
+  }
+  if (!result.ok)
+    throw result.error;
+  return result.value;
+}
+async function inventory(root) {
+  const entries2 = [];
+  let bytes = 0n;
+  const visit = async (name, depth) => {
+    if (depth > MAX_DEPTH || name.length > 4096 || entries2.length >= MAX_ENTRIES)
+      throw bounded();
+    const path = join7(root, name);
+    const stat2 = await fs.lstat(path, { bigint: true });
+    physical(stat2);
+    if (stat2.isFile()) {
+      bytes += stat2.size;
+      if (bytes > BigInt(MAX_TOTAL_BYTES))
+        throw bounded();
+      entries2.push({ name, stat: stat2, digest: await digestFile(path, stat2) });
+    } else {
+      entries2.push({ name, stat: stat2 });
+      const directory = await fs.opendir(path);
+      let read = { ok: true };
+      try {
+        for (;; ) {
+          const child = await directory.read();
+          if (child === null)
+            break;
+          await visit(join7(name, child.name), depth + 1);
+        }
+      } catch (error) {
+        read = { ok: false, error };
+      }
+      try {
+        await directory.close();
+      } catch (error) {
+        if (!read.ok)
+          throw new ReadCloseFailure(read.error, error);
+        throw error;
+      }
+      if (!read.ok)
+        throw read.error;
+      await assertIdentity(path, stat2);
+    }
+  };
+  await visit("", 0);
+  if (!entries2[0]?.stat.isDirectory())
+    throw unsafe();
+  return entries2;
+}
+function sameContents(left3, right3) {
+  const byName = new Map(right3.map((entry) => [entry.name, entry]));
+  return left3.length === right3.length && left3.every((entry) => {
+    const other = byName.get(entry.name);
+    return other !== undefined && entry.stat.isDirectory() === other.stat.isDirectory() && entry.stat.size === (entry.stat.isFile() ? other.stat.size : entry.stat.size) && entry.digest === other.digest;
   });
 }
+async function assertInventory(root, expected) {
+  const actual = await inventory(root);
+  if (!sameContents(expected, actual))
+    throw unsafe();
+  const byName = new Map(actual.map((entry) => [entry.name, entry.stat]));
+  if (!expected.every((entry) => {
+    const value = byName.get(entry.name);
+    return value !== undefined && same(entry.stat, value);
+  }))
+    throw unsafe();
+}
+async function parents(plan) {
+  for (const parent of plan.parents)
+    await assertIdentity(parent.path, parent.stat);
+}
+function state(token3) {
+  const value = transactions.get(token3);
+  if (value === undefined)
+    throw unsafe();
+  return value;
+}
+async function custody(transaction) {
+  await parents(transaction.plan);
+  if (transaction.lockStat !== undefined)
+    await assertIdentity(transaction.lock, transaction.lockStat);
+  if (transaction.directoryStat !== undefined)
+    await assertIdentity(transaction.directory, transaction.directoryStat);
+}
+async function absent(path) {
+  if (await optionalStat(path) !== null)
+    throw unsafe();
+}
+async function projectAnchor(requested) {
+  let cursor = resolve6(requested);
+  if (Buffer.byteLength(cursor, "utf8") > 4096)
+    throw unsafe();
+  const suffix = [];
+  for (;; ) {
+    let existing;
+    try {
+      existing = await fs.realpath(cursor);
+    } catch (error) {
+      if (!isMissing(error))
+        throw error;
+      if (await optionalStat(cursor) !== null || suffix.length >= 64)
+        throw unsafe();
+      const parent = dirname4(cursor);
+      if (parent === cursor)
+        throw error;
+      suffix.push(basename4(cursor));
+      cursor = parent;
+      continue;
+    }
+    const stat2 = await fs.lstat(existing, { bigint: true });
+    physical(stat2);
+    if (!stat2.isDirectory())
+      throw unsafe();
+    const missing = [];
+    let anchor = existing;
+    for (const name of suffix.reverse()) {
+      anchor = join7(anchor, name);
+      missing.push(anchor);
+    }
+    return { anchor, parents: [{ path: existing, stat: stat2 }], missing };
+  }
+}
+async function preflight(options) {
+  const { anchor, parents: observed, missing } = await projectAnchor(options.scope === "user" ? homedir4() : options.projectDirectory ?? process.cwd());
+  const folder = options.target === "agents" ? ".agents" : options.target === "codex" ? ".codex" : ".claude";
+  const root = join7(anchor, folder, "skills");
+  for (const path of [join7(anchor, folder), root]) {
+    const stat2 = await optionalStat(path);
+    if (stat2 === null)
+      missing.push(path);
+    else {
+      physical(stat2);
+      if (!stat2.isDirectory())
+        throw unsafe();
+      observed.push({ path, stat: stat2 });
+    }
+  }
+  const items = {};
+  for (const name of SKILL_INSTALL_PAIR) {
+    const sourcePath = name === "message-like-me" ? bundledSkillPath() : bundledEnsoulSkillPath();
+    const sourceStat = await optionalStat(sourcePath);
+    if (sourceStat === null)
+      throw new CliError("not-found", `Bundled ${name} skill is missing at ${sourcePath}`);
+    physical(sourceStat);
+    if (!sourceStat.isDirectory())
+      throw unsafe();
+    const source = await fs.realpath(sourcePath);
+    if (contains5(source, root) || contains5(root, source))
+      throw unsafe();
+    const sourceInventory = await inventory(source);
+    const destination = join7(root, name);
+    const current = await optionalStat(destination);
+    if (current !== null) {
+      physical(current);
+      if (!current.isDirectory())
+        throw new CliError("unsafe-path", `Refusing to replace non-directory ${destination}`);
+      if (!options.force)
+        throw new CliError("conflict", `Skill already exists at ${destination}; pass --force to replace both bundled skills`);
+    }
+    items[name] = { source, destination, sourceInventory, original: current === null ? null : await inventory(destination) };
+  }
+  return { parents: observed, missing, root, items };
+}
+async function removeObserved(transaction, root, entries2) {
+  for (const entry of [...entries2].reverse()) {
+    await custody(transaction);
+    for (const parent of entries2) {
+      if (parent.stat.isDirectory() && contains5(join7(root, parent.name), join7(root, entry.name))) {
+        await assertIdentity(join7(root, parent.name), parent.stat);
+      }
+    }
+    const path = join7(root, entry.name);
+    await assertIdentity(path, entry.stat);
+    if (entry.stat.isDirectory())
+      await fs.rmdir(path);
+    else
+      await fs.unlink(path);
+  }
+}
+var foreign = (operation) => exports_Effect.uninterruptible(exports_Effect.tryPromise({ try: operation, catch: nativeFailure }));
+var skillInstallPlatform = {
+  preflight: (options) => foreign(async () => {
+    const plan = await preflight(options);
+    const token3 = Object.freeze({ _tag: "SkillInstallPlan" });
+    plans.set(token3, plan);
+    return token3;
+  }),
+  transaction: (token3) => exports_Effect.try({ try: () => {
+    const plan = plans.get(token3);
+    if (plan === undefined)
+      throw unsafe();
+    const directory = join7(plan.root, `.skill-install.${randomBytes2(16).toString("hex")}`);
+    const itemState = (name) => ({ stage: join7(directory, `${name}.stage`), backup: join7(directory, `${name}.backup`), staged: [], backupAttempted: false, publishAttempted: false });
+    const transaction = Object.freeze({ _tag: "SkillInstallTransaction" });
+    transactions.set(transaction, {
+      plan,
+      lock: join7(plan.root, ".message-like-me.install-lock"),
+      lockAttempted: false,
+      directory,
+      directoryAttempted: false,
+      items: { "message-like-me": itemState("message-like-me"), ensoul: itemState("ensoul") }
+    });
+    return transaction;
+  }, catch: commandFailure }),
+  acquire: (token3) => foreign(async () => {
+    const transaction = state(token3);
+    await parents(transaction.plan);
+    for (const path of transaction.plan.missing) {
+      await parents(transaction.plan);
+      await fs.mkdir(path, { mode: 448 });
+      const stat2 = await fs.lstat(path, { bigint: true });
+      physical(stat2);
+      if (!stat2.isDirectory())
+        throw unsafe();
+      transaction.plan.parents.push({ path, stat: stat2 });
+    }
+    await parents(transaction.plan);
+    transaction.lockAttempted = true;
+    await fs.mkdir(transaction.lock, { mode: 448 });
+    transaction.lockStat = await fs.lstat(transaction.lock, { bigint: true });
+    physical(transaction.lockStat);
+    if (!transaction.lockStat.isDirectory())
+      throw unsafe();
+    await custody(transaction);
+    transaction.directoryAttempted = true;
+    await fs.mkdir(transaction.directory, { mode: 448 });
+    transaction.directoryStat = await fs.lstat(transaction.directory, { bigint: true });
+    physical(transaction.directoryStat);
+    if (!transaction.directoryStat.isDirectory())
+      throw unsafe();
+  }),
+  copy: (token3, name) => foreign(async () => {
+    const transaction = state(token3);
+    const item = transaction.plan.items[name];
+    const current = transaction.items[name];
+    await custody(transaction);
+    await assertInventory(item.source, item.sourceInventory);
+    for (const entry of item.sourceInventory) {
+      await custody(transaction);
+      for (const parent of current.staged) {
+        if (parent.stat.isDirectory() && contains5(join7(current.stage, parent.name), join7(current.stage, entry.name))) {
+          await assertIdentity(join7(current.stage, parent.name), parent.stat);
+        }
+      }
+      const target = join7(current.stage, entry.name);
+      await assertIdentity(join7(item.source, entry.name), entry.stat);
+      if (entry.stat.isDirectory())
+        await fs.mkdir(target, { mode: 448 });
+      else
+        await fs.cp(join7(item.source, entry.name), target, { force: false, errorOnExist: true, dereference: false });
+      const stat2 = await fs.lstat(target, { bigint: true });
+      physical(stat2);
+      if (stat2.isDirectory() !== entry.stat.isDirectory())
+        throw unsafe();
+      current.staged.push({ name: entry.name, stat: stat2, ...entry.digest === undefined ? {} : { digest: entry.digest } });
+    }
+    const copied = await inventory(current.stage);
+    if (!sameContents(item.sourceInventory, copied))
+      throw unsafe();
+    await assertInventory(item.source, item.sourceInventory);
+    current.staged = [...copied];
+  }),
+  backup: (token3, name) => foreign(async () => {
+    const transaction = state(token3);
+    const item = transaction.plan.items[name];
+    const current = transaction.items[name];
+    await custody(transaction);
+    await absent(current.backup);
+    if (item.original === null) {
+      await absent(item.destination);
+      return;
+    }
+    await assertInventory(item.destination, item.original);
+    await custody(transaction);
+    current.backupAttempted = true;
+    await fs.rename(item.destination, current.backup);
+  }),
+  publish: (token3, name) => foreign(async () => {
+    const transaction = state(token3);
+    const item = transaction.plan.items[name];
+    const current = transaction.items[name];
+    await custody(transaction);
+    await assertInventory(current.stage, current.staged);
+    await custody(transaction);
+    await absent(item.destination);
+    current.publishAttempted = true;
+    await fs.rename(current.stage, item.destination);
+  }),
+  cleanup: (token3, name, phase) => foreign(async () => {
+    const transaction = state(token3);
+    if (phase === "lock-cleanup") {
+      if (transaction.lockStat === undefined) {
+        if (transaction.lockAttempted) {
+          await parents(transaction.plan);
+          await absent(transaction.lock);
+        }
+        return;
+      }
+      await parents(transaction.plan);
+      await assertIdentity(transaction.lock, transaction.lockStat);
+      await fs.rmdir(transaction.lock);
+      return;
+    }
+    if (phase === "transaction-cleanup") {
+      if (transaction.directoryStat === undefined) {
+        if (transaction.directoryAttempted) {
+          await parents(transaction.plan);
+          await absent(transaction.directory);
+        }
+        return;
+      }
+      await custody(transaction);
+      await fs.rmdir(transaction.directory);
+      return;
+    }
+    if (name === "pair")
+      throw unsafe();
+    const current = transaction.items[name];
+    const item = transaction.plan.items[name];
+    if (phase === "rollback-published") {
+      if (!current.publishAttempted)
+        return;
+      await custody(transaction);
+      const destination = await optionalStat(item.destination);
+      if (destination === null)
+        return;
+      const root = current.staged[0];
+      if (root === undefined || !same(root.stat, destination))
+        throw unsafe();
+      await removeObserved(transaction, item.destination, current.staged);
+    } else if (phase === "restore-backup") {
+      if (!current.backupAttempted || item.original === null)
+        return;
+      await custody(transaction);
+      if (await optionalStat(current.backup) === null) {
+        await assertInventory(item.destination, item.original);
+        return;
+      }
+      await assertInventory(current.backup, item.original);
+      await absent(item.destination);
+      await fs.rename(current.backup, item.destination);
+    } else if (phase === "stage-cleanup") {
+      if (current.staged.length === 0)
+        return;
+      await custody(transaction);
+      if (await optionalStat(current.stage) !== null)
+        await removeObserved(transaction, current.stage, current.staged);
+    } else if (phase === "backup-cleanup") {
+      if (item.original !== null)
+        await removeObserved(transaction, current.backup, item.original);
+    }
+  }),
+  destinations: (token3) => foreign(async () => {
+    const transaction = state(token3);
+    await custody(transaction);
+    for (const name of SKILL_INSTALL_PAIR)
+      await assertInventory(transaction.plan.items[name].destination, transaction.items[name].staged);
+    return Object.freeze({ messageLikeMe: await fs.realpath(transaction.plan.items["message-like-me"].destination), ensoul: await fs.realpath(transaction.plan.items.ensoul.destination) });
+  })
+};
+var skillInstallPlatformLive = exports_Layer.succeed(SkillInstallPlatform, skillInstallPlatform);
 
 // src/store.ts
 import { Database as Database3 } from "bun:sqlite";
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 import {
   closeSync as closeSync2,
   constants as fsConstants6,
@@ -21068,7 +21478,7 @@ function globalCorpusRevision(database) {
   }));
 }
 function sourceStateRevision(database, sourceId) {
-  const hash2 = createHash5("sha256");
+  const hash2 = createHash6("sha256");
   hash2.update("message-like-me\x00stored-source-state-v1\x00", "utf8");
   const append4 = (kind, row) => {
     const encoded = canonicalJson(row);
@@ -22677,8 +23087,8 @@ class LocalStore {
   }
   preparedHandoffReceiptStatus(value) {
     const handoff = parseAgentMessageHandoffV1(value);
-    const exists6 = get13(this.#database, "SELECT handoff_id FROM agent_message_handoffs WHERE handoff_id=?", handoff.handoffId);
-    if (exists6 === null)
+    const exists5 = get13(this.#database, "SELECT handoff_id FROM agent_message_handoffs WHERE handoff_id=?", handoff.handoffId);
+    if (exists5 === null)
       return "absent";
     const audit = this.handoffAudit(handoff.handoffId);
     return audit.handoffSha256 === handoff.integrity.canonicalSha256 && audit.contactIdSha256 === sha256(handoff.contact.contactId) && audit.routeCandidateIdSha256 === sha256(handoff.contact.routeCandidateId) && audit.sourceIdSha256 === sha256(handoff.contact.sourceId) && audit.conversationIdSha256 === sha256(handoff.contact.conversationId) && audit.corpusRevision === handoff.evidence.corpusRevision && audit.sourceRevision === handoff.evidence.sourceRevision && audit.profileState === handoff.evidence.profileState && audit.profileEvidenceRevision === handoff.evidence.profileEvidenceRevision && audit.wrenchContractHash === handoff.wrench.contractHash && audit.routeRefSha256 === sha256(handoff.wrench.routeRef) && audit.contextRefSha256 === sha256(handoff.wrench.contextRef) && audit.exactDataRevisionSha256 === handoff.wrench.exactDataRevision && audit.latestMessageRevisionSha256 === handoff.wrench.latestMessageRevision && audit.turnDigest === wrenchMessagingTurnDigestV1(handoff) && audit.partCount === handoff.turn.bubbles.length && audit.createdAt === handoff.createdAt && audit.expiresAt === handoff.expiresAt ? "committed" : "different";
@@ -22813,17 +23223,17 @@ class LocalStore {
 }
 
 // src/x-archive.ts
-import { createHash as createHash6 } from "crypto";
+import { createHash as createHash7 } from "crypto";
 import {
   closeSync as closeSync3,
-  constants as constants2,
+  constants as constants3,
   fstatSync as fstatSync3,
   lstatSync as lstatSync5,
   openSync as openSync3,
   readSync as readSync3,
   realpathSync as realpathSync4
 } from "fs";
-import { isAbsolute as isAbsolute5, resolve as resolve6 } from "path";
+import { isAbsolute as isAbsolute5, resolve as resolve7 } from "path";
 
 // src/x-archive-zip.ts
 import { readSync as readSync2 } from "fs";
@@ -22854,7 +23264,7 @@ var U32_MAX = 4294967295;
 var MAX_X_ZIP_ARCHIVE_BYTES = 16 * 1024 * 1024 * 1024;
 var MAX_X_ZIP_MEMBER_BYTES = 256 * 1024 * 1024;
 var MAX_COMPRESSED_MEMBER_BYTES = 64 * 1024 * 1024;
-var MAX_ENTRIES = 1e5;
+var MAX_ENTRIES2 = 1e5;
 var MAX_CENTRAL_BYTES = 64 * 1024 * 1024;
 var MAX_TOTAL_SELECTED_BYTES = 768 * 1024 * 1024;
 var MAX_TOTAL_DECLARED_BYTES = 64 * 1024 * 1024 * 1024;
@@ -22872,8 +23282,8 @@ var CRC32_TABLE = (() => {
   }
   return table;
 })();
-function updateCrc32(state, bytes) {
-  let value = state;
+function updateCrc32(state2, bytes) {
+  let value = state2;
   for (const byte of bytes)
     value = CRC32_TABLE[(value ^ byte) & 255] ^ value >>> 8;
   return value;
@@ -22941,7 +23351,7 @@ function directoryFromEocd(descriptor3, archiveSize) {
     if (legacyDisk !== 0 || legacyCentralDisk !== 0 || legacyOnDisk !== legacyCount) {
       throw new Error("X ZIP multi-disk archives are not supported");
     }
-    if (legacyCount < 1 || legacyCount > MAX_ENTRIES || legacySize > MAX_CENTRAL_BYTES) {
+    if (legacyCount < 1 || legacyCount > MAX_ENTRIES2 || legacySize > MAX_CENTRAL_BYTES) {
       throw new Error("X ZIP central directory exceeds its bounds");
     }
     const end4 = checkedEnd(legacyOffset, legacySize, "central directory");
@@ -22966,7 +23376,7 @@ function directoryFromEocd(descriptor3, archiveSize) {
   const offset = u64(zip64, 48, "ZIP64 central directory offset");
   if (onDisk !== count)
     throw new Error("X ZIP multi-disk archives are not supported");
-  if (count < 1 || count > MAX_ENTRIES || size9 > MAX_CENTRAL_BYTES) {
+  if (count < 1 || count > MAX_ENTRIES2 || size9 > MAX_CENTRAL_BYTES) {
     throw new Error("X ZIP central directory exceeds its bounds");
   }
   const end3 = checkedEnd(offset, size9, "ZIP64 central directory");
@@ -23379,7 +23789,7 @@ var PROVIDER_ID = /^[1-9][0-9]{0,39}$/u;
 var OPAQUE_PROVIDER_ID = /^-?[0-9]{1,40}$/u;
 var HANDLE = /^[A-Za-z0-9_]{1,15}$/u;
 function sha2563(value) {
-  return createHash6("sha256").update(value).digest("hex");
+  return createHash7("sha256").update(value).digest("hex");
 }
 function plain(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -23725,16 +24135,16 @@ function parseConversations(member, selfId, group, seenConversationIds, seenMess
     if (!/^[0-9]+(?:-[0-9]+)?$/u.test(conversationId)) {
       throw new Error(`${label}.dmConversation.conversationId is invalid`);
     }
-    let state = combined.get(conversationId);
-    if (state === undefined) {
+    let state2 = combined.get(conversationId);
+    if (state2 === undefined) {
       if (seenConversationIds.has(conversationId)) {
         throw new Error(`${label} repeats an X conversation across direct and group members`);
       }
       seenConversationIds.add(conversationId);
-      state = { participants: new Set([selfId]), events: [] };
-      combined.set(conversationId, state);
+      state2 = { participants: new Set([selfId]), events: [] };
+      combined.set(conversationId, state2);
     }
-    const participants = state.participants;
+    const participants = state2.participants;
     const directIds = group ? null : conversationId.split("-").map((id, index) => providerId(id, `${label}.conversationId[${index}]`));
     if (directIds !== null) {
       if (directIds.length !== 2 || !directIds.includes(selfId)) {
@@ -23779,17 +24189,17 @@ function parseConversations(member, selfId, group, seenConversationIds, seenMess
       if (directIds !== null && [...participants].some((id) => !directIds.includes(id))) {
         throw new Error(`${eventLabel} names a user outside its direct conversation`);
       }
-      state.events.push(parsed);
+      state2.events.push(parsed);
     }
   }
   const signatures = new Map;
-  const conversations = [...combined.entries()].map(([conversationId, state]) => {
-    const orderedEvents = state.events.sort((left3, right3) => left3.createdAt.localeCompare(right3.createdAt) || eventSortKey(left3).localeCompare(eventSortKey(right3)));
+  const conversations = [...combined.entries()].map(([conversationId, state2]) => {
+    const orderedEvents = state2.events.sort((left3, right3) => left3.createdAt.localeCompare(right3.createdAt) || eventSortKey(left3).localeCompare(eventSortKey(right3)));
     signatures.set(conversationId, orderedEvents.filter((event) => event.kind === "message-create").map(eventHeaderSignature).sort());
     return {
       conversationId,
       kind: group ? "group" : "direct",
-      participantIds: [...state.participants].sort(),
+      participantIds: [...state2.participants].sort(),
       events: orderedEvents
     };
   });
@@ -24067,7 +24477,7 @@ function parseXArchiveMembers(members) {
   };
 }
 function sha256Descriptor(descriptor3, size9) {
-  const digest5 = createHash6("sha256");
+  const digest5 = createHash7("sha256");
   const buffer = Buffer.allocUnsafe(8 * 1024 * 1024);
   let position = 0;
   while (position < size9) {
@@ -24083,18 +24493,18 @@ function sameStat(left3, right3) {
   return left3.dev === right3.dev && left3.ino === right3.ino && left3.size === right3.size && left3.mtimeNs === right3.mtimeNs && left3.ctimeNs === right3.ctimeNs && left3.mode === right3.mode && left3.uid === right3.uid && left3.nlink === right3.nlink;
 }
 async function readXArchive(path) {
-  if (typeof path !== "string" || path.length < 1 || path.includes("\x00") || !isAbsolute5(path) || resolve6(path) !== path)
+  if (typeof path !== "string" || path.length < 1 || path.includes("\x00") || !isAbsolute5(path) || resolve7(path) !== path)
     throw new Error("X archive path must be a normalized absolute path");
-  let physical;
+  let physical2;
   try {
-    physical = realpathSync4(path);
+    physical2 = realpathSync4(path);
   } catch (error) {
     throw new Error("X archive path cannot be resolved", { cause: error });
   }
-  if (physical !== path)
+  if (physical2 !== path)
     throw new Error("X archive path must not traverse a symbolic link");
   const pathBefore = lstatSync5(path, { bigint: true });
-  const descriptor3 = openSync3(path, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0));
+  const descriptor3 = openSync3(path, constants3.O_RDONLY | (constants3.O_NOFOLLOW ?? 0));
   try {
     const before2 = fstatSync3(descriptor3, { bigint: true });
     const uid = typeof process.getuid === "function" ? BigInt(process.getuid()) : null;
@@ -24146,11 +24556,11 @@ function translatedFailure(translate, error) {
 }
 function commandPlatformLive(io, cleanupFailure) {
   const attempt = (tryOperation) => exports_Effect.try({ try: tryOperation, catch: commandFailure });
-  const foreign = (tryOperation) => exports_Effect.tryPromise({ try: tryOperation, catch: commandFailure });
+  const foreign2 = (tryOperation) => exports_Effect.tryPromise({ try: tryOperation, catch: commandFailure });
   const paths = (explicit) => attempt(() => dataPaths(explicit));
-  const initialize = (requested) => foreign(() => initializeDataPaths(requested));
-  const installKey = (path) => foreign(() => loadOrCreateInstallKey(path));
-  const exists6 = (path) => foreign(async () => {
+  const initialize = (requested) => foreign2(() => initializeDataPaths(requested));
+  const installKey = (path) => foreign2(() => loadOrCreateInstallKey(path));
+  const exists5 = (path) => foreign2(async () => {
     try {
       await lstat5(path);
       return true;
@@ -24190,7 +24600,7 @@ function commandPlatformLive(io, cleanupFailure) {
   })));
   const existingSession = (explicit) => exports_Effect.gen(function* () {
     const requested = yield* paths(explicit);
-    if (!(yield* exists6(requested.root)) || !(yield* exists6(requested.database))) {
+    if (!(yield* exists5(requested.root)) || !(yield* exists5(requested.database))) {
       return yield* exports_Effect.fail(commandFailure(new CliError("not-found", "Message Like Me is not initialized; run messagelikeme init or an ingest command")));
     }
     const initialized = yield* initialize(requested);
@@ -24218,7 +24628,7 @@ function commandPlatformLive(io, cleanupFailure) {
     paths,
     initialize,
     installKey,
-    exists: exists6,
+    exists: exists5,
     existingSession,
     writableSession,
     openStore,
@@ -24226,9 +24636,9 @@ function commandPlatformLive(io, cleanupFailure) {
     readContacts: (path, key) => exports_Effect.try({ try: () => readMacOSContacts(path, { hmacKey: key }), catch: (error) => translatedFailure(translateContactsError, error) }),
     readBundle: (path, key) => exports_Effect.tryPromise({ try: () => readMessageBundle(path, { hmacKey: key }), catch: (error) => translatedFailure(translateBundleError, error) }),
     readXArchive: (path) => exports_Effect.tryPromise({ try: () => readXArchive(path), catch: (error) => translatedFailure(translateXArchiveError, error) }),
-    readProfile: (path) => foreign(() => readStyleProfile(path)),
-    readPrivateJson: (path, label, maximumBytes) => foreign(() => readStablePrivateJson(path, label, maximumBytes)),
-    installSkill: (options) => foreign(() => installSkill(options))
+    readProfile: (path) => foreign2(() => readStyleProfile(path)),
+    readPrivateJson: (path, label, maximumBytes) => foreign2(() => readStablePrivateJson(path, label, maximumBytes)),
+    installSkill: (options) => installSkillProgram(options).pipe(exports_Effect.provide(skillInstallPlatformLive))
   });
 }
 
@@ -24329,10 +24739,10 @@ function rejectUnused(parsed, allowedOptions, allowedFlags) {
 }
 
 // src/command-input.ts
-import { isAbsolute as isAbsolute6, resolve as resolve7 } from "path";
+import { isAbsolute as isAbsolute6, resolve as resolve8 } from "path";
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.8.5";
+var MESSAGE_LIKE_ME_VERSION = "0.8.6";
 
 // src/command-input.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -24435,7 +24845,7 @@ function absolutePrivatePath(value, label) {
     throw new CliError("usage", `${label} is required`);
   if (!isAbsolute6(value))
     throw new CliError("unsafe-path", `${label} must be an absolute private path`);
-  return resolve7(value);
+  return resolve8(value);
 }
 function handoffExpiry(createdAt, contextExpiresAt, lifetimeMilliseconds) {
   return new Date(Math.min(Date.parse(createdAt) + lifetimeMilliseconds, Date.parse(contextExpiresAt))).toISOString();
@@ -24487,7 +24897,7 @@ function commandArtifactsLive(reports) {
 }
 
 // src/metrics.ts
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 var DEFAULT_SESSION_GAP_SECONDS = 8 * 60 * 60;
 var DEFAULT_BURST_GAP_SECONDS = 5 * 60;
 var DEFAULT_STUDY_LIMIT = 12;
@@ -24500,7 +24910,7 @@ var DEFAULT_MAX_STUDY_PACKET_BODY_BYTES = 256 * 1024;
 var MAX_STUDY_PACKET_BODY_BYTES = 1024 * 1024;
 var MAX_GAP_SECONDS = 30 * 24 * 60 * 60;
 function digest5(namespace, parts2) {
-  const hash2 = createHash7("sha256");
+  const hash2 = createHash8("sha256");
   hash2.update(`message-like-me\x00${namespace}\x00`, "utf8");
   for (const part of parts2)
     hash2.update(`${part.length}:`, "utf8").update(part, "utf8");
@@ -24938,15 +25348,15 @@ function studyMessages(response, byId, maximumTextBytes, maximumMessagesPerDirec
     let emittedBodyBytes = sourceBodyBytes;
     if (sourceBodyBytes > maximumTextBytes) {
       let bytes = 0;
-      let bounded = "";
+      let bounded2 = "";
       for (const symbol3 of sourceBody) {
         const symbolBytes = Buffer.byteLength(symbol3, "utf8");
         if (bytes + symbolBytes > maximumTextBytes)
           break;
-        bounded += symbol3;
+        bounded2 += symbol3;
         bytes += symbolBytes;
       }
-      body = bounded;
+      body = bounded2;
       emittedBodyBytes = bytes;
     }
     return Object.freeze({
@@ -27010,13 +27420,19 @@ function commandProgram(argv) {
       if (project3 !== undefined && scope5 !== "project") {
         return yield* exports_Effect.fail(commandFailure(new CliError("usage", "--project requires --scope project")));
       }
-      const destinations = yield* platform2.installSkill({
+      const installed = yield* platform2.installSkill({
         target,
         scope: scope5,
         ...project3 === undefined ? {} : { projectDirectory: project3 },
         force: parsed.flags.has("force")
       });
-      yield* platform2.emit(json, { destination: destinations.messageLikeMe, destinations, target, scope: scope5 }, `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`);
+      const destinations = exports_Exit.isSuccess(installed.operation) ? installed.operation.value : null;
+      const output = destinations === null ? exports_Exit.asVoid(installed.operation) : yield* exports_Effect.exit(platform2.emit(json, { destination: destinations.messageLikeMe, destinations, target, scope: scope5 }, `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`));
+      const warning = skillInstallWarning({ ...installed, operation: exports_Exit.isFailure(output) ? output : installed.operation });
+      const diagnostic = warning === null ? exports_Exit.void : yield* exports_Effect.exit(platform2.stderr(warning));
+      if (exports_Exit.isFailure(output))
+        return yield* output;
+      yield* diagnostic;
       return;
     }
     if (command === "doctor" && subcommand === undefined) {

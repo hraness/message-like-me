@@ -1,4 +1,4 @@
-import { Effect, type Scope } from "effect";
+import { Effect, Exit, type Scope } from "effect";
 import { integerOption, parseArguments, rejectUnused } from "./args.ts";
 import { AGENTIC_MESSAGING_V1_LIMITS, AgenticMessagingV1ContractError, createAgentMessageHandoffV1, parseAgentMessageDraftV1, parseAgentMessageHandoffRequestV1, parseAgentMessageHandoffV1, parseWrenchMessagingContextBindingV1, wrenchMessagingTurnDigestV1 } from "./agentic-messaging-v1.ts";
 import { prettyJson, sha256 } from "./canonical-json.ts";
@@ -10,6 +10,7 @@ import { CliError } from "./errors.ts";
 import { buildEnsoulMessagesSourcePacketV1, ensoulSubjectMessages, ensoulSubjectReactions } from "./ensoul-source-v1.ts";
 import { analyzeContact, buildEvaluationPackets, buildStudyPacket } from "./metrics.ts";
 import type { SkillScope, SkillTarget } from "./skill-install.ts";
+import { skillInstallWarning } from "./skill-install-model.ts";
 import type { LocalStore } from "./store.ts";
 import type { ContactMetrics } from "./types.ts";
 import { MESSAGE_LIKE_ME_VERSION } from "./version.ts";
@@ -687,13 +688,21 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
       if (project !== undefined && scope !== "project") {
         return yield* Effect.fail(commandFailure(new CliError("usage", "--project requires --scope project")));
       }
-      const destinations = (yield* platform.installSkill({
+      const installed = (yield* platform.installSkill({
         target,
         scope,
         ...(project === undefined ? {} : { projectDirectory: project }),
         force: parsed.flags.has("force"),
       }));
-      yield* platform.emit(json, { destination: destinations.messageLikeMe, destinations, target, scope }, `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`);
+      const destinations = Exit.isSuccess(installed.operation) ? installed.operation.value : null;
+      const output = destinations === null ? Exit.asVoid(installed.operation) : yield* Effect.exit(platform.emit(json,
+        { destination: destinations.messageLikeMe, destinations, target, scope },
+        `Installed message-like-me and ensoul skills at ${destinations.messageLikeMe} and ${destinations.ensoul}`));
+      const warning = skillInstallWarning({ ...installed, operation: Exit.isFailure(output) ? output : installed.operation });
+      const diagnostic = warning === null ? Exit.void : yield* Effect.exit(platform.stderr(warning));
+      // A broken diagnostic writer cannot replace a primary failure, even undefined.
+      if (Exit.isFailure(output)) return yield* output;
+      yield* diagnostic;
       return;
     }
     if (command === "doctor" && subcommand === undefined) {
