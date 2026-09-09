@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.7 (2026-09-09)
+
+- Make the exact public `@hraness/message-like-me@0.8.7` npm package the
+  supported default install, with the same reviewed bytes mirrored in the
+  immutable GitHub Release.
+- Show how an unsent draft can use evidence about tone, rhythm, and attention
+  before introducing import commands. The website examples remain synthetic;
+  the site never receives message history or produces drafts.
+- Make supported sources and their limits easier to scan, with import details
+  available beside each source. Local-only ingestion and drafts-only behavior
+  remain unchanged.
+- Strengthen the development Effect architecture checker. Public protocols,
+  the source readers, and command behavior are unchanged.
+
 ## 0.8.6 (2026-09-07)
 
 - Make the exact public `@hraness/message-like-me@0.8.6` npm package the
