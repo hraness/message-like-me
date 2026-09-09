@@ -68,9 +68,31 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(8);
   expect(heading).not.toMatch(/\.$/u);
   expect(heroCopy).toContain(' you');
+  expect(heroCopy).not.toContain('ask your agent to draft a reply about friday');
+  expect(hero?.[0]).not.toContain('hraness-marketing-hero__example');
+  const boundary = /<p class="hraness-marketing-hero__boundary">([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
+  expect(boundary).toBe('Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer.');
+  expect(boundary).not.toContain(SOFTWARE_VERSION);
+  expect(hero?.[0]).toContain(`Install v${SOFTWARE_VERSION}`);
   for (const word of HERO_VOCABULARY_TO_AVOID) {
     expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
   }
+});
+
+test('explains the synthetic draft before asking a reader to understand import commands', () => {
+  const html = renderToStaticMarkup(<Home />);
+  const frame = /<div class="mlm-frame"[\s\S]*?<\/figure>/u.exec(html)?.[0] ?? '';
+  expect(frame).toContain('Unsent draft');
+  expect(frame).toContain('More than word choice');
+  expect(frame).toContain('Two short messages instead of one paragraph');
+  expect(frame).toContain('Nothing is sent');
+  expect(frame).not.toContain('export-message-like-me');
+  expect(frame).not.toContain('ingest bundle');
+  expect(html).toContain('not a measured result');
+  expect(html).toContain('hosted agent, that agent handles its excerpts under its own privacy terms');
+  expect(html.match(/<details class="source-details">/gu)).toHaveLength(5);
+  expect(html).toContain('Import command and limits');
+  expect(html).not.toMatch(/<details class="source-details"[^>]*\bopen/gu);
 });
 
 test('binds Design Kit v0.4.0 to one light-default accent palette', async () => {

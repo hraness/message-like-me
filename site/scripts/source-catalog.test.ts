@@ -32,8 +32,8 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-06T00:00:00.000Z'],
-      ['/sources', '2026-09-06T00:00:00.000Z'],
+      ['/', '2026-09-09T00:00:00.000Z'],
+      ['/sources', '2026-09-09T00:00:00.000Z'],
       ['/docs', '2026-09-06T00:00:00.000Z'],
       ['/methodology', '2026-08-27T00:00:00.000Z'],
       ['/research', '2026-08-27T00:00:00.000Z'],

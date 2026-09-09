@@ -16,8 +16,11 @@ export function SourceCard({ source }: { source: SupportedSource }) {
         <span>{source.mode}</span>
       </div>
       <p className="source-summary">{source.summary}</p>
-      <p className="source-boundary"><strong>Boundary:</strong> {source.boundary}</p>
-      <code className="source-command">{source.command}</code>
+      <details className="source-details">
+        <summary>Import command and limits<span className="visually-hidden"> for {source.name}</span></summary>
+        <p className="source-boundary">{source.boundary}</p>
+        <code className="source-command">{source.command}</code>
+      </details>
     </article>
   );
 }
