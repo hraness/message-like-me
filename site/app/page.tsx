@@ -33,7 +33,7 @@ export const metadata = pageMetadata({
 });
 
 const HERO_FOOTNOTE =
-  `Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer. Version ${SOFTWARE_VERSION}.`;
+  'Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer.';
 
 const HOME_QUESTIONS = [
   {
@@ -148,7 +148,6 @@ export default function Home() {
             ]}
             boundary={HERO_FOOTNOTE}
             className="mlm-marketing-hero"
-            example="Ask your agent to draft a reply about Friday plans that reads the way you actually text that friend."
             eyebrow="A local-first CLI and Agent Skill"
             frame={<HeroFrame />}
             heading="Draft messages that sound like you"

@@ -68,6 +68,12 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(8);
   expect(heading).not.toMatch(/\.$/u);
   expect(heroCopy).toContain(' you');
+  expect(heroCopy).not.toContain('ask your agent to draft a reply about friday');
+  expect(hero?.[0]).not.toContain('hraness-marketing-hero__example');
+  const boundary = /<p class="hraness-marketing-hero__boundary">([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
+  expect(boundary).toBe('Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer.');
+  expect(boundary).not.toContain(SOFTWARE_VERSION);
+  expect(hero?.[0]).toContain(`Install v${SOFTWARE_VERSION}`);
   for (const word of HERO_VOCABULARY_TO_AVOID) {
     expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
   }
