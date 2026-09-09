@@ -14,6 +14,12 @@ the leased ref move only while the matching App-sourced success is current.
 No personal access token, deploy key, Vercel token, or repository-administration
 permission belongs in either workflow.
 
+Routine production promotion needs no human confirmation. The current-main
+source, public artifacts, complete workflow history, App authority, writer
+denial, expected-old lease, and provider readback are machine gates. An agent
+may perform the independent review and exact dispatch required for a changed
+workflow-control epoch; that review precedes dispatch.
+
 ## Establish the production controls once
 
 Apply these controls in order. Record the exact readbacks in the change review.
@@ -59,9 +65,12 @@ for this rollout and do not create a replacement Sites project.
    GitHub's authenticated repository API and do not substitute a name at the
    token-mint boundary.
 5. Create environment `production-ref-writer-key`. Limit deployment branches
-   to selected branch `main` only. Require reviewer `@0thernet` and leave
-   prevent-self-review disabled for this owner-operated release path. Do not add
-   a custom deployment-protection-rule App. Store the private key only as
+   to selected branch `main` only. Configure no required reviewers, no wait
+   timer, and no custom deployment-protection-rule App. Keep administrator
+   bypass disabled (`can_admins_bypass=false`). The checked workflow admits
+   only verified releases and revalidates the complete control range before
+   reading the key; environment admission does not wait for a person. Store the
+   private key only as
    environment secret `MLM_RELEASE_APP_PRIVATE_KEY`; store checked variables
    `MLM_RELEASE_APP_CLIENT_ID`, `MLM_RELEASE_APP_ID`,
    `MLM_RELEASE_APP_INSTALLATION_ID`, and `MLM_RELEASE_APP_SLUG` in that
@@ -88,9 +97,10 @@ for this rollout and do not create a replacement Sites project.
 8. Keep active no-bypass ruleset `Immutable version tags` scoped exactly to
    `refs/tags/v*`, with only update and deletion restrictions. It allows a new
    stable tag to be created but prevents an existing release tag from moving or
-   disappearing. Read back `current_user_can_bypass=never` before release.
-9. Enable immutable releases for the repository. Immediately before creating
-   each version tag, use owner-admin access out of band to require the repository
+   disappearing. Read back `current_user_can_bypass=never` during the
+   administrative controls census below.
+9. Enable immutable releases for the repository. During that census, use
+   owner-admin access out of band to require the repository
    immutable-releases endpoint to report `enabled=true`; record whether owner
    policy also reports `enforced_by_owner`. The Actions token cannot perform
    this administrative read. The workflow must still prove the resulting
@@ -118,9 +128,14 @@ for this rollout and do not create a replacement Sites project.
    Never retag or reuse `v0.8.0`. The public repository and package must retain
    automatic npm provenance for every automated release.
 
-After setup, use owner-admin access out of band to read back the exact Vercel
-production branch, environment, variables, secret names, complete App
-installation, and all GitHub ref rulesets. Never give that administrative
+After setup, use owner-admin access out of band for a complete administrative
+controls census: read back the exact Vercel production branch, environment,
+variables, secret names, complete App installation, immutable-release setting,
+and all GitHub ref rulesets. Refresh this census when control configuration or
+workflow authority changes, when drift is detected, and during interrupted
+authority recovery. Keep the reviewed evidence with that change or incident;
+do not replay the historical bootstrap mutations to refresh it. Ordinary
+releases do not repeat the complete owner-admin census. Never give that administrative
 credential or evidence collector to the release workflow. Its narrowed App
 token proves only its own effective identity, repository, permission, and
 expiry closure. The Message Like Me post-control record must prove all of these
@@ -142,9 +157,9 @@ assertions together:
   `workflows` authority, and an exhaustive
   `/installation/repositories` set of exactly
   `{hraness/message-like-me}` with repository ID `1342143606`;
-- `production-ref-writer-key` admits only `main`, requires the expected
-  reviewer, exposes only the expected key and checked variables, and has no
-  custom deployment-protection rules;
+- `production-ref-writer-key` admits only `main`, has no required reviewers,
+  wait timer, or custom deployment-protection rules, disables administrator
+  bypass, and exposes only the expected key and checked variables;
 - the Vercel project reads back
   `link.productionBranch=website-production`, while its project root, build,
   install, Git, domain, environment, and deployment settings remain identical
@@ -158,11 +173,27 @@ dependency, lockfile, or generated documentation.
 
 Treat the production and canary ruleset IDs and their complete live readbacks as
 an external release gate, not as inputs the promotion workflow may administer.
-The workflow must not create, replace, patch, disable, or broaden a ruleset. A
-release operator revalidates the existing IDs, targets, lifecycle rules,
-App-pinned status context, integration ID, enforcement state, and empty bypass
-sets before admitting a release. Any drift blocks promotion until it is reviewed
-and repaired out of band.
+The workflow must not create, replace, patch, disable, or broaden a ruleset.
+The administrative census establishes the existing IDs, targets, lifecycle
+rules, App-pinned status context, integration ID, enforcement state, and empty
+bypass sets. Every production attempt still validates the exact current
+source and artifact, helper hashes and control epoch, effective App token
+permissions and repository scope, live rules exposed to its scoped token,
+App-sourced status, writer-denial proof, expected-old lease, and provider
+outcome. These checks do not claim an administrator's complete controls view.
+Observed drift blocks promotion until the controls are reviewed, repaired,
+and admitted through a fresh administrative census.
+
+For an existing environment that still requires a person, first merge this
+admission policy after independent review and the required checks. Revalidate
+the current workflow and helper hashes, the successful production and writer
+canary evidence, exact ref rules, App scope, and provider state. Then remove
+only the required-reviewer rule through the environment API, preserving its
+main-only branch policy, disabled administrator bypass, key, and variables.
+Read back the complete environment and the unchanged authority controls.
+Existing machine gates remain required, including control-epoch admission and
+interrupted-authority quarantine. An unrelated release failure is not a reason
+to remove or bypass them.
 
 ### Review one workflow-control epoch
 
@@ -258,17 +289,18 @@ When an established protected ref predates reviewed workflow-control changes:
    the workflow source for a canary review. Do not fetch an unbounded ref
    namespace, hand-assemble a digest, use a different checkout, or reorder the
    inventory.
-3. Dispatch one fresh manual attempt 1 from exact current `main` with that exact
+3. Before dispatching the reviewed control-epoch transition, compare the tag,
+   v2 domain, protected ref, old SHA, target SHA, workflow-source SHA, ordered
+   inventory, change list, and digest with both the independently reviewed
+   failed-run summary and the locally reconstructed receipt. Reject the
+   dispatch if any field or ordered inventory row differs. Dispatch one fresh
+   manual attempt 1 from exact current `main` with that exact
    digest. Automatic `workflow_run` events, rerun attempts, already-exact refs,
    and unchanged-workflow ranges must reject any digest. The gate recomputes the
    complete inventory and digest before environment admission; any source, tag,
    ref, target, ancestry, inventory, or digest drift fails closed.
-4. Before approving `production-ref-writer-key`, compare the fresh run title,
-   tag, v2 domain, protected ref, old SHA, target SHA, workflow-source SHA,
-   ordered inventory, change list, and digest with both the independently
-   reviewed failed-run summary and the locally reconstructed receipt. Reject the
-   environment admission if any field or ordered
-   inventory row differs. After approval, the hash-pinned helper
+4. The workflow enters `production-ref-writer-key` after its read-only
+   admission jobs succeed, without a human approval. The hash-pinned helper
    recomputes and revalidates the same transition before reading the key. The
    normal split-authority sequence then applies unchanged: terminalize the status
    to the exact App-authored `error`, then prove the writer is denied with one exact
@@ -674,7 +706,7 @@ or decreasing inventory digest fails closed. Because an administrator could
 delete and recreate evidence between API reads, the owner freeze and
 before/after admin readbacks remain part of admission.
 
-After the main-only environment approval, the helper repeats the complete
+After the main-only environment admission, the helper repeats the complete
 snapshot before it may read the private key. The status-only App may then POST
 only one distinct `error` for the exact failed target, prove that exact status
 through the combined-status endpoint, and revoke the token through the same
