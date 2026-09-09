@@ -104,6 +104,12 @@ body {
 
 .mlm-marketing-hero {
   --hraness-marketing-copy-measure: 38rem;
+  padding-block-start: clamp(2rem, 5vw, 4rem);
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+.mlm-marketing-hero .hraness-marketing-hero__heading {
+  max-inline-size: 20ch;
+  font-size: clamp(2.3rem, 4.5vw, 3.75rem);
 }
 .mlm-marketing-hero .hraness-marketing-hero__example {
   max-inline-size: 34rem;
@@ -127,7 +133,7 @@ body {
   font-weight: 500;
 }
 
-/* Product frame: the synthetic conversation beside the transcript. */
+/* The illustrative draft and its plain-language reading notes. */
 .hraness-marketing-hero__frame {
   margin-block-start: clamp(0.25rem, 1.5vw, 1rem);
 }
@@ -144,8 +150,6 @@ body {
   min-width: 0;
   padding: clamp(1.25rem, 3vw, 2.25rem);
   background-color: var(--surface);
-  background-image: radial-gradient(var(--line) 1px, transparent 1px);
-  background-size: 1.25rem 1.25rem;
 }
 .stage-label {
   margin: 0 0 0.6rem;
@@ -174,6 +178,40 @@ body {
   color: var(--accent-ink);
 }
 .bubble-short { margin-top: -0.15rem; }
+.stage-label--draft { align-self: flex-end; margin-block: 1.2rem 0; }
+.draft-notes {
+  min-inline-size: 0;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border-inline-start: 1px solid var(--line);
+  background: var(--paper-deep);
+}
+.draft-notes h2 { margin: 0; font-size: 1.15rem; line-height: 1.35; }
+.draft-notes dl { display: grid; gap: 1rem; margin-block: 1.25rem; }
+.draft-notes dt { font-weight: 600; }
+.draft-notes dd { margin: 0.2rem 0 0; color: var(--muted); }
+.draft-notes > p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.source-details { margin-block-start: 1rem; }
+.source-details > summary {
+  min-block-size: 3rem;
+  padding-block: 0.7rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--accent);
+}
+.source-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.source-details > summary:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 48rem) {
+  .draft-notes { border-inline-start: 0; border-block-start: 1px solid var(--line); }
+}
 .terminal-card {
   display: flex;
   flex-direction: column;

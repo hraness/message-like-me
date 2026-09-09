@@ -104,26 +104,26 @@ const faqStructuredData = {
 function HeroFrame() {
   return (
     <MarketingProofFrame
-      caption="A synthetic conversation and transcript. No real messages, contacts, or private paths appear on this site."
-      credit={`Synthetic example · v${SOFTWARE_VERSION}`}
+      caption="An illustrative, unsent draft—not a measured result. Every message and pattern shown here is synthetic."
+      credit="Synthetic example · no real message history"
       title="Message Like Me · synthetic example"
     >
       <div className="mlm-frame" role="group" aria-label="A synthetic local drafting workflow">
         <div className="message-stage">
-          <p className="stage-label">Synthetic example</p>
+          <p className="stage-label">Incoming message</p>
           <div className="bubble bubble-in">yes to friday. also can you send me that link?</div>
+          <p className="stage-label stage-label--draft">Unsent draft</p>
           <div className="bubble bubble-out">perfect, friday it is</div>
           <div className="bubble bubble-out bubble-short">yep one sec</div>
         </div>
-        <div className="terminal-card">
-          <p>
-            <span>$</span>{' '}wrench whatsapp export-message-like-me --auth whatsapp-main --output &quot;$HOME/message-like-me-whatsapp&quot;
-          </p>
-          <p className="terminal-result">✓ compatible Wrench bundle written</p>
-          <p>
-            <span>$</span>{' '}messagelikeme ingest bundle --input &quot;$HOME/message-like-me-whatsapp&quot;
-          </p>
-          <p className="terminal-result">✓ verified source observation ingested</p>
+        <div className="draft-notes">
+          <h2>More than word choice</h2>
+          <dl>
+            <div><dt>Tone</dt><dd>Lowercase, casual, and direct.</dd></div>
+            <div><dt>Rhythm</dt><dd>Two short messages instead of one paragraph.</dd></div>
+            <div><dt>Attention</dt><dd>Acknowledge the plans and the link request.</dd></div>
+          </dl>
+          <p>You review the draft. Nothing is sent.</p>
         </div>
       </div>
     </MarketingProofFrame>
@@ -154,14 +154,14 @@ export default function Home() {
             heading="Draft messages that sound like you"
             headingId="message-like-me-title"
             name="Message Like Me"
-            summary="Message Like Me studies how you actually text one person, then hands your agent an evidence profile for an unsent draft. It reads local history and never sends."
+            summary="You text different people differently. Message Like Me studies your past conversations with one person, then gives your agent examples and patterns to work from. You get a draft to review, never an automatically sent message."
           />
 
           <MarketingPillars
             ariaLabel="Message Like Me in three points"
             pillars={[
               {
-                label: 'Ingest',
+                label: 'Read your history',
                 summary: 'Read Apple Messages, an X archive, or a Beeper or WhatsApp bundle from Wrench without changing any of them.',
               },
               {
@@ -180,7 +180,7 @@ export default function Home() {
             headingId="sources-title"
             id="sources"
             label="Supported sources"
-            summary="Four messaging-history inputs and one optional label source. Beeper and native WhatsApp arrive as explicit Wrench bundle paths, never as hidden account connections or sending integrations."
+            summary="Read Apple Messages or an X archive directly. For Beeper and WhatsApp, import a finished local export from Wrench. Contacts can add familiar names. Expand a source for its import command and limits."
           >
             <div className="source-grid">
               {SUPPORTED_SOURCES.map((source) => (
@@ -198,7 +198,7 @@ export default function Home() {
             id="how-it-works"
             label="How it works"
             layout="split"
-            summary="Every step is one command with a JSON form. The CLI never calls a model; the skill you install teaches the agent you already use how to read the evidence and where to stop."
+            summary="The command-line tool reads and measures your history on your Mac. The installed Agent Skill teaches your existing agent how to use those examples and patterns. You choose what it can read, then review its draft."
           >
             <MarketingFlow
               ariaLabel="From history to an unsent draft"
@@ -206,12 +206,12 @@ export default function Home() {
                 {
                   code: 'messagelikeme ingest imessage --json',
                   detail: 'Read a stable copy of Apple Messages, or bring an X archive or a Wrench bundle. Nothing in the source changes.',
-                  label: 'Ingest',
+                  label: 'Read history',
                 },
                 {
                   code: 'messagelikeme inspect tempo <contact-id> --json',
-                  detail: 'See counts, timing, bursts, and reply habits for one person under pseudonymous IDs, with no message text.',
-                  label: 'Understand',
+                  detail: 'See counts, timing, and reply habits for one person. This view uses contact IDs instead of names and leaves out message text.',
+                  label: 'Find patterns',
                 },
                 {
                   code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
@@ -268,7 +268,7 @@ export default function Home() {
 
           <MarketingTrustBoundary
             className="mlm-marketing-trust"
-            heading="Your history is evidence, not inventory."
+            heading="Choose what your agent can read."
             headingId="privacy-title"
             id="privacy"
             items={[
@@ -294,7 +294,7 @@ export default function Home() {
               },
             ]}
             label="Your data"
-            summary="Local-first describes where the work happens, not a promise of secrecy. Here is what stays where, in plain words."
+            summary="The CLI keeps your history local. If you open a study packet in a hosted agent, that agent handles its excerpts under its own privacy terms. Share only what you are comfortable giving it."
           />
 
           <MarketingInstallPanel

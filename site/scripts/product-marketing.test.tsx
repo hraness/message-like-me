@@ -73,6 +73,22 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   }
 });
 
+test('explains the synthetic draft before asking a reader to understand import commands', () => {
+  const html = renderToStaticMarkup(<Home />);
+  const frame = /<div class="mlm-frame"[\s\S]*?<\/figure>/u.exec(html)?.[0] ?? '';
+  expect(frame).toContain('Unsent draft');
+  expect(frame).toContain('More than word choice');
+  expect(frame).toContain('Two short messages instead of one paragraph');
+  expect(frame).toContain('Nothing is sent');
+  expect(frame).not.toContain('export-message-like-me');
+  expect(frame).not.toContain('ingest bundle');
+  expect(html).toContain('not a measured result');
+  expect(html).toContain('hosted agent, that agent handles its excerpts under its own privacy terms');
+  expect(html.match(/<details class="source-details">/gu)).toHaveLength(5);
+  expect(html).toContain('Import command and limits');
+  expect(html).not.toMatch(/<details class="source-details"[^>]*\bopen/gu);
+});
+
 test('binds Design Kit v0.4.0 to one light-default accent palette', async () => {
   const [layout, css, manifestSource] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
