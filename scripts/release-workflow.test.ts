@@ -934,7 +934,7 @@ test("publishing documents the exact App, environment, canary, and ref controls"
     "canonical lowercase SHA-256 digest",
     "Do not trust the digest without reviewing its complete preimage",
     "const receipt = describeControlEpoch({",
-    "Before approving `production-ref-writer-key`",
+    "Before dispatching the reviewed control-epoch transition",
     "tree OID as the baseline for the next",
     "completed epoch requires no key rotation",
     "Automatic `workflow_run` events, rerun attempts, already-exact refs",
