@@ -1,6 +1,6 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
   producer: 'Ghostget',
-  producerVersion: '0.17.0',
+  producerVersion: '0.17.1',
   adapterId: 'beeper-local',
   adapterVersion: '2.4.0',
   reviewedOperationCount: 32,
@@ -17,7 +17,7 @@ export const BEEPER_COMPATIBILITY = Object.freeze({
 
 export const WHATSAPP_COMPATIBILITY = Object.freeze({
   producer: 'Ghostget',
-  producerVersion: '0.17.0',
+  producerVersion: '0.17.1',
   providerCli: 'Wacli',
   providerCliVersion: '0.15.0',
   bundleSchemaVersion: '2',
@@ -68,7 +68,7 @@ export const SUPPORTED_SOURCES = Object.freeze([
     mode: 'Bounded local bundle',
     status: 'Supported',
     summary:
-      'Adds a finished Beeper bundle from Ghostget v0.17.0 and adapter 2.4.0 to the private local evidence corpus.',
+      'Adds a finished Beeper bundle from Ghostget v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
     boundary:
       'All 32 reviewed operations stay in Ghostget: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads. Message Like Me receives no provider credentials, calls no Ghostget or Beeper operation, never sends, and does not claim complete history.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',

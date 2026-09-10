@@ -18,7 +18,7 @@ test('renders the complete README with one source-owned heading and working anch
     /Beeper users can bring a bounded observation from supported connected accounts\s+into the same private evidence layer as Apple Messages\./u,
   );
   expect(html).toContain(
-    '<td>A finished local bundle from Ghostget v0.17.0 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads</td>',
+    '<td>A finished local bundle from Ghostget v0.17.1 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads</td>',
   );
   expect(html).toContain(
     'Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends',

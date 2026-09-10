@@ -115,7 +115,7 @@ describe('supported source presentation', () => {
   test('pins the native WhatsApp Ghostget/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
       producer: 'Ghostget',
-      producerVersion: '0.17.0',
+      producerVersion: '0.17.1',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
       bundleSchemaVersion: '2',
@@ -135,7 +135,7 @@ describe('supported source presentation', () => {
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
       producer: 'Ghostget',
-      producerVersion: '0.17.0',
+      producerVersion: '0.17.1',
       adapterId: 'beeper-local',
       adapterVersion: '2.4.0',
       reviewedOperationCount: 32,
@@ -159,7 +159,7 @@ describe('supported source presentation', () => {
     const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-ghostget');
     expect(beeper?.name).toBe('Beeper via Ghostget');
     expect(beeper?.summary).toBe(
-      'Adds a finished Beeper bundle from Ghostget v0.17.0 and adapter 2.4.0 to the private local evidence corpus.',
+      'Adds a finished Beeper bundle from Ghostget v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
     );
     expect(beeper?.boundary).toContain('All 32 reviewed operations stay in Ghostget');
     expect(beeper?.boundary).toContain('26 through one pinned Beeper CLI 0.6.2 executable');
@@ -218,7 +218,7 @@ describe('supported source presentation', () => {
     expect(sourcesPage).toContain('Beeper via Ghostget');
     expect(sourcesPage).toContain('It owns zero of Ghostget’s');
     expect(renderedSourcesPage).toContain(
-      'Ghostget v0.17.0 uses beeper-local adapter v2.4.0',
+      'Ghostget v0.17.1 uses beeper-local adapter v2.4.0',
     );
     expect(renderedSourcesPage).toContain(
       'Bring Beeper history into the same private evidence corpus.',
@@ -366,7 +366,7 @@ describe('supported source presentation', () => {
     }
     for (const exactModelClaim of [
       'Beeper via Ghostget lets users bring a finished private bundle into the same local evidence corpus as other sources.',
-      'Ghostget v0.17.0 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
+      'Ghostget v0.17.1 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
       'The executable’s reported 0.6.2 is runtime authority; the upstream tagged packages/cli/package.json declaration of 0.6.1 is provenance only.',
       'Message Like Me receives no provider credentials, never calls Ghostget or Beeper operations, and never sends; it does not claim complete history.',
       'Every ingest path is read-only with respect to its source.',
@@ -389,7 +389,7 @@ describe('supported source presentation', () => {
       'Read-only Apple Messages history ingestion',
       'Caller-owned X data archive direct-message ingestion',
       'Every ingest path is read-only with respect to its source',
-      'Finished Beeper bundle from Ghostget v0.17.0 and adapter beeper-local v2.4.0; all 32 reviewed operations stay in Ghostget (26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads)',
+      'Finished Beeper bundle from Ghostget v0.17.1 and adapter beeper-local v2.4.0; all 32 reviewed operations stay in Ghostget (26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads)',
       'Beeper CLI executable 0.6.2 is runtime authority; upstream tagged packages/cli/package.json declaration 0.6.1 is provenance only',
       'No provider credentials, Ghostget or Beeper operation calls, or sending',
       'Native WhatsApp bundle ingestion via Ghostget and official Wacli',

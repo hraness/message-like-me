@@ -107,8 +107,8 @@ visibly instead of being treated as current.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Ghostget | A finished local bundle from Ghostget v0.17.0 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
-| WhatsApp via Ghostget | A one-account native bundle produced by Ghostget v0.17.0 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
+| Beeper via Ghostget | A finished local bundle from Ghostget v0.17.1 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
+| WhatsApp via Ghostget | A one-account native bundle produced by Ghostget v0.17.1 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Add private local history
@@ -187,12 +187,12 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[`@hraness/ghostget@0.17.0`](https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz)
+[`@hraness/ghostget@0.17.1`](https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz)
 canonical GitHub Release archive, then use Ghostget to create a new private Message Like Me
 bundle:
 
 ```sh
-bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz
 ghostget adapter sync-bundled --json
 ghostget beeper export-message-like-me \
   --auth <beeper-auth-id> \
@@ -202,7 +202,7 @@ ghostget beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Ghostget v0.17.0 adapter
+path to a directory that does not already exist. Ghostget v0.17.1 adapter
 `beeper-local@2.4.0` exposes 32 reviewed Beeper operations: 26 through one
 pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus
 six fixed Desktop loopback reads. Message Like Me never calls Ghostget or any of
@@ -248,7 +248,7 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Ghostget v0.17.0 is the currently verified
+source-transform version `1.1.0`. Ghostget v0.17.1 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
 not by an open-ended Ghostget package range.
 
@@ -259,11 +259,11 @@ reappearance restores it. Older snapshots cannot overwrite newer state. Use
 `sources show <source-id> --private --json` only when you deliberately need the
 private provider account and source metadata.
 
-For native WhatsApp evidence, install Ghostget v0.17.0 and let its official
+For native WhatsApp evidence, install Ghostget v0.17.1 and let its official
 Wacli 0.15.0 adapter create the one-account v2 bundle:
 
 ```sh
-bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz
 ghostget adapter sync-bundled --json
 ghostget whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
@@ -284,7 +284,7 @@ surfaces are excluded. The complete contract is in
 [local message bundle v2](docs/local-message-bundle-v2.md).
 
 Wacli v0.15.0 may retain an earlier emoji after a reaction is removed, so its
-local rows cannot prove current active reaction state. Ghostget v0.17.0 omits
+local rows cannot prove current active reaction state. Ghostget v0.17.1 omits
 every reaction-shaped row and adds `reaction-state-unproven` when it observes
 one. An empty `reactions.ndjson` from this producer means reaction behavior was
 unobservable, not that the account had no reactions. The v2 wire contract keeps

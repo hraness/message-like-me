@@ -9,11 +9,11 @@ invokes a Beeper operation, and never sends. Like every Message Like Me ingest
 path, it is read-only with respect to its source.
 
 The currently verified producer is the local Beeper export in the
-[`@hraness/ghostget@0.17.0`](https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz)
+[`@hraness/ghostget@0.17.1`](https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz)
 canonical GitHub Release archive:
 
 ```sh
-bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz
 ghostget adapter sync-bundled --json
 ghostget beeper export-message-like-me \
   --auth <beeper-auth-id> \
@@ -33,7 +33,7 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Ghostget v0.17.0 emits those coordinates through
+source-transform version `1.1.0`. Ghostget v0.17.1 emits those coordinates through
 adapter `beeper-local@2.4.0`. That adapter has 32 reviewed Beeper operations:
 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions
 and writes, plus six fixed Desktop loopback reads. The Message Like Me bundle is

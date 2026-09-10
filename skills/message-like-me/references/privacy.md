@@ -21,7 +21,7 @@ sensitive local data.
   synchronize a linked device, inspect its database, or expose exact JIDs.
   Ghostget owns that provider boundary. `--overlap-source` requires explicit
   intent and exact CLI proof; it never authorizes fuzzy account or contact
-  matching. The Ghostget v0.17.0 producer omits reaction-shaped Wacli rows with
+  matching. The Ghostget v0.17.1 producer omits reaction-shaped Wacli rows with
   `reaction-state-unproven`; never turn that missing evidence into a claim that
   no reactions occurred.
 - Treat a caller-owned X data archive ZIP as private source evidence. Pass only

@@ -10,7 +10,7 @@ network, or sends a message.
 The intended producer flow is:
 
 ```sh
-bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz
 ghostget adapter sync-bundled --json
 ghostget whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
@@ -21,7 +21,7 @@ messagelikeme ingest bundle \
   --json
 ```
 
-The checked compatibility coordinates are Ghostget v0.17.0 and official Wacli
+The checked compatibility coordinates are Ghostget v0.17.1 and official Wacli
 v0.15.0. Ghostget owns that executable dependency and its authentication state;
 neither enters Message Like Me.
 
@@ -90,7 +90,7 @@ byte disagreement, and SHA-256 disagreement. The same public bounds as v1
 apply, except v2 admits exactly one account.
 
 The v2 wire contract retains the fixed `reactions.ndjson` artifact and strict
-reaction parser for proven records. The checked Ghostget v0.17.0/Wacli v0.15.0
+reaction parser for proven records. The checked Ghostget v0.17.1/Wacli v0.15.0
 producer leaves that artifact empty because it cannot prove current reaction
 state.
 
@@ -163,7 +163,7 @@ duplicates cannot prove equivalence.
 
 Both source provenances and all source-unique history remain stored. Proven
 message duplicates contribute once. A reaction can deduplicate only when a
-conforming producer supplies a proven reaction record; Ghostget v0.17.0 supplies
+conforming producer supplies a proven reaction record; Ghostget v0.17.1 supplies
 none, so this overlap path does not reconcile reaction state. The native Wacli
 conversation is the preferred action route and carries the exact private
 `whatsappJid` coordinate. Its proven Beeper duplicate remains evidence with
