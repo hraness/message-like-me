@@ -21,7 +21,8 @@ describe("site typography", () => {
     expect(layout.indexOf("@hraness/design-kit/fonts.css"))
       .toBeLessThan(layout.indexOf("./globals.css"));
     expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
-    expect(css.indexOf("@import 'tailwindcss';"))
+    expect(css).not.toContain("@import 'tail" + "windcss';");
+    expect(css.indexOf("@import '@hraness/ui/stylex.css';"))
       .toBeLessThan(css.indexOf("@import '@hraness/design-kit/product-marketing.css';"));
     expect(css).toContain('font-family: "Nebula Sans", ui-sans-serif, system-ui');
     expect(css).not.toContain("font-family: Inter");

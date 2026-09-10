@@ -1,10 +1,8 @@
-@import 'tailwindcss';
 @import '@hraness/ui/tokens.css';
 @import '@hraness/ui/stylex.css';
-/* The marketing grammar is imported here, after Tailwind, so its
- * `components.hraness-design-kit.*` layers sit above the `base` preflight
- * in the declared layer order. Importing it as a separate stylesheet lets the
- * bundler load it first and the preflight would override the grammar. */
+/* The marketing grammar is imported after the shared StyleX tokens and
+ * compiled recipes so its `components.hraness-design-kit.*` layers sit above
+ * the shared foundation in the declared layer order. */
 @import '@hraness/design-kit/product-marketing.css';
 
 /* Palette. Light is the default appearance; dark mirrors every token through
