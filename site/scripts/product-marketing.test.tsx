@@ -95,7 +95,7 @@ test('explains the synthetic draft before asking a reader to understand import c
   expect(html).not.toMatch(/<details class="source-details"[^>]*\bopen/gu);
 });
 
-test('binds Design Kit v0.4.0 to one light-default accent palette', async () => {
+test('binds Design Kit v0.6.3 to one light-default accent palette', async () => {
   const [layout, css, manifestSource] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -106,9 +106,9 @@ test('binds Design Kit v0.4.0 to one light-default accent palette', async () => 
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.4.0');
+    .toBe('github:hraness/design-kit#v0.6.3');
   expect(manifest.dependencies?.['@hraness/ui'])
-    .toBe('github:hraness/ui#v0.4.10');
+    .toBe('github:hraness/ui#v0.5.13');
   expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
   expect(layout).toContain("colorScheme: 'light dark'");
   expect(css).toContain('color-scheme: light dark;');
