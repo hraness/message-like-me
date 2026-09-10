@@ -25,7 +25,7 @@ const GOLDEN_FILES = Object.freeze([
   "manifest.json",
 ]);
 
-async function materializeWrenchGoldenBundle(parent: string): Promise<string> {
+async function materializeGhostgetGoldenBundle(parent: string): Promise<string> {
   const source = join(import.meta.dir, "fixtures", "beeper-message-like-me-v1");
   const target = join(parent, "beeper-message-like-me-v1");
   await mkdir(target, { mode: 0o700 });
@@ -62,7 +62,7 @@ async function replaceArtifactBytes(
 }
 
 describe("private local message bundle", () => {
-  test("dispatches and normalizes the native Wrench/Wacli v2 contract", async () => {
+  test("dispatches and normalizes the native Ghostget/Wacli v2 contract", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-bundle-"));
     try {
       const path = await writeSyntheticMessageBundle(root, syntheticWhatsAppBundleRecords(), {
@@ -183,7 +183,7 @@ describe("private local message bundle", () => {
     }
   });
 
-  test("imports the exact canonical bundle emitted by Wrench", async () => {
+  test("imports the exact canonical bundle emitted by Ghostget", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-wrench-golden-"));
     try {
       const vendoredManifest = await readFile(join(
@@ -193,7 +193,7 @@ describe("private local message bundle", () => {
         "manifest.json",
       ));
       expect(sha256(vendoredManifest)).toBe(GOLDEN_MANIFEST_SHA256);
-      const path = await materializeWrenchGoldenBundle(root);
+      const path = await materializeGhostgetGoldenBundle(root);
       const bundle = await readMessageBundle(path, { hmacKey: TEST_KEY });
       expect(bundle.manifestSha256).toBe(GOLDEN_MANIFEST_SHA256);
       expect(bundle.sources).toHaveLength(2);
@@ -292,7 +292,7 @@ describe("private local message bundle", () => {
     }
   });
 
-  test("verifies and normalizes Wrench's six-artifact contract", async () => {
+  test("verifies and normalizes Ghostget's six-artifact contract", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-bundle-"));
     try {
       const path = await writeSyntheticMessageBundle(root);

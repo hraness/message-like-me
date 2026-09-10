@@ -1,6 +1,6 @@
 export const BEEPER_COMPATIBILITY = Object.freeze({
-  producer: 'Wrench',
-  producerVersion: '0.16.7',
+  producer: 'Ghostget',
+  producerVersion: '0.17.1',
   adapterId: 'beeper-local',
   adapterVersion: '2.4.0',
   reviewedOperationCount: 32,
@@ -16,8 +16,8 @@ export const BEEPER_COMPATIBILITY = Object.freeze({
 } as const);
 
 export const WHATSAPP_COMPATIBILITY = Object.freeze({
-  producer: 'Wrench',
-  producerVersion: '0.16.7',
+  producer: 'Ghostget',
+  producerVersion: '0.17.1',
   providerCli: 'Wacli',
   providerCliVersion: '0.15.0',
   bundleSchemaVersion: '2',
@@ -32,8 +32,8 @@ export const WHATSAPP_COMPATIBILITY = Object.freeze({
 export type SourceKind = 'Messaging history' | 'Label enrichment';
 export type SupportedSourceId =
   | 'apple-messages'
-  | 'beeper-via-wrench'
-  | 'whatsapp-via-wrench'
+  | 'beeper-via-ghostget'
+  | 'whatsapp-via-ghostget'
   | 'x-data-archive'
   | 'macos-contacts';
 
@@ -62,27 +62,27 @@ export const SUPPORTED_SOURCES = Object.freeze([
     command: 'messagelikeme ingest imessage',
   },
   {
-    id: 'beeper-via-wrench',
-    name: 'Beeper via Wrench',
+    id: 'beeper-via-ghostget',
+    name: 'Beeper via Ghostget',
     kind: 'Messaging history',
     mode: 'Bounded local bundle',
     status: 'Supported',
     summary:
-      'Adds a finished Beeper bundle from Wrench v0.16.7 and adapter 2.4.0 to the private local evidence corpus.',
+      'Adds a finished Beeper bundle from Ghostget v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
     boundary:
-      'All 32 reviewed operations stay in Wrench: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads. Message Like Me receives no provider credentials, calls no Wrench or Beeper operation, never sends, and does not claim complete history.',
+      'All 32 reviewed operations stay in Ghostget: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads. Message Like Me receives no provider credentials, calls no Ghostget or Beeper operation, never sends, and does not claim complete history.',
     command: 'messagelikeme ingest bundle --input /absolute/private/bundle',
   },
   {
-    id: 'whatsapp-via-wrench',
-    name: 'WhatsApp via Wrench',
+    id: 'whatsapp-via-ghostget',
+    name: 'WhatsApp via Ghostget',
     kind: 'Messaging history',
     mode: 'Native · bounded local bundle',
     status: 'Supported',
     summary:
-      'Ingests one native WhatsApp linked-device observation exported by Wrench through official Wacli.',
+      'Ingests one native WhatsApp linked-device observation exported by Ghostget through official Wacli.',
     boundary:
-      'Wrench omits reaction-shaped rows when Wacli cannot prove current state; Message Like Me verifies the finished bundle and never operates WhatsApp.',
+      'Ghostget omits reaction-shaped rows when Wacli cannot prove current state; Message Like Me verifies the finished bundle and never operates WhatsApp.',
     command: 'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
   },
   {

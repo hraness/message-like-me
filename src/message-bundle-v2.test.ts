@@ -25,7 +25,7 @@ import {
 } from "./test-bundle-fixture.ts";
 
 describe("local message bundle v2 public contract", () => {
-  test("parses one canonical synthetic Wrench/Wacli fixture", async () => {
+  test("parses one canonical synthetic Ghostget/Wacli fixture", async () => {
     const root = await mkdtemp(join(tmpdir(), "message-like-me-wacli-contract-"));
     try {
       const records = syntheticWhatsAppBundleRecords();

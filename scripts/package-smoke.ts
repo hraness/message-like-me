@@ -349,7 +349,7 @@ export async function packageSmoke(suppliedArchive?: string): Promise<void> {
     await run([
       process.execPath,
       "-e",
-      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4") throw new Error("wrong agentic messaging contract")`,
+      `const contract = await import(${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)}); if (contract.GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH !== "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687" || contract.GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH !== "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4") throw new Error("wrong agentic messaging contract")`,
     ], consumer);
     await run([
       process.execPath,
@@ -365,7 +365,7 @@ export async function packageSmoke(suppliedArchive?: string): Promise<void> {
         `import type { LocalMessageBundleV1Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v1`)};`,
         `import { LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, parseLocalMessageBundleV2Record } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)};`,
         `import type { LocalMessageBundleV2Manifest } from ${JSON.stringify(`${PACKAGE_NAME}/message-bundle-v2`)};`,
-        `import { parseAgentMessageHandoffV1, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
+        `import { parseAgentMessageHandoffV1, GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
         `import type { AgentMessageHandoffV1 } from ${JSON.stringify(`${PACKAGE_NAME}/agentic-messaging-v1`)};`,
         `import { buildEnsoulMessagesSourcePacketV1, ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID } from ${JSON.stringify(`${PACKAGE_NAME}/ensoul-source-v1`)};`,
         `import type { EnsoulMessagesSourcePacketV1 } from ${JSON.stringify(`${PACKAGE_NAME}/ensoul-source-v1`)};`,
@@ -380,7 +380,7 @@ export async function packageSmoke(suppliedArchive?: string): Promise<void> {
         "const parseHandoff: typeof parseAgentMessageHandoffV1 = parseAgentMessageHandoffV1;",
         "const ensoulPacket = null as unknown as EnsoulMessagesSourcePacketV1;",
         "const buildEnsoul: typeof buildEnsoulMessagesSourcePacketV1 = buildEnsoulMessagesSourcePacketV1;",
-        "void [digest, profile, metrics, manifest, whatsappManifest, parseRecord, parseWhatsAppRecord, handoff, parseHandoff, ensoulPacket, buildEnsoul, ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
+        "void [digest, profile, metrics, manifest, whatsappManifest, parseRecord, parseWhatsAppRecord, handoff, parseHandoff, ensoulPacket, buildEnsoul, ENSOUL_MESSAGES_SOURCE_V1_ADAPTER_ID, LOCAL_MESSAGE_BUNDLE_V1_ARTIFACTS, LOCAL_MESSAGE_BUNDLE_V2_ARTIFACTS, GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH, GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH];",
         "",
       ].join("\n"),
       { mode: 0o600 },

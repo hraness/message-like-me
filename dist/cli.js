@@ -14816,12 +14816,12 @@ var AGENTIC_MESSAGING_V1_SCHEMA_VERSION = 1;
 var AGENT_MESSAGE_DRAFT_V1_FORMAT = "message-like-me.agent-message-draft";
 var AGENT_MESSAGE_HANDOFF_REQUEST_V1_FORMAT = "message-like-me.agent-message-handoff-request";
 var AGENT_MESSAGE_HANDOFF_V1_FORMAT = "message-like-me.agent-message-handoff";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT = "wrench.messaging-context-binding";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT = "wrench.messaging-receipt-binding";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID = "wrench.messaging-context-binding.v1";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH = "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
-  contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT = "wrench.messaging-context-binding";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT = "wrench.messaging-receipt-binding";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID = "wrench.messaging-context-binding.v1";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH = "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
+  contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
     "schemaVersion:1",
     "format:wrench.messaging-context-binding",
@@ -14837,10 +14837,10 @@ var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
   format: "wrench.messaging-contract-descriptor",
   schemaVersion: 1
 });
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID = "wrench.messaging-receipt-binding.v1";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
-  contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID = "wrench.messaging-receipt-binding.v1";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
+  contractId: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
     "schemaVersion:1",
     "format:wrench.messaging-receipt-binding",
@@ -14996,8 +14996,8 @@ function handoffCore(value) {
 function handoffDigest(value) {
   return sha256(canonicalJson(handoffCore(value)));
 }
-function parseWrenchMessagingContextBindingV1(value) {
-  const record = object(value, "Wrench messaging context binding");
+function parseGhostgetMessagingContextBindingV1(value) {
+  const record = object(value, "Ghostget messaging context binding");
   exactKeys(record, [
     "schemaVersion",
     "format",
@@ -15009,26 +15009,26 @@ function parseWrenchMessagingContextBindingV1(value) {
     "latestMessageRevision",
     "validatedAt",
     "expiresAt"
-  ], "Wrench messaging context binding");
-  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT)
-    return fail9("Wrench messaging context binding has the wrong schemaVersion or format");
-  if (record.contractId !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID || record.contractHash !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH)
-    return fail9("Wrench messaging context binding has an unsupported contract identity");
-  const validatedAt = timestamp(record.validatedAt, "Wrench messaging context binding.validatedAt");
-  const expiresAt = timestamp(record.expiresAt, "Wrench messaging context binding.expiresAt");
+  ], "Ghostget messaging context binding");
+  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT)
+    return fail9("Ghostget messaging context binding has the wrong schemaVersion or format");
+  if (record.contractId !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID || record.contractHash !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH)
+    return fail9("Ghostget messaging context binding has an unsupported contract identity");
+  const validatedAt = timestamp(record.validatedAt, "Ghostget messaging context binding.validatedAt");
+  const expiresAt = timestamp(record.expiresAt, "Ghostget messaging context binding.expiresAt");
   const lifetime = Date.parse(expiresAt) - Date.parse(validatedAt);
   if (lifetime <= 0 || lifetime > AGENTIC_MESSAGING_V1_LIMITS.maximumContextLifetimeMilliseconds) {
-    return fail9("Wrench messaging context binding has an invalid lifetime");
+    return fail9("Ghostget messaging context binding has an invalid lifetime");
   }
   return Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
-    contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-    contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
-    routeRef: identifier2(record.routeRef, "Wrench messaging context binding.routeRef"),
-    contextRef: identifier2(record.contextRef, "Wrench messaging context binding.contextRef"),
-    exactDataRevision: digest(record.exactDataRevision, "Wrench messaging context binding.exactDataRevision"),
-    latestMessageRevision: digest(record.latestMessageRevision, "Wrench messaging context binding.latestMessageRevision"),
+    format: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+    contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+    contractHash: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+    routeRef: identifier2(record.routeRef, "Ghostget messaging context binding.routeRef"),
+    contextRef: identifier2(record.contextRef, "Ghostget messaging context binding.contextRef"),
+    exactDataRevision: digest(record.exactDataRevision, "Ghostget messaging context binding.exactDataRevision"),
+    latestMessageRevision: digest(record.latestMessageRevision, "Ghostget messaging context binding.latestMessageRevision"),
     validatedAt,
     expiresAt
   });
@@ -15056,7 +15056,10 @@ function parseAgentMessageHandoffRequestV1(value) {
   });
 }
 function createAgentMessageHandoffV1(input) {
-  const context5 = parseWrenchMessagingContextBindingV1(input.wrenchContext);
+  if (input.ghostgetContext !== undefined && input.wrenchContext !== undefined) {
+    return fail9("Choose ghostgetContext or its legacy wrenchContext alias, not both");
+  }
+  const context5 = parseGhostgetMessagingContextBindingV1(input.ghostgetContext ?? input.wrenchContext);
   const draft = parseAgentMessageDraftV1(input.draft);
   const core = Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
@@ -15103,7 +15106,7 @@ function createAgentMessageHandoffV1(input) {
     return fail9("Agent message handoff timestamps are inconsistent");
   }
   if (core.expiresAt > core.wrench.contextExpiresAt) {
-    return fail9("Agent message handoff outlives its Wrench context binding");
+    return fail9("Agent message handoff outlives its Ghostget context binding");
   }
   const canonicalSha256 = handoffDigest(core);
   return Object.freeze({
@@ -15167,9 +15170,9 @@ function parseAgentMessageHandoffV1(value) {
   exactKeys(integrityRecord, ["algorithm", "canonicalSha256"], "Agent message handoff.integrity");
   if (integrityRecord.algorithm !== "sha256")
     return fail9("Agent message handoff integrity algorithm must be sha256");
-  const context5 = parseWrenchMessagingContextBindingV1({
+  const context5 = parseGhostgetMessagingContextBindingV1({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+    format: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
     contractId: wrenchRecord.contractId,
     contractHash: wrenchRecord.contractHash,
     routeRef: wrenchRecord.routeRef,
@@ -15194,7 +15197,7 @@ function parseAgentMessageHandoffV1(value) {
       profileState: profileState(evidenceRecord.profileState, "Agent message handoff.evidence.profileState"),
       profileEvidenceRevision: evidenceRecord.profileEvidenceRevision === null ? null : digest(evidenceRecord.profileEvidenceRevision, "Agent message handoff.evidence.profileEvidenceRevision")
     },
-    wrenchContext: context5,
+    ghostgetContext: context5,
     draft: {
       schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
       format: AGENT_MESSAGE_DRAFT_V1_FORMAT,
@@ -15208,7 +15211,7 @@ function parseAgentMessageHandoffV1(value) {
     return fail9("Agent message handoff integrity does not match its canonical content");
   return handoff;
 }
-function wrenchMessagingTurnDigestV1(value) {
+function ghostgetMessagingTurnDigestV1(value) {
   const handoff = parseAgentMessageHandoffV1(value);
   return sha256(canonicalJson({
     schemaVersion: 1,
@@ -15223,8 +15226,8 @@ function wrenchMessagingTurnDigestV1(value) {
     }))
   }));
 }
-function parseWrenchMessagingReceiptBindingV1(value) {
-  const record = object(value, "Wrench messaging receipt binding");
+function parseGhostgetMessagingReceiptBindingV1(value) {
+  const record = object(value, "Ghostget messaging receipt binding");
   exactKeys(record, [
     "schemaVersion",
     "format",
@@ -15241,42 +15244,42 @@ function parseWrenchMessagingReceiptBindingV1(value) {
     "provenPartCount",
     "receiptSha256",
     "recordedAt"
-  ], "Wrench messaging receipt binding");
-  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT)
-    return fail9("Wrench messaging receipt binding has the wrong schemaVersion or format");
-  if (record.contractId !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID || record.contractHash !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH)
-    return fail9("Wrench messaging receipt binding has an unsupported contract identity");
+  ], "Ghostget messaging receipt binding");
+  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT)
+    return fail9("Ghostget messaging receipt binding has the wrong schemaVersion or format");
+  if (record.contractId !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID || record.contractHash !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH)
+    return fail9("Ghostget messaging receipt binding has an unsupported contract identity");
   if (record.state !== "submitted" && record.state !== "failed" && record.state !== "partial" && record.state !== "indeterminate")
-    return fail9("Wrench messaging receipt binding has an invalid state");
+    return fail9("Ghostget messaging receipt binding has an invalid state");
   if (!Number.isSafeInteger(record.partCount) || record.partCount < 1 || record.partCount > 8) {
-    return fail9("Wrench messaging receipt binding.partCount must be from 1 through 8");
+    return fail9("Ghostget messaging receipt binding.partCount must be from 1 through 8");
   }
   if (!Number.isSafeInteger(record.provenPartCount) || record.provenPartCount < 0 || record.provenPartCount > record.partCount)
-    return fail9("Wrench messaging receipt binding.provenPartCount is out of range");
+    return fail9("Ghostget messaging receipt binding.provenPartCount is out of range");
   const partCount = record.partCount;
   const provenPartCount = record.provenPartCount;
   if (record.state === "submitted" && provenPartCount !== partCount || record.state === "failed" && provenPartCount !== 0 || record.state === "partial" && (provenPartCount < 1 || provenPartCount >= partCount) || record.state === "indeterminate" && provenPartCount >= partCount)
-    return fail9("Wrench messaging receipt binding state does not match its proven prefix");
+    return fail9("Ghostget messaging receipt binding state does not match its proven prefix");
   const parsed = Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
-    contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
-    contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-    clientIntentSha256: digest(record.clientIntentSha256, "Wrench messaging receipt binding.clientIntentSha256"),
-    routeRefSha256: digest(record.routeRefSha256, "Wrench messaging receipt binding.routeRefSha256"),
-    contextRefSha256: digest(record.contextRefSha256, "Wrench messaging receipt binding.contextRefSha256"),
-    turnDigest: digest(record.turnDigest, "Wrench messaging receipt binding.turnDigest"),
-    previewDigest: digest(record.previewDigest, "Wrench messaging receipt binding.previewDigest"),
-    runId: identifier2(record.runId, "Wrench messaging receipt binding.runId", 256),
+    format: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
+    contractId: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+    contractHash: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+    clientIntentSha256: digest(record.clientIntentSha256, "Ghostget messaging receipt binding.clientIntentSha256"),
+    routeRefSha256: digest(record.routeRefSha256, "Ghostget messaging receipt binding.routeRefSha256"),
+    contextRefSha256: digest(record.contextRefSha256, "Ghostget messaging receipt binding.contextRefSha256"),
+    turnDigest: digest(record.turnDigest, "Ghostget messaging receipt binding.turnDigest"),
+    previewDigest: digest(record.previewDigest, "Ghostget messaging receipt binding.previewDigest"),
+    runId: identifier2(record.runId, "Ghostget messaging receipt binding.runId", 256),
     state: record.state,
     partCount,
     provenPartCount,
-    receiptSha256: digest(record.receiptSha256, "Wrench messaging receipt binding.receiptSha256"),
-    recordedAt: timestamp(record.recordedAt, "Wrench messaging receipt binding.recordedAt")
+    receiptSha256: digest(record.receiptSha256, "Ghostget messaging receipt binding.receiptSha256"),
+    recordedAt: timestamp(record.recordedAt, "Ghostget messaging receipt binding.recordedAt")
   });
   const { receiptSha256, ...receiptCore } = parsed;
   if (sha256(canonicalJson(receiptCore)) !== receiptSha256) {
-    return fail9("Wrench messaging receipt binding receiptSha256 does not match its canonical content");
+    return fail9("Ghostget messaging receipt binding receiptSha256 does not match its canonical content");
   }
   return parsed;
 }
@@ -22948,7 +22951,7 @@ class LocalStore {
           turn_digest_sha256,part_count,created_at,expires_at,state
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'prepared')
         ON CONFLICT(handoff_id) DO NOTHING
-      `).run(handoff.handoffId, handoff.integrity.canonicalSha256, sha256(handoff.contact.contactId), sha256(handoff.contact.routeCandidateId), sha256(handoff.contact.sourceId), sha256(handoff.contact.conversationId), handoff.evidence.corpusRevision, handoff.evidence.sourceRevision, handoff.evidence.profileState, handoff.evidence.profileEvidenceRevision, handoff.wrench.contractHash, handoff.wrench.routeRefSha256, handoff.wrench.contextRefSha256, handoff.wrench.exactDataRevision, handoff.wrench.latestMessageRevision, wrenchMessagingTurnDigestV1(handoff), handoff.turn.bubbles.length, handoff.createdAt, handoff.expiresAt);
+      `).run(handoff.handoffId, handoff.integrity.canonicalSha256, sha256(handoff.contact.contactId), sha256(handoff.contact.routeCandidateId), sha256(handoff.contact.sourceId), sha256(handoff.contact.conversationId), handoff.evidence.corpusRevision, handoff.evidence.sourceRevision, handoff.evidence.profileState, handoff.evidence.profileEvidenceRevision, handoff.wrench.contractHash, handoff.wrench.routeRefSha256, handoff.wrench.contextRefSha256, handoff.wrench.exactDataRevision, handoff.wrench.latestMessageRevision, ghostgetMessagingTurnDigestV1(handoff), handoff.turn.bubbles.length, handoff.createdAt, handoff.expiresAt);
       const stored = get13(this.#database, `
         SELECT handoff_sha256 FROM agent_message_handoffs WHERE handoff_id=?
       `, handoff.handoffId);
@@ -22962,7 +22965,7 @@ class LocalStore {
     if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
       throw new CliError("usage", "Invalid handoff ID");
     }
-    const receipt = parseWrenchMessagingReceiptBindingV1(value);
+    const receipt = parseGhostgetMessagingReceiptBindingV1(value);
     transaction(this.#database, () => {
       const stored = get13(this.#database, `
         SELECT handoff_sha256,route_ref_sha256,context_ref_sha256,turn_digest_sha256,
@@ -22972,11 +22975,11 @@ class LocalStore {
       if (stored === null)
         throw new CliError("not-found", `Unknown handoff ${handoffId}`);
       if (receipt.clientIntentSha256 !== stored.handoff_sha256 || receipt.routeRefSha256 !== stored.route_ref_sha256 || receipt.contextRefSha256 !== stored.context_ref_sha256 || receipt.turnDigest !== stored.turn_digest_sha256 || receipt.partCount !== stored.part_count || receipt.recordedAt < stored.created_at)
-        throw new CliError("conflict", "Wrench receipt does not bind the recorded handoff");
+        throw new CliError("conflict", "Ghostget receipt does not bind the recorded handoff");
       if (stored.state === "recorded") {
         if (stored.receipt_sha256 === receipt.receiptSha256)
           return;
-        throw new CliError("conflict", "Handoff already has a different Wrench receipt");
+        throw new CliError("conflict", "Handoff already has a different Ghostget receipt");
       }
       this.#database.query(`
         UPDATE agent_message_handoffs SET
@@ -23091,7 +23094,7 @@ class LocalStore {
     if (exists5 === null)
       return "absent";
     const audit = this.handoffAudit(handoff.handoffId);
-    return audit.handoffSha256 === handoff.integrity.canonicalSha256 && audit.contactIdSha256 === sha256(handoff.contact.contactId) && audit.routeCandidateIdSha256 === sha256(handoff.contact.routeCandidateId) && audit.sourceIdSha256 === sha256(handoff.contact.sourceId) && audit.conversationIdSha256 === sha256(handoff.contact.conversationId) && audit.corpusRevision === handoff.evidence.corpusRevision && audit.sourceRevision === handoff.evidence.sourceRevision && audit.profileState === handoff.evidence.profileState && audit.profileEvidenceRevision === handoff.evidence.profileEvidenceRevision && audit.wrenchContractHash === handoff.wrench.contractHash && audit.routeRefSha256 === sha256(handoff.wrench.routeRef) && audit.contextRefSha256 === sha256(handoff.wrench.contextRef) && audit.exactDataRevisionSha256 === handoff.wrench.exactDataRevision && audit.latestMessageRevisionSha256 === handoff.wrench.latestMessageRevision && audit.turnDigest === wrenchMessagingTurnDigestV1(handoff) && audit.partCount === handoff.turn.bubbles.length && audit.createdAt === handoff.createdAt && audit.expiresAt === handoff.expiresAt ? "committed" : "different";
+    return audit.handoffSha256 === handoff.integrity.canonicalSha256 && audit.contactIdSha256 === sha256(handoff.contact.contactId) && audit.routeCandidateIdSha256 === sha256(handoff.contact.routeCandidateId) && audit.sourceIdSha256 === sha256(handoff.contact.sourceId) && audit.conversationIdSha256 === sha256(handoff.contact.conversationId) && audit.corpusRevision === handoff.evidence.corpusRevision && audit.sourceRevision === handoff.evidence.sourceRevision && audit.profileState === handoff.evidence.profileState && audit.profileEvidenceRevision === handoff.evidence.profileEvidenceRevision && audit.wrenchContractHash === handoff.wrench.contractHash && audit.routeRefSha256 === sha256(handoff.wrench.routeRef) && audit.contextRefSha256 === sha256(handoff.wrench.contextRef) && audit.exactDataRevisionSha256 === handoff.wrench.exactDataRevision && audit.latestMessageRevisionSha256 === handoff.wrench.latestMessageRevision && audit.turnDigest === ghostgetMessagingTurnDigestV1(handoff) && audit.partCount === handoff.turn.bubbles.length && audit.createdAt === handoff.createdAt && audit.expiresAt === handoff.expiresAt ? "committed" : "different";
   }
   applyProfile(profile, appliedAt) {
     const parsedProfile = parseStyleProfile(profile);
@@ -24590,7 +24593,7 @@ function commandPlatformLive(io, cleanupFailure) {
     applyProfile: (...args2) => attempt(() => store.applyProfile(...args2)),
     handoffPreparation: (...args2) => attempt(() => store.handoffPreparation(...args2)),
     recordPreparedHandoff: (...args2) => attempt(() => store.recordPreparedHandoff(...args2)).pipe(exports_Effect.mapError((failure) => failure.cause instanceof AgenticMessagingV1ContractError ? translatedFailure((error) => translateAgenticContractError(error, "Private handoff"), failure.cause) : failure)),
-    recordHandoffReceipt: (...args2) => attempt(() => store.recordHandoffReceipt(...args2)).pipe(exports_Effect.mapError((failure) => failure.cause instanceof AgenticMessagingV1ContractError ? translatedFailure((error) => translateAgenticContractError(error, "Private Wrench receipt file"), failure.cause) : failure)),
+    recordHandoffReceipt: (...args2) => attempt(() => store.recordHandoffReceipt(...args2)).pipe(exports_Effect.mapError((failure) => failure.cause instanceof AgenticMessagingV1ContractError ? translatedFailure((error) => translateAgenticContractError(error, "Private Ghostget receipt file"), failure.cause) : failure)),
     studyPacketReceiptStatus: (...args2) => attempt(() => store.studyPacketReceiptStatus(...args2)),
     preparedHandoffReceiptStatus: (...args2) => attempt(() => store.preparedHandoffReceiptStatus(...args2)),
     handoffAudit: (...args2) => attempt(() => store.handoffAudit(...args2)),
@@ -24664,10 +24667,14 @@ var VALUE_OPTIONS = new Set([
   "subject",
   "target",
   "draft",
-  "wrench-context",
-  "wrench-receipt"
+  "ghostget-context",
+  "ghostget-receipt"
 ]);
 var FLAG_OPTIONS = new Set(["force", "help", "json", "private", "version"]);
+var LEGACY_OPTION_ALIASES = new Map([
+  ["wrench-context", "ghostget-context"],
+  ["wrench-receipt", "ghostget-receipt"]
+]);
 function parseArguments(argv) {
   const positionals = [];
   const options = new Map;
@@ -24686,7 +24693,8 @@ function parseArguments(argv) {
       continue;
     }
     const separator = argument.indexOf("=");
-    const key = argument.slice(2, separator < 0 ? undefined : separator);
+    const suppliedKey = argument.slice(2, separator < 0 ? undefined : separator);
+    const key = LEGACY_OPTION_ALIASES.get(suppliedKey) ?? suppliedKey;
     if (key.length === 0)
       throw new CliError("usage", "Empty option name");
     if (VALUE_OPTIONS.has(key)) {
@@ -24742,7 +24750,7 @@ function rejectUnused(parsed, allowedOptions, allowedFlags) {
 import { isAbsolute as isAbsolute6, resolve as resolve8 } from "path";
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.8.7";
+var MESSAGE_LIKE_ME_VERSION = "0.8.8";
 
 // src/command-input.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -24778,9 +24786,9 @@ Usage:
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
   messagelikeme [--data-dir PATH] context CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] handoff prepare CONTACT_ID --request FILE
-                    --wrench-context FILE --draft FILE --output FILE [--json]
+                    --ghostget-context FILE --draft FILE --output FILE [--json]
   messagelikeme [--data-dir PATH] handoff verify FILE [--json]
-  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --ghostget-receipt FILE [--json]
   messagelikeme [--data-dir PATH] handoffs show HANDOFF_ID [--json]
   messagelikeme skill path [--json]
   messagelikeme skill install [--target codex|claude|agents] [--scope user|project]
@@ -27309,28 +27317,28 @@ function commandProgram(argv) {
       rejectUnused(parsed, [
         "data-dir",
         "request",
-        "wrench-context",
+        "ghostget-context",
         "draft",
         "output"
       ], ["json"]);
       const requestPath = absolutePrivatePath(parsed.options.get("request"), "--request");
-      const wrenchContextPath = absolutePrivatePath(parsed.options.get("wrench-context"), "--wrench-context");
+      const ghostgetContextPath = absolutePrivatePath(parsed.options.get("ghostget-context"), "--ghostget-context");
       const draftPath = absolutePrivatePath(parsed.options.get("draft"), "--draft");
       const output = absolutePrivatePath(parsed.options.get("output"), "--output");
-      if (new Set([requestPath, wrenchContextPath, draftPath, output]).size !== 4) {
-        return yield* exports_Effect.fail(commandFailure(new CliError("usage", "Handoff request, Wrench context, draft, and output paths must be different")));
+      if (new Set([requestPath, ghostgetContextPath, draftPath, output]).size !== 4) {
+        return yield* exports_Effect.fail(commandFailure(new CliError("usage", "Handoff request, Ghostget context, draft, and output paths must be different")));
       }
       const request2 = yield* platform2.readPrivateJson(requestPath, "Private handoff request file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.flatMap((value) => exports_Effect.try({ try: () => parseAgentMessageHandoffRequestV1(value), catch: commandFailure })), exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")));
-      const wrenchContext = yield* platform2.readPrivateJson(wrenchContextPath, "Private Wrench context file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.flatMap((value) => exports_Effect.try({ try: () => parseWrenchMessagingContextBindingV1(value), catch: commandFailure })), exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")));
+      const ghostgetContext = yield* platform2.readPrivateJson(ghostgetContextPath, "Private Ghostget context file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.flatMap((value) => exports_Effect.try({ try: () => parseGhostgetMessagingContextBindingV1(value), catch: commandFailure })), exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")));
       const draft = yield* platform2.readPrivateJson(draftPath, "Private draft file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.flatMap((value) => exports_Effect.try({ try: () => parseAgentMessageDraftV1(value), catch: commandFailure })), exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")));
       const createdAt = yield* platform2.now;
-      if (wrenchContext.validatedAt > createdAt || wrenchContext.expiresAt <= createdAt) {
-        return yield* exports_Effect.fail(commandFailure(new CliError("conflict", "The private Wrench context is not current; collect a fresh exact context")));
+      if (ghostgetContext.validatedAt > createdAt || ghostgetContext.expiresAt <= createdAt) {
+        return yield* exports_Effect.fail(commandFailure(new CliError("conflict", "The private Ghostget context is not current; collect a fresh exact context")));
       }
       const context5 = yield* platform2.existingSession(parsed.options.get("data-dir"));
       yield* exports_Effect.gen(function* () {
         const preparation = yield* context5.store.handoffPreparation(identifier5, request2.routeCandidateId);
-        const expiresAt = handoffExpiry(createdAt, wrenchContext.expiresAt, AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds);
+        const expiresAt = handoffExpiry(createdAt, ghostgetContext.expiresAt, AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds);
         const handoff = yield* exports_Effect.try({ try: () => createAgentMessageHandoffV1({
           createdAt,
           expiresAt,
@@ -27346,7 +27354,7 @@ function commandProgram(argv) {
             profileState: preparation.profileState,
             profileEvidenceRevision: preparation.profileEvidenceRevision
           },
-          wrenchContext,
+          ghostgetContext,
           draft
         }), catch: commandFailure });
         const audit = yield* artifacts.publishWithReceipt(output, prettyJson(handoff), context5.store.recordPreparedHandoff(handoff), context5.store.preparedHandoffReceiptStatus(handoff));
@@ -27375,7 +27383,7 @@ function commandProgram(argv) {
         contextRefSha256: handoff.wrench.contextRefSha256,
         exactDataRevisionSha256: handoff.wrench.exactDataRevision,
         latestMessageRevisionSha256: handoff.wrench.latestMessageRevision,
-        turnDigest: wrenchMessagingTurnDigestV1(handoff),
+        turnDigest: ghostgetMessagingTurnDigestV1(handoff),
         partCount: handoff.turn.bubbles.length,
         createdAt: handoff.createdAt,
         expiresAt: handoff.expiresAt,
@@ -27385,12 +27393,12 @@ function commandProgram(argv) {
       return;
     }
     if (command === "handoff" && subcommand === "record" && identifier5 !== undefined) {
-      rejectUnused(parsed, ["data-dir", "wrench-receipt"], ["json"]);
-      const receiptPath = absolutePrivatePath(parsed.options.get("wrench-receipt"), "--wrench-receipt");
-      const receipt = yield* platform2.readPrivateJson(receiptPath, "Private Wrench receipt file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private Wrench receipt file")));
+      rejectUnused(parsed, ["data-dir", "ghostget-receipt"], ["json"]);
+      const receiptPath = absolutePrivatePath(parsed.options.get("ghostget-receipt"), "--ghostget-receipt");
+      const receipt = yield* platform2.readPrivateJson(receiptPath, "Private Ghostget receipt file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(exports_Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private Ghostget receipt file")));
       const context5 = yield* platform2.existingSession(parsed.options.get("data-dir"));
-      const audit = yield* context5.store.recordHandoffReceipt(identifier5, receipt).pipe(exports_Effect.mapError((failure) => failure.cause instanceof AgenticMessagingV1ContractError ? agenticContractFailure(failure.cause, "Private Wrench receipt file") : failure));
-      yield* platform2.emit(json, audit, `Recorded body-free Wrench audit for ${audit.handoffId}`);
+      const audit = yield* context5.store.recordHandoffReceipt(identifier5, receipt).pipe(exports_Effect.mapError((failure) => failure.cause instanceof AgenticMessagingV1ContractError ? agenticContractFailure(failure.cause, "Private Ghostget receipt file") : failure));
+      yield* platform2.emit(json, audit, `Recorded body-free Ghostget audit for ${audit.handoffId}`);
       return;
     }
     if (command === "handoffs" && subcommand === "show" && identifier5 !== undefined) {

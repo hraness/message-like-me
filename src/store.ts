@@ -12,8 +12,8 @@ import { canonicalJson, sha256 } from "./canonical-json.ts";
 import {
   agentMessageRouteCandidateId,
   parseAgentMessageHandoffV1,
-  parseWrenchMessagingReceiptBindingV1,
-  wrenchMessagingTurnDigestV1,
+  parseGhostgetMessagingReceiptBindingV1,
+  ghostgetMessagingTurnDigestV1,
   type AgentMessageRouteCandidateV1,
 } from "./agentic-messaging-v1.ts";
 import {
@@ -1043,7 +1043,7 @@ function routeCandidatesForScope(
       sourceRevision: row.source_revision,
       actionability: Object.freeze(archive
         ? { state: "evidence-only" as const, reason: "archive-source" as const }
-        // Handoff v1 is intentionally direct-conversation only. Wrench can
+        // Handoff v1 is intentionally direct-conversation only. Ghostget can
         // independently bind exact provider groups; this local evidence
         // candidate cannot authorize one through the v1 Message Like Me seam.
         : group
@@ -4029,7 +4029,7 @@ export class LocalStore {
         handoff.wrench.contextRefSha256,
         handoff.wrench.exactDataRevision,
         handoff.wrench.latestMessageRevision,
-        wrenchMessagingTurnDigestV1(handoff),
+        ghostgetMessagingTurnDigestV1(handoff),
         handoff.turn.bubbles.length,
         handoff.createdAt,
         handoff.expiresAt,
@@ -4051,7 +4051,7 @@ export class LocalStore {
     if (!/^handoff_[a-f0-9]{64}$/u.test(handoffId)) {
       throw new CliError("usage", "Invalid handoff ID");
     }
-    const receipt = parseWrenchMessagingReceiptBindingV1(value);
+    const receipt = parseGhostgetMessagingReceiptBindingV1(value);
     transaction(this.#database, () => {
       const stored = get<{
         handoff_sha256: string;
@@ -4075,10 +4075,10 @@ export class LocalStore {
         || receipt.turnDigest !== stored.turn_digest_sha256
         || receipt.partCount !== stored.part_count
         || receipt.recordedAt < stored.created_at
-      ) throw new CliError("conflict", "Wrench receipt does not bind the recorded handoff");
+      ) throw new CliError("conflict", "Ghostget receipt does not bind the recorded handoff");
       if (stored.state === "recorded") {
         if (stored.receipt_sha256 === receipt.receiptSha256) return;
-        throw new CliError("conflict", "Handoff already has a different Wrench receipt");
+        throw new CliError("conflict", "Handoff already has a different Ghostget receipt");
       }
       this.#database.query(`
         UPDATE agent_message_handoffs SET
@@ -4332,7 +4332,7 @@ export class LocalStore {
       && audit.contextRefSha256 === sha256(handoff.wrench.contextRef)
       && audit.exactDataRevisionSha256 === handoff.wrench.exactDataRevision
       && audit.latestMessageRevisionSha256 === handoff.wrench.latestMessageRevision
-      && audit.turnDigest === wrenchMessagingTurnDigestV1(handoff)
+      && audit.turnDigest === ghostgetMessagingTurnDigestV1(handoff)
       && audit.partCount === handoff.turn.bubbles.length
       && audit.createdAt === handoff.createdAt && audit.expiresAt === handoff.expiresAt
       ? "committed" : "different";

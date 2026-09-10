@@ -2,19 +2,20 @@
 
 Beeper users can bring a bounded provider observation into Message Like Me's
 private local evidence layer without giving Message Like Me a provider
-credential or send access. Wrench writes a finished
+credential or send access. Ghostget writes a finished
 `message-like-me.local-message-bundle`; `messagelikeme ingest bundle` verifies
-and normalizes that directory. The importer never starts or calls Wrench, never
+and normalizes that directory. The importer never starts or calls Ghostget, never
 invokes a Beeper operation, and never sends. Like every Message Like Me ingest
 path, it is read-only with respect to its source.
 
 The currently verified producer is the local Beeper export in the
-[`@hraness/wrench@0.16.7`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.7)
-npm package:
+[`@hraness/ghostget@0.17.1`](https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz)
+canonical GitHub Release archive:
 
 ```sh
-bun add --global @hraness/wrench@0.16.7
-wrench beeper export-message-like-me \
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz
+ghostget adapter sync-bundled --json
+ghostget beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output <normalized-absolute-new-directory> \
   [--limit-chats <n>] \
@@ -32,11 +33,11 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.16.7 emits those coordinates through
+source-transform version `1.1.0`. Ghostget v0.17.1 emits those coordinates through
 adapter `beeper-local@2.4.0`. That adapter has 32 reviewed Beeper operations:
 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions
 and writes, plus six fixed Desktop loopback reads. The Message Like Me bundle is
-made by Wrench's separate internal bounded export, not by a Message Like Me
+made by Ghostget's separate internal bounded export, not by a Message Like Me
 provider operation. It fixes the raw export arguments, excludes attachments,
 and preserves incomplete-coverage evidence. It does not claim a complete
 Beeper history.
@@ -44,7 +45,7 @@ Beeper history.
 The pinned Beeper CLI executable reports version `0.6.2`; that executable is
 the runtime authority. At the upstream source tag,
 `packages/cli/package.json` declares `0.6.1`; that source-package value is
-provenance only and never overrides executable runtime identity. A later Wrench
+provenance only and never overrides executable runtime identity. A later Ghostget
 package release remains compatible only while its manifest still declares the
 same bundle schema, source ID, and `source.version: "1.1.0"`. Package age,
 adapter version, or a permissive package range never overrides those manifest
@@ -52,7 +53,7 @@ coordinates. The provider version records the pinned Beeper CLI used for
 capture and may change without changing the bundle contract.
 
 Message Like Me owns zero Beeper operations, credentials, or live sessions. It
-does not start or call Wrench, call the provider, or support sending. Its
+does not start or call Ghostget, call the provider, or support sending. Its
 authority begins at strict verification of the already finished private
 directory.
 

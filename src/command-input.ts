@@ -38,9 +38,9 @@ Usage:
   messagelikeme [--data-dir PATH] profile export CONTACT_ID --output FILE [--json]
   messagelikeme [--data-dir PATH] context CONTACT_ID [--json]
   messagelikeme [--data-dir PATH] handoff prepare CONTACT_ID --request FILE
-                    --wrench-context FILE --draft FILE --output FILE [--json]
+                    --ghostget-context FILE --draft FILE --output FILE [--json]
   messagelikeme [--data-dir PATH] handoff verify FILE [--json]
-  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+  messagelikeme [--data-dir PATH] handoff record HANDOFF_ID --ghostget-receipt FILE [--json]
   messagelikeme [--data-dir PATH] handoffs show HANDOFF_ID [--json]
   messagelikeme skill path [--json]
   messagelikeme skill install [--target codex|claude|agents] [--scope user|project]

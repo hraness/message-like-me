@@ -91,7 +91,7 @@ and message overlap or fail closed. Group DMs remain separate. Keep both
 provenances and treat the resulting exact-message dedupe as a source fact, not
 an identity inference.
 
-When the user supplies a finished Wrench/Beeper Message Like Me bundle, ingest
+When the user supplies a finished Ghostget/Beeper Message Like Me bundle, ingest
 only its normalized absolute directory path:
 
 ```sh
@@ -100,13 +100,13 @@ messagelikeme sources list --json
 ```
 
 Do not request or handle the Beeper credential, call Beeper directly, improvise
-a provider parser, or open the bundle's NDJSON files. Wrench owns provider
+a provider parser, or open the bundle's NDJSON files. Ghostget owns provider
 capture; Message Like Me owns strict verification, normalization, and local
 analysis. Use `sources show <source-id> --json` for redacted completeness and
 health. Add `--private` only when the user's task requires provider account
 metadata.
 
-When the user supplies a finished Wrench/Wacli native WhatsApp v2 bundle, use
+When the user supplies a finished Ghostget/Wacli native WhatsApp v2 bundle, use
 the same strict importer:
 
 ```sh
@@ -115,8 +115,8 @@ messagelikeme ingest bundle --input <absolute-private-whatsapp-bundle> --json
 
 Do not request or handle Wacli session state or WhatsApp linked-device
 authentication, call Wacli, inspect its database, synchronize the account, or
-open bundle records in agent context. Wrench owns those provider operations.
-The Wrench v0.16.7/Wacli v0.15.0 producer omits every reaction-shaped row and
+open bundle records in agent context. Ghostget owns those provider operations.
+The Ghostget v0.17.1/Wacli v0.15.0 producer omits every reaction-shaped row and
 reports `reaction-state-unproven` when it encounters one because current active
 or removed state is not durable. Treat that warning, and an empty reaction
 artifact from this producer, as unobservable reaction behavior. Do not infer
@@ -185,7 +185,7 @@ parameters changes the operational meaning of turns, sessions, and latency.
 
 Study packets, Ensoul source packets, evaluation packets, and explicit private
 handoffs are the only CLI exports that contain message bodies. A handoff is for
-bounded coordination with Wrench and is not evidence that anything was sent.
+bounded coordination with Ghostget and is not evidence that anything was sent.
 Retain the study
 command's JSON receipt and copy its `packetSha256`
 into the finished profile; the packet does not contain its own digest. Analyze
