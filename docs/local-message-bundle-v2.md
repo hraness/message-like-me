@@ -1,17 +1,18 @@
 # Local message bundle v2
 
 Local message bundle v2 is the native WhatsApp evidence boundary between a
-Wrench-owned Wacli adapter and Message Like Me. Wrench owns Wacli discovery,
+Ghostget-owned Wacli adapter and Message Like Me. Ghostget owns Wacli discovery,
 authentication, local synchronization, provider interpretation, and export.
 Message Like Me reads only the finished caller-owned directory. It never starts
-Wrench or Wacli, receives a WhatsApp credential or session database, accesses a
+Ghostget or Wacli, receives a WhatsApp credential or session database, accesses a
 network, or sends a message.
 
 The intended producer flow is:
 
 ```sh
-bun add --global @hraness/wrench@0.16.7
-wrench whatsapp export-message-like-me \
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+ghostget adapter sync-bundled --json
+ghostget whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
   --output /absolute/private/path/whatsapp-bundle
 
@@ -20,8 +21,8 @@ messagelikeme ingest bundle \
   --json
 ```
 
-The checked compatibility coordinates are Wrench v0.16.7 and official Wacli
-v0.15.0. Wrench owns that executable dependency and its authentication state;
+The checked compatibility coordinates are Ghostget v0.17.0 and official Wacli
+v0.15.0. Ghostget owns that executable dependency and its authentication state;
 neither enters Message Like Me.
 
 That exact producer excludes every reaction-shaped Wacli row. Wacli v0.15.0
@@ -89,7 +90,7 @@ byte disagreement, and SHA-256 disagreement. The same public bounds as v1
 apply, except v2 admits exactly one account.
 
 The v2 wire contract retains the fixed `reactions.ndjson` artifact and strict
-reaction parser for proven records. The checked Wrench v0.16.7/Wacli v0.15.0
+reaction parser for proven records. The checked Ghostget v0.17.0/Wacli v0.15.0
 producer leaves that artifact empty because it cannot prove current reaction
 state.
 
@@ -162,7 +163,7 @@ duplicates cannot prove equivalence.
 
 Both source provenances and all source-unique history remain stored. Proven
 message duplicates contribute once. A reaction can deduplicate only when a
-conforming producer supplies a proven reaction record; Wrench v0.16.7 supplies
+conforming producer supplies a proven reaction record; Ghostget v0.17.0 supplies
 none, so this overlap path does not reconcile reaction state. The native Wacli
 conversation is the preferred action route and carries the exact private
 `whatsappJid` coordinate. Its proven Beeper duplicate remains evidence with
@@ -177,6 +178,6 @@ handles, account coordinates, message bodies, and source metadata stay in the
 private store or explicit owner-only artifacts.
 
 Message Like Me may write an exact `whatsappJid` route into an explicit
-mode-`0600` route inventory. That coordinate is evidence for a separate Wrench
+mode-`0600` route inventory. That coordinate is evidence for a separate Ghostget
 binding and preview. Message Like Me does not authenticate, synchronize,
 preview, submit, or send through WhatsApp.

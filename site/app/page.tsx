@@ -54,7 +54,7 @@ const HOME_QUESTIONS = [
   {
     question: 'Which sources are supported?',
     answer:
-      'Apple Messages, caller-owned X data archives, bounded Beeper and native WhatsApp bundles exported through compatible Wrench releases, and optional macOS Contacts labels. Every path is read-only; Messages, Contacts, archives, and bundles are never changed.',
+      'Apple Messages, caller-owned X data archives, bounded Beeper and native WhatsApp bundles exported through compatible Ghostget releases, and optional macOS Contacts labels. Every path is read-only; Messages, Contacts, archives, and bundles are never changed.',
   },
   {
     question: 'What does it cost?',
@@ -161,7 +161,7 @@ export default function Home() {
             pillars={[
               {
                 label: 'Read your history',
-                summary: 'Read Apple Messages, an X archive, or a Beeper or WhatsApp bundle from Wrench without changing any of them.',
+                summary: 'Read Apple Messages, an X archive, or a Beeper or WhatsApp bundle from Ghostget without changing any of them.',
               },
               {
                 label: 'Understand',
@@ -179,7 +179,7 @@ export default function Home() {
             headingId="sources-title"
             id="sources"
             label="Supported sources"
-            summary="Read Apple Messages or an X archive directly. For Beeper and WhatsApp, import a finished local export from Wrench. Contacts can add familiar names. Expand a source for its import command and limits."
+            summary="Read Apple Messages or an X archive directly. For Beeper and WhatsApp, import a finished local export from Ghostget. Contacts can add familiar names. Expand a source for its import command and limits."
           >
             <div className="source-grid">
               {SUPPORTED_SOURCES.map((source) => (
@@ -204,7 +204,7 @@ export default function Home() {
               steps={[
                 {
                   code: 'messagelikeme ingest imessage --json',
-                  detail: 'Read a stable copy of Apple Messages, or bring an X archive or a Wrench bundle. Nothing in the source changes.',
+                  detail: 'Read a stable copy of Apple Messages, or bring an X archive or a Ghostget bundle. Nothing in the source changes.',
                   label: 'Read history',
                 },
                 {

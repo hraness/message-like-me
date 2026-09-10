@@ -107,7 +107,7 @@ export function commandPlatformLive(io: CommandIo,
         ? translatedFailure((error) => translateAgenticContractError(error, "Private handoff"), failure.cause) : failure)),
     recordHandoffReceipt: (...args) => attempt(() => store.recordHandoffReceipt(...args)).pipe(Effect.mapError((failure) =>
       failure.cause instanceof AgenticMessagingV1ContractError
-        ? translatedFailure((error) => translateAgenticContractError(error, "Private Wrench receipt file"), failure.cause) : failure)),
+        ? translatedFailure((error) => translateAgenticContractError(error, "Private Ghostget receipt file"), failure.cause) : failure)),
     studyPacketReceiptStatus: (...args) => attempt(() => store.studyPacketReceiptStatus(...args)),
     preparedHandoffReceiptStatus: (...args) => attempt(() => store.preparedHandoffReceiptStatus(...args)),
     handoffAudit: (...args) => attempt(() => store.handoffAudit(...args)),

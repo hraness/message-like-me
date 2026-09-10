@@ -8,10 +8,10 @@ import { CliError, errorMessage, exitCodeFor } from "./errors.ts";
 import { PrivatePublicationError } from "./private-publication.ts";
 import { main } from "./cli.ts";
 import {
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
 } from "./agentic-messaging-v1.ts";
 import { canonicalJson, sha256 } from "./canonical-json.ts";
 import type { EnsoulMessagesSourcePacketV1 } from "./ensoul-source-v1.ts";
@@ -419,8 +419,8 @@ describe("messagelikeme CLI", () => {
       await writeFile(contextPath, `${JSON.stringify({
         schemaVersion: 1,
         format: "wrench.messaging-context-binding",
-        contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-        contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+        contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+        contractHash: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
         routeRef,
         contextRef,
         exactDataRevision: "d".repeat(64),
@@ -440,7 +440,7 @@ describe("messagelikeme CLI", () => {
       expect(await main([
         "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
         "--request", requestPath,
-        "--wrench-context", contextPath,
+        "--ghostget-context", contextPath,
         "--draft", draftPath,
         "--output", handoffPath,
         "--json",
@@ -476,7 +476,7 @@ describe("messagelikeme CLI", () => {
       try {
         let failed: unknown;
         try { await runCommand(["--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
-          "--request", requestPath, "--wrench-context", contextPath, "--draft", draftPath, "--output", recoveredPath, "--json"], capture.io); }
+          "--request", requestPath, "--ghostget-context", contextPath, "--draft", draftPath, "--output", recoveredPath, "--json"], capture.io); }
         catch (error) { failed = error; }
         expect(failed).toBeInstanceOf(PrivatePublicationError);
         expect(errorMessage(failed)).toBe(auditFailure.message);
@@ -513,8 +513,8 @@ describe("messagelikeme CLI", () => {
       const receiptCore = {
         schemaVersion: 1,
         format: "wrench.messaging-receipt-binding",
-        contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
-        contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+        contractId: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+        contractHash: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
         clientIntentSha256: prepared.handoffSha256,
         routeRefSha256: sha256(routeRef),
         contextRefSha256: sha256(contextRef),
@@ -534,14 +534,14 @@ describe("messagelikeme CLI", () => {
       capture.clear();
       expect(await main([
         "--data-dir", state, "handoff", "record", prepared.handoffId,
-        "--wrench-receipt", receiptPath, "--json",
+        "--ghostget-receipt", receiptPath, "--json",
       ], capture.io)).toBe(0);
       const recordedOutput = capture.stdout();
       expect(JSON.parse(recordedOutput)).toMatchObject({
         handoffId: prepared.handoffId,
         state: "recorded",
         receipt: {
-          contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+          contractHash: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
           receiptSha256,
           previewDigest: "9".repeat(64),
           runIdSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
@@ -587,7 +587,7 @@ describe("messagelikeme CLI", () => {
       expect(await main([
         "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
         "--request", requestPath,
-        "--wrench-context", contextPath,
+        "--ghostget-context", contextPath,
         "--draft", draftPath,
         "--output", join(root, "unsafe-output.json"),
         "--json",
@@ -602,7 +602,7 @@ describe("messagelikeme CLI", () => {
       expect(await main([
         "--data-dir", state, "handoff", "prepare", "contact_0123456789abcdef",
         "--request", requestPath,
-        "--wrench-context", linkedContext,
+        "--ghostget-context", linkedContext,
         "--draft", draftPath,
         "--output", join(root, "linked-output.json"),
         "--json",
@@ -1219,8 +1219,8 @@ describe("typed command failure translations", () => {
       const raw = new Error(detail);
       const request = { schemaVersion: 1, format: "message-like-me.agent-message-handoff-request", routeCandidateId: `route_${"a".repeat(64)}` };
       const context = { schemaVersion: 1, format: "wrench.messaging-context-binding",
-        contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-        contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+        contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+        contractHash: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
         routeRef: "synthetic_route", contextRef: "synthetic_context", exactDataRevision: "a".repeat(64), latestMessageRevision: "b".repeat(64),
         validatedAt: "2026-08-21T11:59:00.000Z", expiresAt: "2026-08-21T12:10:00.000Z" };
       const reader = spyOn(privateJson, "readStablePrivateJson").mockImplementation(async (path) => {
@@ -1229,11 +1229,11 @@ describe("typed command failure translations", () => {
       });
       const capture = ioCapture();
       const args = stage === "verify" ? ["handoff", "verify", "/synthetic/verify.json", "--json"]
-        : stage === "receipt" ? ["handoff", "record", "synthetic_handoff", "--wrench-receipt", "/synthetic/receipt.json", "--json"]
-        : ["handoff", "prepare", "synthetic_contact", "--request", "/synthetic/request.json", "--wrench-context", "/synthetic/context.json", "--draft", "/synthetic/draft.json", "--output", "/synthetic/output.json", "--json"];
+        : stage === "receipt" ? ["handoff", "record", "synthetic_handoff", "--ghostget-receipt", "/synthetic/receipt.json", "--json"]
+        : ["handoff", "prepare", "synthetic_contact", "--request", "/synthetic/request.json", "--ghostget-context", "/synthetic/context.json", "--draft", "/synthetic/draft.json", "--output", "/synthetic/output.json", "--json"];
       try {
         expect(await main(args, capture.io)).toBe(7);
-        const label = stage === "verify" ? "Private handoff file" : stage === "receipt" ? "Private Wrench receipt file" : "Private handoff input";
+        const label = stage === "verify" ? "Private handoff file" : stage === "receipt" ? "Private Ghostget receipt file" : "Private handoff input";
         expect(capture.stderr()).toBe(`${label} could not be validated safely\n`);
         expect(capture.stderr()).not.toContain(detail);
         expect(capture.stdout()).toBe("");

@@ -3,19 +3,19 @@ export declare const AGENT_MESSAGE_DRAFT_V1_FORMAT: "message-like-me.agent-messa
 export declare const AGENT_MESSAGE_HANDOFF_REQUEST_V1_FORMAT: "message-like-me.agent-message-handoff-request";
 export declare const AGENT_MESSAGE_HANDOFF_V1_FORMAT: "message-like-me.agent-message-handoff";
 export declare const AGENT_MESSAGE_AUDIT_V1_FORMAT: "message-like-me.agent-message-handoff-audit";
-export declare const WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT: "wrench.messaging-context-binding";
-export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT: "wrench.messaging-receipt-binding";
-export declare const WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID: "wrench.messaging-context-binding.v1";
-export declare const WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH: "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
-export declare const WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR: Readonly<{
+export declare const GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT: "wrench.messaging-context-binding";
+export declare const GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT: "wrench.messaging-receipt-binding";
+export declare const GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID: "wrench.messaging-context-binding.v1";
+export declare const GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH: "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
+export declare const GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR: Readonly<{
     contractId: "wrench.messaging-context-binding.v1";
     fields: readonly string[];
     format: "wrench.messaging-contract-descriptor";
     schemaVersion: 1;
 }>;
-export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID: "wrench.messaging-receipt-binding.v1";
-export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH: "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
-export declare const WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR: Readonly<{
+export declare const GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID: "wrench.messaging-receipt-binding.v1";
+export declare const GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH: "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
+export declare const GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR: Readonly<{
     contractId: "wrench.messaging-receipt-binding.v1";
     fields: readonly string[];
     format: "wrench.messaging-contract-descriptor";
@@ -30,11 +30,11 @@ export declare const AGENTIC_MESSAGING_V1_LIMITS: Readonly<{
     readonly handoffLifetimeMilliseconds: number;
     readonly maximumContextLifetimeMilliseconds: number;
 }>;
-export type WrenchMessagingContextBindingV1 = Readonly<{
+export type GhostgetMessagingContextBindingV1 = Readonly<{
     schemaVersion: typeof AGENTIC_MESSAGING_V1_SCHEMA_VERSION;
-    format: typeof WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT;
-    contractId: typeof WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID;
-    contractHash: typeof WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH;
+    format: typeof GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT;
+    contractId: typeof GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID;
+    contractHash: typeof GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH;
     routeRef: string;
     contextRef: string;
     exactDataRevision: string;
@@ -77,8 +77,8 @@ export type AgentMessageHandoffV1 = Readonly<{
         profileEvidenceRevision: string | null;
     }>;
     wrench: Readonly<{
-        contractId: typeof WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID;
-        contractHash: typeof WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH;
+        contractId: typeof GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID;
+        contractHash: typeof GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH;
         routeRef: string;
         routeRefSha256: string;
         contextRef: string;
@@ -140,19 +140,19 @@ export type AgentMessageRouteCandidateV1 = Readonly<{
         }>;
     }> | null;
 }>;
-export type WrenchMessagingReceiptStateV1 = "failed" | "indeterminate" | "partial" | "submitted";
-export type WrenchMessagingReceiptBindingV1 = Readonly<{
+export type GhostgetMessagingReceiptStateV1 = "failed" | "indeterminate" | "partial" | "submitted";
+export type GhostgetMessagingReceiptBindingV1 = Readonly<{
     schemaVersion: typeof AGENTIC_MESSAGING_V1_SCHEMA_VERSION;
-    format: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT;
-    contractId: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID;
-    contractHash: typeof WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH;
+    format: typeof GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT;
+    contractId: typeof GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID;
+    contractHash: typeof GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH;
     clientIntentSha256: string;
     routeRefSha256: string;
     contextRefSha256: string;
     turnDigest: string;
     previewDigest: string;
     runId: string;
-    state: WrenchMessagingReceiptStateV1;
+    state: GhostgetMessagingReceiptStateV1;
     partCount: number;
     provenPartCount: number;
     receiptSha256: string;
@@ -162,7 +162,7 @@ export declare class AgenticMessagingV1ContractError extends TypeError {
     readonly code: "agentic-messaging-v1-contract";
     constructor(message: string, options?: ErrorOptions);
 }
-export declare function parseWrenchMessagingContextBindingV1(value: unknown): WrenchMessagingContextBindingV1;
+export declare function parseGhostgetMessagingContextBindingV1(value: unknown): GhostgetMessagingContextBindingV1;
 export declare function parseAgentMessageDraftV1(value: unknown): AgentMessageDraftV1;
 export declare function parseAgentMessageHandoffRequestV1(value: unknown): AgentMessageHandoffRequestV1;
 export declare function createAgentMessageHandoffV1(input: Readonly<{
@@ -170,10 +170,29 @@ export declare function createAgentMessageHandoffV1(input: Readonly<{
     expiresAt: string;
     contact: AgentMessageHandoffV1["contact"];
     evidence: AgentMessageHandoffV1["evidence"];
-    wrenchContext: WrenchMessagingContextBindingV1;
     draft: AgentMessageDraftV1;
-}>): AgentMessageHandoffV1;
+} & ({
+    ghostgetContext: GhostgetMessagingContextBindingV1;
+    wrenchContext?: never;
+} | {
+    ghostgetContext?: never;
+    wrenchContext: GhostgetMessagingContextBindingV1;
+})>): AgentMessageHandoffV1;
 export declare function parseAgentMessageHandoffV1(value: unknown): AgentMessageHandoffV1;
-export declare function wrenchMessagingTurnDigestV1(value: unknown): string;
-export declare function parseWrenchMessagingReceiptBindingV1(value: unknown): WrenchMessagingReceiptBindingV1;
+export declare function ghostgetMessagingTurnDigestV1(value: unknown): string;
+export declare function parseGhostgetMessagingReceiptBindingV1(value: unknown): GhostgetMessagingReceiptBindingV1;
 export declare function agentMessageRouteCandidateId(sourceId: string, conversationId: string): string;
+export { GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT as WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT };
+export { GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT as WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT };
+export { GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID };
+export { GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH };
+export { GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR };
+export { GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID };
+export { GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH };
+export { GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR };
+export { type GhostgetMessagingContextBindingV1 as WrenchMessagingContextBindingV1 };
+export { type GhostgetMessagingReceiptStateV1 as WrenchMessagingReceiptStateV1 };
+export { type GhostgetMessagingReceiptBindingV1 as WrenchMessagingReceiptBindingV1 };
+export { parseGhostgetMessagingContextBindingV1 as parseWrenchMessagingContextBindingV1 };
+export { ghostgetMessagingTurnDigestV1 as wrenchMessagingTurnDigestV1 };
+export { parseGhostgetMessagingReceiptBindingV1 as parseWrenchMessagingReceiptBindingV1 };

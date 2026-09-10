@@ -1,11 +1,9 @@
 import type { SupportedSourceId } from '../_lib/sources';
 
-function WrenchMark() {
+function GhostgetMark() {
   return (
-    <g data-mark-tool="wrench">
-      <path d="M24 35 36 23" />
-      <circle cx="22" cy="37" r="2.5" />
-      <path d="M32 15a6 6 0 0 0 7 7l-4-4 4-4a6 6 0 0 0-7 1Z" />
+    <g data-mark-tool="ghostget">
+      <path d="M40 23a9 9 0 1 0 1 14v-7h-8" />
     </g>
   );
 }
@@ -25,7 +23,7 @@ function SourceArtwork({ sourceId }: { sourceId: SupportedSourceId }) {
           <circle cx="31" cy="21.5" r="1.25" />
         </>
       );
-    case 'beeper-via-wrench':
+    case 'beeper-via-ghostget':
       return (
         <>
           <g data-mark-provider="beeper">
@@ -33,10 +31,10 @@ function SourceArtwork({ sourceId }: { sourceId: SupportedSourceId }) {
             <path d="M12 22v4l5-4" />
             <rect x="10" y="25" width="15" height="9" rx="3" />
           </g>
-          <WrenchMark />
+          <GhostgetMark />
         </>
       );
-    case 'whatsapp-via-wrench':
+    case 'whatsapp-via-ghostget':
       return (
         <>
           <g data-mark-provider="whatsapp">
@@ -44,7 +42,7 @@ function SourceArtwork({ sourceId }: { sourceId: SupportedSourceId }) {
             <path d="m9 29 2-6" />
             <path d="M12 13c1 5 4 8 9 9l2-3-3-2-2 2c-2-1-3-2-4-4l2-2-2-3Z" />
           </g>
-          <WrenchMark />
+          <GhostgetMark />
         </>
       );
     case 'x-data-archive':

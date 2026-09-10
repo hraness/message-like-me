@@ -11,12 +11,12 @@ var AGENT_MESSAGE_DRAFT_V1_FORMAT = "message-like-me.agent-message-draft";
 var AGENT_MESSAGE_HANDOFF_REQUEST_V1_FORMAT = "message-like-me.agent-message-handoff-request";
 var AGENT_MESSAGE_HANDOFF_V1_FORMAT = "message-like-me.agent-message-handoff";
 var AGENT_MESSAGE_AUDIT_V1_FORMAT = "message-like-me.agent-message-handoff-audit";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT = "wrench.messaging-context-binding";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT = "wrench.messaging-receipt-binding";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID = "wrench.messaging-context-binding.v1";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH = "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
-var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
-  contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT = "wrench.messaging-context-binding";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT = "wrench.messaging-receipt-binding";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID = "wrench.messaging-context-binding.v1";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH = "5e64da6a3d826e7f6fa3db7dca0a4ba92c10cfb784981e71a25aed9513a5c687";
+var GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
+  contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
     "schemaVersion:1",
     "format:wrench.messaging-context-binding",
@@ -32,10 +32,10 @@ var WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
   format: "wrench.messaging-contract-descriptor",
   schemaVersion: 1
 });
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID = "wrench.messaging-receipt-binding.v1";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
-var WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
-  contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID = "wrench.messaging-receipt-binding.v1";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH = "7f6cf724f0200b2399e4f4641c637b20b48914fc5c9b13755127a8ec69fe66f4";
+var GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR = Object.freeze({
+  contractId: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
   fields: Object.freeze([
     "schemaVersion:1",
     "format:wrench.messaging-receipt-binding",
@@ -191,8 +191,8 @@ function handoffCore(value) {
 function handoffDigest(value) {
   return sha256(canonicalJson(handoffCore(value)));
 }
-function parseWrenchMessagingContextBindingV1(value) {
-  const record = object(value, "Wrench messaging context binding");
+function parseGhostgetMessagingContextBindingV1(value) {
+  const record = object(value, "Ghostget messaging context binding");
   exactKeys(record, [
     "schemaVersion",
     "format",
@@ -204,26 +204,26 @@ function parseWrenchMessagingContextBindingV1(value) {
     "latestMessageRevision",
     "validatedAt",
     "expiresAt"
-  ], "Wrench messaging context binding");
-  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT)
-    return fail("Wrench messaging context binding has the wrong schemaVersion or format");
-  if (record.contractId !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID || record.contractHash !== WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH)
-    return fail("Wrench messaging context binding has an unsupported contract identity");
-  const validatedAt = timestamp(record.validatedAt, "Wrench messaging context binding.validatedAt");
-  const expiresAt = timestamp(record.expiresAt, "Wrench messaging context binding.expiresAt");
+  ], "Ghostget messaging context binding");
+  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT)
+    return fail("Ghostget messaging context binding has the wrong schemaVersion or format");
+  if (record.contractId !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID || record.contractHash !== GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH)
+    return fail("Ghostget messaging context binding has an unsupported contract identity");
+  const validatedAt = timestamp(record.validatedAt, "Ghostget messaging context binding.validatedAt");
+  const expiresAt = timestamp(record.expiresAt, "Ghostget messaging context binding.expiresAt");
   const lifetime = Date.parse(expiresAt) - Date.parse(validatedAt);
   if (lifetime <= 0 || lifetime > AGENTIC_MESSAGING_V1_LIMITS.maximumContextLifetimeMilliseconds) {
-    return fail("Wrench messaging context binding has an invalid lifetime");
+    return fail("Ghostget messaging context binding has an invalid lifetime");
   }
   return Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
-    contractId: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-    contractHash: WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
-    routeRef: identifier(record.routeRef, "Wrench messaging context binding.routeRef"),
-    contextRef: identifier(record.contextRef, "Wrench messaging context binding.contextRef"),
-    exactDataRevision: digest(record.exactDataRevision, "Wrench messaging context binding.exactDataRevision"),
-    latestMessageRevision: digest(record.latestMessageRevision, "Wrench messaging context binding.latestMessageRevision"),
+    format: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+    contractId: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+    contractHash: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+    routeRef: identifier(record.routeRef, "Ghostget messaging context binding.routeRef"),
+    contextRef: identifier(record.contextRef, "Ghostget messaging context binding.contextRef"),
+    exactDataRevision: digest(record.exactDataRevision, "Ghostget messaging context binding.exactDataRevision"),
+    latestMessageRevision: digest(record.latestMessageRevision, "Ghostget messaging context binding.latestMessageRevision"),
     validatedAt,
     expiresAt
   });
@@ -251,7 +251,10 @@ function parseAgentMessageHandoffRequestV1(value) {
   });
 }
 function createAgentMessageHandoffV1(input) {
-  const context = parseWrenchMessagingContextBindingV1(input.wrenchContext);
+  if (input.ghostgetContext !== undefined && input.wrenchContext !== undefined) {
+    return fail("Choose ghostgetContext or its legacy wrenchContext alias, not both");
+  }
+  const context = parseGhostgetMessagingContextBindingV1(input.ghostgetContext ?? input.wrenchContext);
   const draft = parseAgentMessageDraftV1(input.draft);
   const core = Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
@@ -298,7 +301,7 @@ function createAgentMessageHandoffV1(input) {
     return fail("Agent message handoff timestamps are inconsistent");
   }
   if (core.expiresAt > core.wrench.contextExpiresAt) {
-    return fail("Agent message handoff outlives its Wrench context binding");
+    return fail("Agent message handoff outlives its Ghostget context binding");
   }
   const canonicalSha256 = handoffDigest(core);
   return Object.freeze({
@@ -362,9 +365,9 @@ function parseAgentMessageHandoffV1(value) {
   exactKeys(integrityRecord, ["algorithm", "canonicalSha256"], "Agent message handoff.integrity");
   if (integrityRecord.algorithm !== "sha256")
     return fail("Agent message handoff integrity algorithm must be sha256");
-  const context = parseWrenchMessagingContextBindingV1({
+  const context = parseGhostgetMessagingContextBindingV1({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+    format: GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
     contractId: wrenchRecord.contractId,
     contractHash: wrenchRecord.contractHash,
     routeRef: wrenchRecord.routeRef,
@@ -389,7 +392,7 @@ function parseAgentMessageHandoffV1(value) {
       profileState: profileState(evidenceRecord.profileState, "Agent message handoff.evidence.profileState"),
       profileEvidenceRevision: evidenceRecord.profileEvidenceRevision === null ? null : digest(evidenceRecord.profileEvidenceRevision, "Agent message handoff.evidence.profileEvidenceRevision")
     },
-    wrenchContext: context,
+    ghostgetContext: context,
     draft: {
       schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
       format: AGENT_MESSAGE_DRAFT_V1_FORMAT,
@@ -403,7 +406,7 @@ function parseAgentMessageHandoffV1(value) {
     return fail("Agent message handoff integrity does not match its canonical content");
   return handoff;
 }
-function wrenchMessagingTurnDigestV1(value) {
+function ghostgetMessagingTurnDigestV1(value) {
   const handoff = parseAgentMessageHandoffV1(value);
   return sha256(canonicalJson({
     schemaVersion: 1,
@@ -418,8 +421,8 @@ function wrenchMessagingTurnDigestV1(value) {
     }))
   }));
 }
-function parseWrenchMessagingReceiptBindingV1(value) {
-  const record = object(value, "Wrench messaging receipt binding");
+function parseGhostgetMessagingReceiptBindingV1(value) {
+  const record = object(value, "Ghostget messaging receipt binding");
   exactKeys(record, [
     "schemaVersion",
     "format",
@@ -436,42 +439,42 @@ function parseWrenchMessagingReceiptBindingV1(value) {
     "provenPartCount",
     "receiptSha256",
     "recordedAt"
-  ], "Wrench messaging receipt binding");
-  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT)
-    return fail("Wrench messaging receipt binding has the wrong schemaVersion or format");
-  if (record.contractId !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID || record.contractHash !== WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH)
-    return fail("Wrench messaging receipt binding has an unsupported contract identity");
+  ], "Ghostget messaging receipt binding");
+  if (record.schemaVersion !== AGENTIC_MESSAGING_V1_SCHEMA_VERSION || record.format !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT)
+    return fail("Ghostget messaging receipt binding has the wrong schemaVersion or format");
+  if (record.contractId !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID || record.contractHash !== GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH)
+    return fail("Ghostget messaging receipt binding has an unsupported contract identity");
   if (record.state !== "submitted" && record.state !== "failed" && record.state !== "partial" && record.state !== "indeterminate")
-    return fail("Wrench messaging receipt binding has an invalid state");
+    return fail("Ghostget messaging receipt binding has an invalid state");
   if (!Number.isSafeInteger(record.partCount) || record.partCount < 1 || record.partCount > 8) {
-    return fail("Wrench messaging receipt binding.partCount must be from 1 through 8");
+    return fail("Ghostget messaging receipt binding.partCount must be from 1 through 8");
   }
   if (!Number.isSafeInteger(record.provenPartCount) || record.provenPartCount < 0 || record.provenPartCount > record.partCount)
-    return fail("Wrench messaging receipt binding.provenPartCount is out of range");
+    return fail("Ghostget messaging receipt binding.provenPartCount is out of range");
   const partCount = record.partCount;
   const provenPartCount = record.provenPartCount;
   if (record.state === "submitted" && provenPartCount !== partCount || record.state === "failed" && provenPartCount !== 0 || record.state === "partial" && (provenPartCount < 1 || provenPartCount >= partCount) || record.state === "indeterminate" && provenPartCount >= partCount)
-    return fail("Wrench messaging receipt binding state does not match its proven prefix");
+    return fail("Ghostget messaging receipt binding state does not match its proven prefix");
   const parsed = Object.freeze({
     schemaVersion: AGENTIC_MESSAGING_V1_SCHEMA_VERSION,
-    format: WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
-    contractId: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
-    contractHash: WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-    clientIntentSha256: digest(record.clientIntentSha256, "Wrench messaging receipt binding.clientIntentSha256"),
-    routeRefSha256: digest(record.routeRefSha256, "Wrench messaging receipt binding.routeRefSha256"),
-    contextRefSha256: digest(record.contextRefSha256, "Wrench messaging receipt binding.contextRefSha256"),
-    turnDigest: digest(record.turnDigest, "Wrench messaging receipt binding.turnDigest"),
-    previewDigest: digest(record.previewDigest, "Wrench messaging receipt binding.previewDigest"),
-    runId: identifier(record.runId, "Wrench messaging receipt binding.runId", 256),
+    format: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
+    contractId: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+    contractHash: GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+    clientIntentSha256: digest(record.clientIntentSha256, "Ghostget messaging receipt binding.clientIntentSha256"),
+    routeRefSha256: digest(record.routeRefSha256, "Ghostget messaging receipt binding.routeRefSha256"),
+    contextRefSha256: digest(record.contextRefSha256, "Ghostget messaging receipt binding.contextRefSha256"),
+    turnDigest: digest(record.turnDigest, "Ghostget messaging receipt binding.turnDigest"),
+    previewDigest: digest(record.previewDigest, "Ghostget messaging receipt binding.previewDigest"),
+    runId: identifier(record.runId, "Ghostget messaging receipt binding.runId", 256),
     state: record.state,
     partCount,
     provenPartCount,
-    receiptSha256: digest(record.receiptSha256, "Wrench messaging receipt binding.receiptSha256"),
-    recordedAt: timestamp(record.recordedAt, "Wrench messaging receipt binding.recordedAt")
+    receiptSha256: digest(record.receiptSha256, "Ghostget messaging receipt binding.receiptSha256"),
+    recordedAt: timestamp(record.recordedAt, "Ghostget messaging receipt binding.recordedAt")
   });
   const { receiptSha256, ...receiptCore } = parsed;
   if (sha256(canonicalJson(receiptCore)) !== receiptSha256) {
-    return fail("Wrench messaging receipt binding receiptSha256 does not match its canonical content");
+    return fail("Ghostget messaging receipt binding receiptSha256 does not match its canonical content");
   }
   return parsed;
 }
@@ -482,22 +485,33 @@ function agentMessageRouteCandidateId(sourceId, conversationId) {
   }))}`;
 }
 export {
-  wrenchMessagingTurnDigestV1,
-  parseWrenchMessagingReceiptBindingV1,
-  parseWrenchMessagingContextBindingV1,
+  ghostgetMessagingTurnDigestV1 as wrenchMessagingTurnDigestV1,
+  parseGhostgetMessagingReceiptBindingV1 as parseWrenchMessagingReceiptBindingV1,
+  parseGhostgetMessagingContextBindingV1 as parseWrenchMessagingContextBindingV1,
+  parseGhostgetMessagingReceiptBindingV1,
+  parseGhostgetMessagingContextBindingV1,
   parseAgentMessageHandoffV1,
   parseAgentMessageHandoffRequestV1,
   parseAgentMessageDraftV1,
+  ghostgetMessagingTurnDigestV1,
   createAgentMessageHandoffV1,
   agentMessageRouteCandidateId,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
-  WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR,
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
-  WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT as WRENCH_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR as WRENCH_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT as WRENCH_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR as WRENCH_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_FORMAT,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_RECEIPT_BINDING_V1_CONTRACT_DESCRIPTOR,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_FORMAT,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_ID,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_HASH,
+  GHOSTGET_MESSAGING_CONTEXT_BINDING_V1_CONTRACT_DESCRIPTOR,
   AgenticMessagingV1ContractError,
   AGENT_MESSAGE_HANDOFF_V1_FORMAT,
   AGENT_MESSAGE_HANDOFF_REQUEST_V1_FORMAT,

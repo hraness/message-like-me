@@ -67,7 +67,7 @@ export default function AboutPage() {
             <p>
               Message Like Me reads Apple Messages locally, caller-owned X archive
               DMs, bounded Beeper exports, and native WhatsApp evidence made through
-              Wrench. Optional macOS Contacts adds exact local labels. Each source
+              Ghostget. Optional macOS Contacts adds exact local labels. Each source
               retains its own provenance and observability limits.
             </p>
             <Link href="/sources">Compare the source boundaries →</Link>

@@ -12,9 +12,9 @@ Like Me and Ensoul Agent Skills teach Codex, Claude, and other coding agents how
 to interpret those artifacts through the agent environment you already use.
 
 Beeper users can bring a bounded observation from supported connected accounts
-into the same private evidence layer as Apple Messages. Wrench writes a finished
+into the same private evidence layer as Apple Messages. Ghostget writes a finished
 local bundle; Message Like Me verifies and ingests that directory. It receives
-no provider credentials, never calls Wrench or a Beeper operation, and never
+no provider credentials, never calls Ghostget or a Beeper operation, and never
 sends. Every ingest path is read-only with respect to its source.
 
 The result is an inspectable evidence layer for relationship-aware drafting,
@@ -43,7 +43,7 @@ Message Like Me requires Bun 1.3.14 or newer. Install the exact public npm
 package, then install both bundled Agent Skills:
 
 ```sh
-bun add --global @hraness/message-like-me@0.8.7
+bun add --global @hraness/message-like-me@0.8.8
 messagelikeme skill install
 ```
 
@@ -107,8 +107,8 @@ visibly instead of being treated as current.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Wrench | A finished local bundle from Wrench v0.16.7 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls Wrench or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
-| WhatsApp via Wrench | A one-account native bundle produced by Wrench v0.16.7 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
+| Beeper via Ghostget | A finished local bundle from Ghostget v0.17.0 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
+| WhatsApp via Ghostget | A one-account native bundle produced by Ghostget v0.17.0 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Add private local history
@@ -187,13 +187,14 @@ same or a later archive preserves proven deduplication; archive absence does not
 delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
-[`@hraness/wrench@0.16.7`](https://www.npmjs.com/package/@hraness/wrench/v/0.16.7)
-package from npm, then use Wrench to create a new private Message Like Me
+[`@hraness/ghostget@0.17.0`](https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz)
+canonical GitHub Release archive, then use Ghostget to create a new private Message Like Me
 bundle:
 
 ```sh
-bun add --global @hraness/wrench@0.16.7
-wrench beeper export-message-like-me \
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+ghostget adapter sync-bundled --json
+ghostget beeper export-message-like-me \
   --auth <beeper-auth-id> \
   --output /absolute/private/path/beeper-bundle \
   --json
@@ -201,21 +202,21 @@ wrench beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Wrench v0.16.7 adapter
+path to a directory that does not already exist. Ghostget v0.17.0 adapter
 `beeper-local@2.4.0` exposes 32 reviewed Beeper operations: 26 through one
 pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus
-six fixed Desktop loopback reads. Message Like Me never calls Wrench or any of
-those Beeper operations. The bundle command enters Wrench's separate internal
+six fixed Desktop loopback reads. Message Like Me never calls Ghostget or any of
+those Beeper operations. The bundle command enters Ghostget's separate internal
 bounded export, which fixes the raw export arguments, excludes attachments, and
 preserves explicit incomplete-coverage evidence instead of claiming full
 history.
 
-Wrench calls the pinned
+Ghostget calls the pinned
 [official Beeper CLI 0.6.2 release](https://github.com/beeper/cli/releases/tag/v0%2E6%2E2)
 directly. The executable reports version `0.6.2`, which is the runtime
 authority. At the upstream tag, `packages/cli/package.json` declares `0.6.1`;
 that source-package value is provenance only and never overrides the executable
-runtime identity. Wrench enumerates
+runtime identity. Ghostget enumerates
 the connected account realm, invokes `export --no-attachments` once per
 account in deterministic order, and reports the account ordinal, elapsed-time
 heartbeats, and cumulative validated chat and message counts on stderr. It
@@ -228,7 +229,7 @@ export path does not use it. The pinned CLI path supplies the bounded account
 snapshots and local files needed for hash validation, deterministic conversion,
 crash recovery, and atomic publication. Provider URLs and credentials are
 excluded. Message Like Me does not receive the Beeper credential or live
-session, start Wrench, invoke a Beeper operation, or send a message.
+session, start Ghostget, invoke a Beeper operation, or send a message.
 
 Ingest the finished directory, then inspect its redacted source health:
 
@@ -247,9 +248,9 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](docs/local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Wrench v0.16.7 is the currently verified
+source-transform version `1.1.0`. Ghostget v0.17.0 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
-not by an open-ended Wrench package range.
+not by an open-ended Ghostget package range.
 
 Beeper exports describe bounded local observations. A later bounded export
 that omits an older record does not delete retained history. Explicit deletion,
@@ -258,12 +259,13 @@ reappearance restores it. Older snapshots cannot overwrite newer state. Use
 `sources show <source-id> --private --json` only when you deliberately need the
 private provider account and source metadata.
 
-For native WhatsApp evidence, install Wrench v0.16.7 and let its official
+For native WhatsApp evidence, install Ghostget v0.17.0 and let its official
 Wacli 0.15.0 adapter create the one-account v2 bundle:
 
 ```sh
-bun add --global @hraness/wrench@0.16.7
-wrench whatsapp export-message-like-me \
+bun add --global https://github.com/hraness/ghostget/releases/download/v0.17.0/hraness-ghostget-0.17.0.tgz
+ghostget adapter sync-bundled --json
+ghostget whatsapp export-message-like-me \
   --auth <whatsapp-auth-id> \
   --output /absolute/private/path/whatsapp-bundle \
   --json
@@ -282,7 +284,7 @@ surfaces are excluded. The complete contract is in
 [local message bundle v2](docs/local-message-bundle-v2.md).
 
 Wacli v0.15.0 may retain an earlier emoji after a reaction is removed, so its
-local rows cannot prove current active reaction state. Wrench v0.16.7 omits
+local rows cannot prove current active reaction state. Ghostget v0.17.0 omits
 every reaction-shaped row and adds `reaction-state-unproven` when it observes
 one. An empty `reactions.ndjson` from this producer means reaction behavior was
 unobservable, not that the account had no reactions. The v2 wire contract keeps
@@ -386,8 +388,8 @@ person scopes and labels, never handles or message bodies.
 ## Prepare an exact private agent handoff
 
 Message Like Me can bind an ordered unsent draft to one exact local
-source-conversation candidate and one current opaque Wrench context. It still
-does not invoke Wrench, authenticate, launch a provider command, access a
+source-conversation candidate and one current opaque Ghostget context. It still
+does not invoke Ghostget, authenticate, launch a provider command, access a
 network, or send a message.
 
 Start with the redacted candidate inventory:
@@ -404,24 +406,24 @@ Ordinary stdout reports only its digest, counts, and selection state.
 the exact account, source, and tagged conversation coordinate already observed
 in that imported source: `beeperConversation` for a Beeper bundle,
 `whatsappJid` for a native Wacli bundle, or `imessageChat` for Messages. It never
-emits names, handles, participants, or a locator derived from them. Wrench
+emits names, handles, participants, or a locator derived from them. Ghostget
 rejects a coordinate whose tag does not match the selected provider adapter.
 
 An X archive candidate is always `evidence-only` with reason
 `archive-source`. Handoff v1 also keeps group candidates evidence-only as an
-explicit direct-conversation product limit. This does not claim that Wrench or
+explicit direct-conversation product limit. This does not claim that Ghostget or
 a provider cannot address an exact group. It prevents Message Like Me from
 authorizing one through this first handoff contract. Several eligible direct
 candidates produce an `ambiguous` selection state; no route is chosen from a
 name, title, participant list, or merged person scope.
 
-After Wrench has written its exact current context and the agent has written an
+After Ghostget has written its exact current context and the agent has written an
 ordered one-to-eight-bubble draft, prepare one private handoff:
 
 ```sh
 messagelikeme handoff prepare <contact-id> \
   --request /absolute/private/handoff-request.json \
-  --wrench-context /absolute/private/wrench-context.json \
+  --ghostget-context /absolute/private/ghostget-context.json \
   --draft /absolute/private/draft.json \
   --output /absolute/private/handoff.json \
   --json
@@ -434,21 +436,21 @@ singly linked physical files. The context must carry the pinned
 an unexpired opaque route and context reference, and exact SHA-256 data and
 latest-message revisions. The output is a mode-`0600` file whose canonical
 digest binds those values, the selected source revision, corpus and profile
-evidence, bubble order, text, and optional reply references. Raw opaque Wrench
+evidence, bubble order, text, and optional reply references. Raw opaque Ghostget
 references and draft bodies appear only in the explicit private inputs and
 handoff file.
 
 Verification and audit commands emit hashes, counts, timestamps, and
-pseudonymous IDs without bodies or raw Wrench references:
+pseudonymous IDs without bodies or raw Ghostget references:
 
 ```sh
 messagelikeme handoff verify /absolute/private/handoff.json --json
 messagelikeme handoff record <handoff-id> \
-  --wrench-receipt /absolute/private/wrench-receipt.json --json
+  --ghostget-receipt /absolute/private/ghostget-receipt.json --json
 messagelikeme handoffs show <handoff-id> --json
 ```
 
-Recording requires Wrench's pinned body-free receipt binding. It carries the
+Recording requires Ghostget's pinned body-free receipt binding. It carries the
 provider-neutral client-intent digest, set to this exact Message Like Me
 handoff digest, along with route-reference, context-reference, exact-turn, and
 private-preview digests. It also carries the proven prefix and a canonical
@@ -664,9 +666,9 @@ messagelikeme profile show CONTACT_ID [--json]
 messagelikeme profile export CONTACT_ID --output FILE [--json]
 messagelikeme context CONTACT_ID [--json]
 messagelikeme handoff prepare CONTACT_ID --request FILE
-  --wrench-context FILE --draft FILE --output FILE [--json]
+  --ghostget-context FILE --draft FILE --output FILE [--json]
 messagelikeme handoff verify FILE [--json]
-messagelikeme handoff record HANDOFF_ID --wrench-receipt FILE [--json]
+messagelikeme handoff record HANDOFF_ID --ghostget-receipt FILE [--json]
 messagelikeme handoffs show HANDOFF_ID [--json]
 messagelikeme skill path [--json]
 messagelikeme skill install [--target codex|claude|agents]
@@ -789,3 +791,9 @@ the site, and the site never receives message or contact data.
 ## License
 
 MIT.
+
+Ghostget is the current name of Wrench. The original `--wrench-context` and
+`--wrench-receipt` options remain aliases for the documented Ghostget options. The SDK accepts
+`ghostgetContext` and retains the original `wrenchContext` input alias.
+Existing bundle, handoff, receipt, and database formats retain their versioned
+`wrench` identifiers so saved evidence remains verifiable.

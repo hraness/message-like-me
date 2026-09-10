@@ -55,7 +55,7 @@
   explicitly declares authoritative coverage; apply explicit deletions and
   tombstones separately.
 - Preserve local message bundle v1 as the frozen Beeper contract. Treat bundle
-  v2 as the exact one-account Wrench/Wacli WhatsApp seam: source
+  v2 as the exact one-account Ghostget/Wacli WhatsApp seam: source
   `wacli-local@1.0.0`, provider `whatsapp@0.15.0`, network `whatsapp`, canonical
   supported JIDs, and E.164 handles only when the JID proves them. Never add
   Wacli process, authentication, synchronization, network, or send code to
