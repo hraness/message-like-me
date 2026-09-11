@@ -86,7 +86,18 @@ built-in tool inventory and is insufficient for execution qualification.
 local synthetic Anthropic endpoint and temporary contact folders. It uses the same
 restricted launch-option builder as production; the production adapter does not
 accept custom API endpoints. Its receipt describes the exact fixture/runtime
-boundary and never automatically enables production.
+boundary and never automatically enables production. The seven native scenarios
+passed on macOS ARM64 on 2026-09-11, including explicit `doctor` / `checkup` Skill
+denials, literal command-shaped prompts, 11 forbidden tool calls, six file escape
+or stale-write denials, and a successful conditional edit and staged reply.
+
+The [SDK skills reference](https://code.claude.com/docs/en/agent-sdk/skills)
+distinguishes the discovered skill catalog from invocation permission. An empty
+allowlist alone does not empty that catalog, and direct command dispatch bypasses
+the allowlist. The pinned profile explicitly turns `doctor` and `checkup` off,
+denies the Skill tool, wraps task text, and retains strict empty-catalog checks as
+a configuration-drift guard. Native evidence checks every API request's tool
+manifest and actual denied results; catalog absence alone is not a scope proof.
 
 Codex execution remains unavailable. A credential-free probe of installed Codex
 **0.153.4** found default-on `code_mode_host`, shell, browser, computer, image,

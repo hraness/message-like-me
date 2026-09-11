@@ -14,7 +14,7 @@ export function restrictedClaudeOptions({ brokerToolNames, ...host }: HostInputs
     permissionMode: "dontAsk", permissionPrompts: "none", settingSources: [], strictMcpConfig: true,
     agents: {}, skills: [], plugins: [], persistSession: false, enableFileCheckpointing: false,
     settings: JSON.stringify({ disableAllHooks: true, disableClaudeAiConnectors: true, autoMemoryEnabled: false,
-      disableBundledSkills: true, disableSkillShellExecution: true, enableWorkflows: false, workflowKeywordTriggerEnabled: false }),
+      disableBundledSkills: true, disableSkillShellExecution: true, enableWorkflows: false, workflowKeywordTriggerEnabled: false, skillOverrides: { doctor: "off", checkup: "off" } }),
     systemPrompt: "You are a contact-scoped assistant. Use only the provided broker tools. File paths are relative to this contact's folder. Messaging tools stage intentions; the host applies disclosure and decides delivery. Return the requested JSON only.",
     stderr: () => {},
   };
