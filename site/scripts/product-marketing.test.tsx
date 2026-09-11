@@ -95,11 +95,12 @@ test('explains the synthetic draft before asking a reader to understand import c
   expect(html).not.toMatch(/<details class="source-details"[^>]*\bopen/gu);
 });
 
-test('binds Design Kit v0.4.0 to one light-default accent palette', async () => {
-  const [layout, css, manifestSource] = await Promise.all([
+test('binds the existing Design Kit release to the portable Paper palette', async () => {
+  const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
     readFile(resolve(siteRoot, 'package.json'), 'utf8'),
+    readFile(resolve(siteRoot, 'styles/vendor/hraness-paper/paper-theme.css'), 'utf8'),
   ]);
   const manifest = JSON.parse(manifestSource) as {
     dependencies?: Record<string, string>;
@@ -111,10 +112,11 @@ test('binds Design Kit v0.4.0 to one light-default accent palette', async () => 
     .toBe('github:hraness/ui#v0.4.10');
   expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
   expect(layout).toContain("colorScheme: 'light dark'");
-  expect(css).toContain('color-scheme: light dark;');
-  expect(css).toContain('@media (prefers-color-scheme: dark)');
-  expect(css).toContain('--hraness-site-accent: var(--accent);');
-  expect(css).toContain('--hraness-site-accent-ink: var(--accent-ink);');
+  expect(layout).toContain('data-hraness-theme="paper"');
+  expect(css).toContain("@import '../styles/vendor/hraness-paper/paper-theme.css';");
+  expect(paper).toContain('color-scheme: light dark;');
+  expect(paper).toContain('--hraness-site-accent: var(--primary);');
+  expect(paper).toContain('--hraness-site-accent-ink: var(--primary-foreground);');
   expect(css).toContain(':where(.hraness-marketing-page, .hraness-marketing-header) {');
   expect(css).toContain('.mlm-marketing-hero {');
   expect(css).toContain('.mlm-marketing-trust .hraness-marketing-trust-grid {');
