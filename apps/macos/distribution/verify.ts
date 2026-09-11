@@ -1,4 +1,5 @@
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PackagedCustodyUncertain, smokePackagedRuntime } from "../scripts/package-smoke.ts";
 import { ARCHIVE, assertRuntime, command, digest, object, parseUnsigned, readPhysical, requireValue, sha256 } from "./common.ts";
@@ -16,7 +17,7 @@ if (import.meta.main) {
   const archiveBytes = readPhysical(join(input, ARCHIVE));
   requireValue(archive.name === ARCHIVE && archive.bytes === archiveBytes.length && archive.sha256 === sha256(archiveBytes), "Signed archive differs");
   command("/usr/bin/python3", ["-I", join(import.meta.dir, "archive.py"), "signed", join(input, ARCHIVE)], { timeout: 180_000 });
-  const scratch = realpathSync(mkdtempSync("/private/tmp/textbutler-verify-")), app = join(scratch, "Textbutler.app");
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "textbutler-verify-"))), app = join(scratch, "Textbutler.app");
   let clean = true;
   try {
     command("/usr/bin/ditto", ["-x", "-k", join(input, ARCHIVE), scratch], { timeout: 180_000 });

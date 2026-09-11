@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { BUN_ENTITLEMENTS, command, IDENTIFIER, inventory, object, requireValue, VERSION } from "./common.ts";
@@ -27,7 +28,7 @@ export function verifySignedBundle(app: string, team: string, identity: string):
   for (const path of nativePaths(app)) {
     const absolute = join(app, path); assertSignature(absolute, team); command("/usr/bin/codesign", ["--verify", "--strict", absolute]);
     requireValue(command("/usr/bin/lipo", ["-archs", absolute]).toString("utf8").trim() === "arm64", "Native architecture differs");
-    const scratch = mkdtempSync("/private/tmp/textbutler-signature-");
+    const scratch = mkdtempSync(join(tmpdir(), "textbutler-signature-"));
     try { command("/usr/bin/codesign", ["--display", "--extract-certificates", join(scratch, "cert"), absolute]); requireValue(createHash("sha1").update(readFileSync(join(scratch, "cert0"))).digest("hex") === identity, "Developer ID leaf differs"); }
     finally { rmSync(scratch, { recursive: true, force: true }); }
     const text = inspectSignature(absolute, ["--display", "--entitlements", ":-"]), start = text.indexOf("<?xml"), end = text.indexOf("</plist>");

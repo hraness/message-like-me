@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requestDaemon } from "../../../packages/textbutler/src/daemon.ts";
 import { CONTROL_PROTOCOL } from "../../../packages/control/src/index.ts";
@@ -9,7 +10,7 @@ export class PackagedCustodyUncertain extends Error { constructor() { super("Pac
 
 /** Actual packaged Bun/CLI, isolated synthetic owner state. No launchctl or provider. */
 export async function smokePackagedRuntime(app: string): Promise<void> {
-  const scratch = await realpath(await mkdtemp("/private/tmp/textbutler-package-"));
+  const scratch = await realpath(await mkdtemp(join(tmpdir(), "textbutler-package-")));
   const state = join(scratch, "state"), runtime = join(app, "Contents/Resources/textbutler-runtime"), bun = join(runtime, "textbutler-bun"), cli = join(runtime, "cli.ts");
   await mkdir(state, { mode: 0o700 });
   assertRuntime(runtime);

@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { ARCHIVE, BUN_VERSION, command, digest, IDENTIFIER, inventory, loadUnsigned, object, readPhysical, requireValue, sha256 } from "./common.ts";
@@ -11,7 +12,7 @@ if (import.meta.main) {
   const input = resolve(process.argv[2]!), receiptDigest = digest(process.argv[3]), source = digest(process.argv[4], 40), out = resolve(process.argv[5]!);
   const receipt = loadUnsigned(input, receiptDigest, source);
   mkdirSync(out, { mode: 0o700 });
-  const scratch = realpathSync(mkdtempSync("/private/tmp/textbutler-signing-")), tree = join(scratch, "tree"); mkdirSync(tree, { mode: 0o700 });
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "textbutler-signing-"))), tree = join(scratch, "tree"); mkdirSync(tree, { mode: 0o700 });
   const keychain = join(scratch, "signing.keychain-db"), keychainPassword = randomBytes(32).toString("hex");
   let keychainAttempted = false;
   const environment = { HOME: process.env.HOME ?? "", TMPDIR: scratch, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
