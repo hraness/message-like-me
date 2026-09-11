@@ -112,6 +112,13 @@ Oompa's existing runtime provider port and account/process-custody patterns are 
 
 ## Ghostget contract and rich features
 
+WhatsApp follows the same Ghostget ownership boundary. Textbutler has a bounded
+read adapter for Ghostget's existing wacli-backed `whatsapp-web` contract;
+pairing, session state and synchronization stay in Ghostget. The
+[WhatsApp integration design](whatsapp.md) separates this implemented read seam
+from the durable enrollment, events, contact grants and sends still required
+upstream. Textbutler does not embed WPPConnect or invoke wacli directly.
+
 Current source inspection found Ghostget's Tauri 2 webview with a packaged Bun helper. That helper lives with the app, and its private socket handles approvals/control, not a public messaging subscription service. Textbutler must not couple to it.
 
 Current direct iMessage APIs provide listing, bounded context, text preview/confirm, and delivery readback. Route resolution produces expiring opaque references. These are not durable contact bindings. Native Contacts, durable message subscriptions, unattended delegated sends, and rich native actions are not yet qualified through that surface.

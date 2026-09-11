@@ -25,7 +25,10 @@ function readPrivate(path: string): Record<string, unknown> {
 }
 /** Only existing public commands; no raw argv, shell, database, or administrative socket. */
 export function ghostgetCommand(request: GhostgetInvocation, output: string, binding: string): readonly string[] {
-  if (request.command === "capabilities") return ["capabilities", "imessage-direct", "--json"];
+  if (request.command === "capabilities") {
+    if (request.adapterId !== "imessage-direct" && request.adapterId !== "whatsapp-web") throw new Error("Unsupported Ghostget adapter");
+    return ["capabilities", request.adapterId, "--json"];
+  }
   if (request.command === "confirm") return ["confirm", digest(request.planDigest), "--private-output", output, "--receipt-binding-output", binding, "--json"];
   const operations = { "messaging.routes": "routes", "messaging.resolve": "resolve", "messaging.context": "context", "messaging.preview": "preview" } as const;
   const operation = operations[request.command];

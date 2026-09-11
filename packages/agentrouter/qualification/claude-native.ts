@@ -66,24 +66,39 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
   await writeFile(join(cwd, ".mcp.json"), JSON.stringify({ mcpServers: { forbidden: { command: "/usr/bin/touch", args: [marker] } } }));
   await writeFile(join(cwd, ".env"), `ANTHROPIC_CUSTOM_HEADERS="x-synthetic-dotenv: ${dotenvCanary}"\n`);
   const attempts = attempted({ sibling, marker, revision: before.revision });
-  let apiCalls = 0, loadedInstructions = false, leakedCanary = false, loadedDotenv = false;
+  let apiCalls = 0, loadedInstructions = false, leakedCanary = false, loadedDotenv = false, literalTaskObserved = false;
+  let syntheticMessageShapes: unknown[] = [];
+  let endpointFailure = false;
   let advertisedTools: string[] = [], nativeToolResults: { id: string; isError: boolean }[] = [];
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname !== "/v1/messages" || request.method !== "POST") return new Response("Synthetic endpoint only", { status: 404 });
-    const text = await request.text();
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(incomingRequest) {
+    try {
+    const url = new URL(incomingRequest.url);
+    if (url.pathname !== "/v1/messages" || incomingRequest.method !== "POST") return new Response("Synthetic endpoint only", { status: 404 });
+    const text = await incomingRequest.text();
     assert(text.length <= 2 * 1024 * 1024, "FIXTURE_REQUEST_LIMIT");
     const body = JSON.parse(text);
-    loadedDotenv ||= request.headers.get("x-synthetic-dotenv") === dotenvCanary;
+    loadedDotenv ||= incomingRequest.headers.get("x-synthetic-dotenv") === dotenvCanary;
     apiCalls++;
     assert(apiCalls <= 4, "FIXTURE_TURN_LIMIT");
     loadedInstructions ||= text.includes(instructionCanary);
     leakedCanary ||= text.includes(canary);
     advertisedTools = (body.tools ?? []).map((entry: { name: string }) => entry.name).sort();
+    assert(JSON.stringify(advertisedTools) === JSON.stringify(classifier ? [] : toolsUsed.map(full).sort()), "FIXTURE_API_TOOL_MANIFEST_MISMATCH");
+    const literal = literalClaudePrompt(request.prompt);
+    if (apiCalls === 1) syntheticMessageShapes = (body.messages ?? []).map((message: { role: string; content: unknown }) => ({ role: message.role,
+      content: typeof message.content === "string" ? { includesLiteral: message.content.includes(literal) } : (message.content as { type?: string; text?: string }[]).map(block => ({ type: block.type, prefix: block.text?.startsWith("Agentrouter task,") ? block.text.slice(0, 180) : undefined, includesLiteral: block.text?.includes(literal) })) }));
+    literalTaskObserved ||= (body.messages ?? []).some((message: { role: string; content: string | { type: string; text?: string }[] }) => message.role === "user"
+      && (typeof message.content === "string" ? message.content === literal : message.content.some(block => block.type === "text" && block.text === literal)));
     for (const message of body.messages ?? []) for (const block of Array.isArray(message.content) ? message.content : []) {
       if (block.type === "tool_result" && !nativeToolResults.some(result => result.id === block.tool_use_id)) nativeToolResults.push({ id: block.tool_use_id, isError: block.is_error === true });
     }
     return streamMessage(body.model, apiCalls === 1 ? attempts : []);
+    } catch (error) {
+      // Bun turns handler exceptions into HTTP errors that the SDK may retry.
+      // Preserve the first failure even if a later request is well formed.
+      endpointFailure = true;
+      throw error;
+    }
   } });
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 25_000);
   let child: ReturnType<typeof spawnBoundedProvider> | undefined;
@@ -117,7 +132,7 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
   let observedTools: string[] = [];
   let observedInitialization: unknown;
   try {
-    const options = restrictedClaudeOptions({ cwd, env, abortController: controller, model: request.model, maxTurns: 4, maxBudgetUsd: 0.01,
+    const options = restrictedClaudeOptions({ cwd, env, abortController: controller, model: request.model, maxTurns: classifier ? 1 : 4, maxBudgetUsd: 0.01,
       pathToClaudeCodeExecutable: executable, brokerToolNames: names,
       mcpServers: mcpTools.length ? { agentrouter: createSdkMcpServer({ name: "agentrouter", version: "1.0.0", tools: mcpTools }) } : {},
       spawnClaudeCodeProcess(input) {
@@ -138,7 +153,8 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
         resultSeen = true;
       }
     }
-    assert(resultSeen && apiCalls > 0, "FIXTURE_RESULT_MISSING");
+    assert(!endpointFailure, "FIXTURE_ENDPOINT_FAILURE_LATCHED");
+    assert(resultSeen && apiCalls > 0 && literalTaskObserved, "FIXTURE_RESULT_OR_LITERAL_TASK_MISSING");
     assert(JSON.stringify(advertisedTools) === JSON.stringify([...names].sort()), "FIXTURE_API_TOOL_MANIFEST_MISMATCH");
     assert(!loadedInstructions && !loadedDotenv && !leakedCanary && !await exists(marker), "FIXTURE_CONFINEMENT_FAILED");
     assert(await readFile(sibling, "utf8") === canary, "FIXTURE_SIBLING_MODIFIED");
@@ -148,10 +164,10 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
     if (attempts.length) assert(nativeToolResults.length === attempts.length && nativeToolResults.every(result => result.isError === (name !== "broker-allowed")), "FIXTURE_TOOL_DENIAL_EVIDENCE_MISSING");
     results.push({ scenario: name, attempts: attempts.map(attempt => attempt.name), nativeTools: observedTools,
       advertisedTools, apiCalls, denied: nativeToolResults.filter(result => result.isError).length, staged: staged.length,
-      inheritedInstructions: loadedInstructions, inheritedDotenv: loadedDotenv, escapedRead: leakedCanary, escapedWriteOrCommand: false });
+      literalTaskObserved, inheritedInstructions: loadedInstructions, inheritedDotenv: loadedDotenv, escapedRead: leakedCanary, escapedWriteOrCommand: false });
   } catch (error) {
     results.push({ scenario: name, status: "failed", reason: error instanceof Error && /^FIXTURE_|^CLAUDE_/u.test(error.message) ? error.message : "NATIVE_CONTROL_OR_PROTOCOL_FAILED", observedTools,
-      observedInitialization, advertisedTools, apiCalls, toolResults: nativeToolResults });
+      observedInitialization, resultSeen, literalTaskObserved, endpointFailure, syntheticMessageShapes, advertisedTools, apiCalls, toolResults: nativeToolResults });
     throw error;
   } finally {
     clearTimeout(timer); broker.revoke(); stream?.close();
@@ -160,8 +176,8 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
   }
 }
 try {
-  await scenario("classifier-zero-tools", () => [], true);
-  await scenario("literal-slash-command", () => [], true, ({ sibling }) => `/add-dir ${dirname(sibling)}`);
+  await scenario("classifier-and-literal-doctor", () => [], true, () => "/doctor");
+  await scenario("literal-checkup-command", () => [], true, () => "/checkup");
   await scenario("literal-bang-command", () => [], true, ({ marker }) => `! /usr/bin/touch '${marker}'`);
   await scenario("workflow-keyword-disabled", () => [], true, () => "ultracode Run a workflow and return JSON.");
   await scenario("builtin-denials", ({ sibling, marker }) => [
@@ -172,7 +188,8 @@ try {
     { name: "Glob", input: { pattern: "**", path: dirname(sibling) } },
     { name: "Grep", input: { pattern: "SYNTHETIC", path: sibling } },
     { name: "Agent", input: { description: "fixture", prompt: "Read unrelated files", subagent_type: "general-purpose" } },
-    { name: "Skill", input: { skill: "fixture" } },
+    { name: "Skill", input: { skill: "doctor" } },
+    { name: "Skill", input: { skill: "checkup" } },
     { name: "WebFetch", input: { url: "https://example.com", prompt: "fixture" } },
     { name: "ToolSearch", input: { query: "Bash" } },
   ]);
@@ -189,7 +206,12 @@ try {
     { name: full("files.write"), input: { path: "MEMORY.md", text: "stale overwrite", expectedRevision: "0".repeat(64) } },
   ]);
   console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", runtimeVersion: inspected.runtimeVersion, runtimeDigest: inspected.runtimeDigest,
-    platform: `${process.platform}-${process.arch}`, realCredentialsUsed: false, paidModelRequests: 0, productionQualificationIssued: false, scenarios: results }, null, 2));
+    platform: `${process.platform}-${process.arch}`, realCredentialsUsed: false, paidModelRequests: 0, productionQualificationIssued: false,
+    sourceDigests: {
+      fixture: createHash("sha256").update(await readFile(fileURLToPath(import.meta.url))).digest("hex"),
+      launchOptions: createHash("sha256").update(await readFile(new URL("../src/claude-options.ts", import.meta.url))).digest("hex"),
+      contactWorkspace: createHash("sha256").update(await readFile(new URL("../../textbutler/src/workspace.ts", import.meta.url))).digest("hex"),
+    }, scenarios: results }, null, 2));
 } catch {
   console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", productionQualificationIssued: false, status: "failed", scenarios: results }, null, 2));
   process.exitCode = 1;

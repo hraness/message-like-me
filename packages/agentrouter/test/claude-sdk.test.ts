@@ -92,7 +92,7 @@ test("real SDK classifier has zero tools, fresh state, no inherited config or cr
     expect(output.toolsEmpty).toBe(true); expect(output.settingsSourcesEmpty).toBe(true); expect(output.strictMcp).toBe(true);
     expect(output.persisted).toBe(false); expect(output.ambient).toBeNull(); expect(output.authMatches).toBe(true);
     expect(output.settings).toMatchObject({ disableAllHooks: true, disableClaudeAiConnectors: true, autoMemoryEnabled: false,
-      disableBundledSkills: true, disableSkillShellExecution: true, enableWorkflows: false, workflowKeywordTriggerEnabled: false });
+      disableBundledSkills: true, disableSkillShellExecution: true, enableWorkflows: false, workflowKeywordTriggerEnabled: false, skillOverrides: { doctor: "off", checkup: "off" } });
     expect(result.processStopped).toBe(true);
     await expect(stat(String(output.cwd))).rejects.toThrow();
   } finally {
