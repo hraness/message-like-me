@@ -10,13 +10,16 @@ The new product lives at [textbutler.app](https://textbutler.app). Its default
 response looks like `🤖{ hello this is my response }`. Each contact can choose
 the three symbols, a keyword, and smart or keyword-only response mode.
 
-**Development status:** the source includes the contact policy engine, protected
-memory, extension hooks, send journal, Ghostget transport seam, Agentrouter
-foundation, and a Mac app/control-daemon implementation. Live automated replies
-are unavailable while Ghostget's durable events and scoped automation grants,
-and the provider's contact-only sandbox, remain unqualified. The Mac app has not
-been released as a signed/notarized download. The website is informational;
-it has no connection to private messages or contact folders.
+**Development status:** the source includes the Mac settings app, background
+daemon lifecycle, owner-selected Ghostget conversation enrollment, optional
+history initialization, private memory, executable hooks, reply policy and send
+journal. Agentrouter includes a restricted Claude Agent SDK adapter and shared
+account custody. Live automated replies remain unavailable until Ghostget's
+durable events and scoped automation grants, and the provider's contact-only
+execution, are qualified. Codex execution and native rich actions are also
+unavailable. The Mac app has not been released as a signed/notarized download.
+The website is informational; it has no connection to private messages or
+contact folders.
 
 Start with the [architecture and capability status](docs/textbutler/architecture.md),
 [Textbutler runtime](packages/textbutler/README.md),

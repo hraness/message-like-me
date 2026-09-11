@@ -10,6 +10,9 @@ prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
 - New agents receive only one contact's brokered files, bounded public web
   requests, and recipient-bound proposed messaging actions. Never enable shell,
   arbitrary process tools, inherited plugins, or extra filesystem roots.
+- The exact Textbutler provider SDKs may be development dependencies of the
+  source checkout. Preserve the legacy public runtime's dependency/import
+  restrictions and packed export boundary; it never loads those SDKs.
 - Keep owner settings, credentials, route bindings, and executable plugins
   outside model-writable contact workspaces. Preserve user data and frozen wire
   identities throughout migration.
@@ -26,6 +29,9 @@ prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
   path still requires exact current-main CI and site-build admission, reviewed
   workflow changes, protected conditional ref writes, status-authority cleanup,
   and verified provider readback. The legacy release path retains its gates.
+- Preserve any existing required environment review. Complete the exact run's
+  review through the normal provider interface; this redesign does not authorize
+  removing runtime-enforced reviewers or other protection settings.
 
 # Contents
 

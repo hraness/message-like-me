@@ -8,6 +8,7 @@ import type { ContactSettings } from "./config.ts";
 import { CLASSIFIER_INSTRUCTIONS } from "./decision.ts";
 import type { AgentRequest, ButlerAgent } from "./runtime.ts";
 import { CONTACT_GUIDANCE, ContactWorkspace } from "./workspace.ts";
+import type { Hooks } from "./hooks.ts";
 
 export type ProviderSelection = Readonly<{ qualification: RuntimeQualification; modelCatalog: ModelCatalog; defaultReplyModel: string }>;
 export type RoutedAgentOptions = Readonly<{
@@ -15,6 +16,7 @@ export type RoutedAgentOptions = Readonly<{
   selection: (contact: ContactSettings) => Promise<ProviderSelection>;
   getWorkspace: (contactId: string) => Promise<ContactWorkspace>;
   web?: PublicWeb;
+  hooks?: Hooks;
   isActive: (contactId: string, settingsRevision: number) => boolean;
   now?: () => number;
 }>;
@@ -52,7 +54,13 @@ export function createRoutedButlerAgent(options: RoutedAgentOptions): ButlerAgen
       ...(purpose === "classify" ? { allowedTools: [] } : {}),
       files: {
         async read(id, path, signal) { signal.throwIfAborted(); if (id !== request.contact.id || !active()) throw new Error("Workspace revoked"); return workspace.readVersioned(path); },
-        async write(id, path, text, revision, signal) { signal.throwIfAborted(); if (id !== request.contact.id || !active()) throw new Error("Workspace revoked"); return workspace.writeVersioned(path, text, revision); },
+        async write(id, path, text, revision, signal) {
+          signal.throwIfAborted(); if (id !== request.contact.id || !active()) throw new Error("Workspace revoked");
+          const written = await workspace.writeVersioned(path, text, revision);
+          try { await options.hooks?.emit("memory.updated", { contactId: id, runId: request.runId, eventId: request.event.id, signal, changedFile: Object.freeze({ path, revision: written.revision }) }); }
+          catch { /* A post-write notification cannot undo committed memory or request a replay. */ }
+          return written;
+        },
       },
       web,
       messaging: {

@@ -12,6 +12,7 @@ import { newContact, type ContactSettings } from "./config.ts";
 import { createRoutedButlerAgent } from "./routed-agent.ts";
 import type { AgentRequest } from "./runtime.ts";
 import { ContactWorkspace } from "./workspace.ts";
+import { Hooks, type HookContext } from "./hooks.ts";
 
 const NOW = 1_000_000;
 const roots: string[] = [];
@@ -37,6 +38,7 @@ async function setup(options: {
   contact?: Partial<ContactSettings>;
   adapterQualification?: RuntimeQualification;
   selectionQualification?: RuntimeQualification;
+  hooks?: Hooks;
   execute?: (call: AdapterCall) => Promise<unknown>;
 } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "textbutler-routed-test-")));
@@ -68,6 +70,7 @@ async function setup(options: {
   };
   const router = new AgentRouter({ adapters: [adapter], leases, now: () => NOW });
   const agent = createRoutedButlerAgent({ router, now: () => NOW,
+    ...(options.hooks === undefined ? {} : { hooks: options.hooks }),
     selection: async () => ({ qualification: options.selectionQualification ?? qualified, modelCatalog, defaultReplyModel: "default-expensive" }),
     getWorkspace: async id => { if (id !== contact.id) throw new Error("Unexpected contact"); return workspace; },
     isActive: (id, revision) => active && id === contact.id && revision === contact.revision,
@@ -107,7 +110,9 @@ for (const provider of ["codex", "claude"] as const) {
 }
 
 test("composition conditionally edits private memory and stages one deduplicated proposal without send authority", async () => {
-  const fixture = await setup({ execute: async ({ broker }) => {
+  const notifications: HookContext[] = [], hooks = new Hooks();
+  hooks.register({ id: "observe-memory", version: "1.0.0", hooks: { "memory.updated": async context => { notifications.push(context); throw new Error("Notification failure cannot undo the edit"); } } });
+  const fixture = await setup({ hooks, execute: async ({ broker }) => {
     const memory = await broker.invoke("files.read", { path: "MEMORY.md" }) as { text: string; revision: string };
     expect(memory.revision).toMatch(/^[a-f0-9]{64}$/u);
     const nextText = `${memory.text}\nContact prefers tea; source message-one, contact-authored.\n`;
@@ -122,6 +127,9 @@ test("composition conditionally edits private memory and stages one deduplicated
   } });
   expect(await fixture.agent.compose(fixture.request)).toEqual({ summary: "A proposed response", actions: [{ kind: "text", text: "I can help with that." }] });
   expect(await fixture.workspace.read("MEMORY.md")).toContain("source message-one, contact-authored");
+  expect(notifications).toHaveLength(1);
+  expect(notifications[0]).toMatchObject({ contactId: fixture.contact.id, runId: fixture.request.runId, eventId: "message-one", changedFile: { path: "MEMORY.md" } });
+  expect(notifications[0]?.changedFile?.revision).toBe((await fixture.workspace.readVersioned("MEMORY.md")).revision);
   expect(fixture.publicRequests()).toBe(0);
   await expect(fixture.seenBrokers[0]!.invoke("messages.propose_text", { text: "Late action", idempotencyKey: "late" })).rejects.toThrow("RUN_REVOKED");
 });

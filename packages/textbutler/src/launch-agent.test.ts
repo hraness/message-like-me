@@ -1,0 +1,162 @@
+import { afterEach, expect, test } from "bun:test";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { createLaunchAgentLifecycle, LAUNCH_AGENT_LABEL, type LaunchAgentHost, type LaunchctlResult } from "./launch-agent.ts";
+import { runTextbutlerCli } from "./cli.ts";
+
+const roots: string[] = [];
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+function decode(value: string): string { return value.replaceAll("&apos;", "'").replaceAll("&quot;", '"').replaceAll("&gt;", ">").replaceAll("&lt;", "<").replaceAll("&amp;", "&"); }
+async function fixture() {
+  const root = await mkdtemp(join(await realpath("/tmp"), "tb-la-")); roots.push(root);
+  const home = join(root, "owner & home"), dataDir = join(root, "data"), runtime = join(root, "bun"), entrypoint = join(root, "cli.ts");
+  await mkdir(home, { mode: 0o700 }); await writeFile(runtime, "synthetic runtime; never executed", { mode: 0o700 }); await writeFile(entrypoint, "// synthetic entrypoint; never executed", { mode: 0o600 });
+  const uid = process.getuid!(); const target = `gui/${uid}/${LAUNCH_AGENT_LABEL}`;
+  const plistPath = join(home, "Library", "LaunchAgents", `${LAUNCH_AGENT_LABEL}.plist`), receiptPath = join(dataDir, "state", "launch-agent.json");
+  const calls: readonly string[][] = [];
+  const state = { job: null as { path: string; args: string[]; program: string } | null, bootstrap: "ok", bootout: "ok", process: "alive" as "alive" | "dead" | "unknown" };
+  const complete = (exitCode = 0, stdout = "", stderr = ""): LaunchctlResult => ({ outcome: "completed", exitCode, stdout, stderr });
+  const loadJob = async (): Promise<void> => {
+    const plist = await readFile(plistPath, "utf8"); const array = /<key>ProgramArguments<\/key><array>(.*?)<\/array>/su.exec(plist)?.[1];
+    if (array === undefined) throw new Error("No fixed ProgramArguments");
+    const args = [...array.matchAll(/<string>(.*?)<\/string>/gsu)].map(match => decode(match[1]!));
+    state.job = { path: plistPath, program: args[0]!, args };
+  };
+  const host: LaunchAgentHost = { platform: "darwin", uid, home, runtime, entrypoint, processState: () => state.process, async run(args) {
+    (calls as string[][]).push([...args]);
+    if (args[0] === "print") {
+      expect(args).toEqual(["print", target]);
+      if (!state.job) return complete(113, "", `Bad request.\nCould not find service "${LAUNCH_AGENT_LABEL}" in domain for user gui: ${uid}\n`);
+      return complete(0, `${target} = {\n\tpath = ${state.job.path}\n\tprogram = ${state.job.program}\n\targuments = {\n${state.job.args.map(arg => `\t\t${arg}\n`).join("")}\t}\n\tstate = running\n\tpid = 1234567\n}\n`);
+    }
+    if (args[0] === "bootstrap") {
+      expect(args).toEqual(["bootstrap", `gui/${uid}`, plistPath]);
+      if (state.bootstrap === "unknown") return { outcome: "indeterminate", exitCode: null, stdout: "", stderr: "" };
+      if (state.bootstrap === "failed") return complete(5);
+      await loadJob(); return complete();
+    }
+    expect(args).toEqual(["bootout", "--wait", target]);
+    if (state.bootout === "unknown") return { outcome: "indeterminate", exitCode: null, stdout: "", stderr: "" };
+    state.job = null; return complete();
+  } };
+  return { root, dataDir, home, runtime, entrypoint, host, state, calls, plistPath, receiptPath, loadJob, lifecycle: createLaunchAgentLifecycle(host) };
+}
+
+test("installation creates a fixed private LaunchAgent, preserves data, and never repeats an admitted bootstrap", async () => {
+  const f = await fixture();
+  expect(await f.lifecycle.status(f.dataDir)).toMatchObject({ installation: "absent", service: "not-loaded" });
+  await expect(lstat(f.dataDir)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await f.lifecycle.install(f.dataDir)).toMatchObject({ installation: "installed", service: "running", automaticReplies: "unavailable" });
+  const settings = JSON.parse(await readFile(join(f.dataDir, "state", "settings.json"), "utf8")); expect(settings.settings).toMatchObject({ paused: true, contacts: [] });
+  expect((await lstat(f.plistPath)).mode & 0o777).toBe(0o600);
+  const plist = await readFile(f.plistPath, "utf8"); expect(plist).toContain("owner &amp; home"); expect(plist).toContain("<key>RunAtLoad</key><true/>");
+  const args = f.state.job!.args;
+  expect(args.slice(0, 4)).toEqual(["/usr/bin/env", "-i", `HOME=${f.home}`, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"]);
+  expect(args.slice(5)).toEqual([f.runtime, "--no-env-file", f.entrypoint, "daemon", "run", "--data-dir", f.dataDir]);
+  expect(args[4]).toMatch(/^TEXTBUTLER_LAUNCH_AGENT_GENERATION=[a-f0-9-]{36}$/u);
+  expect(await f.lifecycle.install(f.dataDir)).toMatchObject({ installation: "installed" });
+  expect(f.calls.filter(args => args[0] === "bootstrap")).toHaveLength(1);
+  expect(await f.lifecycle.uninstall(f.dataDir)).toMatchObject({ installation: "absent", service: "not-loaded" });
+  await expect(lstat(f.plistPath)).rejects.toMatchObject({ code: "ENOENT" }); await expect(lstat(f.receiptPath)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(JSON.parse(await readFile(join(f.dataDir, "state", "settings.json"), "utf8"))).toEqual(settings);
+  expect(await f.lifecycle.uninstall(f.dataDir)).toMatchObject({ installation: "absent" });
+  expect(f.calls.filter(args => args[0] === "bootout")).toHaveLength(1);
+});
+
+test("a foreign plist or service with the same label is never overwritten or stopped", async () => {
+  const f = await fixture(); await f.lifecycle.install(f.dataDir);
+  const original = await readFile(f.plistPath, "utf8"); await writeFile(f.plistPath, "owner sentinel", { mode: 0o600 });
+  await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("exact recorded"); expect(await readFile(f.plistPath, "utf8")).toBe("owner sentinel");
+  await writeFile(f.plistPath, original, { mode: 0o600 }); f.state.job!.args[4] = "FOREIGN_GENERATION";
+  expect(await f.lifecycle.status(f.dataDir)).toMatchObject({ installation: "conflict", service: "unknown" });
+  await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("no longer matches");
+  expect(f.calls.filter(args => args[0] === "bootout")).toHaveLength(0);
+});
+
+test.each(["unknown", "failed"])("%s bootstrap preserves intent and requires positive reconciliation before retry", async outcome => {
+  const f = await fixture(); f.state.bootstrap = outcome;
+  expect(await f.lifecycle.install(f.dataDir)).toMatchObject({ installation: "indeterminate" });
+  expect(JSON.parse(await readFile(f.receiptPath, "utf8")).phase).toBe("uncertain-install");
+  await expect(f.lifecycle.install(f.dataDir)).rejects.toThrow("uncertain");
+  expect(f.calls.filter(args => args[0] === "bootstrap")).toHaveLength(1);
+  await f.loadJob();
+  expect(await f.lifecycle.install(f.dataDir)).toMatchObject({ installation: "installed" });
+  expect(JSON.parse(await readFile(f.receiptPath, "utf8")).phase).toBe("installed");
+});
+
+test("uncertain bootout preserves artifacts and cannot race a new install or removal", async () => {
+  const f = await fixture(); await f.lifecycle.install(f.dataDir); f.state.bootout = "unknown";
+  expect(await f.lifecycle.uninstall(f.dataDir)).toMatchObject({ installation: "indeterminate" });
+  expect(JSON.parse(await readFile(f.receiptPath, "utf8")).phase).toBe("uncertain-remove");
+  expect(await f.lifecycle.status(f.dataDir)).toMatchObject({ installation: "indeterminate" });
+  await expect(f.lifecycle.install(f.dataDir)).rejects.toThrow("removal"); await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("removal");
+  expect(f.calls.filter(args => args[0] === "bootout")).toHaveLength(1); expect(await readFile(f.plistPath, "utf8")).toContain(LAUNCH_AGENT_LABEL);
+  f.state.job = null;
+  await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("recorded process has stopped");
+  f.state.process = "unknown";
+  await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("recorded process has stopped");
+  f.state.process = "dead";
+  expect(await f.lifecycle.uninstall(f.dataDir)).toMatchObject({ installation: "absent" });
+  expect(f.calls.filter(args => args[0] === "bootout")).toHaveLength(1);
+  await expect(lstat(f.plistPath)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("a removal interrupted after bootout reconciles only after the recorded process and operation owner stop", async () => {
+  const f = await fixture(); await f.lifecycle.install(f.dataDir);
+  const receipt = JSON.parse(await readFile(f.receiptPath, "utf8"));
+  await writeFile(f.receiptPath, JSON.stringify({ ...receipt, phase: "removing" }), { mode: 0o600 });
+  await writeFile(join(f.dataDir, "state", "launch-agent.lock"), JSON.stringify({ schemaVersion: 1, pid: 1234568, generation: "12345678-1234-1234-1234-123456789abc" }), { mode: 0o600 });
+  f.state.job = null;
+  await expect(f.lifecycle.uninstall(f.dataDir)).rejects.toThrow("owner is uncertain");
+  f.state.process = "dead";
+  expect(await f.lifecycle.uninstall(f.dataDir)).toMatchObject({ installation: "absent" });
+  expect(f.calls.filter(args => args[0] === "bootout")).toHaveLength(0);
+});
+
+test("a replacement during bootout prevents conditional artifact cleanup", async () => {
+  const f = await fixture(); await f.lifecycle.install(f.dataDir);
+  const run = f.host.run; const lifecycle = createLaunchAgentLifecycle({ ...f.host, async run(args) {
+    const result = await run(args);
+    if (args[0] === "bootout") await writeFile(f.plistPath, "replacement", { mode: 0o600 });
+    return result;
+  } });
+  await expect(lifecycle.uninstall(f.dataDir)).rejects.toThrow("revision conflict"); expect(await readFile(f.plistPath, "utf8")).toBe("replacement");
+  expect(await readFile(f.receiptPath, "utf8")).toContain('"phase":"removing"');
+});
+
+test("unsafe paths, mutable runtime, unknown sockets, and active lifecycle locks fail closed", async () => {
+  const f = await fixture(); await chmod(f.runtime, 0o777);
+  await expect(f.lifecycle.install(f.dataDir)).rejects.toThrow("runtime"); await chmod(f.runtime, 0o700);
+  await mkdir(f.dataDir, { mode: 0o700 }); await writeFile(join(f.dataDir, "daemon.sock"), "unknown entry", { mode: 0o600 });
+  await expect(f.lifecycle.install(f.dataDir)).rejects.toThrow("socket"); expect(await readFile(join(f.dataDir, "daemon.sock"), "utf8")).toBe("unknown entry");
+  const lock = join(f.dataDir, "state", "launch-agent.lock");
+  await writeFile(lock, JSON.stringify({ schemaVersion: 1, pid: process.pid, generation: "12345678-1234-1234-1234-123456789abc" }), { mode: 0o600 });
+  await expect(f.lifecycle.install(f.dataDir)).rejects.toThrow("owner is uncertain");
+  expect(f.calls.filter(args => args[0] !== "print")).toHaveLength(0);
+  const linked = join(f.root, "linked-home"); await symlink(f.home, linked);
+  await expect(createLaunchAgentLifecycle({ ...f.host, home: linked }).install(f.dataDir)).rejects.toThrow("physical");
+});
+
+test("the lifecycle refuses another installation identity or data directory", async () => {
+  const f = await fixture(); await f.lifecycle.install(f.dataDir);
+  const alternate = join(f.root, "other-cli.ts"); await writeFile(alternate, "// another fixture", { mode: 0o600 });
+  await expect(createLaunchAgentLifecycle({ ...f.host, entrypoint: alternate }).install(f.dataDir)).rejects.toThrow("another runtime or entrypoint");
+  await expect(f.lifecycle.install(join(f.root, "other-data"))).rejects.toThrow("exact recorded");
+  expect(f.calls.filter(args => args[0] === "bootstrap")).toHaveLength(1);
+});
+
+test("CLI install, status, and uninstall use the lifecycle while reporting control health separately", async () => {
+  const f = await fixture(), lines: string[] = [], output = { write: (text: string): void => { lines.push(text); } }, options = { launchAgent: f.lifecycle };
+  expect(await runTextbutlerCli(["daemon", "install", "--data-dir", f.dataDir], output, options)).toBe(0);
+  expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: true, launchAgent: { installation: "installed" }, automaticReplies: "unavailable" });
+  expect(await runTextbutlerCli(["daemon", "status", "--data-dir", f.dataDir], output, options)).toBe(1);
+  expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: false, daemon: { status: "disconnected" }, launchAgent: { service: "running" } });
+  expect(await runTextbutlerCli(["daemon", "uninstall", "--data-dir", f.dataDir], output, options)).toBe(0);
+});
+
+test("unsupported platforms never invoke launchctl", async () => {
+  const f = await fixture(), lifecycle = createLaunchAgentLifecycle({ ...f.host, platform: "linux" });
+  expect(await lifecycle.status(f.dataDir)).toMatchObject({ installation: "unsupported" });
+  await expect(lifecycle.install(f.dataDir)).rejects.toThrow("macOS"); await expect(lifecycle.uninstall(f.dataDir)).rejects.toThrow("macOS");
+  expect(f.calls).toHaveLength(0);
+});

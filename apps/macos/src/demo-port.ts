@@ -19,6 +19,18 @@ export function createDemoPort(): DesktopControlPort {
   const failure = (code: "invalid-request" | "capacity" | "conflict", message: string) => ({ protocol: CONTROL_PROTOCOL, ok: false as const, code, message });
   return { async request(request) {
     if (request.command === "snapshot" || request.command === "activity.list") return snapshot();
+    if (request.command === "owner.job.read") return failure("invalid-request", "This synthetic preview has no background job.");
+    if (request.command === "conversations.list") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "conversations", detail: "Synthetic examples only. No Messages or Contacts data was read.", candidates: state.contacts.some(contact => contact.id === "synthetic-casey") ? [] : [
+      { id: "synthetic-candidate-casey", name: "Casey Jordan", subtitle: "Sample one-to-one conversation", eligible: true, reason: "Ready to add" },
+      { id: "synthetic-candidate-group", name: "Weekend plans", subtitle: "Sample group conversation", eligible: false, reason: "Group conversations are not supported" },
+    ] };
+    if (request.command === "contact.enroll") {
+      if (request.expectedRevision !== state.revision) return failure("conflict", "Settings changed. Refresh before adding a contact.");
+      if (request.candidateId !== "synthetic-candidate-casey" || state.contacts.some(contact => contact.id === "synthetic-casey")) return failure("invalid-request", "Choose an available sample conversation.");
+      state.contacts.push({ id: "synthetic-casey", name: "Casey Jordan", subtitle: "Sample contact · iMessage", settings: structuredClone(DEFAULT_CONTACT_SETTINGS) });
+      memories.set("synthetic-casey", "# Casey Jordan\n\nSynthetic preview memory. No real conversation was imported.\n"); state.revision++;
+      return { protocol: CONTROL_PROTOCOL, ok: true, kind: "enrolled", snapshot: structuredClone(state), contactId: "synthetic-casey", historyInitialized: request.initializeHistory, historyCount: 0, historyOmittedCount: 0, historyShortenedCount: 0 };
+    }
     const contact = "contactId" in request ? state.contacts.find(contact => contact.id === request.contactId) : null;
     if ("contactId" in request && !contact) return failure("invalid-request", "This sample contact no longer exists.");
     if (request.command === "contact.memory.read") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "memory", contactId: request.contactId, revision: await revision(memories.get(request.contactId) ?? ""), content: memories.get(request.contactId) ?? "" };

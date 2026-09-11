@@ -38,6 +38,11 @@ export type AgentRunResult = Readonly<{
   /** Must prove provider process exit or fenced controller release, even after errors. */
   processStopped: true;
 }>;
+/** An adapter may use this only after independently joining every process it started. */
+export class AgentStoppedError extends Error {
+  readonly processStopped = true;
+}
+
 export interface AgentAdapter {
   readonly provider: AgentProvider;
   readonly qualification: RuntimeQualification;
@@ -45,7 +50,7 @@ export interface AgentAdapter {
 }
 
 export const UNQUALIFIED_PROVIDER_REASONS = Object.freeze({
-  codex: "Codex command-tool removal and contact-only read confinement require exact-runtime adversarial qualification.",
+  codex: "Codex 0.153.4 dynamicTools are additive; default-on code_mode_host, browser/computer tools and other built-ins have no attested broker-only inventory.",
   claude: "Claude tool selection is documented; isolated configuration and contact-only read confinement require exact-runtime adversarial qualification.",
 });
 
@@ -93,7 +98,13 @@ export class AgentRouter {
     const lease: AccountLease = this.options.leases.acquire({ provider: p, accountId: request.accountId,
       owner: request.runId, now: this.options.now(), ttlMs: 300_000 });
     // Rejections retain custody: arbitrary errors do not prove the provider stopped.
-    const result = await adapter.run(Object.freeze({ ...request }), broker);
+    let result: AgentRunResult;
+    try {
+      result = await adapter.run(Object.freeze({ ...request }), broker);
+    } catch (error) {
+      if (error instanceof AgentStoppedError && !this.options.leases.release(lease)) throw new Error("STALE_ACCOUNT_LEASE");
+      throw error;
+    }
     if (result.processStopped !== true) throw new Error("PROVIDER_PROCESS_STOP_UNPROVEN");
     if (!this.options.leases.release(lease)) throw new Error("STALE_ACCOUNT_LEASE");
     return result;
@@ -127,8 +138,9 @@ export function createProviderLaunchPlan(binding: AccountBinding, workspaceId: s
     configuration: Object.freeze(p === "codex" ? {
       transport: "app-server", commandTools: false, inheritedConfig: false, dynamicTools: "broker-only",
       readPolicy: "contact-only", writePolicy: "contact-only", approvalPolicy: "never",
-      requiredOverrides: Object.freeze({ "features.shell_tool": false, "features.unified_exec": false,
-        "features.multi_agent": false, "features.js_repl": false, "apps._default.enabled": false }),
+      observedRuntime: "0.153.4",
+      unresolvedControls: Object.freeze(["dynamicTools is additive", "no effective tool inventory in thread/start",
+        "code_mode_host", "browser_use", "computer_use", "view_image", "image_generation", "plugins", "hooks", "workspace_dependencies"]),
     } : {
       transport: "agent-sdk", tools: Object.freeze([]), settingSources: Object.freeze([]),
       permissionMode: "dontAsk", mcpServers: "broker-only", allowedTools: "exact-broker-manifest",

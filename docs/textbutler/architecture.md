@@ -24,7 +24,9 @@ flowchart LR
 
 Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. Agentrouter owns provider selection, shared-account leases, cancellation, model catalogs, qualification evidence, and a bounded tool interface. Textbutler owns conversation policy and the durable send transaction. The Mac app changes owner settings through a small local protocol; it never gives a model arbitrary Tauri commands.
 
-The intended background lifecycle uses a user LaunchAgent: Messages and Contacts belong to the signed-in Mac user. Login persistence must be independent of the settings window. The current source daemon runs in the foreground and serves owner controls; LaunchAgent installation and the live event loop remain unimplemented. In the completed lifecycle, wake/reconnect first catches up without answering historical messages, refreshes state, then resumes live admission. A failed catch-up remains paused.
+The background lifecycle uses a user LaunchAgent: Messages and Contacts belong to the signed-in Mac user, and login persistence is independent of the settings window. The source CLI implements foreground execution and explicit LaunchAgent install, status and uninstall. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies both its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. Crash recovery has been tested with real synthetic child processes; live launchd installation and signed app/helper packaging are not yet qualified.
+
+The daemon currently serves owner controls and bounded enrollment jobs. It does not start an incoming-message loop. Once Ghostget supplies the required event contract, wake/reconnect must first catch up without answering historical messages, refresh state, and then resume live admission. A failed catch-up remains paused.
 
 ## Contact data
 
@@ -35,9 +37,15 @@ Textbutler/
   daemon.sock                  owner-only native control socket
   state/
     settings.json              owner configuration and contact bindings
+    host.json                  optional private installed Ghostget CLI/account binding
     runs.sqlite                private run and send journal
+    daemon-custody.sqlite      exclusive process/socket ownership
+    launch-agent-custody.sqlite lifecycle serialization
+    launch-agent.json          exact LaunchAgent installation receipt
     event-cursor.json          planned durable subscription checkpoint
-  extensions/                  owner-installed executable hooks
+  plugins/
+    extensions.json            explicit owner-installed hook manifest
+    quiet-hours.ts             example trusted executable extension
   contacts/
     <opaque-contact-id>/       the only model-visible workspace for one run
       AGENTS.md                editable response guidance; never authority
@@ -52,7 +60,7 @@ Textbutler/
 
 Directory names use opaque identifiers, not contact names or phone numbers. Files are private to the Mac user. Models cannot traverse parent paths, links, other contact folders, or host configuration. The file broker supports reads, conditional writes, and exact edits. It exposes no symlink, directory, delete-tree, shell, or executable permission operations. Atomic replacement preserves the preceding file if a write fails. A stale memory revision produces a conflict instead of overwriting an owner's correction.
 
-Initialization imports at most 200 recent, explicitly scoped messages, with message ID, time, and author preserved. These records are context only. An initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
+The owner chooses one verified direct conversation from a bounded Ghostget list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
 
 The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated. There is no need to carry every previous archive/source feature into the new UI.
 
@@ -88,11 +96,15 @@ The initial lifecycle is `message.received`, `reply.decide`, `reply.compose`, `r
 
 Executable extensions are application code with the daemon's trust. They are installed outside contact folders; the agent cannot write them or turn message text into imports. Agent self-evolution means revising guidance and memory, not installing executable code. A future untrusted plugin mode needs its own process or language sandbox and explicit capabilities. In-process hooks are never described as a plugin security boundary.
 
+The daemon reads a bounded private `plugins/extensions.json` manifest and preflights its complete inventory before importing listed TypeScript/JavaScript entry modules. Each default export must match the manifest ID/version and known hook names. Source digests appear in the loaded extension metadata. No directory scanning, package installation or hot reload occurs; changes require a full daemon process restart. The routed agent emits `memory.updated` only after a successful conditional write, with its path and committed revision. A notification failure does not undo that write or replay it.
+
 ## Agentrouter
 
 Agentrouter begins as an MIT-licensed source package independent of Textbutler's product model. Its account lease coordinates the selected provider account without embedding credentials in a contact workspace. Credential resolvers remain trusted host services. A lease cannot be stolen merely because its time elapsed while a process might still be alive.
 
 Provider adapters declare observed, exact-version qualification. A launch plan is not proof of a sandbox. Codex's shell-disable setting and Claude's exact tool list are useful inputs, but an adapter is not admitted until attempted shell/process calls, host file reads, inherited MCP/plugin configuration, auth-file access, alternate agents, and additional workspaces are demonstrably blocked. No bypass-permissions mode is acceptable.
+
+The source implements a pinned Claude Agent SDK adapter with explicit API-key account binding, a private verified executable snapshot, isolated runtime directories, no built-in tools or inherited settings, broker-only MCP, bounded raw output, and joined process-group termination. Its production gate requires independent qualification of the exact executable and SDK identity. Synthetic protocol and native-runtime fixtures do not activate it. Codex remains unavailable because its current app-server surface has not established the required tool inventory and confinement. See the [Agentrouter implementation and evidence](../../packages/agentrouter/README.md).
 
 The model receives a fixed contact/workspace identity and a fixed run ID. File operations are brokered and conditional. Public web requests are separately bounded and must not reach loopback, private networks, local sockets, or cloud metadata through DNS or redirects. Message tools stage recipient-free intents for the one conversation. Unknown tool names and unknown input fields fail. Credential/account services are never model tools.
 
@@ -104,6 +116,10 @@ Current source inspection found Ghostget's Tauri 2 webview with a packaged Bun h
 
 Current direct iMessage APIs provide listing, bounded context, text preview/confirm, and delivery readback. Route resolution produces expiring opaque references. These are not durable contact bindings. Native Contacts, durable message subscriptions, unattended delegated sends, and rich native actions are not yet qualified through that surface.
 
+The [Ghostget integration contract](ghostget-contract.md) records the observed
+read-only boundary and the exact binding, grant, event, effect and receipt
+semantics needed upstream before unattended replies can activate.
+
 The Textbutler transport protocol supports capability negotiation, contacts, conversations, history, cursor-based events, exact preparation, authorization, and receipts. The existing Ghostget adapter implements only actual documented command contracts and returns explicit unsupported results for absent operations. No polling of private databases or direct UI scripting is added as a hidden workaround.
 
 Linq's documented iMessage API includes attachments, reactions, stickers, rich links, App Clips, and experiences. App cards and rich links are standalone messages. Those hosted capabilities do not establish availability through native macOS Messages. Optional Linq would be a separate transport with explicit account setup, sender identity, webhook signature verification, replay protection, and the same Textbutler policy gates. It is not a way to silently route an owner's personal conversation through a different phone number.
@@ -112,17 +128,17 @@ Ghostget currently imports published Message Like Me bundle contracts. Keep that
 
 ## Mac application
 
-The app has a contact list, per-contact activation and mode settings, disclosure preview, memory editing, activity, provider status, and global pause. Unsupported capabilities show their actual setup or transport limitation. A separate synthetic demo is clearly labeled and is not included in the native app's live data graph.
+The app has an explicit conversation picker, optional history initialization, a contact list, per-contact activation and mode settings, disclosure preview, memory editing, activity, provider status, and global pause. Long provider reads use bounded asynchronous jobs; Pause stays available and preserves unsaved choices. Unsupported capabilities show their actual setup or transport limitation. A separate synthetic demo is clearly labeled and is not included in the native app's live data graph.
 
 One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The webview has no generic shell, filesystem, opener, or network plugin. The app does not inherit access to arbitrary Ghostget operations.
 
 ## Admission still required
 
-1. Ghostget must publish a durable contact/conversation binding, bounded history, authenticated cursor subscription with gap recovery, owner-authorship signals, and per-contact revocable automation grants. Its send boundary must bind current context and exact actions without requiring a new foreground preview confirmation for every reply.
-2. Implement a real Codex or Claude subprocess adapter and account binding, then pass exact-runtime no-shell and contact-only read/write qualification, including inherited configuration and secret isolation. The current adapters refuse execution; launch plans and synthetic adapters are not provider implementations.
+1. Ghostget must publish a renewable send binding, authenticated cursor subscription with gap recovery, owner-authorship signals, and per-contact revocable automation grants. Its send boundary must bind current context and exact actions without requiring a new foreground preview confirmation for every reply. Existing read-only enrollment and bounded history do not grant send authority.
+2. Independently qualify the Claude SDK adapter for the target host, exact runtime and account path, including inherited managed configuration, no-shell operation, contact-only broker access and secret isolation. Add owner credential/model setup before activation. Codex needs its own real adapter and equivalent evidence. No production qualification receipt is bundled.
 3. Native attachment read/write must be implemented and proven through Ghostget. Each further rich capability needs separate evidence. Linq support requires an explicit product connection and account path.
-4. The launchd install/update/uninstall lifecycle needs signed app/helper identity, process custody, restart/catch-up evidence, and no duplicate daemon ownership. Source scaffolding is not a signed release.
-5. Rebrand the public site, repository, package publication identities, and release controls through a reviewed migration. Existing protected production refs, immutable tags, npm trust, and production verification remain binding until that migration is complete.
+4. Complete live launchd qualification and signed app/helper packaging, including install/update/uninstall identity and restart/catch-up evidence. The current source lifecycle and synthetic crash tests are not a signed release.
+5. Promote the Textbutler site through the reviewed protected production workflow. Historical repository and published package identities remain compatibility and provenance anchors; any later rename or new package publication must migrate release controls and consumers without changing immutable artifacts or bypassing npm trust.
 
 ## Sources
 

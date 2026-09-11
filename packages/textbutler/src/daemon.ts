@@ -1,10 +1,15 @@
-import { createServer, connect, type Server, type Socket } from "node:net";
-import { chmod, lstat, realpath } from "node:fs/promises";
+import { createServer, connect, type Socket } from "node:net";
+import { lstat, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { TextbutlerControlService, TEXTBUTLER_CONTROL_PROTOCOL, ensurePrivateDirectory, parseControlRequest } from "./control-service.ts";
 import { parseControlResponse, type ControlResponse } from "../../control/src/index.ts";
 import type { Settings } from "./config.ts";
+import { loadOwnerExtensions, type LoadedExtensions } from "./plugins.ts";
+import { loadHostConfig } from "./host-config.ts";
+import { createGhostgetOwnerReadPort } from "./ghostget-owner-read.ts";
+import type { OwnerConversationReadPort } from "./enrollment.ts";
+import { DaemonCustody } from "./daemon-custody.ts";
 
 export const MAX_CONTROL_FRAME_BYTES = 1_048_576;
 const MAX_CONNECTIONS = 16;
@@ -31,23 +36,17 @@ async function inspectDataDirectory(dataDir: string): Promise<void> {
   const info = await lstat(dataDir);
   if (await realpath(dataDir) !== dataDir || !info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0) throw new Error("Control directory is not physical, private, and owned");
 }
-function listen(server: Server, path: string): Promise<void> {
-  return new Promise((resolve_, reject) => {
-    const failed = (error: Error): void => { server.off("listening", ready); reject(error); };
-    const ready = (): void => { server.off("error", failed); resolve_(); };
-    server.once("error", failed); server.once("listening", ready); server.listen(path);
-  });
-}
-export interface RunningDaemon { readonly socketPath: string; readonly service: TextbutlerControlService; close(): Promise<void> }
+export interface RunningDaemon { readonly socketPath: string; readonly service: TextbutlerControlService; readonly extensions: LoadedExtensions; close(): Promise<void> }
 
 /** Foreground control daemon. No launchd installation, provider process, model, or message send. */
-export async function startDaemon(options: { dataDir?: string; initialSettings?: Settings } = {}): Promise<RunningDaemon> {
+export async function startDaemon(options: { dataDir?: string; initialSettings?: Settings; enrollment?: OwnerConversationReadPort } = {}): Promise<RunningDaemon> {
   const dataDir = await ensurePrivateDirectory(options.dataDir ?? defaultDataDirectory());
   const path = daemonSocketPath(dataDir);
-  // A stale/foreign socket or any other existing entry is never unlinked here.
-  try { await lstat(path); throw new Error("A Textbutler socket entry already exists. Inspect it before starting another daemon."); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  // SQLite retains an OS lock for this lifetime, with committed socket custody.
+  // Only exact recorded sockets from a proved-dead owner can be recovered.
+  const custody = await DaemonCustody.acquire(dataDir, path);
   let service: TextbutlerControlService | undefined;
+  let extensions: LoadedExtensions | undefined;
   let closing = false, pending = 0;
   const clients = new Set<Socket>(), work = new Set<Promise<unknown>>();
   const server = createServer(socket => {
@@ -82,25 +81,30 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     socket.on("end", () => { if (buffer.length !== 0) socket.destroy(); });
   });
   try {
-    // Successful listen is the single-owner claim. EADDRINUSE never triggers cleanup.
-    await listen(server, path);
-    await chmod(path, 0o600);
+    await custody.publish(server);
     await socketIdentity(path);
-    service = await TextbutlerControlService.open({ dataDir, ...(options.initialSettings === undefined ? {} : { initialSettings: options.initialSettings }), recoverRuns: true });
+    const host = await loadHostConfig(dataDir);
+    const enrollment = options.enrollment ?? (host.ghostget === undefined ? undefined : createGhostgetOwnerReadPort({ ...host.ghostget, custodyDirectory: join(dataDir, "state") }));
+    extensions = await loadOwnerExtensions(dataDir);
+    service = await TextbutlerControlService.open({ dataDir, ...(options.initialSettings === undefined ? {} : { initialSettings: options.initialSettings }), ...(enrollment === undefined ? {} : { enrollment }), recoverRuns: true });
   } catch (error) {
     for (const client of clients) client.destroy();
-    if (server.listening) await new Promise<void>(resolve_ => server.close(() => resolve_()));
-    await service?.close();
+    try {
+      if (server.listening) await new Promise<void>(resolve_ => server.close(() => resolve_()));
+      await service?.close();
+    } finally { await custody.close(); }
     throw error;
   }
   let closePromise: Promise<void> | undefined;
-  return { socketPath: path, service, close() {
+  return { socketPath: path, service, extensions: extensions!, close() {
     closePromise ??= (async () => {
       closing = true;
       for (const client of clients) client.destroy();
-      await new Promise<void>((resolve_, reject) => server.close(error => error ? reject(error) : resolve_()));
-      await Promise.allSettled([...work]);
-      await service!.close();
+      try {
+        await new Promise<void>((resolve_, reject) => server.close(error => error ? reject(error) : resolve_()));
+        await Promise.allSettled([...work]);
+        await service!.close();
+      } finally { await custody.close(); }
     })();
     return closePromise;
   } };

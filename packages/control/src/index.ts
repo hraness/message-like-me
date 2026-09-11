@@ -21,7 +21,11 @@ export interface DesktopSnapshot {
   capabilities: Capability[];
   activity: Activity[];
 }
+export interface ConversationCandidate { id: string; name: string; subtitle: string; eligible: boolean; reason: string }
 export type ControlRequest =
+  | { protocol: typeof CONTROL_PROTOCOL; command: "conversations.list" }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "contact.enroll"; candidateId: string; expectedRevision: number; initializeHistory: boolean }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "owner.job.read"; jobId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.settings.update"; contactId: string; expectedRevision: number; settings: ContactSettings }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.read"; contactId: string }
@@ -29,6 +33,9 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "global.settings.update"; expectedRevision: number; settings: DesktopSnapshot["settings"] }
   | { protocol: typeof CONTROL_PROTOCOL; command: "activity.list" };
 export type ControlResponse =
+  | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "job"; jobId: string }
+  | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "conversations"; candidates: ConversationCandidate[]; detail: string }
+  | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "enrolled"; snapshot: DesktopSnapshot; contactId: string; historyCount: number; historyOmittedCount: number; historyShortenedCount: number; historyInitialized: boolean }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "snapshot"; snapshot: DesktopSnapshot }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "memory"; contactId: string; revision: string; content: string }
   | { protocol: typeof CONTROL_PROTOCOL; ok: false; code: "disconnected" | "invalid-request" | "conflict" | "capacity" | "unavailable"; message: string };
@@ -117,6 +124,19 @@ export function parseControlResponse(value: unknown): ControlResponse {
   if (row.ok === false) return { protocol: CONTROL_PROTOCOL, ok: false,
     code: oneOf(row.code, ["disconnected", "invalid-request", "conflict", "capacity", "unavailable"]), message: text(row.message) };
   if (row.ok !== true) throw new Error("Invalid control response outcome.");
+  if (row.kind === "job") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "job", jobId: text(row.jobId, 80) };
+  if (row.kind === "conversations") {
+    const candidates = list(row.candidates, 200).map(value => { const item = record(value); return { id: text(item.id, 80), name: text(item.name, 200), subtitle: text(item.subtitle, 512), eligible: bool(item.eligible), reason: text(item.reason, 512) }; });
+    if (new Set(candidates.map(candidate => candidate.id)).size !== candidates.length) throw new Error("Duplicate conversation candidate.");
+    return { protocol: CONTROL_PROTOCOL, ok: true, kind: "conversations", candidates, detail: text(row.detail) };
+  }
+  if (row.kind === "enrolled") {
+    const response = parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: row.snapshot });
+    if (!response.ok || response.kind !== "snapshot") throw new Error("Invalid enrollment snapshot.");
+    const contactId = text(row.contactId, 80);
+    if (!response.snapshot.contacts.some(contact => contact.id === contactId && !contact.settings.enabled)) throw new Error("Enrollment must create a disabled contact.");
+    return { protocol: CONTROL_PROTOCOL, ok: true, kind: "enrolled", snapshot: response.snapshot, contactId, historyCount: integer(row.historyCount, 0, 200), historyOmittedCount: integer(row.historyOmittedCount, 0, 200), historyShortenedCount: integer(row.historyShortenedCount, 0, 200), historyInitialized: bool(row.historyInitialized) };
+  }
   if (row.kind === "memory") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "memory", contactId: text(row.contactId, 256), revision: digest(row.revision), content: text(row.content, 65_536) };
   if (row.kind !== "snapshot") throw new Error("Unknown control response kind.");
   const source = record(row.snapshot); const global = record(source.settings);

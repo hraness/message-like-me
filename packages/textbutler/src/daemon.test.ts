@@ -31,6 +31,22 @@ describe("foreground owner-only control socket", () => {
     expect((await lstat(daemon.socketPath)).ino).toBe(before.ino);
     expect((await requestDaemon({ dataDir, request: { protocol, command: "snapshot" } })).ok).toBe(true);
   });
+  test("owner conversation jobs cross the real socket and never read at startup", async () => {
+    const dataDir = await root(); let lists = 0;
+    const daemon = await startDaemon({ dataDir, enrollment: {
+      async list() { lists++; return []; },
+      async read() { throw new Error("No conversation was selected"); },
+    } }); daemons.push(daemon);
+    expect(lists).toBe(0);
+    const begun = await requestDaemon({ dataDir, request: { protocol, command: "conversations.list" } });
+    expect(begun).toMatchObject({ ok: true, kind: "job" });
+    if (!begun.ok || begun.kind !== "job") throw new Error("Expected owner job");
+    let result = await requestDaemon({ dataDir, request: { protocol, command: "owner.job.read", jobId: begun.jobId } });
+    for (let attempt = 0; result.ok && result.kind === "job" && attempt < 10; attempt++) result = await requestDaemon({ dataDir, request: { protocol, command: "owner.job.read", jobId: begun.jobId } });
+    expect(result).toMatchObject({ ok: true, kind: "conversations" });
+    expect(lists).toBe(1);
+    expect((await daemon.service.snapshot()).contacts).toEqual([]);
+  });
   test("unknown socket-path entries are preserved", async () => {
     const dataDir = await root(); const path = daemonSocketPath(dataDir);
     await writeFile(path, "owner sentinel", { mode: 0o600 });

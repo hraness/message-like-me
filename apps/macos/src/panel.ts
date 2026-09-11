@@ -1,4 +1,6 @@
-import { CONTROL_PROTOCOL, disconnectedSnapshot, disclosurePreview, validateContactSettings, type Contact, type ContactSettings, type ControlRequest, type DesktopControlPort, type DesktopSnapshot } from "./control.ts";
+import { CONTROL_PROTOCOL, disconnectedSnapshot, disclosurePreview, validateContactSettings, type ConversationCandidate, type Contact, type ContactSettings, type ControlRequest, type DesktopControlPort, type DesktopSnapshot } from "./control.ts";
+
+import { newerSnapshot, requestPause, requestWithJobs } from "./jobs.ts";
 
 const escape = (value: string | number) => String(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const icon = (name: "pause" | "play" | "settings" | "search" | "check" | "arrow" | "person") => {
@@ -14,13 +16,14 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort): void {
   let selected: string | null = null;
   let tab: Tab = "behavior";
   let search = "";
+  let adding = false; let candidates: ConversationCandidate[] = []; let candidateId = ""; let initializeHistory = false; let conversationDetail = "";
   let draft: ContactSettings | null = null;
   let memory = ""; let savedMemory = ""; let memoryRevision = ""; let memoryLoaded = false;
   let globalDraft = { ...snapshot.settings };
-  let busy = true; let feedback = ""; let feedbackError = false;
+  let busy = true; let ownerJobPending = false; let pauseBusy = false; let feedback = ""; let feedbackError = false;
   const current = () => snapshot.contacts.find(contact => contact.id === selected);
   const dirty = () => (draft !== null && JSON.stringify(draft) !== JSON.stringify(current()?.settings)) || memory !== savedMemory || JSON.stringify(globalDraft) !== JSON.stringify(snapshot.settings);
-  const editable = () => snapshot.connection !== "disconnected" && !busy;
+  const editable = () => snapshot.connection !== "disconnected" && !busy && !pauseBusy;
   function announce(message: string, error = false) {
     feedback = message; feedbackError = error;
     const live = root.querySelector<HTMLElement>("#feedback");
@@ -30,25 +33,45 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort): void {
   async function request(request: ControlRequest, success?: string, preserveDrafts = false): Promise<void> {
     busy = true; render();
     try {
-      const response = await port.request(request);
+      const response = await requestWithJobs(port, request, undefined, () => { ownerJobPending = true; render(); });
       if (!response.ok) { announce(response.message, true); return; }
-      if (response.kind === "snapshot") {
-        snapshot = response.snapshot;
+      if (response.kind === "conversations") {
+        candidates = response.candidates; candidateId = ""; conversationDetail = response.detail;
+      } else if (response.kind === "enrolled") {
+        snapshot = newerSnapshot(snapshot, response.snapshot); selected = response.contactId; adding = false; tab = "behavior"; resetDraft();
+        announce(response.historyInitialized ? `Contact added with ${response.historyCount} recent messages as context. ${response.historyShortenedCount} shortened; ${response.historyOmittedCount} omitted. The butler is off.` : "Contact added. No message history was imported. The butler is off.");
+      } else if (response.kind === "snapshot") {
+        const stale = response.snapshot.revision < snapshot.revision;
+        snapshot = newerSnapshot(snapshot, response.snapshot);
         if (selected && !snapshot.contacts.some(contact => contact.id === selected)) selected = null;
         if (request.command === "snapshot" && !selected && snapshot.contacts[0]) selected = snapshot.contacts[0].id;
         if (preserveDrafts) globalDraft.paused = snapshot.settings.paused;
-        if (request.command !== "activity.list" && !preserveDrafts) {
+        if (request.command !== "activity.list" && !preserveDrafts && !stale) {
           const previousMemory = memory;
           resetDraft();
           if (request.command === "contact.memory.write") { memory = previousMemory; savedMemory = previousMemory; memoryLoaded = true; memoryRevision = ""; memoryLoaded = false; }
         }
-      } else {
+      } else if (response.kind === "memory") {
         if (response.contactId !== selected) throw new Error("Memory response does not match the selected contact.");
         memory = response.content; savedMemory = memory; memoryLoaded = true; memoryRevision = response.revision;
       }
       if (success) announce(success);
     } catch (error) { announce(error instanceof Error ? error.message : "The daemon could not complete the request.", true); }
-    finally { busy = false; render(); }
+    finally { busy = false; ownerJobPending = false; render(); }
+  }
+  async function togglePause(): Promise<void> {
+    if (pauseBusy || snapshot.connection === "disconnected") return;
+    const paused = !snapshot.settings.paused;
+    pauseBusy = true; render();
+    try {
+      const response = await requestPause(port, snapshot, paused);
+      if (!response.ok) { announce(response.message, true); return; }
+      if (response.kind !== "snapshot") throw new Error("The daemon returned an unexpected global pause response.");
+      snapshot = newerSnapshot(snapshot, response.snapshot);
+      globalDraft.paused = snapshot.settings.paused;
+      announce(paused ? "All contacts paused. Unsaved edits are preserved." : "Global pause lifted. Contact settings still apply.");
+    } catch (error) { announce(error instanceof Error ? error.message : "The daemon could not change global pause.", true); }
+    finally { pauseBusy = false; render(); }
   }
   function contactList(): string {
     const contacts = snapshot.contacts.filter(contact => contact.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
@@ -78,13 +101,18 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort): void {
   function globalView(): string {
     return `<header class="inspector-heading"><div><h1>Textbutler settings</h1><p>Set boundaries for every contact.</p></div></header><div class="inspector-content"><form id="global-form"><section class="section"><h2>Availability</h2><div class="setting-row"><label for="global-paused"><strong>Pause all contacts</strong><span>Keep settings and memory while replies are paused.</span></label><label class="switch"><input id="global-paused" name="paused" type="checkbox" ${globalDraft.paused ? "checked" : ""} ${!editable() ? "disabled" : ""}><span></span></label></div><div class="setting-row"><label for="active-limit"><strong>Active contact limit</strong><span>${snapshot.contacts.filter(contact => contact.settings.enabled).length} contacts currently enabled. Default: 5.</span></label><input id="active-limit" name="activeContactLimit" type="number" min="1" max="50" step="1" value="${globalDraft.activeContactLimit}" ${!editable() ? "disabled" : ""}></div><p class="quiet-note">Disable contacts before lowering this below the active count.</p></section><div class="form-actions"><span id="dirty-state">${dirty() ? "Unsaved changes" : "Settings are up to date"}</span><button class="button" type="button" data-action="discard" ${!editable() ? "disabled" : ""}>Discard changes</button><button class="button primary" ${!editable() ? "disabled" : ""}>Save settings</button></div></form>${setup()}</div>`;
   }
+  function enrollmentView(): string {
+    return `<header class="inspector-heading"><div><h1>Messages conversations</h1><p>Choose one person to give their butler a home.</p></div><button class="button" data-action="close-enrollment" ${busy ? "disabled" : ""}>Cancel</button></header><div class="inspector-content"><section class="section"><div class="section-heading"><h2>Choose a conversation</h2><button class="button" data-action="refresh-conversations" ${!editable() ? "disabled" : ""}>Refresh</button></div><p class="section-description">${escape(conversationDetail || "Textbutler reads recent conversation names and participants through Ghostget. The native Contacts directory is not available.")}</p>${busy ? `<p role="status" class="quiet-note">Reading through Ghostget… This can take a moment.</p>` : ""}<form id="enrollment-form"><fieldset class="conversation-picker" ${!editable() ? "disabled" : ""}><legend class="sr-only">Messages conversations</legend>${candidates.length ? candidates.map(candidate => `<label class="conversation-option ${candidate.eligible ? "" : "unavailable"}"><input type="radio" name="candidateId" value="${escape(candidate.id)}" ${candidateId === candidate.id ? "checked" : ""} ${!candidate.eligible ? "disabled" : ""}><span><strong>${escape(candidate.name)}</strong><span>${escape(candidate.subtitle)}</span>${!candidate.eligible ? `<span>${escape(candidate.reason)}</span>` : ""}</span></label>`).join("") : `<p class="quiet-note">${busy ? "Loading conversations…" : "No conversations to show. Check Ghostget setup, then refresh."}</p>`}</fieldset><div class="history-choice"><label><input type="checkbox" name="initializeHistory" ${initializeHistory ? "checked" : ""} ${!editable() ? "disabled" : ""}><strong>Initialize from recent history</strong></label><p>Copy up to 200 recent text messages from this conversation into its private context folder. Long messages are shortened to keep the import bounded. History is context only and never triggers a reply.</p></div><p class="quiet-note">This adds a disabled contact. Account and participants are checked again before enrollment and activation. Attachments are not imported.</p><div class="form-actions"><span>No messages will be sent.</span><button id="enroll-contact" class="button primary" type="submit" ${!editable() || !candidateId ? "disabled" : ""}>Add contact</button></div></form></section></div>`;
+  }
   function render() {
     const contact = current();
-    root.innerHTML = `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">${icon("person")}</span><strong>Textbutler</strong></div><div class="connection-summary"><span class="status-dot ${snapshot.connection === "connected" ? "connected" : ""}"></span><span>${snapshot.connection === "demo" ? "Synthetic preview" : snapshot.connection === "connected" ? snapshot.settings.paused ? "All contacts paused" : "Daemon connected" : "Daemon disconnected"}</span></div><button class="button pause-button" data-action="pause" ${!editable() ? "disabled" : ""}>${icon(snapshot.settings.paused ? "play" : "pause")}${snapshot.settings.paused ? "Resume all" : "Pause all"}</button><div class="sidebar-heading"><h2>Contacts</h2><span>${snapshot.contacts.filter(contact => contact.settings.enabled).length} / ${snapshot.settings.activeContactLimit} active</span></div><label class="search-field">${icon("search")}<input id="contact-search" type="search" placeholder="Find a contact" value="${escape(search)}" aria-label="Find a contact"></label><nav id="contact-list" class="contact-list" aria-label="Contacts">${contactList()}</nav><div class="sidebar-footer"><button class="settings-nav ${selected === null ? "selected" : ""}" data-action="global">${icon("settings")}<span>Settings & setup</span></button></div></aside><main class="inspector">${snapshot.connection === "demo" ? `<div class="mode-banner">Synthetic preview <span>Sample contacts only. Changes reset when this page closes.</span></div>` : ""}${snapshot.connection === "disconnected" ? `<div class="connection-banner"><div><strong>${busy ? "Connecting to Textbutler…" : "Connect your local daemon"}</strong><span>${escape(snapshot.detail)} No replies are being sent.</span></div><button class="button" data-action="reconnect" ${busy ? "disabled" : ""}>Retry connection</button></div>` : ""}${contact ? `<header class="inspector-heading"><span class="avatar large">${escape(initials(contact))}</span><div><h1>${escape(contact.name)}</h1><p>${escape(contact.subtitle)}</p></div><span class="contact-label">${contact.settings.enabled ? snapshot.settings.paused ? "Paused" : "Butler enabled" : "Butler off"}</span></header><nav class="tabs" aria-label="Contact sections">${(["behavior", "memory", "activity", "setup"] as const).map(value => `<button data-tab="${value}" aria-current="${tab === value ? "page" : "false"}" class="${tab === value ? "active" : ""}">${({ behavior: "Behavior", memory: "Memory", activity: "Activity", setup: "Setup" })[value]}</button>`).join("")}</nav><div class="inspector-content">${tab === "behavior" ? behavior() : tab === "memory" ? memoryView() : tab === "activity" ? activityView() : setup()}</div>` : globalView()}<div id="feedback" class="feedback ${feedbackError ? "error" : ""}" role="status" aria-live="polite">${escape(feedback)}</div></main></div>`;
+    root.innerHTML = `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">${icon("person")}</span><strong>Textbutler</strong></div><div class="connection-summary"><span class="status-dot ${snapshot.connection === "connected" ? "connected" : ""}"></span><span>${snapshot.connection === "demo" ? "Synthetic preview" : snapshot.connection === "connected" ? snapshot.settings.paused ? "All contacts paused" : "Daemon connected" : "Daemon disconnected"}</span></div><button class="button pause-button" data-action="pause" ${snapshot.connection === "disconnected" || pauseBusy || busy && !ownerJobPending ? "disabled" : ""}>${icon(snapshot.settings.paused ? "play" : "pause")}${snapshot.settings.paused ? "Resume all" : "Pause all"}</button><div class="sidebar-heading"><h2>Contacts</h2><span>${snapshot.contacts.filter(contact => contact.settings.enabled).length} / ${snapshot.settings.activeContactLimit} active</span></div><button class="button add-contact-button" data-action="add-contact" ${!editable() ? "disabled" : ""}>Add contact…</button><label class="search-field">${icon("search")}<input id="contact-search" type="search" placeholder="Find a contact" value="${escape(search)}" aria-label="Find a contact"></label><nav id="contact-list" class="contact-list" aria-label="Contacts">${contactList()}</nav><div class="sidebar-footer"><button class="settings-nav ${selected === null ? "selected" : ""}" data-action="global">${icon("settings")}<span>Settings & setup</span></button></div></aside><main class="inspector">${snapshot.connection === "demo" ? `<div class="mode-banner">Synthetic preview <span>Sample contacts only. Changes reset when this page closes.</span></div>` : ""}${snapshot.connection === "disconnected" ? `<div class="connection-banner"><div><strong>${busy ? "Connecting to Textbutler…" : "Connect your local daemon"}</strong><span>${escape(snapshot.detail)} No replies are being sent.</span></div><button class="button" data-action="reconnect" ${busy ? "disabled" : ""}>Retry connection</button></div>` : ""}${adding ? enrollmentView() : contact ? `<header class="inspector-heading"><span class="avatar large">${escape(initials(contact))}</span><div><h1>${escape(contact.name)}</h1><p>${escape(contact.subtitle)}</p></div><span class="contact-label">${contact.settings.enabled ? snapshot.settings.paused ? "Paused" : "Butler enabled" : "Butler off"}</span></header><nav class="tabs" aria-label="Contact sections">${(["behavior", "memory", "activity", "setup"] as const).map(value => `<button data-tab="${value}" aria-current="${tab === value ? "page" : "false"}" class="${tab === value ? "active" : ""}">${({ behavior: "Behavior", memory: "Memory", activity: "Activity", setup: "Setup" })[value]}</button>`).join("")}</nav><div class="inspector-content">${tab === "behavior" ? behavior() : tab === "memory" ? memoryView() : tab === "activity" ? activityView() : setup()}</div>` : globalView()}<div id="feedback" class="feedback ${feedbackError ? "error" : ""}" role="status" aria-live="polite">${escape(feedback)}</div></main></div>`;
   }
   root.addEventListener("input", event => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+    if (target.name === "candidateId") { candidateId = target.value; const submit = root.querySelector<HTMLButtonElement>("#enroll-contact"); if (submit) submit.disabled = !editable() || !candidateId; return; }
+    if (target.name === "initializeHistory" && target instanceof HTMLInputElement) { initializeHistory = target.checked; return; }
     if (target.id === "contact-search") { search = target.value; root.querySelector("#contact-list")!.innerHTML = contactList(); return; }
     if (target.name === "memory") { memory = target.value; root.querySelector("#memory-state")!.textContent = memory === savedMemory ? "Memory is up to date" : "Unsaved changes"; return; }
     if (draft && target.closest("#behavior-form")) {
@@ -103,11 +131,18 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort): void {
   });
   root.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
-    const button = event.target.closest<HTMLButtonElement>("button"); if (!button || button.disabled || busy) return;
+    const button = event.target.closest<HTMLButtonElement>("button"); if (!button || button.disabled || pauseBusy || busy && !(button.dataset.action === "pause" && ownerJobPending)) return;
     if (button.dataset.contact || button.dataset.action === "global") {
       if (dirty()) { announce("Save or discard your edits before switching contacts.", true); return; }
-      selected = button.dataset.contact ?? null; tab = "behavior"; resetDraft(); feedback = ""; render(); return;
+      adding = false; selected = button.dataset.contact ?? null; tab = "behavior"; resetDraft(); feedback = ""; render(); return;
     }
+    if (button.dataset.action === "add-contact") {
+      if (dirty()) { announce("Save or discard your edits before adding a contact.", true); return; }
+      adding = true; candidates = []; candidateId = ""; initializeHistory = false; conversationDetail = ""; feedback = "";
+      void request({ protocol: CONTROL_PROTOCOL, command: "conversations.list" }); return;
+    }
+    if (button.dataset.action === "close-enrollment") { adding = false; feedback = ""; render(); return; }
+    if (button.dataset.action === "refresh-conversations") { candidateId = ""; void request({ protocol: CONTROL_PROTOCOL, command: "conversations.list" }); return; }
     const newTab = button.dataset.tab as Tab | undefined;
     if (newTab) { if (dirty()) { announce("Save or discard your edits before switching sections.", true); return; } feedback = ""; tab = newTab; render(); if (tab === "memory" && !memoryLoaded && selected) void request({ protocol: CONTROL_PROTOCOL, command: "contact.memory.read", contactId: selected }); return; }
     if (button.dataset.action === "discard") { resetDraft(); announce("Changes discarded."); render(); }
@@ -116,15 +151,14 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort): void {
     if (button.dataset.action === "load-memory" && selected && memory !== savedMemory) { announce("Save or discard your memory edits before reloading.", true); return; }
     if (button.dataset.action === "load-memory" && selected) void request({ protocol: CONTROL_PROTOCOL, command: "contact.memory.read", contactId: selected });
     if (button.dataset.action === "refresh-activity") void request({ protocol: CONTROL_PROTOCOL, command: "activity.list" });
-    if (button.dataset.action === "pause") {
-      // Stopping replies must remain available while the owner has unsaved edits.
-      // Preserve those drafts when the refreshed settings snapshot arrives.
-      void request({ protocol: CONTROL_PROTOCOL, command: "global.settings.update", expectedRevision: snapshot.revision, settings: { ...snapshot.settings, paused: !snapshot.settings.paused } }, snapshot.settings.paused ? "Global pause lifted. Contact settings still apply." : "All contacts paused. Unsaved edits are preserved.", true);
-    }
+    if (button.dataset.action === "pause") void togglePause();
   });
   root.addEventListener("submit", event => {
     event.preventDefault(); if (busy || !editable() || !(event.target instanceof HTMLFormElement)) return;
-    if (event.target.id === "behavior-form" && draft && selected) {
+    if (event.target.id === "enrollment-form") {
+      if (!candidates.some(candidate => candidate.id === candidateId && candidate.eligible)) { announce("Choose an eligible conversation.", true); return; }
+      void request({ protocol: CONTROL_PROTOCOL, command: "contact.enroll", candidateId, expectedRevision: snapshot.revision, initializeHistory });
+    } else if (event.target.id === "behavior-form" && draft && selected) {
       const error = validateContactSettings(draft); if (error) { announce(error, true); return; }
       void request({ protocol: CONTROL_PROTOCOL, command: "contact.settings.update", contactId: selected, expectedRevision: snapshot.revision, settings: structuredClone(draft) }, "Contact settings saved.");
     } else if (event.target.id === "memory-form" && selected) {

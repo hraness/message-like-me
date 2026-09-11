@@ -3,9 +3,10 @@ import { link, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/prom
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import type { ControlRequest, ControlResponse, DesktopSnapshot } from "../../control/src/index.ts";
-import { configureContact, DEFAULT_ACTIVE_LIMIT, parseSettings, type Settings } from "./config.ts";
+import { configureContact, newContact, DEFAULT_ACTIVE_LIMIT, parseSettings, type Settings } from "./config.ts";
 import { ContactWorkspace } from "./workspace.ts";
 import { RunJournal } from "./journal.ts";
+import { OwnerReadRecoveryError, assertSameConversation, bindingDigest, boundedHistory, parseConversationBinding, type ConversationBinding, type ObservedConversation, type OwnerConversationReadPort } from "./enrollment.ts";
 
 export const TEXTBUTLER_CONTROL_PROTOCOL = "textbutler.control.v1" as const;
 const MAX_SETTINGS_BYTES = 524_288;
@@ -44,8 +45,15 @@ function parseUiSettings(value: unknown) {
 export function parseControlRequest(value: unknown): ControlRequest {
   const item = record(value);
   if (item.protocol !== TEXTBUTLER_CONTROL_PROTOCOL) fail("invalid-request", "Unsupported control protocol.");
-  if (item.command === "snapshot" || item.command === "activity.list") {
+  if (item.command === "snapshot" || item.command === "activity.list" || item.command === "conversations.list") {
     exact(item, ["protocol", "command"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command };
+  }
+  if (item.command === "owner.job.read") {
+    exact(item, ["protocol", "command", "jobId"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, jobId: contactId(item.jobId) };
+  }
+  if (item.command === "contact.enroll") {
+    exact(item, ["protocol", "command", "candidateId", "expectedRevision", "initializeHistory"]);
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, candidateId: contactId(item.candidateId), expectedRevision: integer(item.expectedRevision, 1), initializeHistory: bool(item.initializeHistory) };
   }
   if (item.command === "contact.memory.read") {
     exact(item, ["protocol", "command", "contactId"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId) };
@@ -89,14 +97,23 @@ async function privateText(path: string): Promise<string> {
     return new TextDecoder("utf-8", { fatal: true }).decode(data.subarray(0, bytesRead));
   } finally { await handle.close(); }
 }
-type OwnerState = Readonly<{ schemaVersion: 1; revision: number; settings: Settings }>;
+type OwnerState = Readonly<{ schemaVersion: 1; revision: number; settings: Settings; bindings: Record<string, ConversationBinding> }>;
 function parseOwnerState(value: unknown): OwnerState {
-  const item = record(value); exact(item, ["schemaVersion", "revision", "settings"]);
+  const item = record(value); exact(item, ["schemaVersion", "revision", "settings", ...(Object.hasOwn(item, "bindings") ? ["bindings"] : [])]);
   if (item.schemaVersion !== 1) throw new Error("Unsupported owner state version");
   const settings = record(item.settings); exact(settings, ["schemaVersion", "paused", "maxActiveContacts", "contacts"]);
   if (!Array.isArray(settings.contacts) || settings.contacts.length > MAX_CONTACTS) throw new Error("Too many configured contacts");
   for (const contact of settings.contacts) { const entry = record(contact); exact(entry, CONTACT_KEYS); exact(record(entry.disclosure), ["character", "begin", "end"]); }
-  return { schemaVersion: 1, revision: integer(item.revision, 1), settings: parseSettings(settings) };
+  const parsed = parseSettings(settings);
+  const bindings: Record<string, ConversationBinding> = {};
+  for (const [id, value] of Object.entries(item.bindings === undefined ? {} : record(item.bindings))) {
+    contactId(id);
+    if (!parsed.contacts.some(contact => contact.id === id && contact.routeId === `local-binding:${id}`)) throw new Error("Conversation binding has no matching contact");
+    bindings[id] = parseConversationBinding(value);
+    if (bindings[id]!.participants.length !== 1) throw new Error("Group bindings are unsupported");
+  }
+  if (new Set(Object.values(bindings).map(bindingDigest)).size !== Object.keys(bindings).length) throw new Error("Repeated owner conversation binding");
+  return { schemaVersion: 1, revision: integer(item.revision, 1), settings: parsed, bindings };
 }
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
@@ -123,12 +140,15 @@ export async function initializeOwnerState(dataDir: string, initialSettings?: Se
 export class TextbutlerControlService {
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
-  private constructor(readonly dataDir: string, private readonly settingsPath: string, private readonly journal: RunJournal) {}
-  static async open(options: { dataDir: string; initialSettings?: Settings; recoverRuns?: boolean }): Promise<TextbutlerControlService> {
+  private candidates = new Map<string, { conversation: ObservedConversation; expires: number }>();
+  private jobs = new Map<string, { result?: ControlResponse; expires: number }>();
+  private activeJob: { controller: AbortController; promise: Promise<void> } | undefined;
+  private constructor(readonly dataDir: string, private readonly settingsPath: string, private readonly journal: RunJournal, private readonly enrollment?: OwnerConversationReadPort) {}
+  static async open(options: { dataDir: string; initialSettings?: Settings; recoverRuns?: boolean; enrollment?: OwnerConversationReadPort }): Promise<TextbutlerControlService> {
     const state = await initializeOwnerState(options.dataDir, options.initialSettings);
     const journal = await RunJournal.open(join(state.dataDir, "state", "runs.sqlite"));
     if (options.recoverRuns === true) journal.recover(Date.now());
-    return new TextbutlerControlService(state.dataDir, state.settingsPath, journal);
+    return new TextbutlerControlService(state.dataDir, state.settingsPath, journal, options.enrollment);
   }
   private async current(): Promise<{ state: OwnerState; bytes: string }> {
     await ensurePrivateDirectory(this.dataDir);
@@ -137,9 +157,9 @@ export class TextbutlerControlService {
     return { state: parseOwnerState(JSON.parse(bytes)), bytes };
   }
   async settings(): Promise<Settings> { return (await this.current()).state.settings; }
-  private async publish(current: { state: OwnerState; bytes: string }, settings: Settings): Promise<void> {
+  private async publish(current: { state: OwnerState; bytes: string }, settings: Settings, bindings = current.state.bindings): Promise<void> {
     if (current.state.revision >= Number.MAX_SAFE_INTEGER) fail("unavailable", "Settings revision capacity is exhausted.");
-    const bytes = `${JSON.stringify(parseOwnerState({ schemaVersion: 1, revision: current.state.revision + 1, settings }), null, 2)}\n`;
+    const bytes = `${JSON.stringify(parseOwnerState({ schemaVersion: 1, revision: current.state.revision + 1, settings, bindings }), null, 2)}\n`;
     if (Buffer.byteLength(bytes) > MAX_SETTINGS_BYTES) fail("capacity", "Settings exceed the private storage limit.");
     const staged = join(dirname(this.settingsPath), `.settings-${randomUUID()}`);
     const handle = await open(staged, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -151,6 +171,23 @@ export class TextbutlerControlService {
       try { await directory.sync(); } finally { await directory.close(); }
     } catch (error) { await handle.close().catch(() => {}); await unlink(staged).catch(() => {}); throw error; }
   }
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.queue.catch(() => {}).then(work); this.queue = result; return result;
+  }
+  private error(error: unknown): ControlResponse {
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: false, code: error instanceof ControlFailure ? error.code : "unavailable", message: error instanceof ControlFailure || error instanceof OwnerReadRecoveryError ? error.message : "The private control operation could not complete. Reload before retrying a change." };
+  }
+  private startJob(work: (signal: AbortSignal) => Promise<ControlResponse>): ControlResponse {
+    if (this.activeJob) fail("capacity", "A Messages read is already in progress. Wait for it to finish.");
+    for (const [id, job] of this.jobs) if (job.expires < Date.now()) this.jobs.delete(id);
+    if (this.jobs.size >= 16) fail("capacity", "Too many recent owner jobs. Try again in a few minutes.");
+    const jobId = randomUUID(), controller = new AbortController();
+    const job: { result?: ControlResponse; expires: number } = { expires: Date.now() + 600_000 }; this.jobs.set(jobId, job);
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    const promise = Promise.resolve().then(() => work(controller.signal)).then(result => { job.result = result; }, error => { job.result = this.error(error); }).finally(() => { clearTimeout(timer); this.activeJob = undefined; });
+    this.activeJob = { controller, promise };
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "job", jobId };
+  }
   async snapshot(): Promise<DesktopSnapshot> {
     const { state } = await this.current();
     const activity = state.settings.contacts.flatMap(contact => this.journal.recent(contact.id, 50)).sort((a, b) => b.startedAt - a.startedAt).slice(0, 200).map(run => ({ id: run.id, at: new Date(run.updatedAt).toISOString(), contactId: run.contactId, title: run.state, detail: run.reason }));
@@ -158,9 +195,9 @@ export class TextbutlerControlService {
       protocol: TEXTBUTLER_CONTROL_PROTOCOL, revision: state.revision, connection: "connected",
       detail: "The local control daemon is connected. Automatic replies remain unavailable until messaging, contact grants, and the agent sandbox are qualified.",
       settings: { paused: state.settings.paused, activeContactLimit: state.settings.maxActiveContacts },
-      contacts: state.settings.contacts.map(contact => ({ id: contact.id, name: contact.label, subtitle: "Owner-configured workspace · sending unavailable", settings: { enabled: contact.enabled, responseMode: contact.mode, keyword: contact.keyword, provider: contact.provider, disclosure: { ...contact.disclosure } } })),
+      contacts: state.settings.contacts.map(contact => ({ id: contact.id, name: contact.label, subtitle: state.bindings[contact.id] ? "Selected Messages conversation · sending unavailable" : "Owner-configured workspace · sending unavailable", settings: { enabled: contact.enabled, responseMode: contact.mode, keyword: contact.keyword, provider: contact.provider, disclosure: { ...contact.disclosure } } })),
       capabilities: [
-        { id: "messages", status: "setup-required", detail: "No qualified durable Ghostget message subscription or contact-scoped send grant is connected." },
+        { id: "messages", status: "setup-required", detail: this.enrollment ? "Owner conversation selection is configured. Message subscriptions and autonomous sending remain unavailable." : "Configure the owner-installed Ghostget CLI to select Messages conversations. Autonomous sending remains unavailable." },
         { id: "contacts", status: "unsupported", detail: "The current Ghostget contract has no native Contacts directory. No contacts are imported automatically." },
         { id: "agent", status: "setup-required", detail: "Codex and Claude execution is disabled until its installed tool and file isolation is qualified." },
         { id: "attachments", status: "unsupported", detail: "No qualified attachment transport is connected." },
@@ -174,6 +211,61 @@ export class TextbutlerControlService {
     if (this.closed) fail("unavailable", "The control service is closing.");
     const current = await this.current();
     if (request.command === "snapshot" || request.command === "activity.list") return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
+    if (request.command === "owner.job.read") {
+      const job = this.jobs.get(request.jobId);
+      if (!job || job.expires < Date.now()) fail("invalid-request", "This owner job has expired. Reload before retrying.");
+      return job.result ?? { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "job", jobId: request.jobId };
+    }
+    if (request.command === "conversations.list") {
+      if (!this.enrollment) fail("unavailable", "Messages selection is not configured. Set up the owner-installed Ghostget CLI in Textbutler's host configuration, then restart the daemon.");
+      return this.startJob(async signal => {
+        const conversations = await this.enrollment!.list(signal); signal.throwIfAborted();
+        if (conversations.length > 200) throw new Error("Too many conversations");
+        this.candidates.clear();
+        const latest = await this.current();
+        const candidates = conversations.map(conversation => {
+          const binding = parseConversationBinding(conversation.binding);
+          const enrolled = Object.values(latest.state.bindings).some(value => value.authId === binding.authId && value.chatGuid === binding.chatGuid);
+          const eligible = conversation.kind === "single" && binding.participants.length === 1 && !enrolled;
+          const id = randomUUID(); this.candidates.set(id, { conversation: { ...conversation, binding }, expires: Date.now() + 300_000 });
+          return { id, name: conversation.title.slice(0, 200), subtitle: binding.participants.join(", ").slice(0, 512), eligible, reason: enrolled ? "Already added" : !eligible ? "Only one-to-one conversations with a verified participant are supported" : "Ready to add" };
+        });
+        return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "conversations", candidates, detail: "Up to 200 recent Messages conversations. Selection expires after five minutes. Contacts directory access is not available." };
+      });
+    }
+    if (request.command === "contact.enroll") {
+      if (!this.enrollment) fail("unavailable", "Messages selection is not configured.");
+      if (request.expectedRevision !== current.state.revision) fail("conflict", "Settings changed. Reload before adding a contact.");
+      const candidate = this.candidates.get(request.candidateId);
+      if (!candidate || candidate.expires < Date.now()) fail("conflict", "The conversation selection expired. Refresh conversations.");
+      assertSameConversation(candidate.conversation.binding, candidate.conversation);
+      return this.startJob(async signal => {
+        const observed = await this.enrollment!.read(candidate.conversation.binding, request.initializeHistory, signal);
+        signal.throwIfAborted(); assertSameConversation(candidate.conversation.binding, observed.conversation);
+        const messages = request.initializeHistory ? boundedHistory(observed.messages) : [];
+        const historyOmittedCount = request.initializeHistory ? observed.messages.length - messages.length : 0;
+        const historyShortenedCount = request.initializeHistory ? messages.filter(message => observed.messages.find(original => original.id === message.id || `sha256:${hash(original.id)}` === message.id)?.text !== message.text).length : 0;
+        return this.serial(async () => {
+          signal.throwIfAborted();
+          const latest = await this.current();
+          if (latest.state.revision !== request.expectedRevision) fail("conflict", "Settings changed. Reload before adding a contact.");
+          if (latest.state.settings.contacts.length >= MAX_CONTACTS) fail("capacity", "The configured contact limit has been reached.");
+          const binding = parseConversationBinding(candidate.conversation.binding);
+          if (Object.values(latest.state.bindings).some(value => value.authId === binding.authId && value.chatGuid === binding.chatGuid)) fail("conflict", "This Messages conversation has already been added.");
+          const id = randomUUID();
+          const workspace = await ContactWorkspace.create(join(this.dataDir, "contacts", id));
+          if (request.initializeHistory) {
+            const historyFile = await workspace.initializeHistory(messages);
+            await workspace.writeVersioned("history/bootstrap-summary.json", JSON.stringify({ schemaVersion: 1, purpose: "context-only-never-trigger", historyFile, requestedLimit: 200, receivedMessages: observed.messages.length, retainedMessages: messages.length, omittedMessages: historyOmittedCount, shortenedMessages: historyShortenedCount, attachmentsImported: false, historicalAutomation: "Only the default visible butler wrapper is identified; other historical automation may be present. Do not derive owner style rules automatically." }, null, 2), null);
+          }
+          signal.throwIfAborted();
+          const settings = parseSettings({ ...latest.state.settings, contacts: [...latest.state.settings.contacts, newContact(id, candidate.conversation.title, `local-binding:${id}`)] });
+          await this.publish(latest, settings, { ...latest.state.bindings, [id]: binding });
+          this.candidates.delete(request.candidateId);
+          return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "enrolled", snapshot: await this.snapshot(), contactId: id, historyInitialized: request.initializeHistory, historyCount: messages.length, historyOmittedCount, historyShortenedCount };
+        });
+      });
+    }
     const contact = "contactId" in request ? current.state.settings.contacts.find(contact => contact.id === request.contactId) : undefined;
     if ("contactId" in request && contact === undefined) fail("invalid-request", "This contact is not configured by the owner.");
     if (request.command === "contact.memory.read" || request.command === "contact.memory.write") {
@@ -189,6 +281,22 @@ export class TextbutlerControlService {
       return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "memory", contactId: request.contactId, revision: memory.revision, content: memory.text };
     }
     if (request.expectedRevision !== current.state.revision) fail("conflict", "Settings changed. Reload before saving.");
+    if (request.command === "contact.settings.update" && request.settings.enabled && current.state.bindings[request.contactId]) {
+      if (!this.enrollment) fail("unavailable", "Reconnect the configured Ghostget account before enabling this contact.");
+      const binding = current.state.bindings[request.contactId]!;
+      return this.startJob(async signal => {
+        const observed = await this.enrollment!.read(binding, false, signal);
+        signal.throwIfAborted(); assertSameConversation(binding, observed.conversation);
+        return this.serial(async () => {
+          signal.throwIfAborted(); const latest = await this.current();
+          if (latest.state.revision !== request.expectedRevision) fail("conflict", "Settings changed. Reload before saving.");
+          if (!contact!.enabled && latest.state.settings.contacts.filter(item => item.enabled).length >= latest.state.settings.maxActiveContacts) fail("capacity", "The active contact limit has been reached.");
+          const updated = configureContact(latest.state.settings, request.contactId, { enabled: request.settings.enabled, mode: request.settings.responseMode, keyword: request.settings.keyword, provider: request.settings.provider, disclosure: request.settings.disclosure });
+          await this.publish(latest, updated);
+          return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
+        });
+      });
+    }
     let updated: Settings;
     if (request.command === "global.settings.update") {
       if (current.state.settings.contacts.filter(contact => contact.enabled).length > request.settings.activeContactLimit) fail("capacity", "Disable contacts before reducing the active limit.");
@@ -201,12 +309,12 @@ export class TextbutlerControlService {
     return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
   }
   request(value: unknown): Promise<ControlResponse> {
-    const result = this.queue.catch(() => {}).then(async (): Promise<ControlResponse> => {
+    const result = this.serial(async (): Promise<ControlResponse> => {
       try { return await this.execute(parseControlRequest(value)); }
-      catch (error) { return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: false, code: error instanceof ControlFailure ? error.code : "unavailable", message: error instanceof ControlFailure ? error.message : "The private control operation could not complete. Reload before retrying a change." }; }
+      catch (error) { return this.error(error); }
     });
     this.queue = result;
     return result;
   }
-  async close(): Promise<void> { this.closed = true; await this.queue.catch(() => {}); this.journal.close(); }
+  async close(): Promise<void> { this.closed = true; this.activeJob?.controller.abort(); await this.activeJob?.promise; await this.queue.catch(() => {}); this.journal.close(); }
 }

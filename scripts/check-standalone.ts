@@ -372,18 +372,20 @@ function checkPackageManifest(value: unknown): string[] {
     problems.push("package.json description must match the canonical public description");
   }
 
-  const names = [
-    ...dependencyNames(manifest.dependencies),
-    ...dependencyNames(manifest.devDependencies),
-    ...dependencyNames(manifest.optionalDependencies),
-    ...dependencyNames(manifest.peerDependencies),
-  ];
-  for (const name of names) {
-    if (
-      BANNED_DEPENDENCIES.has(name)
-      || BANNED_DEPENDENCY_PREFIXES.some((prefix) => name.startsWith(prefix))
-    ) {
-      problems.push(`package.json depends on forbidden network, auth, AI, or private package ${name}`);
+  // Exact development-only dependencies support the separate Textbutler source
+  // tree. They do not enter the legacy public runtime or its packed exports.
+  const textbutlerProviderToolchain: Readonly<Record<string, string>> = {
+    "@anthropic-ai/claude-agent-sdk": "0.3.268",
+    "@anthropic-ai/sdk": "0.125.0",
+  };
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const) {
+    const entries = manifest[field];
+    for (const name of dependencyNames(entries)) {
+      if (field === "devDependencies" && Object.hasOwn(textbutlerProviderToolchain, name)
+        && (entries as JsonRecord)[name] === textbutlerProviderToolchain[name]) continue;
+      if (BANNED_DEPENDENCIES.has(name) || BANNED_DEPENDENCY_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+        problems.push(`package.json ${field} depends on forbidden network, auth, AI, or private package ${name}`);
+      }
     }
   }
   return problems;

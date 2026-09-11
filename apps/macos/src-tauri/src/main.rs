@@ -114,7 +114,9 @@ fn allowed_request(request: &Value) -> bool {
     let Some(row) = request.as_object() else { return false; };
     if row.get("protocol").and_then(Value::as_str) != Some(PROTOCOL) { return false; }
     let fields: &[&str] = match row.get("command").and_then(Value::as_str) {
-        Some("snapshot" | "activity.list") => &["protocol", "command"],
+        Some("snapshot" | "activity.list" | "conversations.list") => &["protocol", "command"],
+        Some("owner.job.read") => &["protocol", "command", "jobId"],
+        Some("contact.enroll") => &["protocol", "command", "candidateId", "expectedRevision", "initializeHistory"],
         Some("contact.memory.read") => &["protocol", "command", "contactId"],
         Some("contact.settings.update") => &["protocol", "command", "contactId", "expectedRevision", "settings"],
         Some("contact.memory.write") => &["protocol", "command", "contactId", "expectedRevision", "content"],
@@ -242,6 +244,10 @@ mod tests {
     #[test]
     fn bridge_has_no_arbitrary_execution_or_file_operation() {
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "snapshot" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "conversations.list" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "owner.job.read", "jobId": "test-job" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "contact.enroll", "candidateId": "test-candidate", "expectedRevision": 1, "initializeHistory": false })));
+        assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "contact.enroll", "candidateId": "test-candidate", "expectedRevision": 1, "initializeHistory": false, "chatGuid": "arbitrary-target" })));
         for command in ["shell", "exec", "read_file", "messages.send", "daemon.start"] { assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": command }))); }
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "snapshot", "path": "/tmp" })));
     }

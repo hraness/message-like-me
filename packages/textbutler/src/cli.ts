@@ -1,8 +1,9 @@
 import { initializeOwnerState, TEXTBUTLER_CONTROL_PROTOCOL } from "./control-service.ts";
 import { defaultDataDirectory, requestDaemon, startDaemon } from "./daemon.ts";
+import { createLaunchAgentLifecycle, type LaunchAgentLifecycle } from "./launch-agent.ts";
 
-export const CLI_USAGE = "textbutler init|doctor|daemon run|daemon status [--data-dir /physical/private/path]";
-export async function runTextbutlerCli(argv: readonly string[], output: { write(text: string): unknown } = process.stdout): Promise<number> {
+export const CLI_USAGE = "textbutler init|doctor|daemon run|daemon install|daemon uninstall|daemon status [--data-dir /physical/private/path]";
+export async function runTextbutlerCli(argv: readonly string[], output: { write(text: string): unknown } = process.stdout, options: { launchAgent?: LaunchAgentLifecycle } = {}): Promise<number> {
   if (argv.length === 0 || argv.length === 1 && ["--help", "help", "-h"].includes(argv[0]!)) { output.write(`${CLI_USAGE}\n`); return 0; }
   const args = [...argv]; let dataDir = defaultDataDirectory();
   const option = args.indexOf("--data-dir");
@@ -11,17 +12,32 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     dataDir = args[option + 1]!; args.splice(option, 2);
   }
   const command = args.join(" ");
-  if (!["init", "doctor", "daemon run", "daemon status"].includes(command)) throw new Error(CLI_USAGE);
+  if (!["init", "doctor", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command)) throw new Error(CLI_USAGE);
   const print = (value: unknown): void => { output.write(`${JSON.stringify(value)}\n`); };
   if (command === "init") {
     const state = await initializeOwnerState(dataDir);
     print({ ok: true, status: "initialized", dataDir: state.dataDir, automation: "unavailable", detail: "Owner settings are private and paused. No contacts, providers, agents, or launch agents were installed." });
     return 0;
   }
-  if (command === "doctor" || command === "daemon status") {
+  if (command === "daemon install" || command === "daemon uninstall") {
+    const lifecycle = options.launchAgent ?? createLaunchAgentLifecycle();
+    const launchAgent = command === "daemon install" ? await lifecycle.install(dataDir) : await lifecycle.uninstall(dataDir);
+    const ok = launchAgent.installation === (command === "daemon install" ? "installed" : "absent");
+    print({ ok, launchAgent, automaticReplies: "unavailable" }); return ok ? 0 : 1;
+  }
+  if (command === "daemon status") {
+    const lifecycle = options.launchAgent ?? createLaunchAgentLifecycle();
+    const [launchAgent, daemon] = await Promise.all([
+      lifecycle.status(dataDir),
+      requestDaemon({ dataDir, request: { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" } }).catch(() => null),
+    ]);
+    print({ ok: daemon?.ok ?? false, daemon: daemon ?? { ok: false, status: "disconnected" }, launchAgent, automaticReplies: "unavailable" });
+    return daemon?.ok ? 0 : 1;
+  }
+  if (command === "doctor") {
     try {
       const response = await requestDaemon({ dataDir, request: { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" } });
-      print(command === "doctor" ? { ok: response.ok, platform: process.platform, supportedPlatform: process.platform === "darwin", daemon: response, automaticReplies: "unavailable" } : response);
+      print({ ok: response.ok, platform: process.platform, supportedPlatform: process.platform === "darwin", daemon: response, automaticReplies: "unavailable" });
       return response.ok ? 0 : 1;
     } catch {
       print({ ok: false, status: "disconnected", platform: process.platform, automaticReplies: "unavailable", detail: "No qualified owner-only Textbutler control daemon is reachable. Start it with textbutler daemon run." });

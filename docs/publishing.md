@@ -30,6 +30,13 @@ the same current `main` commit, and carry `tag: null`. They cannot authorize a
 legacy package release. Both routes retain checked helper hashes and code-owner
 review for the complete authority implementation.
 
+Preserve the environment's actual protection rules. If the existing key
+environment requires a reviewer, satisfy that exact run's review through
+GitHub's normal environment approval interface after source admission and
+independent control review. The site redesign does not remove reviewers, wait
+timers or other runtime gates; the legacy setup policy below is not permission
+to bypass an existing protection.
+
 The site writer consumes prior status, proves that the ordinary writer is
 denied by the exact required App status, attests one target, revokes the App
 token, verifies current rules/status/source again, and makes one sterile

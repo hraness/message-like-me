@@ -2,7 +2,7 @@
 
 A bundled Tauri 2 webview for contact settings, scoped memory, activity, capability setup, and global pause. The app never starts an agent, launches the daemon, reads Messages or Contacts, or sends a message itself.
 
-The native entry communicates with the separately started Textbutler daemon at `~/Library/Application Support/Textbutler/daemon.sock`. One native command accepts only the versioned control requests in `src/control.ts`. It checks directory/socket ownership and private modes, rejects symlink paths, checks the peer UID, bounds requests and responses to 1 MiB, caps concurrent relays at four, and enforces one absolute four-second connection/write/read deadline. Missing or refused sockets show a disconnected state; malformed responses and permission failures are visible errors.
+The native entry communicates with the separately started Textbutler daemon at `~/Library/Application Support/Textbutler/daemon.sock`. One native command accepts only the versioned control requests in `src/control.ts`. It checks directory/socket ownership and private modes, rejects symlink paths, checks the peer UID, bounds requests and responses to 1 MiB, caps concurrent relays at four, and enforces one absolute four-second connection/write/read deadline. Missing or refused sockets show a disconnected state; malformed responses and permission failures are visible errors. The source CLI can install the daemon as a per-user LaunchAgent; see the runtime README for its explicit lifecycle commands.
 
 The native webview loads bundled assets only, denies external navigation and new windows, and has one explicit `allow-control-request` permission. No shell, filesystem, HTTP, opener, or remote navigation plugin is installed. The daemon remains responsible for validating every request, scope, revision and capability. Memory writes use the content SHA-256 as a conditional revision; settings use the snapshot revision.
 
@@ -18,7 +18,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo run --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-Route native Cargo checks/builds through the installed host scheduler when required by the repository instructions. The frontend must be built before Cargo embeds it. The scaffold is source-buildable; signing, notarization, release packaging, installation and live Ghostget qualification remain separate release work.
+Route native Cargo checks/builds through the installed host scheduler when required by the repository instructions. The frontend must be built before Cargo embeds it. The app is source-buildable; signing, notarization, app release packaging and live autonomous messaging qualification remain separate release work.
 
 ## Synthetic interface preview
 

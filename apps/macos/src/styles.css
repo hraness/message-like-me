@@ -164,3 +164,14 @@ select { min-width: 155px; }
   .button.primary { color: #101a2b; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+.add-contact-button { margin-bottom: 12px; width: 100%; }
+.conversation-picker { margin: 20px 0 28px; padding: 0; border: 0; min-width: 0; }
+.conversation-option { display: flex; align-items: start; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.conversation-option > span { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.conversation-option > span > span { color: var(--muted); font-size: 12px; }
+.conversation-option input { margin-top: 3px; flex: 0 0 auto; }
+.conversation-option.unavailable { cursor: default; }
+.history-choice { margin: 28px 0 20px; }
+.history-choice label { display: flex; gap: 10px; align-items: center; }
+.history-choice p { margin: 8px 0 0 25px; max-width: 64ch; color: var(--muted); line-height: 1.6; }

@@ -18,31 +18,91 @@ packages/agentrouter` from the repository root.
 
 ## Provider execution status
 
-**Both bundled provider adapters are unqualified and refuse execution.**
-`createProviderLaunchPlan` describes configuration intent; it does not spawn a
-provider or establish a sandbox. Real Codex/Claude subprocess adapters and account
-sign-in are not implemented in this package yet. The library never converts a successful model
-response, working directory, permission prompt or tool list into an isolation claim.
+`createClaudeSdkAdapter()` implements the pinned Claude Agent SDK subprocess
+protocol with API-key authentication. Its execution gate requires a trusted host
+qualification for the exact native executable and SDK digest. No production
+qualification receipt is bundled. The default provider adapters continue to refuse
+execution. `createProviderLaunchPlan()` is descriptive configuration, not a sandbox.
 
-A production adapter must independently prove the exact runtime binary and its
-effective tool inventory, configuration isolation, contact read and write
-confinement, and the separation of authentication from model-readable files. The
-trusted host owns those qualification records. They must not come from messages,
-plugins, contact files or model output. No bundled qualification receipt exists.
+The installed versions are Claude Agent SDK **0.3.268**, bundled native Claude Code
+**2.1.268**, Anthropic SDK **0.125.0**, MCP SDK **1.30.0**, and Zod **4.6.2**.
+`inspectClaudeSdkRuntime()` checks the installed SDK version, native binary owner,
+mode, link count and SHA-256, and returns the composite qualification identity.
+Every run verifies and copies executable bytes from a checked file descriptor into
+its private run directory before resolving credentials. The subprocess runs that
+snapshot, so replacing the configured source path cannot replace the admitted
+credential-bearing executable.
 
-The [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
-documents `features.shell_tool`, but disabling that setting alone does not prove
-that every command-capable route is absent. The
-[App Server documentation](https://learn.chatgpt.com/docs/app-server) marks dynamic
-tool calls as experimental. An adapter must pin and test their exact wire contract.
+The adapter creates separate private working, home, configuration and temporary
+directories outside contact memory. It supplies an explicit environment, removes
+all built-in tools, disables inherited settings, hooks, automatic memory, connectors,
+plugins, bundled skills, workflow triggers and persistence, and configures only its in-process MCP broker. It checks the
+native initialization model, version, tools, MCP servers, skills, plugins and API-key
+source before admitting broker calls. A fixed plain-text prompt header prevents task text from entering native slash or bang command dispatch. Classification has no tools. The contact
+folder is accessed only by host broker methods; it is never the native process cwd.
+
+Native processes use a detached process group. Raw stdout is bounded to 1 MiB per
+frame and 8 MiB total before SDK parsing; stderr is discarded and capped at 256 KiB.
+Cancellation terminates the group, escalates to kill if needed, and waits for root
+exit and group absence before releasing account custody. A joined failure uses
+`AgentStoppedError`; an unproven exit keeps its lease and private state. These
+controls do not prove confinement of a malicious native process or a descendant
+that escapes its process group. Runtime qualification must cover the trusted
+executable, host policy and relevant descendant behavior independently.
+
+The host can bind an account to one explicit environment variable:
+
+```ts
+const credentials = createEnvironmentClaudeApiKeyResolver({
+  "owner-api-account": "TEXTBUTLER_ANTHROPIC_API_KEY",
+});
+const adapter = createClaudeSdkAdapter({
+  runtime: { executablePath: pinnedNativePath, executableSha256: reviewedBinarySha256 },
+  stateRoot: privateProviderStateDirectory,
+  credentials,
+  qualification: independentlyVerifiedHostQualification,
+});
+```
+
+Those paths, digest and qualification are host inputs, never contact or plugin
+configuration. The resolver reads only the selected variable at invocation time;
+it does not discover personal accounts, parse dotenv files, use ambient provider
+keys, or borrow subscription tokens. It admits the pinned API-key format and
+rejects OAuth tokens. A host Keychain integration can implement the same
+`ClaudeApiKeyResolver.withApiKey()` interface without changing the broker. API keys
+must remain outside contact folders, settings responses and logs. The adapter's
+per-run default budget is $0.25 and deadline is 120 seconds; neither is a claim of
+account-wide spend control.
+
+`test/claude-sdk.test.ts` runs the real SDK against synthetic subprocess peers to
+verify option isolation, MCP routing, zero-tool classification, output validation,
+revocation and process custody. `test/provider-process.test.ts` also proves
+termination of a surviving process-group descendant and raw output bounds. On
+2026-09-11 the actual macOS ARM64 native CLI completed a separate control
+initialization with a fresh synthetic home and no user message: the configuration
+was accepted and the MCP inventory was empty. That control response contains no
+built-in tool inventory and is insufficient for execution qualification.
+`qualification/claude-native.ts` is the explicit adversarial native fixture with a
+local synthetic Anthropic endpoint and temporary contact folders. It uses the same
+restricted launch-option builder as production; the production adapter does not
+accept custom API endpoints. Its receipt describes the exact fixture/runtime
+boundary and never automatically enables production.
+
+Codex execution remains unavailable. A credential-free probe of installed Codex
+**0.153.4** found default-on `code_mode_host`, shell, browser, computer, image,
+plugins, hooks and workspace dependency capabilities. Disabling the old `js_repl`
+flag does not remove current code execution. App-server dynamic tools are additive,
+and `thread/start` exposes no complete effective tool inventory. Reusing Oompa's
+transport or login implementation would therefore not establish Textbutler's
+required scope. See the [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+and [App Server documentation](https://learn.chatgpt.com/docs/app-server).
 
 The [Claude custom-tools documentation](https://code.claude.com/docs/en/agent-sdk/custom-tools)
-documents selecting built-ins with `tools`; `tools: []` is the intended starting
-point for an MCP-only broker. The
-[permissions documentation](https://code.claude.com/docs/en/agent-sdk/permissions)
-explains that `allowedTools` alone only pre-approves calls. An unlisted tool is not
-necessarily disabled. Use the exact broker manifest and a deny-by-default policy,
-with no inherited settings, skills or plugins, then qualify the effective result.
+documents selecting built-ins with `tools`; `tools: []` removes that surface.
+The [permissions documentation](https://code.claude.com/docs/en/agent-sdk/permissions)
+explains why `allowedTools` alone only pre-approves calls. A production qualification
+must also establish that managed host policy has not introduced configuration,
+hooks or other authority that cannot be disabled by application settings.
 
 ## Ownership boundaries
 
