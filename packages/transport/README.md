@@ -44,6 +44,15 @@ contracts exist and are negotiated.
 
 ## Upstream extension contract
 
+WhatsApp uses `createGhostgetWhatsAppTransport()` and Ghostget's existing
+`whatsapp-web` adapter backed by its pinned wacli linked device. It admits
+bounded conversation/history reads only; a local projection does not supply
+fresh context or autonomous send authority. No WPPConnect dependency, direct
+wacli invocation, pairing, or synchronization is added to Textbutler. The Mac
+app's WhatsApp enrollment still needs a durable upstream account/conversation
+binding. See [the WhatsApp seam](../../docs/textbutler/whatsapp.md) for exact
+current behavior and the upstream event, grant and rich-action requirements.
+
 Ghostget should own stable account/conversation bindings, OS access, Contacts
 selection, ordered resumable incoming and owner-outgoing events, attachment
 materialization, and provider-specific rich execution. Textbutler should own

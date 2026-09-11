@@ -5,7 +5,7 @@ import { array, canonicalJson, digest, failure, integer, nullableString, object,
 
 /** These names map to existing Ghostget CLI commands. No invented daemon RPC. */
 export type GhostgetInvocation =
-  | { readonly command: "capabilities"; readonly adapterId: "imessage-direct" }
+  | { readonly command: "capabilities"; readonly adapterId: "imessage-direct" | "whatsapp-web" }
   | { readonly command: "messaging.routes" | "messaging.resolve" | "messaging.context" | "messaging.preview"; readonly input: Readonly<Record<string, unknown>> }
   | { readonly command: "confirm"; readonly planDigest: string };
 /** Invokers return parsed, receipt-verified private artifacts for messaging commands. */
