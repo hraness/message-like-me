@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { admitSiteCiRun, parseSiteSubject, revalidateSiteSource, revalidateSiteSubject, SITE_REQUIRED_CI_JOBS,
   SITE_REPOSITORY as repo, SITE_REPOSITORY_ID as repoId, siteDigest } from "./site-production-subject.mjs";
-import { assertSiteInvocation, assertConsumedSiteStatus, proveSiteProductionDenial, promoteSiteProduction } from "./site-production.mjs";
+import { assertSiteInvocation, assertConsumedSiteStatus, proveSiteProductionDenial, promoteSiteProduction, siteMain, siteReceiptDigest } from "./site-production.mjs";
+import { encodeProviderReceipt } from "./release-provider-outcome.mjs";
 import { createProductionAuthorityAttestedReceipt, createProductionAuthorityConsumedReceipt,
   encodeProductionAuthorityPhaseReceipt, finalizeProductionAuthority } from "./release-production-authority.mjs";
 import { describeControlEpoch, verifySiteWorkflowAdmission, assertSiteWorkflowAdmissionReceipt,
@@ -164,12 +165,31 @@ test("site deny→attest→leased advance→consume finalizes with no legacy rel
   expect(sends).toBe(0);
   const promotion = await promoteSiteProduction(input);
   expect(sends).toBe(1); expect(promotion.subject.kind).toBe("site"); expect(promotion.verifiedTag).toBeUndefined();
-  const consumption = consumed(f.next(), attested, promotion.receiptSha256); f.setStatus(consumption.status);
+  // The consumption workflow receives the emitted output, not the object's
+  // self-digest field. Hashing the self-digest again breaks this binding.
+  expect(siteReceiptDigest(promotion)).toBe(promotion.receiptSha256);
+  expect(siteReceiptDigest(promotion)).not.toBe(siteDigest(promotion));
+  const consumption = consumed(f.next(), attested, siteReceiptDigest(promotion)); f.setStatus(consumption.status);
   const final = await finalizeProductionAuthority({ api: f.api, preconditionReceipt: precondition, denialReceipt: denial,
     attestationReceipt: attested, consumptionReceipt: consumption, promotion });
   expect(final.schema).toBe("textbutler-site-authority-final-v1");
   await expect(finalizeProductionAuthority({ api: f.api, preconditionReceipt: precondition, denialReceipt: legacyDenial,
     attestationReceipt: attested, consumptionReceipt: consumption, promotion })).rejects.toThrow();
+  const environment = { SITE_SOURCE_SHA: sha, SITE_CI_RUN_ID: "10", SITE_CI_RUN_ATTEMPT: "1", GITHUB_ACTIONS: "true",
+    GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main", GITHUB_SHA: sha,
+    GITHUB_REPOSITORY: repo, GITHUB_REPOSITORY_ID: String(repoId), GITHUB_RUN_ATTEMPT: "1", GITHUB_RUN_ID: "20",
+    SITE_SUBJECT_RECEIPT: encodeProviderReceipt(subject), SITE_BASELINE_RECEIPT: encodeProviderReceipt(f.baseline),
+    SITE_WORKFLOW_RECEIPT: encodeWorkflowAdmissionReceipt(f.workflow), SITE_DENIAL_RECEIPT: encodeProviderReceipt(denial),
+    SITE_PROMOTION_RECEIPT: encodeProviderReceipt(promotion), AUTHORITY_PRECONDITION_RECEIPT: encodeProductionAuthorityPhaseReceipt(precondition),
+    AUTHORITY_ATTESTATION_RECEIPT: encodeProductionAuthorityPhaseReceipt(attested), AUTHORITY_CONSUMPTION_RECEIPT: encodeProductionAuthorityPhaseReceipt(consumption) };
+  // Exercise the real CLI wire boundary: environment receipts are encoded.
+  await expect(siteMain("finalize", environment, { api: f.api })).resolves.toBeUndefined();
+  for (const command of ["finalize", "wait"]) {
+    await expect(siteMain(command, { ...environment, AUTHORITY_CONSUMPTION_RECEIPT: "invalid" }, { api: f.api })).rejects.toThrow();
+    const wrongConsumption = consumed(f.next(), attested, siteDigest(promotion));
+    await expect(siteMain(command, { ...environment, AUTHORITY_CONSUMPTION_RECEIPT: encodeProductionAuthorityPhaseReceipt(wrongConsumption) }, { api: f.api })).rejects.toThrow("one exact promotion");
+  }
+  expect(() => siteReceiptDigest({ ...promotion, receiptSha256: "0".repeat(64) })).toThrow("digest");
 });
 
 test("already-exact recovery refuses unconsumed or impersonated status without requesting a key", async () => {

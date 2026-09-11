@@ -203,9 +203,18 @@ function output(name, value) {
   else process.stdout.write(`${name}=${value}\n`);
 }
 
+export function siteReceiptDigest(receipt) {
+  if (receipt.schema === PROMOTION_SCHEMA) {
+    const { receiptSha256, ...evidence } = receipt;
+    if (receiptSha256 !== siteDigest(evidence)) fail("site promotion digest does not bind its evidence");
+    return receiptSha256;
+  }
+  return siteDigest(receipt);
+}
+
 function emitReceipt(receipt) {
   output("receipt", encodeProviderReceipt(receipt));
-  output("receipt_sha256", siteDigest(receipt));
+  output("receipt_sha256", siteReceiptDigest(receipt));
 }
 
 function gitText(args) {
@@ -244,10 +253,10 @@ function boundSubject(environment, invocation) {
   return subject;
 }
 
-export async function siteMain(command, environment = process.env) {
+export async function siteMain(command, environment = process.env, dependencies = {}) {
   assertNoAppKey(environment, command === "deny" || command === "promote");
   const invocation = assertSiteInvocation(environment);
-  const api = provider.createApi(environment);
+  const api = dependencies.api ?? provider.createApi(environment);
   if (command === "verify") {
     await revalidateSiteSource(api, invocation);
     sourceTrees(invocation);
@@ -324,8 +333,10 @@ export async function siteMain(command, environment = process.env) {
     return;
   }
   const promotionReceipt = readReceipt(environment, "SITE_PROMOTION_RECEIPT");
-  const finalizeInput = { denialReceipt, preconditionReceipt: environment.AUTHORITY_PRECONDITION_RECEIPT,
-    attestationReceipt: environment.AUTHORITY_ATTESTATION_RECEIPT, consumptionReceipt: environment.AUTHORITY_CONSUMPTION_RECEIPT };
+  const finalizeInput = { denialReceipt,
+    preconditionReceipt: decodeProductionAuthorityPhaseReceipt(environment.AUTHORITY_PRECONDITION_RECEIPT),
+    attestationReceipt: decodeProductionAuthorityPhaseReceipt(environment.AUTHORITY_ATTESTATION_RECEIPT),
+    consumptionReceipt: decodeProductionAuthorityPhaseReceipt(environment.AUTHORITY_CONSUMPTION_RECEIPT) };
   if (command === "finalize") {
     const receipt = await finalizeProductionAuthority({ api, ...finalizeInput, promotion: promotionReceipt });
     if (!same(receipt.promotion.subject, subject)) fail("site finalizer subject mismatch");
