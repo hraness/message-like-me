@@ -24,10 +24,14 @@ Current result on the tested Darwin 25.5.0 ARM64 host: the converged kernel help
 passes its nine checks. The actual pinned Claude fixture fails before its first
 initialization event, with zero model requests and no effective tool inventory.
 Consequently there is no native production qualification. A separate bounded
-`macos-native-bootstrap.ts` diagnostic was prepared to run only the pinned
-executable's `--version`; automatic approval review rejected that invocation due
-to a reported usage limit, so it has not executed. Do not treat the helper result
-as evidence that the actual native process can run within this profile.
+`macos-native-bootstrap.ts` diagnostic runs the pinned executable's `--version`.
+Its first attempt was rejected by automatic approval review because of a reported
+usage limit. After the approval service recovered, the identical invocation was
+accepted normally and passed: exit zero, version 2.1.268. Basic executable startup
+therefore works inside the profile. The optional `--initialize` diagnostic
+captures the SDK control handshake and native stderr without sending a user
+prompt. Do not treat version output or the kernel helper as proof that the full
+native agent can run within this profile.
 
 Run the explicit fixture on macOS ARM64 through the installed host scheduler:
 
