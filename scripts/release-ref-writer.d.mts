@@ -117,3 +117,17 @@ export function proveWebsiteProductionCanaryStaleLeaseFromEnvironment(input: Rea
   classification: "stale-info";
   diagnosticSha256: string;
 }>;
+
+export function advanceWebsiteProductionSiteRef(options: Readonly<{
+  environment: RefWriterEnvironment;
+  expectedOldSha: string;
+  repository: string;
+  targetSha: string;
+  workflowSha: string;
+  spawnImplementation?: typeof import("node:child_process").spawnSync;
+}>): Readonly<RefWriterPushReceipt>;
+
+export function proveWebsiteProductionSiteRequiredStatusDenial(options: Parameters<typeof advanceWebsiteProductionSiteRef>[0]): Readonly<{
+  classification: "required-status-errored";
+  diagnosticSha256: string;
+}>;

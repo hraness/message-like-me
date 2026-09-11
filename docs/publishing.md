@@ -1,5 +1,65 @@
 # Publish Message Like Me
 
+## Textbutler informational-site delivery
+
+The following explicit site-subject route supersedes the package-publication
+prerequisite below for the informational Textbutler website only. It grants no
+package publication, native app release, provider qualification, or live message
+authority. The legacy tagged package route and its exact-byte/npm checks remain
+unchanged. Source repository identity remains `hraness/message-like-me` until
+the separately reviewed repository-name migration is applied.
+
+Use the existing `Promote website production` workflow with `site_sha` set to
+the exact reviewed current `main` commit, `site_ci_run_id` and
+`site_ci_run_attempt` set to its successful `CI` run, and `release_tag` empty.
+Do not rerun a promotion attempt; make a fresh attempt-1 dispatch. The route
+requires exactly the current standalone/site job and macOS fixture/native job,
+rejects an older attempt after CI is rerun, rebuilds the site, and admits a
+bounded immutable Actions build-manifest artifact by exact run, attempt, source
+tree, site subtree, lockfile digest, artifact ID/digest, and manifest bytes.
+
+An advancing site target uses the same `website-production` ref, shared
+promotion concurrency, existing status-only App, environment, rulesets, and
+ordinary GitHub Actions ref writer as the legacy route. Before the App key is
+available, complete governed Git histories and all ordered workflow-tree
+changes must pass the site control-epoch admission. A changed workflow range
+requires the independently reviewed exact digest emitted by preflight in
+`control_epoch_digest`; unchanged ranges reject a supplied digest. Site epochs
+use domain `textbutler/control-epoch/site/v1`, bind target and workflow source to
+the same current `main` commit, and carry `tag: null`. They cannot authorize a
+legacy package release. Both routes retain checked helper hashes and code-owner
+review for the complete authority implementation.
+
+The site writer consumes prior status, proves that the ordinary writer is
+denied by the exact required App status, attests one target, revokes the App
+token, verifies current rules/status/source again, and makes one sterile
+fast-forward push with the expected-old lease. App-only steps receive no ref
+token; writer/admission steps receive no App key. The terminal consumption step
+runs even after failure or cancellation when admission completed. The final
+read-only jobs verify status consumption, revocations, unchanged rules, and
+twice-confirmed REST/GraphQL Vercel Production identity for the exact source.
+
+`textbutler-site-attempt` retains the explicitly listed public phase receipts
+for 30 days when the runner can upload them. Hard termination may prevent this
+upload; remote ref/status/provider readback and the existing interrupted
+authority cleanup remain authoritative. Never blindly repeat an uncertain
+write. If the ref already equals the site source, a fresh dispatch takes a
+read-only qualification route with no App key or ref token. It requires the
+status already consumed by the exact App bot (including its numeric actor
+identity), the unchanged App-pinned rules, and the matching Production
+deployment after the original successful CI completion. The retry's newly
+built manifest is not treated as that existing deployment's publication time.
+Leave `control_epoch_digest` empty for this already-exact route. An outstanding
+success status must first pass the documented custody cleanup, not be silently
+cleared by read-only qualification.
+
+After provider success, verify `textbutler.app` serves the exact intended
+deployment, truthful development status, canonical metadata and legacy links.
+The current Vercel project/production branch remain the target; domain or
+repository renaming is a separate inspected provider mutation.
+
+## Legacy package publication
+
 Message Like Me builds one exact public package tarball, validates those bytes
 on macOS and Linux, and publishes the same tarball plus `SHA256SUMS` to an
 immutable GitHub Release. Only then does it publish that tarball to npm through

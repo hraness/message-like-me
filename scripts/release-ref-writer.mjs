@@ -424,13 +424,13 @@ function fetchExactCanaryCoordinate(
   spawnImplementation,
   token,
   sterile,
-  { expectedCanarySha, targetMainSha },
+  { expectedCanarySha, targetMainSha, protectedRef = CANARY_REF },
 ) {
   const canaryLocalRef = `${STERILE_REF_PREFIX}/canary`;
   const mainLocalRef = `${STERILE_REF_PREFIX}/main`;
   runGit(
     spawnImplementation,
-    protectedBranchFetchArguments(CANARY_REF, canaryLocalRef),
+    protectedBranchFetchArguments(protectedRef, canaryLocalRef),
     sterile.authenticatedEnvironment,
     "exact writer-canary ref fetch",
     token,
@@ -616,6 +616,32 @@ export function advanceWebsiteProductionCanaryRef(options) {
     });
     },
   );
+}
+
+// Site promotion binds an advancing production ref directly to current main.
+// It shares the sterile Git transport, ref verification, ancestry and lease
+// implementation with the canary; it never fabricates a package tag.
+export function advanceWebsiteProductionSiteRef(options) {
+  if (options.repository !== EXPECTED_REPOSITORY) fail(`site ref writer is bound to ${EXPECTED_REPOSITORY}`);
+  const token = exactToken(options.environment.MLM_RELEASE_REF_TOKEN);
+  const expectedOldSha = exactSha(options.expectedOldSha, "expected site production SHA");
+  const targetSha = exactSha(options.targetSha, "site target SHA");
+  if (targetSha !== exactSha(options.workflowSha, "site workflow SHA")) fail("site target must equal exact current main");
+  return withSterileRepository(options.spawnImplementation ?? spawnSync, token, "textbutler-site-writer-", sterile => {
+    fetchExactCanaryCoordinate(options.spawnImplementation ?? spawnSync, token, sterile, {
+      expectedCanarySha: expectedOldSha, targetMainSha: targetSha, protectedRef: PRODUCTION_REF,
+    });
+    const result = runGit(options.spawnImplementation ?? spawnSync,
+      websiteProductionPushArguments(expectedOldSha, targetSha), sterile.authenticatedEnvironment,
+      "website-production Git push", token, sterile.root);
+    return parseProtectedRefPushReceipt(result, { expectedOldSha, targetSha, protectedRef: PRODUCTION_REF, label: "website-production Git push" });
+  });
+}
+
+export function proveWebsiteProductionSiteRequiredStatusDenial(options) {
+  try { advanceWebsiteProductionSiteRef(options); }
+  catch (error) { return parseWebsiteProductionRequiredStatusDenial(error); }
+  fail("site production writer without current status unexpectedly succeeded");
 }
 
 export function proveWebsiteProductionCanaryStaleLease(options) {

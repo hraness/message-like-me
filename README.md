@@ -1,6 +1,40 @@
-# Message Like Me
+# Textbutler
 
 [![skills.sh](https://skills.sh/b/hraness/message-like-me)](https://skills.sh/hraness/message-like-me)
+
+Textbutler is a personal message butler for macOS, powered by the coding agent
+you choose. Activate a few contacts, give each relationship a private folder of
+context, and let a clearly identified assistant help when it is useful.
+
+The new product lives at [textbutler.app](https://textbutler.app). Its default
+response looks like `🤖{ hello this is my response }`. Each contact can choose
+the three symbols, a keyword, and smart or keyword-only response mode.
+
+**Development status:** the source includes the contact policy engine, protected
+memory, extension hooks, send journal, Ghostget transport seam, Agentrouter
+foundation, and a Mac app/control-daemon implementation. Live automated replies
+are unavailable while Ghostget's durable events and scoped automation grants,
+and the provider's contact-only sandbox, remain unqualified. The Mac app has not
+been released as a signed/notarized download. The website is informational;
+it has no connection to private messages or contact folders.
+
+Start with the [architecture and capability status](docs/textbutler/architecture.md),
+[Textbutler runtime](packages/textbutler/README.md),
+[Agentrouter](packages/agentrouter/README.md),
+[transport adapter](packages/transport/README.md), or
+[Mac app](apps/macos/README.md).
+
+```sh
+bun install --frozen-lockfile --ignore-scripts
+bun run check:textbutler
+```
+
+The source is MIT licensed. New packages remain unpublished while their
+contracts are developed. Message Like Me's published history readers and
+message-bundle contracts are retained below for existing consumers; they are
+not the new live messaging runtime.
+
+## Legacy Message Like Me history tools
 
 **A local-first CLI and Agent Skill for studying private messaging history and
 drafting messages that sound like you.**

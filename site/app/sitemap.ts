@@ -3,14 +3,13 @@ import type { MetadataRoute } from 'next';
 import { absoluteUrl } from './_lib/site';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const existingContentLastModified = new Date('2026-08-27T00:00:00Z');
-  const sourceIntegrationLastModified = new Date('2026-09-06T00:00:00Z');
+  const rebrandDate = new Date('2026-09-11T00:00:00Z');
   return [
-    { url: absoluteUrl('/'), lastModified: new Date('2026-09-09T00:00:00Z'), changeFrequency: 'weekly', priority: 1 },
-    { url: absoluteUrl('/sources'), lastModified: new Date('2026-09-09T00:00:00Z'), changeFrequency: 'monthly', priority: 0.9 },
-    { url: absoluteUrl('/docs'), lastModified: sourceIntegrationLastModified, changeFrequency: 'monthly', priority: 0.9 },
-    { url: absoluteUrl('/methodology'), lastModified: existingContentLastModified, changeFrequency: 'monthly', priority: 0.8 },
-    { url: absoluteUrl('/research'), lastModified: existingContentLastModified, changeFrequency: 'monthly', priority: 0.8 },
-    { url: absoluteUrl('/about'), lastModified: existingContentLastModified, changeFrequency: 'yearly', priority: 0.5 },
+    { url: absoluteUrl('/'), lastModified: rebrandDate, changeFrequency: 'weekly', priority: 1 },
+    { url: absoluteUrl('/sources'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/docs'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.9 },
+    { url: absoluteUrl('/methodology'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/research'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/about'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.7 },
   ];
 }

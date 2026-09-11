@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { SiteFooter, SiteHeader } from './_components/site-chrome';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Page not found | Message Like Me' },
+  title: { absolute: 'Page not found | Textbutler' },
   robots: { index: false, follow: false },
 };
 

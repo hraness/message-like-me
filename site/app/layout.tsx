@@ -1,15 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 
-import { BEEPER_COMPATIBILITY } from './_lib/sources';
 import {
   absoluteUrl,
   GITHUB_URL,
-  RELEASE_URL,
   serializeJsonLd,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_ORIGIN,
-  SOFTWARE_VERSION,
 } from './_lib/site';
 import '@hraness/design-kit/fonts.css';
 import './globals.css';
@@ -17,7 +14,7 @@ import './globals.css';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: {
-    default: 'Message Like Me — Draft messages that sound like you',
+    default: 'Textbutler — Your personal message butler for Mac',
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -26,19 +23,7 @@ export const metadata: Metadata = {
   creator: SITE_NAME,
   publisher: SITE_NAME,
   category: 'developer tools',
-  keywords: [
-    'local-first AI',
-    'message analysis',
-    'messaging style',
-    'Agent Skill',
-    'iMessage analysis',
-    'Beeper message analysis',
-    'Beeper via Ghostget',
-    'WhatsApp message analysis',
-    'WhatsApp via Ghostget',
-    'X data archive messages',
-    'private AI tools',
-  ],
+  keywords: ['Textbutler', 'Mac message assistant', 'personal message butler', 'coding agent', 'contact memory', 'Ghostget', 'Codex', 'Claude Code'],
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
@@ -58,24 +43,24 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
-    title: 'Message Like Me — Draft messages that sound like you',
+    title: 'Textbutler — Your personal message butler for Mac',
     description: SITE_DESCRIPTION,
     images: [
       {
         url: absoluteUrl('/og.png'),
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} — local-first messaging style analysis.`,
+        alt: `${SITE_NAME} — your personal message butler for Mac.`,
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Message Like Me — Draft messages that sound like you',
+    title: 'Textbutler — Your personal message butler for Mac',
     description: SITE_DESCRIPTION,
     images: [{
       url: absoluteUrl('/og.png'),
-      alt: `${SITE_NAME} — local-first messaging style analysis.`,
+      alt: `${SITE_NAME} — your personal message butler for Mac.`,
     }],
   },
 };
@@ -109,26 +94,14 @@ const structuredData = {
       description: SITE_DESCRIPTION,
       applicationCategory: 'DeveloperApplication',
       operatingSystem: 'macOS',
-      softwareVersion: SOFTWARE_VERSION,
-      isAccessibleForFree: true,
       sameAs: GITHUB_URL,
-      downloadUrl: RELEASE_URL,
       featureList: [
-        'Read-only Apple Messages history ingestion',
-        'Caller-owned X data archive direct-message ingestion',
-        'Every ingest path is read-only with respect to its source',
-        `Finished Beeper bundle from Ghostget v${BEEPER_COMPATIBILITY.producerVersion} and adapter ${BEEPER_COMPATIBILITY.adapterId} v${BEEPER_COMPATIBILITY.adapterVersion}; all ${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed operations stay in Ghostget (${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through one pinned Beeper CLI ${BEEPER_COMPATIBILITY.providerCliVersion} executable, including supported actions and writes, plus ${BEEPER_COMPATIBILITY.fixedDesktopReadOperationCount} fixed Desktop loopback reads)`,
-        `Beeper CLI executable ${BEEPER_COMPATIBILITY.providerCliVersion} is runtime authority; upstream tagged ${BEEPER_COMPATIBILITY.providerCliSourcePackagePath} declaration ${BEEPER_COMPATIBILITY.providerCliSourceDeclaredVersion} is provenance only`,
-        'No provider credentials, Ghostget or Beeper operation calls, or sending',
-        'Native WhatsApp bundle ingestion via Ghostget and official Wacli',
-        'Optional macOS Contacts label enrichment',
-        'Local deterministic measurement and drafts-only Agent Skill',
+        'Mac control panel and local daemon controls',
+        'Contact-specific guidance and editable memory',
+        'Configurable visible assistant disclosure',
+        'Smart and keyword-only response policy foundations',
+        'Global pause and active contact limits',
       ],
-      offers: {
-        '@type': 'Offer',
-        price: 0,
-        priceCurrency: 'USD',
-      },
       isPartOf: { '@id': websiteId },
     },
     {
@@ -136,9 +109,9 @@ const structuredData = {
       name: SITE_NAME,
       description: SITE_DESCRIPTION,
       codeRepository: GITHUB_URL,
+      creativeWorkStatus: 'In development; live automatic replies disabled pending qualification',
       programmingLanguage: 'TypeScript',
       runtimePlatform: 'Bun 1.3.14 or newer on macOS',
-      version: SOFTWARE_VERSION,
       license: 'https://opensource.org/license/mit',
       targetProduct: { '@id': applicationId },
     },

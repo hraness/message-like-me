@@ -20,42 +20,24 @@ const HERO_VOCABULARY_TO_AVOID = [
   'receipt',
 ] as const;
 
-test('renders the outcome-led shared product-marketing grammar', () => {
+test('renders Textbutler with the shared grammar and honest development status', () => {
   const html = renderToStaticMarkup(<Home />);
-
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(html).toContain('>Draft messages that sound like you</h1>');
-  for (const role of [
-    'header',
-    'hero',
-    'proof-frame',
-    'pillars',
-    'section',
-    'flow',
-    'primitives',
-    'trust',
-    'install',
-    'questions',
-    'maker',
-    'cta',
-  ]) {
+  expect(html).toContain('>A little help in your conversations</h1>');
+  for (const role of ['header', 'hero', 'proof-frame', 'section', 'flow', 'trust', 'questions', 'cta']) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
-  expect(html).toContain(`Install v${SOFTWARE_VERSION}`);
-  expect(html).toContain('messagelikeme init');
-  expect(html).toContain('messagelikeme doctor --json');
-  expect(html).toContain('messagelikeme inspect tempo &lt;contact-id&gt; --json');
-  expect(html).toContain('Use $message-like-me in your agent');
-  expect(html).toContain('@hraness/message-like-me');
-  expect(html).toContain('No. messagelikeme.com is an informational project page.');
-  expect(html).toContain('stays on your machine in private local paths you choose');
-  expect(html).toContain('with owner-only filesystem permissions');
-  expect(html).not.toContain('readable only by you');
+  expect(html).toContain('Textbutler');
+  expect(html).toContain('See what’s ready');
+  expect(html).toContain('Live automatic replies are disabled');
+  expect(html).toContain('A signed Mac download is not available yet');
+  expect(html).toContain(`Message Like Me v${SOFTWARE_VERSION}`);
+  expect(html).toContain('It does not install Textbutler or enable automatic replies.');
+  expect(html).toContain('No. textbutler.app is informational');
   expect(html).toContain('"@type":"FAQPage"');
-  expect(html).toContain('Synthetic example');
-  expect(html).toContain('Built by Ben Guo');
-  expect(html).toContain('href="https://x.com/hraness"');
   expect(html).not.toMatch(/<(?:form|input|textarea)\b/u);
+  expect(html).not.toContain('bun add --global');
+  expect(html).not.toContain('Install v');
 });
 
 test('keeps the hero outcome-led and free of contract vocabulary', () => {
@@ -64,35 +46,25 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   expect(hero).not.toBeNull();
   const heroCopy = (hero?.[0] ?? '').replace(/<[^>]+>/gu, ' ').toLowerCase();
   const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
-
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(8);
   expect(heading).not.toMatch(/\.$/u);
-  expect(heroCopy).toContain(' you');
-  expect(heroCopy).not.toContain('ask your agent to draft a reply about friday');
-  expect(hero?.[0]).not.toContain('hraness-marketing-hero__example');
+  expect(heroCopy).toContain('your');
   const boundary = /<p class="hraness-marketing-hero__boundary">([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
-  expect(boundary).toBe('Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer.');
+  expect(boundary).toBe('In development · macOS · bring your own coding agent');
   expect(boundary).not.toContain(SOFTWARE_VERSION);
-  expect(hero?.[0]).toContain(`Install v${SOFTWARE_VERSION}`);
-  for (const word of HERO_VOCABULARY_TO_AVOID) {
-    expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
-  }
+  for (const word of HERO_VOCABULARY_TO_AVOID) expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
 });
 
-test('explains the synthetic draft before asking a reader to understand import commands', () => {
+test('shows synthetic contact context and disclosure without claiming transport support', () => {
   const html = renderToStaticMarkup(<Home />);
-  const frame = /<div class="mlm-frame"[\s\S]*?<\/figure>/u.exec(html)?.[0] ?? '';
-  expect(frame).toContain('Unsent draft');
-  expect(frame).toContain('More than word choice');
-  expect(frame).toContain('Two short messages instead of one paragraph');
-  expect(frame).toContain('Nothing is sent');
-  expect(frame).not.toContain('export-message-like-me');
-  expect(frame).not.toContain('ingest bundle');
-  expect(html).toContain('not a measured result');
-  expect(html).toContain('hosted agent, that agent handles its excerpts under its own privacy terms');
-  expect(html.match(/<details class="source-details">/gu)).toHaveLength(5);
-  expect(html).toContain('Import command and limits');
-  expect(html).not.toMatch(/<details class="source-details"[^>]*\bopen/gu);
+  expect(html).toContain('Synthetic illustration of the intended experience.');
+  expect(html).toContain('No real messages, live agent run, or sent reply is shown.');
+  expect(html).toContain('🤖{ Happy to help. Where are you headed, and for how long? }');
+  expect(html).toContain('MEMORY.md');
+  expect(html).toContain('AGENTS.md');
+  expect(html).toContain('No Linq integration or iMessage mini-app support is claimed as available.');
+  expect(html).toContain('Live operation stays disabled until the selected provider can enforce it.');
+  expect(html).toContain('under its own data policies');
 });
 
 test('binds the existing Design Kit release to the portable Paper palette', async () => {

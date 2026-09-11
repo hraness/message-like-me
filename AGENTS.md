@@ -1,3 +1,32 @@
+# Textbutler redesign scope
+
+The owner has authorized replacing the unused Message Like Me product with
+Textbutler, a macOS message-butler daemon and app at `textbutler.app`.
+`PRODUCT.md` and `docs/textbutler/architecture.md` define the new product.
+The historical constraints below continue to govern the legacy `src/`, `dist/`,
+published message contracts, and their existing release machinery. They do not
+prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
+
+- New agents receive only one contact's brokered files, bounded public web
+  requests, and recipient-bound proposed messaging actions. Never enable shell,
+  arbitrary process tools, inherited plugins, or extra filesystem roots.
+- Keep owner settings, credentials, route bindings, and executable plugins
+  outside model-writable contact workspaces. Preserve user data and frozen wire
+  identities throughout migration.
+- Apply disclosure in trusted code, check human takeover immediately before
+  dispatch, and journal send intent. Never retry an indeterminate send.
+- Unqualified provider restrictions and unsupported transport operations must
+  remain unavailable. Synthetic tests do not prove live delivery or sandboxing.
+- Run `bun run check:textbutler` for the new source packages as well as the
+  existing required aggregate. Native build and UI checks are additional gates.
+- Repository/package rename and website deployment must use a reviewed identity
+  migration that preserves the existing release and production protections.
+- Informational site changes may use the explicit site-source promotion path in
+  `docs/publishing.md`, independently of legacy npm/package publication. That
+  path still requires exact current-main CI and site-build admission, reviewed
+  workflow changes, protected conditional ref writes, status-authority cleanup,
+  and verified provider readback. The legacy release path retains its gates.
+
 # Contents
 
 - `src/` – the deterministic local iMessage, X archive, Contacts, and private

@@ -7,9 +7,9 @@ import PreviewPage, { metadata } from '../app/preview/page.tsx';
 test('server-renders an honest script-independent preview with no navigation', () => {
   const html = renderToStaticMarkup(<PreviewPage />);
 
-  expect(html).toContain('Study the evidence.');
-  expect(html).toContain('no product server');
-  expect(html).toContain('bounded local evidence prepared');
+  expect(html).toContain('A little help in your conversations');
+  expect(html).toContain('Live replies remain disabled');
+  expect(html).toContain('Synthetic example · no message sent');
   expect(html).not.toMatch(/<(?:a|button|form|script)\b/u);
   expect(metadata.robots).toEqual({ follow: false, index: false });
 });

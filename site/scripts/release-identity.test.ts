@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
-import { RELEASE_URL, SOFTWARE_VERSION } from "../app/_lib/site.ts";
+import { absoluteUrl, CANONICAL_PAGE_PATHS, RELEASE_URL, SITE_NAME, SITE_ORIGIN, SOFTWARE_VERSION } from "../app/_lib/site.ts";
+
+import manifest from "../app/manifest.ts";
+import { metadata } from "../app/layout.tsx";
 
 type PackageIdentity = Readonly<{ version?: unknown }>;
 
@@ -12,7 +15,17 @@ async function packageVersion(path: string): Promise<string> {
 }
 
 describe("release identity", () => {
-  test("keeps the deployable site aligned with the immutable package release", async () => {
+  test("uses Textbutler identity without advertising a web messaging app", () => {
+    expect(SITE_NAME).toBe("Textbutler");
+    expect(SITE_ORIGIN).toBe("https://textbutler.app");
+    expect(new URL(String(metadata.metadataBase)).origin).toBe(SITE_ORIGIN);
+    expect(metadata.applicationName).toBe(SITE_NAME);
+    for (const path of CANONICAL_PAGE_PATHS) expect(new URL(absoluteUrl(path)).origin).toBe(SITE_ORIGIN);
+    expect(manifest().name).toBe(SITE_NAME);
+    expect(manifest().display).toBe("browser");
+  });
+
+  test("preserves the immutable legacy package release coordinates", async () => {
     const siteRoot = resolve(import.meta.dir, "..");
     const repositoryRoot = resolve(siteRoot, "..");
     const [packageRelease, siteRelease] = await Promise.all([
@@ -27,7 +40,7 @@ describe("release identity", () => {
     );
   });
 
-  test("routes installation through the exact public npm release", async () => {
+  test("keeps legacy installation separate from the unreleased Mac app", async () => {
     const siteRoot = resolve(import.meta.dir, "..");
     const repositoryRoot = resolve(siteRoot, "..");
     const packageRelease = await packageVersion(resolve(repositoryRoot, "package.json"));
@@ -39,9 +52,9 @@ describe("release identity", () => {
     ]);
 
     expect(readme).toContain(exactInstall);
-    expect(page).toContain(
-      "bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}",
-    );
+    expect(page).toContain("Message Like Me v{SOFTWARE_VERSION}");
+    expect(page).toContain("It does not install Textbutler or enable automatic replies.");
+    expect(page).not.toContain("bun add --global");
     expect(readme).not.toContain("github:hraness/message-like-me#");
     expect(page).not.toContain("github:hraness/message-like-me#");
     expect(readme).not.toContain("is not published to npm");

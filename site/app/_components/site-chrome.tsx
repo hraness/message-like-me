@@ -6,7 +6,7 @@ import {
   absoluteUrl,
   type CanonicalPagePath,
   GITHUB_URL,
-  SOFTWARE_VERSION,
+  ARCHITECTURE_URL,
 } from '../_lib/site';
 
 export function SiteHeader() {
@@ -14,16 +14,15 @@ export function SiteHeader() {
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <MarketingSiteHeader
-        action={{ href: '/#install', label: `Install v${SOFTWARE_VERSION}` }}
+        action={{ href: '/#development', label: 'Development status' }}
         ariaLabel="Primary navigation"
-        brand="Message Like Me"
-        brandLabel="Message Like Me home"
+        brand="Textbutler"
+        brandLabel="Textbutler home"
         className="site-header"
         links={[
-          { href: '/sources', label: 'Sources' },
+          { href: '/#how-it-works', label: 'How it works' },
           { href: '/docs', label: 'Docs' },
-          { href: '/methodology', label: 'Method' },
-          { href: '/research', label: 'Research' },
+          { href: ARCHITECTURE_URL, label: 'Architecture' },
           { href: GITHUB_URL, label: 'GitHub' },
         ]}
       />
@@ -41,11 +40,11 @@ export function SiteFooter({ path }: Readonly<{ path?: CanonicalPagePath }>) {
         />
       )}
       <footer className="site-footer">
-        <Link className="wordmark" href="/">Message Like Me</Link>
-        <p>Open source · MIT · local first</p>
+        <Link className="wordmark" href="/">Textbutler</Link>
+        <p>Built for Mac · MIT source · in development</p>
         <nav aria-label="Footer navigation">
           <Link href="/about">About</Link>
-          <Link href="/sources">Sources</Link>
+          <Link href="/sources">Legacy history tools</Link>
           <Link href="/docs">Docs</Link>
           <a href={GITHUB_URL}>GitHub</a>
         </nav>

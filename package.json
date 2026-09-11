@@ -77,7 +77,9 @@
     "check:standalone": "bun scripts/check-standalone.ts",
     "check:dist": "bun scripts/check-dist.ts",
     "check:package": "bun scripts/package-smoke.ts",
-    "check": "bun run typecheck && bun run check:effect && bun run test && bun run check:skill && bun run check:standalone && bun run build && bun run check:public-graphs && bun run check:dist && bun run check:package",
+    "check": "bun run typecheck && bun run check:effect && bun run test && bun run check:skill && bun run check:standalone && bun run build && bun run check:public-graphs && bun run check:dist && bun run check:package && bun run check:textbutler",
+    "check:textbutler": "bun test packages && tsc --noEmit -p packages/agentrouter/tsconfig.json && tsc --noEmit -p packages/transport/tsconfig.json && tsc --noEmit -p packages/textbutler/tsconfig.json && bun run --cwd apps/macos check",
+    "textbutler": "bun packages/textbutler/src/cli.ts",
     "prepack": "bun run check",
     "check:effect": "bun scripts/check-effect-architecture.ts",
     "check:public-graphs": "bun scripts/check-public-graphs.ts"

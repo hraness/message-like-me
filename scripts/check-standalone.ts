@@ -25,10 +25,25 @@ const SCANNED_DIRECTORIES = [
   "scripts",
   "skills",
   "src",
+  "packages",
+  "apps/macos/src",
+  "apps/macos/scripts",
+  "apps/macos/src-tauri/src",
+  "apps/macos/src-tauri/capabilities",
+  "apps/macos/src-tauri/permissions",
 ] as const;
 const SCANNED_ROOT_FILES = [
   ".gitignore",
   "AGENTS.md",
+  "PRODUCT.md",
+  "apps/macos/package.json",
+  "apps/macos/PRODUCT.md",
+  "apps/macos/DESIGN.md",
+  "apps/macos/README.md",
+  "apps/macos/src-tauri/Cargo.toml",
+  "apps/macos/src-tauri/Cargo.lock",
+  "apps/macos/src-tauri/build.rs",
+  "apps/macos/src-tauri/tauri.conf.json",
   "CONTRIBUTING.md",
   "LICENSE",
   "README.md",
@@ -51,6 +66,7 @@ const TEXT_EXTENSIONS = new Set([
   ".json",
   ".lock",
   ".md",
+  ".rs",
   ".mjs",
   ".sh",
   ".toml",
@@ -389,8 +405,8 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (!readme.includes(expectedInstall)) {
     problems.push(`README.md npm install must match package version ${version}`);
   }
-  if (!readme.startsWith(`# Message Like Me\n\n${SKILLS_BADGE}\n\n`)) {
-    problems.push("README.md must place the official skills.sh repository badge below the title");
+  if (!readme.startsWith(`# Textbutler\n\n${SKILLS_BADGE}\n\n`)) {
+    problems.push("README.md must identify Textbutler and retain the legacy skill badge for its published history tools");
   }
   return problems;
 }

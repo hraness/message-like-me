@@ -15,9 +15,9 @@ import {
 } from '../_lib/site';
 
 export const metadata = pageMetadata({
-  title: 'Supported sources',
+  title: 'Legacy history sources',
   description:
-    'The exact Apple Messages, X archive, Beeper, native WhatsApp, and macOS Contacts inputs supported by Message Like Me.',
+    'Legacy Message Like Me history-reader inputs: the exact Apple Messages, X archive, Beeper, native WhatsApp, and macOS Contacts inputs supported by Message Like Me.',
   path: '/sources',
 });
 
@@ -49,8 +49,8 @@ export default function SourcesPage() {
       <SiteHeader />
       <main className="document-page sources-page" id="main-content" tabIndex={-1}>
         <header className="document-hero sources-hero">
-          <p className="eyebrow">Supported sources</p>
-          <h1>Know exactly what enters the evidence.</h1>
+          <h1>Legacy history sources</h1>
+          <p className="legacy-note">These are the published Message Like Me history readers. Their import capabilities are separate from Textbutler’s planned live Messages transport, which remains disabled pending qualification.</p>
           <p>
             Message Like Me supports {MESSAGING_HISTORY_SOURCES.length} messaging-history
             inputs and one optional Contacts enrichment source. The messaging inputs
@@ -62,7 +62,7 @@ export default function SourcesPage() {
 
         <section className="source-directory" aria-labelledby="source-directory-title">
           <div className="section-heading">
-            <p className="eyebrow">Current support in v{SOFTWARE_VERSION}</p>
+            <p className="eyebrow">Legacy reader support in v{SOFTWARE_VERSION}</p>
             <h2 id="source-directory-title">The source is part of the evidence.</h2>
             <p>
               These labels describe observed inputs—not account connections, complete
@@ -121,7 +121,7 @@ export default function SourcesPage() {
           <div className="source-links">
             <a href="https://ghostget.com/providers/beeper/">Inspect Ghostget’s Beeper surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v1.md`}>Read the versioned bundle contract ↗</a>
-            <Link href="/docs">Open Message Like Me docs →</Link>
+            <Link href="/docs">Open the project docs →</Link>
           </div>
         </section>
 
@@ -169,7 +169,7 @@ export default function SourcesPage() {
           <div className="source-links">
             <a href="https://ghostget.com/providers/whatsapp/">Inspect Ghostget’s WhatsApp surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v2.md`}>Read the native bundle contract ↗</a>
-            <Link href="/docs">Open Message Like Me docs →</Link>
+            <Link href="/docs">Open the project docs →</Link>
           </div>
         </section>
 

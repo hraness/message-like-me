@@ -1,0 +1,10 @@
+{
+  "name": "@hraness/agentrouter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider-neutral agent routing, account custody and scoped tool contracts.",
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test .", "typecheck": "tsc --noEmit -p tsconfig.json" }
+}
