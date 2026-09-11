@@ -1,14 +1,17 @@
 # Textbutler runtime
 
-This source package contains the macOS message-butler foundation. The owner
-selects contacts and a coding-agent provider. Trusted runtime code admits
+This source package contains the macOS message-butler daemon. The owner
+selects contacts and an explicit agent account. Trusted runtime code admits
 replies, isolates contact memory, adds disclosure, and journals outward intent.
 
-The current Ghostget surface supports owner-selected read-only conversation
-bindings and bounded history initialization. It does not provide incoming
-subscriptions or delegated unattended sends. The daemon therefore exposes real
-contact setup, settings and memory control, but does not run a live autoreply
-loop. This is source under development, not a signed Mac release.
+The automation connection polls Ghostget's durable incoming-message feed and
+uses recipient-bound grants for enabled contacts. New installations start paused.
+Only configured, ready messaging connections and admitted agent accounts can
+run replies. Claude API is an explicit, separately billed account choice;
+Claude Code and Codex remain unavailable until their native execution boundaries
+are qualified. Source-mode startup does not supply an API runtime attestation.
+See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
+tests do not attest a signed Mac release or live delivery on a particular account.
 
 ## Modules
 
@@ -31,6 +34,12 @@ loop. This is source under development, not a signed Mac release.
   selection, account/participant binding, and bounded context-only history.
 - `host-config.ts`: private owner configuration of the installed Ghostget CLI;
   no account or message reads occur just by loading configuration.
+- `provider-host.ts`: explicit account selection, current model availability,
+  credential generation fencing, and shared account leases.
+- `automation-owner.ts`: owner-only network setup, exact enrollment identity,
+  scoped grants and current provider capabilities.
+- `reply-loop.ts`: incoming-event polling, debounce, takeover cancellation and
+  qualified runtime dispatch. History imported during setup is context only.
 - `control-service.ts`, `daemon.ts`, and `cli.ts`: owner-only versioned Mac
   control and foreground daemon service, including bounded asynchronous read jobs.
 - `launch-agent.ts`: explicit per-user background-service install, status and
@@ -107,8 +116,32 @@ plus reconciliation of Ghostget's corresponding cleanup state. Do not delete the
 marker or run broad provider recovery merely to unblock a retry. The application
 does not automatically invoke Ghostget recovery or infer descendant cleanup from
 the immediate parent process exiting.
-Enabling a selected conversation rechecks its binding. Provider reads and
-enrollment never send messages or initialize a live autoreply loop.
+The configuration above selects the legacy read-only conversation path. For
+automation, add `ghostget.automationAccounts`, an explicit list of at most one
+`{ "provider": "imessage", "authId": "your-imessage-account-id" }` and one
+`{ "provider": "whatsapp", "authId": "your-whatsapp-account-id" }`. Automation
+account IDs use lowercase letters, digits and hyphens, start with a letter, and
+have at most 48 characters. Keep the legacy `authId` for compatibility.
+
+In **Setup → Messaging connections**, connect the configured iMessage account or
+explicitly start WhatsApp synchronization. Provider configuration alone does not
+start WhatsApp sync. **Add contact…** then lists configured messaging networks;
+enrollment still creates a disabled contact and imports history only if selected.
+Choose a ready agent account in the contact's **Behavior** settings before
+enabling it, then resume the global switch when ready for incoming replies.
+
+Enabling revalidates the messaging identity and grants only currently available
+actions, for at most 30 days and 100,000 actions. While the contact remains enabled,
+the daemon can renew that bounded grant after checking current provider state,
+recipient identity, settings revision and remaining capacity. Textbutler also
+enforces its per-contact reply rate limit. The app shows grant expiry, recovery
+requirements and last-confirmed rich-message capabilities. Pausing stops new
+dispatches; disabling also revokes the grant. An uncertain revocation retains
+private recovery state and blocks dispatch until reconciliation succeeds.
+Before requesting a grant, the daemon durably records its intent. A lost creation
+response is recovered through a read-only lookup of that exact intent; recovery
+never creates a replacement grant. Returned grants are persisted before contact
+activation, and failed cleanup retains them until revocation is confirmed.
 
 See [the architecture](../../docs/textbutler/architecture.md) for the complete
 folder contract, background lifecycle, rich action rules, provider seam,

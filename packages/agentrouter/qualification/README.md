@@ -1,5 +1,34 @@
 # Native Claude fixture
 
+An additional experimental kernel probe compiles a disposable C helper and
+checks a default-deny macOS Seatbelt profile using only synthetic files and a
+local endpoint:
+
+```sh
+oompa-host-run --mode=shared --lane=mac-native --label=textbutler-kernel-boundary-probe -- bun packages/agentrouter/qualification/macos-sandbox.ts
+oompa-host-run --mode=shared --lane=mac-native --label=textbutler-native-claude-os-scope -- bun packages/agentrouter/qualification/claude-native.ts --os-sandbox
+```
+
+The second command applies that same experimental profile to the actual native
+Claude fixture below. Neither command enables a production adapter or issues a
+production qualification. The profile allows only the pinned executable,
+specified system libraries and loader paths, private scratch directories, standard
+I/O descriptors, and one local TCP port. The helper checks foreign file, directory
+and FIFO reads, foreign writes, process creation, other executables and other
+network ports. Re-execution of the same pinned binary is permitted by the profile;
+fork and other executable paths remain denied. This is an explicit diagnostic
+for the current Mac, not a portable sandbox guarantee. Production use also needs
+a reviewed provider relay and exact distribution/account admission.
+
+Current result on the tested Darwin 25.5.0 ARM64 host: the converged kernel helper
+passes its nine checks. The actual pinned Claude fixture fails before its first
+initialization event, with zero model requests and no effective tool inventory.
+Consequently there is no native production qualification. A separate bounded
+`macos-native-bootstrap.ts` diagnostic was prepared to run only the pinned
+executable's `--version`; automatic approval review rejected that invocation due
+to a reported usage limit, so it has not executed. Do not treat the helper result
+as evidence that the actual native process can run within this profile.
+
 Run the explicit fixture on macOS ARM64 through the installed host scheduler:
 
 ```sh

@@ -12,6 +12,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tauri::webview::NewWindowResponse;
+use tauri::Manager;
+mod lifecycle;
 
 const PROTOCOL: &str = "textbutler.control.v1";
 const MAX_FRAME_BYTES: usize = 1_048_576;
@@ -116,6 +118,8 @@ fn allowed_request(request: &Value) -> bool {
     let fields: &[&str] = match row.get("command").and_then(Value::as_str) {
         Some("snapshot" | "activity.list" | "conversations.list") => &["protocol", "command"],
         Some("owner.job.read") => &["protocol", "command", "jobId"],
+        Some("provider.accounts.check") => &["protocol", "command", "accountId"],
+        Some("messaging.start") => &["protocol", "command", "provider"],
         Some("contact.enroll") => &["protocol", "command", "candidateId", "expectedRevision", "initializeHistory"],
         Some("contact.memory.read") => &["protocol", "command", "contactId"],
         Some("contact.settings.update") => &["protocol", "command", "contactId", "expectedRevision", "settings"],
@@ -205,7 +209,7 @@ async fn control_request(window: tauri::WebviewWindow, request: Value) -> Value 
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![control_request])
+        .invoke_handler(tauri::generate_handler![control_request, lifecycle_request])
         .setup(|app| {
             let config = app.config().app.windows.first().ok_or("Missing main window configuration")?;
             tauri::WebviewWindowBuilder::from_config(app, config)?
@@ -216,6 +220,16 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("Textbutler could not open its local control panel");
+}
+
+#[tauri::command]
+async fn lifecycle_request(window: tauri::WebviewWindow, request: Value) -> Value {
+    if window.label() != "main" || !window.url().map(|url| local_url(&url)).unwrap_or(false) { return lifecycle::failure("unavailable", "Only the bundled main window may manage the background service."); }
+    let Some(operation) = lifecycle::operation(&request).map(str::to_owned) else { return lifecycle::failure("unavailable", "Unsupported background-service request."); };
+    let Some(permit) = lifecycle::Permit::acquire() else { return lifecycle::failure("unavailable", "Another background-service operation is in progress."); };
+    let resources = match window.app_handle().path().resource_dir() { Ok(path) => path, Err(_) => return lifecycle::failure("unavailable", "Bundled resources are unavailable.") };
+    tauri::async_runtime::spawn_blocking(move || { let _permit = permit; lifecycle::run(resources, &operation) }).await
+        .unwrap_or_else(|_| lifecycle::failure("indeterminate", "The background-service operation was interrupted."))
 }
 
 #[cfg(test)]
@@ -246,6 +260,10 @@ mod tests {
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "snapshot" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "conversations.list" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "owner.job.read", "jobId": "test-job" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.check", "accountId": "test-account" })));
+        assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.check", "accountId": "test-account", "credential": "not-allowed" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "messaging.start", "provider": "whatsapp" })));
+        assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "messaging.start", "provider": "whatsapp", "credential": "not-allowed" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "contact.enroll", "candidateId": "test-candidate", "expectedRevision": 1, "initializeHistory": false })));
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "contact.enroll", "candidateId": "test-candidate", "expectedRevision": 1, "initializeHistory": false, "chatGuid": "arbitrary-target" })));
         for command in ["shell", "exec", "read_file", "messages.send", "daemon.start"] { assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": command }))); }

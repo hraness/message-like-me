@@ -14,8 +14,11 @@ import { literalClaudePrompt, restrictedClaudeOptions } from "../src/claude-opti
 import { spawnBoundedProvider } from "../src/provider-process.ts";
 import { createToolBroker, type BrokerToolName } from "../src/broker.ts";
 import { ContactWorkspace } from "../../textbutler/src/workspace.ts";
+import { syntheticMacSandbox } from "./macos-sandbox-profile.ts";
 
 if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("QUALIFICATION_REQUIRES_DARWIN_ARM64");
+if (process.argv.slice(2).some(argument => argument !== "--os-sandbox")) throw new Error("INVALID_QUALIFICATION_ARGUMENT");
+const osSandbox = process.argv.includes("--os-sandbox");
 const executable = fileURLToPath(import.meta.resolve("@anthropic-ai/claude-agent-sdk-darwin-arm64/claude"));
 const inspected = await inspectClaudeSdkRuntime({ executablePath: executable, executableSha256: createHash("sha256").update(await readFile(executable)).digest("hex") });
 const root = await realpath(await mkdtemp(join(tmpdir(), "textbutler-native-scope-")));
@@ -131,15 +134,19 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
     model: "claude-sonnet-4-6", purpose: classifier ? "classify" as const : "respond" as const, prompt: taskText?.({ sibling, marker }) ?? "Synthetic qualification fixture. Return JSON.", signal: controller.signal };
   let observedTools: string[] = [];
   let observedInitialization: unknown;
+  let nativeStderr = "";
   try {
     const options = restrictedClaudeOptions({ cwd, env, abortController: controller, model: request.model, maxTurns: classifier ? 1 : 4, maxBudgetUsd: 0.01,
       pathToClaudeCodeExecutable: executable, brokerToolNames: names,
       mcpServers: mcpTools.length ? { agentrouter: createSdkMcpServer({ name: "agentrouter", version: "1.0.0", tools: mcpTools }) } : {},
       spawnClaudeCodeProcess(input) {
         assert(!child && input.command === executable && input.cwd === cwd, "FIXTURE_SPAWN_MISMATCH");
-        child = spawnBoundedProvider({ executable, args: input.args, cwd, env, onViolation: () => controller.abort() });
+        const profile = osSandbox ? syntheticMacSandbox({ executable, scratch: [cwd, home, config, temp], port: server.port! }) : undefined;
+        child = spawnBoundedProvider({ executable: profile ? "/usr/bin/sandbox-exec" : executable,
+          args: profile ? ["-p", profile, executable, ...input.args] : input.args, cwd, env, onViolation: () => controller.abort() });
         return child.process;
       } });
+    if (osSandbox) options.stderr = text => { nativeStderr = `${nativeStderr}${text}`.slice(-4000); };
     stream = query({ prompt: literalClaudePrompt(request.prompt), options });
     for await (const event of stream) {
       if (event.type === "system" && event.subtype === "init") {
@@ -167,7 +174,8 @@ async function scenario(name: string, attempted: (input: { sibling: string; mark
       literalTaskObserved, inheritedInstructions: loadedInstructions, inheritedDotenv: loadedDotenv, escapedRead: leakedCanary, escapedWriteOrCommand: false });
   } catch (error) {
     results.push({ scenario: name, status: "failed", reason: error instanceof Error && /^FIXTURE_|^CLAUDE_/u.test(error.message) ? error.message : "NATIVE_CONTROL_OR_PROTOCOL_FAILED", observedTools,
-      observedInitialization, resultSeen, literalTaskObserved, endpointFailure, syntheticMessageShapes, advertisedTools, apiCalls, toolResults: nativeToolResults });
+      observedInitialization, resultSeen, literalTaskObserved, endpointFailure, syntheticMessageShapes, advertisedTools, apiCalls, toolResults: nativeToolResults,
+      ...(osSandbox ? { nativeStderr: nativeStderr.replaceAll(root, "<synthetic-root>") } : {}) });
     throw error;
   } finally {
     clearTimeout(timer); broker.revoke(); stream?.close();
@@ -205,7 +213,7 @@ try {
     { name: full("files.write"), input: { path: "../other-contact.md", text: "bad overwrite", expectedRevision: null } },
     { name: full("files.write"), input: { path: "MEMORY.md", text: "stale overwrite", expectedRevision: "0".repeat(64) } },
   ]);
-  console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", runtimeVersion: inspected.runtimeVersion, runtimeDigest: inspected.runtimeDigest,
+  console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", experimentalOsSandbox: osSandbox, runtimeVersion: inspected.runtimeVersion, runtimeDigest: inspected.runtimeDigest,
     platform: `${process.platform}-${process.arch}`, realCredentialsUsed: false, paidModelRequests: 0, productionQualificationIssued: false,
     sourceDigests: {
       fixture: createHash("sha256").update(await readFile(fileURLToPath(import.meta.url))).digest("hex"),
@@ -213,6 +221,6 @@ try {
       contactWorkspace: createHash("sha256").update(await readFile(new URL("../../textbutler/src/workspace.ts", import.meta.url))).digest("hex"),
     }, scenarios: results }, null, 2));
 } catch {
-  console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", productionQualificationIssued: false, status: "failed", scenarios: results }, null, 2));
+  console.log(JSON.stringify({ profile: "native-synthetic-model-visible-tools", experimentalOsSandbox: osSandbox, productionQualificationIssued: false, status: "failed", scenarios: results }, null, 2));
   process.exitCode = 1;
 } finally { await rm(root, { recursive: true, force: true }); }

@@ -6,3 +6,7 @@ export { createPublicWeb } from "./public-web.ts";
 export type { AgentProvider } from "./validation.ts";
 export * from "./claude-sdk.ts";
 export * from "./claude-credentials.ts";
+export { createClaudeApiAdapter } from "./claude-api.ts";
+export type { ClaudeApiAdapterOptions } from "./claude-api.ts";
+export { discoverClaudeModels, parseClaudePriceCatalog } from "./claude-api-models.ts";
+export type { ClaudePriceCatalog, ClaudeModelDiscoveryOptions } from "./claude-api-models.ts";
