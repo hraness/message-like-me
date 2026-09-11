@@ -245,18 +245,18 @@ describe('supported source presentation', () => {
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
     expect(renderedSourcesPage).toContain('Every ingest path is read-only with respect to its source');
-    expect(renderedSourcesPage).toContain('Current support in v0.8.8');
+    expect(renderedSourcesPage).toContain('Current support in v0.8.9');
     expect(renderedSourcesPage).toContain(
       'ghostget beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.8/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.9/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
       'ghostget whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.8/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.9/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
@@ -384,7 +384,7 @@ describe('supported source presentation', () => {
     const softwareApplication = jsonLd['@graph']?.find(
       (entry) => entry['@type'] === 'SoftwareApplication',
     );
-    expect(softwareApplication?.softwareVersion).toBe('0.8.8');
+    expect(softwareApplication?.softwareVersion).toBe('0.8.9');
     expect(softwareApplication?.featureList).toEqual([
       'Read-only Apple Messages history ingestion',
       'Caller-owned X data archive direct-message ingestion',
