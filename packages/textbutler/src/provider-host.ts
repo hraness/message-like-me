@@ -1,8 +1,11 @@
 import { join } from "node:path";
 import { createHmac, randomBytes } from "node:crypto";
-import { AgentRouter, AgentStoppedError, createClaudeApiAdapter, createFileClaudeApiKeyResolver, discoverClaudeModels,
-  selectClassifierModel, unqualifiedAdapter, type AccountLeaseStore, type AgentAdapter, type ClaudeApiAdapterOptions,
-  type ClaudeModelDiscoveryOptions, type ModelCatalog, type RuntimeQualification } from "../../agentrouter/src/index.ts";
+import { AgentRouter, AgentStoppedError, unqualifiedAdapter, type AgentAdapter, type RuntimeQualification } from "../../agentrouter/src/runtime.ts";
+import { createClaudeApiAdapter, type ClaudeApiAdapterOptions } from "../../agentrouter/src/claude-api.ts";
+import { createFileClaudeApiKeyResolver } from "../../agentrouter/src/claude-credentials.ts";
+import { discoverClaudeModels, type ClaudeModelDiscoveryOptions } from "../../agentrouter/src/claude-api-models.ts";
+import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
+import type { AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
 import type { ProviderAccountConfig, HostConfig } from "./host-config.ts";
 import type { ContactSettings } from "./config.ts";
 import type { ProviderSelection } from "./routed-agent.ts";

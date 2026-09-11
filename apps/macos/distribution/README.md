@@ -32,6 +32,10 @@ The local app is written under
 script excludes Apple credentials from build children and explicitly requests
 an unsigned bundle. Its final ad hoc outer seal preserves the nested Bun bytes;
 it is only for local validation. It is not notarized or Gatekeeper-qualified.
+The compiled dependency graph must exclude the separately qualified native
+Claude SDK. The API adapter uses direct module imports; whitespace-only
+minification omits Bun's source-location comments while the portable-path guard
+remains in force. Runtime attribution files are retained separately.
 
 The smoke check runs the actual copied Bun and compiled CLI in an isolated
 synthetic home. It verifies supported `--no-env-file`/`--no-install` flags,

@@ -1,8 +1,8 @@
 import { basename } from "node:path";
-import {
-  AgentRouter, assertQualified, createPublicWeb, createToolBroker, selectClassifierModel,
-  type ModelCatalog, type PublicWeb, type RuntimeQualification,
-} from "../../agentrouter/src/index.ts";
+import { AgentRouter, assertQualified, type RuntimeQualification } from "../../agentrouter/src/runtime.ts";
+import { createPublicWeb } from "../../agentrouter/src/public-web.ts";
+import { createToolBroker, type PublicWeb } from "../../agentrouter/src/broker.ts";
+import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
 import { parseActionIntent, type ActionIntent } from "../../transport/src/index.ts";
 import type { ContactSettings } from "./config.ts";
 import { CLASSIFIER_INSTRUCTIONS } from "./decision.ts";

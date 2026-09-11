@@ -1,6 +1,7 @@
 import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { command, inventory, requireValue, sha256 } from "../distribution/common.ts";
+import { buildRuntimeBundle } from "./runtime-bundle.ts";
 
 export const appRoot = resolve(import.meta.dir, "..");
 export const repository = resolve(appRoot, "../..");
@@ -13,8 +14,7 @@ export async function stageRuntime(source = sourceCoordinate()): Promise<string>
   requireValue(Bun.version === "1.3.14" && process.platform === "darwin" && process.arch === "arm64", "Packaging requires Bun1.3.14 on Apple Silicon macOS");
   const root = join(appRoot, "out/runtime");
   await rm(root, { recursive: true, force: true }); await mkdir(root, { recursive: true });
-  const build = await Bun.build({ entrypoints: [join(appRoot, "scripts/runtime-entry.ts")], outdir: root, naming: "cli.ts", target: "bun", minify: false, sourcemap: "none" });
-  requireValue(build.success && build.outputs.length === 1, "Textbutler CLI bundle failed");
+  await buildRuntimeBundle(join(appRoot, "scripts/runtime-entry.ts"), root);
   const bundledSource = await readFile(join(root, "cli.ts"), "utf8");
   requireValue(!bundledSource.includes(repository) && !bundledSource.includes("node_modules/") && !bundledSource.includes("/Users/"), "Runtime bundle contains an unportable path");
   await copyFile(process.execPath, join(root, "textbutler-bun")); await chmod(join(root, "textbutler-bun"), 0o755);
