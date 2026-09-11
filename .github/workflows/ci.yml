@@ -53,7 +53,7 @@ jobs:
   macos_fixtures:
     name: macOS synthetic Messages and Contacts fixtures
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,3 +69,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME"
           bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts
+      - name: Build Textbutler bundled webview
+        run: bun run --cwd apps/macos build
+      - name: Test Textbutler native control boundary
+        run: cargo test --manifest-path apps/macos/src-tauri/Cargo.toml --locked

@@ -66,10 +66,17 @@ export type CanaryControlEpochReceipt = ControlEpochReceiptFields & Readonly<{
   tag: "no-tag";
 }>;
 
-export type ControlEpochReceipt = ProductionControlEpochReceipt | CanaryControlEpochReceipt;
+export type SiteControlEpochReceipt = Omit<ControlEpochReceiptFields, "tag"> & Readonly<{
+  domain: "textbutler/control-epoch/site/v1";
+  protectedRef: "refs/heads/website-production";
+  schema: "textbutler-site-control-epoch-v1";
+  tag: null;
+}>;
+export type ControlEpochReceipt = ProductionControlEpochReceipt | CanaryControlEpochReceipt | SiteControlEpochReceipt;
 export type ProductionWorkflowAdmissionReceipt = ProductionWorkflowRangeReceipt | ProductionControlEpochReceipt;
 export type CanaryWorkflowAdmissionReceipt = CanaryWorkflowRangeReceipt | CanaryControlEpochReceipt;
-export type WorkflowAdmissionReceipt = ProductionWorkflowAdmissionReceipt | CanaryWorkflowAdmissionReceipt;
+export type SiteWorkflowAdmissionReceipt = ProductionWorkflowRangeReceipt | SiteControlEpochReceipt;
+export type WorkflowAdmissionReceipt = ProductionWorkflowAdmissionReceipt | CanaryWorkflowAdmissionReceipt | SiteWorkflowAdmissionReceipt;
 
 export const CONTROL_EPOCH_CANARY_NO_TAG: "no-tag";
 
@@ -150,6 +157,9 @@ type ControlEpochAdmissionBoundary = Readonly<{
 }>;
 
 export function controlEpochDigest(value: unknown): string;
+export function verifySiteWorkflowAdmission(input: ControlEpochAdmissionBoundary): SiteWorkflowAdmissionReceipt;
+export function assertSiteWorkflowAdmissionReceipt(value: unknown, expected: Readonly<{previousSha: string; targetSha: string}>): SiteWorkflowAdmissionReceipt;
+export function describeControlEpoch(input: ControlEpochDescriptionFields & Readonly<{ mode: "site"; protectedRef: "refs/heads/website-production"; tag: null }>): SiteControlEpochReceipt;
 export function describeControlEpoch(
   input: ProductionControlEpochDescriptionInput,
 ): ProductionControlEpochReceipt;

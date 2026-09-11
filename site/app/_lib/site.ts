@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 
-export const SITE_NAME = 'Message Like Me';
-export const SITE_ORIGIN = 'https://messagelikeme.com';
+export const SITE_NAME = 'Textbutler';
+export const SITE_ORIGIN = 'https://textbutler.app';
 export const SITE_DESCRIPTION =
-  'A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.';
+  'A personal message butler for Mac, with your coding agent, contact-specific memory, and clearly identified replies. In development.';
 export const GITHUB_URL = 'https://github.com/hraness/message-like-me';
+export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/architecture.md`;
+// The immutable legacy release coordinate; not a Textbutler app version.
 export const SOFTWARE_VERSION = '0.8.9';
 export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;
 
@@ -54,7 +56,7 @@ export function pageMetadata({
         url: absoluteUrl('/og.png'),
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} — local-first messaging style analysis.`,
+        alt: `${SITE_NAME} — your personal message butler for Mac.`,
       }],
     },
     twitter: {
@@ -63,7 +65,7 @@ export function pageMetadata({
       description,
       images: [{
         url: absoluteUrl('/og.png'),
-        alt: `${SITE_NAME} — local-first messaging style analysis.`,
+        alt: `${SITE_NAME} — your personal message butler for Mac.`,
       }],
     },
   };

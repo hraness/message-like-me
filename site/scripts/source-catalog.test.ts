@@ -23,7 +23,7 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
-  test('dates only the routes changed by the source integration', () => {
+  test('dates all routes changed by the Textbutler rebrand', () => {
     const routeDates = sitemap().map(({ lastModified, url }) => {
       if (!(lastModified instanceof Date)) {
         throw new Error(`Expected a Date lastModified value for ${url}`);
@@ -32,12 +32,12 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-09T00:00:00.000Z'],
-      ['/sources', '2026-09-09T00:00:00.000Z'],
-      ['/docs', '2026-09-06T00:00:00.000Z'],
-      ['/methodology', '2026-08-27T00:00:00.000Z'],
-      ['/research', '2026-08-27T00:00:00.000Z'],
-      ['/about', '2026-08-27T00:00:00.000Z'],
+      ['/', '2026-09-11T00:00:00.000Z'],
+      ['/sources', '2026-09-11T00:00:00.000Z'],
+      ['/docs', '2026-09-11T00:00:00.000Z'],
+      ['/methodology', '2026-09-11T00:00:00.000Z'],
+      ['/research', '2026-09-11T00:00:00.000Z'],
+      ['/about', '2026-09-11T00:00:00.000Z'],
     ]);
   });
 
@@ -204,17 +204,15 @@ describe('supported source presentation', () => {
         source('skills/message-like-me/references/privacy.md'),
       ]);
 
-    expect(home).toMatch(
-      /native WhatsApp bundles exported through compatible Ghostget releases/u,
-    );
     expect(home).toContain('<ProductHero');
-    expect(home).toContain("{ href: '#install', label: `Install v${SOFTWARE_VERSION}` }");
-    expect(home).toContain('<SourceCard');
+    expect(home).toContain("{ href: '#development', label: 'See what’s ready' }");
     expect(renderedHomePage).toContain('data-hraness-marketing="hero"');
-    expect(renderedHomePage).toContain('messagelikeme ingest imessage --json');
-    expect(renderedHomePage).toContain(
-      'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
-    );
+    expect(renderedHomePage).toContain('View legacy history sources.');
+    expect(renderedHomePage).not.toContain('messagelikeme ingest');
+    expect(renderedSourcesPage).toContain('Legacy history sources');
+    expect(renderedSourcesPage).toContain('separate from Textbutler’s planned live Messages transport');
+    expect(modelText).toContain('## Current Textbutler development status');
+    expect(modelText).toContain('## Legacy Message Like Me history tools');
     expect(sourcesPage).toContain('Beeper via Ghostget');
     expect(sourcesPage).toContain('It owns zero of Ghostget’s');
     expect(renderedSourcesPage).toContain(
@@ -245,7 +243,7 @@ describe('supported source presentation', () => {
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
     expect(renderedSourcesPage).toContain('Every ingest path is read-only with respect to its source');
-    expect(renderedSourcesPage).toContain('Current support in v0.8.9');
+    expect(renderedSourcesPage).toContain('Legacy reader support in v0.8.9');
     expect(renderedSourcesPage).toContain(
       'ghostget beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
@@ -384,18 +382,16 @@ describe('supported source presentation', () => {
     const softwareApplication = jsonLd['@graph']?.find(
       (entry) => entry['@type'] === 'SoftwareApplication',
     );
-    expect(softwareApplication?.softwareVersion).toBe('0.8.9');
+    expect(softwareApplication?.softwareVersion).toBeUndefined();
     expect(softwareApplication?.featureList).toEqual([
-      'Read-only Apple Messages history ingestion',
-      'Caller-owned X data archive direct-message ingestion',
-      'Every ingest path is read-only with respect to its source',
-      'Finished Beeper bundle from Ghostget v0.17.1 and adapter beeper-local v2.4.0; all 32 reviewed operations stay in Ghostget (26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads)',
-      'Beeper CLI executable 0.6.2 is runtime authority; upstream tagged packages/cli/package.json declaration 0.6.1 is provenance only',
-      'No provider credentials, Ghostget or Beeper operation calls, or sending',
-      'Native WhatsApp bundle ingestion via Ghostget and official Wacli',
-      'Optional macOS Contacts label enrichment',
-      'Local deterministic measurement and drafts-only Agent Skill',
+      'Mac control panel and local daemon controls',
+      'Contact-specific guidance and editable memory',
+      'Configurable visible assistant disclosure',
+      'Smart and keyword-only response policy foundations',
+      'Global pause and active contact limits',
     ]);
+    expect(renderedRootLayout).not.toContain('downloadUrl');
+    expect(renderedRootLayout).toContain('In development; live automatic replies disabled pending qualification');
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);

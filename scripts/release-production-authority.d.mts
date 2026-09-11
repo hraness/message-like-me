@@ -189,3 +189,17 @@ export function finalizeProductionAuthority(input: Readonly<{
     }>;
   }>;
 }>): Promise<Readonly<ProductionAuthorityFinalReceipt>>;
+export type SiteProductionSubject = Readonly<{
+  kind: "site";
+  sourceSha: string;
+  ciRunId: number;
+  ciRunAttempt: number;
+  buildRunId: number;
+  buildRunAttempt: number;
+  buildArtifactId: number;
+  buildArtifactDigest: string;
+  manifestDigest: string;
+  buildCompletedAt: string;
+  sourceQualifiedAt: string;
+}>;
+export function parseSiteSubject(value: unknown): SiteProductionSubject;

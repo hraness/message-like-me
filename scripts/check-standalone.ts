@@ -25,10 +25,25 @@ const SCANNED_DIRECTORIES = [
   "scripts",
   "skills",
   "src",
+  "packages",
+  "apps/macos/src",
+  "apps/macos/scripts",
+  "apps/macos/src-tauri/src",
+  "apps/macos/src-tauri/capabilities",
+  "apps/macos/src-tauri/permissions",
 ] as const;
 const SCANNED_ROOT_FILES = [
   ".gitignore",
   "AGENTS.md",
+  "PRODUCT.md",
+  "apps/macos/package.json",
+  "apps/macos/PRODUCT.md",
+  "apps/macos/DESIGN.md",
+  "apps/macos/README.md",
+  "apps/macos/src-tauri/Cargo.toml",
+  "apps/macos/src-tauri/Cargo.lock",
+  "apps/macos/src-tauri/build.rs",
+  "apps/macos/src-tauri/tauri.conf.json",
   "CONTRIBUTING.md",
   "LICENSE",
   "README.md",
@@ -51,6 +66,7 @@ const TEXT_EXTENSIONS = new Set([
   ".json",
   ".lock",
   ".md",
+  ".rs",
   ".mjs",
   ".sh",
   ".toml",
@@ -356,18 +372,20 @@ function checkPackageManifest(value: unknown): string[] {
     problems.push("package.json description must match the canonical public description");
   }
 
-  const names = [
-    ...dependencyNames(manifest.dependencies),
-    ...dependencyNames(manifest.devDependencies),
-    ...dependencyNames(manifest.optionalDependencies),
-    ...dependencyNames(manifest.peerDependencies),
-  ];
-  for (const name of names) {
-    if (
-      BANNED_DEPENDENCIES.has(name)
-      || BANNED_DEPENDENCY_PREFIXES.some((prefix) => name.startsWith(prefix))
-    ) {
-      problems.push(`package.json depends on forbidden network, auth, AI, or private package ${name}`);
+  // Exact development-only dependencies support the separate Textbutler source
+  // tree. They do not enter the legacy public runtime or its packed exports.
+  const textbutlerProviderToolchain: Readonly<Record<string, string>> = {
+    "@anthropic-ai/claude-agent-sdk": "0.3.268",
+    "@anthropic-ai/sdk": "0.125.0",
+  };
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const) {
+    const entries = manifest[field];
+    for (const name of dependencyNames(entries)) {
+      if (field === "devDependencies" && Object.hasOwn(textbutlerProviderToolchain, name)
+        && (entries as JsonRecord)[name] === textbutlerProviderToolchain[name]) continue;
+      if (BANNED_DEPENDENCIES.has(name) || BANNED_DEPENDENCY_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+        problems.push(`package.json ${field} depends on forbidden network, auth, AI, or private package ${name}`);
+      }
     }
   }
   return problems;
@@ -389,8 +407,8 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (!readme.includes(expectedInstall)) {
     problems.push(`README.md npm install must match package version ${version}`);
   }
-  if (!readme.startsWith(`# Message Like Me\n\n${SKILLS_BADGE}\n\n`)) {
-    problems.push("README.md must place the official skills.sh repository badge below the title");
+  if (!readme.startsWith(`# Textbutler\n\n${SKILLS_BADGE}\n\n`)) {
+    problems.push("README.md must identify Textbutler and retain the legacy skill badge for its published history tools");
   }
   return problems;
 }

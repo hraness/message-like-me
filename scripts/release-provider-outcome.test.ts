@@ -26,6 +26,7 @@ import {
   productionAuthorityReceiptDigest,
 } from "./release-production-authority.mjs";
 import { controlEpochDigest } from "./release-workflow-range.mjs";
+import { qualifyExistingSiteProduction } from "./site-production.mjs";
 
 const releaseWorkflowUrl = new URL("../.github/workflows/release.yml", import.meta.url);
 const productionWorkflowUrl = new URL("../.github/workflows/website-production.yml", import.meta.url);
@@ -213,7 +214,7 @@ function providerProductionStatus<State extends "error" | "success">(
 
 const providerAttestationStatus = providerProductionStatus("success", 9_001);
 
-function providerProductionCombinedStatus(status = providerAttestationStatus): ProviderJson {
+function providerProductionCombinedStatus(status: ReturnType<typeof providerProductionStatus> = providerAttestationStatus): ProviderJson {
   return {
     commit_url: `https://api.github.com/repos/${providerRepository}/commits/${providerVerifiedSha}`,
     repository: {
@@ -1043,6 +1044,47 @@ async function providerReceipts(mode: "advanced" | "already-exact"): Promise<Rea
 }
 
 
+test("already-exact site recovery accepts a deployment after CI but before the retry artifact, without package lookups", async () => {
+  const subject = { kind: "site" as const, sourceSha: providerVerifiedSha, ciRunId: 10, ciRunAttempt: 1,
+    buildRunId: 20, buildRunAttempt: 1, buildArtifactId: 30, buildArtifactDigest: `sha256:${"a".repeat(64)}`,
+    manifestDigest: "b".repeat(64), buildCompletedAt: "2026-08-29T15:00:00.000Z", sourceQualifiedAt: "2026-08-29T14:00:00.000Z" };
+  const identity = { id: 1342143606, full_name: providerRepository };
+  const ci = { id: 10, run_attempt: 1, workflow_id: 7, path: ".github/workflows/ci.yml", name: "CI", event: "push",
+    head_branch: "main", head_sha: providerVerifiedSha, status: "completed", conclusion: "success", repository: identity, head_repository: identity };
+  const terminal = providerProductionStatus("error", 42, "2026-08-29T14:08:00Z");
+  const common: Record<string, unknown> = {
+    [`/repos/${providerRepository}`]: { ...identity, default_branch: "main" },
+    [`/repos/${providerRepository}/actions/workflows/ci.yml`]: { id: 7, path: ci.path, name: "CI", state: "active" },
+    [`/repos/${providerRepository}/actions/runs/10`]: ci,
+    [`/repos/${providerRepository}/actions/runs/10/attempts/1`]: ci,
+    [`/repos/${providerRepository}/actions/runs/10/attempts/1/jobs?per_page=100`]: { total_count: 2, jobs: ["Standalone package", "macOS synthetic Messages and Contacts fixtures"].map(name => ({ name, run_id: 10, run_attempt: 1, head_sha: providerVerifiedSha, status: "completed", conclusion: "success", completed_at: "2026-08-29T14:00:00Z" })) },
+    [`/repos/${providerRepository}/actions/artifacts/30`]: { id: 30, name: "textbutler-site-build", expired: false, digest: subject.buildArtifactDigest, size_in_bytes: 1000, created_at: "2026-08-29T15:00:00Z", workflow_run: { id: 20, head_sha: providerVerifiedSha } },
+    [`/repos/${providerRepository}/actions/runs/20/attempts/1`]: { id: 20, run_attempt: 1, workflow_id: 8, path: ".github/workflows/website-production.yml", event: "workflow_dispatch", head_branch: "main", head_sha: providerVerifiedSha, status: "in_progress", conclusion: null, repository: identity, head_repository: identity },
+    [`/repos/${providerRepository}/actions/workflows/website-production.yml`]: { id: 8, path: ".github/workflows/website-production.yml", name: "Promote website production", state: "active" },
+    [`/repos/${providerRepository}/commits/${providerVerifiedSha}/status?per_page=100`]: providerProductionCombinedStatus(terminal),
+    [`/repos/${providerRepository}/commits/${providerVerifiedSha}/statuses?per_page=100`]: [{ id: terminal.statusId, node_id: terminal.statusNodeId, context: productionAuthorityContext, state: "error", creator: { id: 123, node_id: "BOT_123", login: "mlm-prod-ref-writer-1342143606[bot]", type: "Bot" } }],
+    "/users/mlm-prod-ref-writer-1342143606%5Bbot%5D": { id: 123, node_id: "BOT_123", login: "mlm-prod-ref-writer-1342143606[bot]", type: "Bot" },
+  };
+  for (const scenario of ["valid", "pre-ci", "wrong-source", "wrong-provider"] as const) {
+    const createdAt = scenario === "pre-ci" ? "2026-08-29T13:05:00Z" : "2026-08-29T14:05:00Z";
+    const deployment = providerDeployment(10, createdAt, scenario === "wrong-source" ? { sha: providerPreviousSha } : scenario === "wrong-provider" ? { creator: { id: 1, login: "other", type: "Bot" } } : {});
+    const inner = new ProviderApiFixture({ deployments: [[deployment]], refSha: providerVerifiedSha,
+      serverDates: ["2026-08-29T15:01:00.000Z"], statuses: terminalBaselineStatus(10, createdAt) });
+    const api = { graphql: inner.graphql.bind(inner), getWithServerDate: inner.getWithServerDate.bind(inner), getRules: inner.getRules.bind(inner),
+      get: async (path: string) => {
+        if (path.includes("/releases/") || path.includes("/git/tags/")) throw new Error("site recovery must not query a package release");
+        if (Object.hasOwn(common, path)) return common[path];
+        return inner.get(path);
+      } };
+    let baseline;
+    try { baseline = await createProviderBaseline({ api: api as never, repository: providerRepository, verifiedSha: providerVerifiedSha }); }
+    catch (error) { if (scenario === "wrong-provider") continue; throw error; }
+    const result = qualifyExistingSiteProduction({ api, subject, baselineReceipt: baseline, maxPolls: 1, pollIntervalMilliseconds: 0, sleep: async () => {} });
+    if (scenario === "valid") await expect(result).resolves.toEqual({ deploymentId: 10, statusId: 100 });
+    else await expect(result).rejects.toThrow();
+  }
+});
+
 describe("release-bound site control", () => {
   test("decodes the workflow-admission receipt only on the executable promote path", async () => {
     const malformedWorkflowRangeReceipt = "***";
@@ -1548,7 +1590,7 @@ esac
     expect(providerJob).toContain(
       "RECOVERY_WORKFLOW_SHA: ${{ needs.verify.outputs.workflow_sha }}",
     );
-    expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() }}");
+    expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() && (github.event_name != 'workflow_dispatch' || inputs.site_sha == '') }}");
     expect(finalPublicJob).not.toContain("continue-on-error");
     expect(finalPublicJob.indexOf("Bind the complete terminal admission chain"))
       .toBeLessThan(finalPublicJob.indexOf("actions/checkout@"));

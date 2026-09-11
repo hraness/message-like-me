@@ -1,0 +1,11 @@
+{
+  "name": "@hraness/textbutler",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "A personal message butler for macOS, powered by your coding agent.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://textbutler.app",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test src", "typecheck": "tsc --noEmit -p tsconfig.json" }
+}

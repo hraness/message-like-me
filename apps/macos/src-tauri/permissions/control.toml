@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-control-request"
+description = "Allow the bundled Textbutler window to issue bounded owner-only daemon control requests."
+commands.allow = ["control_request"]
