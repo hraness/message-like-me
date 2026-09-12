@@ -1,6 +1,41 @@
 import { expect, test } from "bun:test";
 import { BROKER_TOOL_NAMES, createToolBroker, type BrokerToolName } from "../src/broker.ts";
 import { CODEX_TOOL_NAMES, codexResponseTools, codexTools } from "../src/codex-config.ts";
+import { assertCodexCapabilityMapping, createCodexCapabilityMapping, codexTaskSettings, codexTaskConfiguration } from "../src/codex-config.ts";
+import { createCapabilityProfile, type CapabilityProfile } from "../src/capabilities.ts";
+
+test("registered capability mappings preserve distinct names and recursive schemas", () => {
+  const inputSchema = { type: "object", properties: { node: { $ref: "#/$defs/Node" } }, required: ["node"], additionalProperties: false,
+    $defs: { Node: { type: "object", properties: { children: { type: "array", items: { $ref: "#/$defs/Node" } } }, additionalProperties: false } } };
+  const profile = createCapabilityProfile({ id: "sponge-fixture", version: 1,
+    tools: ["a.b", "a_b", "a-b", "A".repeat(128)].map(name => ({ name, description: name, inputSchema, parseInput: input => input, execute: () => null })) });
+  const mapping = createCodexCapabilityMapping(profile);
+  expect(new Set(mapping.tools.map(tool => tool.name)).size).toBe(4);
+  for (const tool of profile.tools) expect(mapping.capabilityName(mapping.nativeName(tool.name)!)).toBe(tool.name);
+  expect(mapping.nativeName("foreign")).toBeNull(); expect(mapping.capabilityName("foreign")).toBeNull();
+  expect(mapping.tools.every(tool => tool.name.length <= 64)).toBe(true);
+  expect(mapping.tools[0]!.inputSchema).toEqual(inputSchema);
+  expect(codexResponseTools(mapping.tools)[0]!.parameters).toEqual(inputSchema);
+  expect(Object.isFrozen(mapping.tools[0]!.inputSchema.$defs)).toBe(true);
+  expect(createCodexCapabilityMapping(profile).descriptorDigest).toBe(mapping.descriptorDigest);
+  expect(() => assertCodexCapabilityMapping(mapping, { ...mapping.profile, digest: "a".repeat(64) })).toThrow("CAPABILITY_PROFILE_MISMATCH");
+  expect(() => assertCodexCapabilityMapping({ ...mapping }, mapping.profile)).toThrow("CODEX_CAPABILITY_MAPPING_UNREGISTERED");
+  expect(() => createCodexCapabilityMapping({ ...profile } as CapabilityProfile)).toThrow("CAPABILITY_PROFILE_MISMATCH");
+});
+
+test("task settings snapshot model intent and keep TOML values inert", () => {
+  const input = { model: { id: "synthetic-model", reasoningEffort: "high", serviceTier: "default" },
+    instructions: { base: "Read the bound document.", developer: "Use only retained evidence." } };
+  const settings = codexTaskSettings(input); input.model.id = "changed"; input.instructions.base = "changed";
+  const config = codexTaskConfiguration(settings, `http://127.0.0.1:1234/relay/${"a".repeat(48)}`);
+  expect(settings.model.id).toBe("synthetic-model"); expect(settings.instructions.base).toBe("Read the bound document.");
+  expect(config).not.toContain("model_reasoning_effort"); expect(config).not.toContain("service_tier =");
+  expect(config).toContain('requires_openai_auth = false');
+  const defaulted = codexTaskSettings({ ...input, model: { id: "fixture", reasoningEffort: null, serviceTier: null } });
+  expect(codexTaskConfiguration(defaulted, `http://127.0.0.1:1234/relay/${"a".repeat(48)}`)).not.toContain("service_tier =");
+  expect(() => codexTaskConfiguration({ ...settings, instructionDigest: "a".repeat(64) }, `http://127.0.0.1:1234/relay/${"a".repeat(48)}`)).toThrow("CODEX_TASK_SETTINGS_CHANGED");
+  expect(() => codexTaskSettings({ ...input, model: { ...input.model, serviceTier: undefined } } as any)).toThrow();
+});
 
 test("fixed native wire schemas match the pinned serde subset without mutating host descriptors", () => {
   const tools = codexTools(BROKER_TOOL_NAMES), before = structuredClone(tools);

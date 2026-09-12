@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { BrokerToolName } from "./broker.ts";
-import { canonicalJson, CODEX_BASE_INSTRUCTIONS, CODEX_TOOL_NAMES, codexResponseTools, type CodexTool } from "./codex-config.ts";
+import { canonicalJson, CODEX_BASE_INSTRUCTIONS, CODEX_TOOL_NAMES, codexResponseTools, type CodexTool, type CodexCapabilityMapping, type CodexTaskSettings } from "./codex-config.ts";
 import { boundedText, object, safeInteger } from "./validation.ts";
 
 /** A trusted host port, deliberately without credential discovery or a live HTTP implementation.
@@ -54,34 +54,49 @@ function relayJson(text: string, scope: "REQUEST" | "RESPONSE" | "ARGUMENTS" | "
   try { return JSON.parse(text) as unknown; }
   catch { throw new Error(`CODEX_RELAY_${scope}_INVALID_JSON`); }
 }
-type Call = { id: string; tool: string; brokerName: BrokerToolName; arguments: Record<string, unknown>; rawArguments: string;
+type Call = { id: string; tool: string; brokerName: string; arguments: Record<string, unknown>; rawArguments: string;
   claimed: boolean; started: boolean; completed: boolean; output: string | null; success: boolean | null; write: Promise<void> | null; observed: boolean;
   outputIdentity?: string };
 export type CodexRelayReceipt = Readonly<{ requests: number; calls: number; started: number; completed: number;
   outputsObserved: number; finalObserved: boolean; joined: boolean; failure: string | null }>;
+export type CodexTaskRelayOptions = Readonly<{ mapping: CodexCapabilityMapping; settings: CodexTaskSettings;
+  executionDeadlineUnixMs: number; maxOutputBytes: number; now?: () => number }>;
 export interface CodexRelay {
   readonly baseUrl: string; readonly port: number;
   bindTurn(threadId: string, turnId: string): void;
   claimCall(params: Record<string, unknown>): { id: string; name: BrokerToolName; input: Record<string, unknown> };
+  claimTaskCall(params: Record<string, unknown>): { id: string; name: string; input: Record<string, unknown> };
   completeCall(id: string, text: string, success: boolean, write: () => Promise<void>): Promise<void>;
   observeTool(params: Record<string, unknown>, phase: "started" | "completed"): void;
   observeFinal(text: unknown): void;
   result(): unknown;
+  resultText(): string | null;
+  usage(): Readonly<{ inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }>;
   receipt(): CodexRelayReceipt;
   close(): Promise<CodexRelayReceipt>;
 }
 
 export function startCodexRelay(options: { model: string; prompt: string; tools: readonly CodexTool[];
-  upstream: CodexResponsesUpstream; signal: AbortSignal; limits: CodexLimits; fail(code: string): void }): CodexRelay {
+  upstream: CodexResponsesUpstream; signal: AbortSignal; limits: CodexLimits; fail(code: string): void; task?: CodexTaskRelayOptions }): CodexRelay {
   boundedText(options.model, 160); boundedText(options.prompt, 512 * 1024);
+  const task = options.task;
+  if (task) {
+    safeInteger(task.executionDeadlineUnixMs, 1, Number.MAX_SAFE_INTEGER);
+    safeInteger(task.maxOutputBytes, 1, 64 * 1024 * 1024);
+    if (task.settings.model.id !== options.model) throw new Error("CODEX_TASK_MODEL_MISMATCH");
+    if (task.mapping.tools.length !== options.tools.length) throw new Error("CODEX_TASK_MAPPING_MISMATCH");
+  }
   const { limits } = options, controller = new AbortController(), signal = AbortSignal.any([controller.signal, options.signal]);
   const calls = new Map<string, Call>(), responses = new Set<string>(), activities = new Set<Promise<unknown>>();
   const ownedBodies = new Set<Response>(); let bodyCleanupFailed = false;
-  const tools = codexResponseTools(options.tools), prefix = `/relay/${randomBytes(24).toString("hex")}`;
+  const tools = codexResponseTools(task?.mapping.tools ?? options.tools), prefix = `/relay/${randomBytes(24).toString("hex")}`;
   let threadId: string | null = null, turnId: string | null = null, requests = 0, active = 0;
   let failure: string | null = null, closed = false, joined = false, initial: unknown[] | null = null;
-  let finalText: string | null = null, finalObserved = false, result: unknown, resolveTurn!: () => void;
+  let finalText: string | null = null, finalObserved = false, result: unknown, responseUsage = { inputTokens: null as number | null, outputTokens: null as number | null, totalTokens: null as number | null }, resolveTurn!: () => void;
   const turnReady = new Promise<void>(resolve => { resolveTurn = resolve; });
+  function assertTaskDeadline() {
+    if (task && (task.now?.() ?? Date.now()) >= task.executionDeadlineUnixMs) throw new Error("CODEX_TASK_DEADLINE");
+  }
   function fail(code: string) { failure ??= code; controller.abort(new Error(code)); options.fail(code); }
   function track<T>(promise: Promise<T>): Promise<T> {
     activities.add(promise); void promise.finally(() => activities.delete(promise)).catch(() => {}); return promise;
@@ -92,6 +107,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     finally { ownedBodies.delete(response); }
   }
   async function upstreamResponse(body: Readonly<Record<string, unknown>>): Promise<Response> {
+    assertTaskDeadline();
     const response = await options.upstream.request(body, signal);
     ownedBodies.add(response);
     // Also owns responses that arrive after the caller's request deadline/abort.
@@ -127,11 +143,12 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     codexAssert(threadId !== null && turnId !== null && params.threadId === threadId && params.turnId === turnId, "CODEX_CALL_SCOPE_MISMATCH");
   }
   async function validateInput(body: Record<string, unknown>) {
+    assertTaskDeadline();
     requestObject(body, ["model", "instructions", "input", "tools", "tool_choice", "parallel_tool_calls", "reasoning", "store", "stream",
       "stream_options", "include", "service_tier", "prompt_cache_key", "text", "client_metadata"], "REQUEST");
     codexAssert(body.model === options.model && body.stream === true && body.store === false && body.tool_choice === "auto"
       && typeof body.parallel_tool_calls === "boolean", "CODEX_MODEL_ENVELOPE_MISMATCH");
-    codexAssert(body.instructions === CODEX_BASE_INSTRUCTIONS, "CODEX_INSTRUCTIONS_MISMATCH");
+    codexAssert(body.instructions === (task?.settings.instructions.base ?? CODEX_BASE_INSTRUCTIONS), "CODEX_INSTRUCTIONS_MISMATCH");
     codexAssert(canonicalJson(body.include) === "[]" || canonicalJson(body.include) === '["reasoning.encrypted_content"]', "CODEX_INCLUDE_INVALID");
     if (body.prompt_cache_key !== undefined) {
       try { boundedText(body.prompt_cache_key, 160); }
@@ -159,6 +176,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     if (body.reasoning != null) {
       const reasoning = requestObject(body.reasoning, ["effort", "summary", "context"], "REASONING");
       codexAssert(reasoning.effort === undefined || ["none", "minimal", "low", "medium", "high", "xhigh"].includes(String(reasoning.effort)), "CODEX_REASONING_EFFORT_INVALID");
+      if (task && task.settings.model.reasoningEffort !== null) codexAssert(reasoning.effort === task.settings.model.reasoningEffort, "CODEX_TASK_REASONING_MISMATCH");
       codexAssert(reasoning.summary === undefined || ["auto", "concise", "detailed", "none"].includes(String(reasoning.summary)), "CODEX_REASONING_SUMMARY_INVALID");
       codexAssert(reasoning.context === undefined || ["auto", "current_turn", "all_turns"].includes(String(reasoning.context)), "CODEX_REASONING_CONTEXT_INVALID");
     }
@@ -170,7 +188,9 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
       const stream = requestObject(body.stream_options, ["reasoning_summary_delivery"], "STREAM_CONTROL");
       codexAssert(stream.reasoning_summary_delivery === "sequential_cutoff", "CODEX_STREAM_CONTROL_INVALID");
     }
-    codexAssert(body.service_tier === undefined, "CODEX_RESPONSE_EXTENSION_UNSUPPORTED");
+    if (task?.settings.model.serviceTier === null) codexAssert(body.service_tier === undefined, "CODEX_TASK_SERVICE_TIER_MISMATCH");
+    else if (task) codexAssert(body.service_tier === task.settings.model.serviceTier, "CODEX_TASK_SERVICE_TIER_MISMATCH");
+    else codexAssert(body.service_tier === undefined, "CODEX_RESPONSE_EXTENSION_UNSUPPORTED");
     codexAssert(Array.isArray(body.input) && body.input.length <= 256, "CODEX_INPUT_BOUND");
     const input = body.input;
     if (initial === null) {
@@ -233,7 +253,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     if (item.type === "function_call") {
       object(item, ["type", "id", "call_id", "name", "arguments"]);
       const callId = checkedId(item.call_id), name = boundedText(item.name, 160), args = boundedText(item.arguments, 512 * 1024);
-      const brokerName = (Object.entries(CODEX_TOOL_NAMES) as [BrokerToolName, string][]).find(([, value]) => value === name)?.[0];
+      const brokerName = task?.mapping.capabilityName(name) ?? (Object.entries(CODEX_TOOL_NAMES) as [BrokerToolName, string][]).find(([, value]) => value === name)?.[0];
       codexAssert(brokerName && options.tools.some(tool => tool.name === name) && !calls.has(callId), "CODEX_MODEL_TOOL_DENIED");
       codexAssert(finalText === null && calls.size < limits.maxRequests - 1, "CODEX_TOOL_CALL_BOUND");
       calls.set(callId, { id: callId, tool: name, brokerName, arguments: codexRecord(relayJson(args, "ARGUMENTS")), rawArguments: args,
@@ -243,12 +263,14 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
       codexAssert(item.type === "message" && item.role === "assistant" && Array.isArray(item.content) && item.content.length === 1 && finalText === null,
         "CODEX_MODEL_OUTPUT_DENIED");
       const part = object(item.content[0], ["type", "text"]); codexAssert(part.type === "output_text", "CODEX_FINAL_TYPE_INVALID");
-      finalText = boundedText(part.text, 256 * 1024); result = relayJson(finalText, "FINAL");
+      finalText = boundedText(part.text, task?.maxOutputBytes ?? 256 * 1024);
+      result = task ? finalText : relayJson(finalText, "FINAL");
     }
     responses.add(id);
     // Reconstruct only the reviewed events. Extra provider envelope fields never grant authority.
     const usage = codexRecord(end.usage);
     for (const key of ["input_tokens", "output_tokens", "total_tokens"]) safeInteger(usage[key], 0, 100_000_000);
+    responseUsage = { inputTokens: usage.input_tokens as number, outputTokens: usage.output_tokens as number, totalTokens: usage.total_tokens as number };
     const canonical = [{ type: "response.created", response: { id } }, { type: "response.output_item.done", item },
       { type: "response.completed", response: { id, usage } }];
     return new Response(canonical.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""),
@@ -261,6 +283,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
         active++;
         try {
           codexAssert(!closed && !failure && active === 1 && ++requests <= limits.maxRequests && finalText === null, "CODEX_REQUEST_STATE_INVALID");
+          assertTaskDeadline();
           codexAssert(request.method === "POST" && request.url === `${baseUrl}/responses`
             && !request.headers.has("authorization") && !request.headers.has("cookie"), "CODEX_RELAY_REQUEST_DENIED");
           const body = codexRecord(relayJson(await bodyText(request.body, limits.maxRequestBytes), "REQUEST"));
@@ -295,6 +318,17 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     baseUrl, port,
     bindTurn(thread, turn) { codexAssert(threadId === null && turnId === null, "CODEX_TURN_ALREADY_BOUND"); threadId = checkedId(thread); turnId = checkedId(turn); resolveTurn(); },
     claimCall(params) {
+      codexAssert(!task, "CODEX_CONTACT_CALL_ON_TASK_RELAY");
+      assertTaskDeadline();
+      signal.throwIfAborted(); object(params, ["threadId", "turnId", "callId", "tool", "namespace", "arguments"]); assertBinding(params);
+      const call = calls.get(String(params.callId));
+      codexAssert(call && !call.claimed && params.tool === call.tool && params.namespace == null, "CODEX_CALLBACK_DENIED");
+      equal(params.arguments, call.arguments, "CODEX_CALLBACK_ARGUMENTS_CHANGED"); call.claimed = true;
+      return { id: call.id, name: call.brokerName as BrokerToolName, input: structuredClone(call.arguments) };
+    },
+    claimTaskCall(params) {
+      codexAssert(task, "CODEX_TASK_CALL_ON_CONTACT_RELAY");
+      assertTaskDeadline();
       signal.throwIfAborted(); object(params, ["threadId", "turnId", "callId", "tool", "namespace", "arguments"]); assertBinding(params);
       const call = calls.get(String(params.callId));
       codexAssert(call && !call.claimed && params.tool === call.tool && params.namespace == null, "CODEX_CALLBACK_DENIED");
@@ -302,6 +336,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
       return { id: call.id, name: call.brokerName, input: structuredClone(call.arguments) };
     },
     async completeCall(id, text, success, write) {
+      assertTaskDeadline();
       const call = calls.get(id); codexAssert(call?.claimed && call.write === null, "CODEX_CALL_COMPLETION_INVALID");
       call.output = boundedText(text, 512 * 1024, true); call.success = success;
       // Publish the exact promise before native can consume bytes and issue its follow-up request.
@@ -323,6 +358,8 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
       codexAssert(!failure && finalObserved && [...calls.values()].every(call => call.claimed && call.started && call.completed && call.observed), "CODEX_INCOMPLETE_ROUND_TRIP");
       return result;
     },
+    resultText() { return finalText; },
+    usage() { return Object.freeze({ ...responseUsage }); },
     receipt,
     async close() {
       closed = true; controller.abort(new Error("CODEX_RELAY_CLOSED"));
