@@ -31,7 +31,7 @@ if (import.meta.main) {
     requireValue((apiMode && /^[A-Z0-9]{10}$/u.test(keyId) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(issuer))
       || (appMode && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(appleId) && appPassword.length > 0 && appPassword.length <= 1024), "Complete notarization credentials are required");
     requireValue(/^[A-Z0-9]{10}$/u.test(team), "A Developer ID team is required"); digest(identity, 40);
-    const certificate = process.env.APPLE_CERTIFICATE_BASE64 ?? "", password = process.env.APPLE_CERTIFICATE_PASSWORD ?? "";
+    const certificate = (process.env.APPLE_CERTIFICATE_BASE64 ?? "").replace(/[\r\n\t ]/gu, ""), password = (process.env.APPLE_CERTIFICATE_PASSWORD ?? "").replace(/[\r\n]+$/u, "");
     requireValue(certificate.length > 0 && certificate.length <= 128 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/u.test(certificate) && password.length > 0 && password.length <= 1024 && (!apiMode || (privateKey.length <= 16 * 1024 && privateKey.startsWith("-----BEGIN PRIVATE KEY-----\n"))), "Complete protected signing secrets are required");
     writeFileSync(join(scratch, "certificate.p12"), Buffer.from(certificate, "base64"), { flag: "wx", mode: 0o600 });
     if (apiMode) writeFileSync(join(scratch, "notary.p8"), privateKey, { flag: "wx", mode: 0o600 });

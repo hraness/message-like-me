@@ -1,7 +1,7 @@
 {
   "schema": "textbutler.rust-notices.v1",
   "target": "aarch64-apple-darwin",
-  "cargoLockSha256": "0a296321dc14d9a4e250740baf161e0ce4489a8e692c949494dbff7fd8c247ed",
+  "cargoLockSha256": "74e09b2b0cf285e1e8ec3913f969a3f6bd1746892381cd8f803e5c3e6df2c2cc",
   "noticesSha256": "51c745abc2d29890618a00675fdb8ea83fc51d76fa4498fc59afa257d714c19d",
   "packages": [
     {

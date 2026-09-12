@@ -3,7 +3,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdir
 import { join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-export const VERSION = "0.1.2";
+export const VERSION = "0.1.3";
 export const IDENTIFIER = "app.textbutler.desktop";
 export const ARCHIVE = `Textbutler-${VERSION}-macos-arm64.zip`;
 export const TAG = `desktop-v${VERSION}-macos-arm64`;
