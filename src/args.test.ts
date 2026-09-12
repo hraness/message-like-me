@@ -17,4 +17,18 @@ describe("CLI argument parsing", () => {
     const parsed = parseArguments(["--limit", "999"]);
     expect(() => integerOption(parsed, "limit", 1, 1, 100)).toThrow("between 1 and 100");
   });
+
+  test("accepts retained handoff options and rejects mixed duplicate aliases", () => {
+    expect(Object.fromEntries(parseArguments([
+      "--wrench-context", "/private/context.json",
+      "--wrench-receipt", "/private/receipt.json",
+    ]).options)).toEqual({
+      "ghostget-context": "/private/context.json",
+      "ghostget-receipt": "/private/receipt.json",
+    });
+    expect(() => parseArguments([
+      "--ghostget-context", "/private/current.json",
+      "--wrench-context", "/private/legacy.json",
+    ])).toThrow("only once");
+  });
 });

@@ -19,9 +19,9 @@ sensitive local data.
 - A native WhatsApp bundle is still only a finished offline input. Do not
   request Wacli session files or WhatsApp authentication, invoke Wacli,
   synchronize a linked device, inspect its database, or expose exact JIDs.
-  Wrench owns that provider boundary. `--overlap-source` requires explicit
+  Ghostget owns that provider boundary. `--overlap-source` requires explicit
   intent and exact CLI proof; it never authorizes fuzzy account or contact
-  matching. The Wrench v0.16.7 producer omits reaction-shaped Wacli rows with
+  matching. The Ghostget v0.17.1 producer omits reaction-shaped Wacli rows with
   `reaction-state-unproven`; never turn that missing evidence into a claim that
   no reactions occurred.
 - Treat a caller-owned X data archive ZIP as private source evidence. Pass only

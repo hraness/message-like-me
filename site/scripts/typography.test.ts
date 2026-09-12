@@ -30,10 +30,11 @@ describe("site typography", () => {
 
   test("keeps one proportional face and an explicit mono role", async () => {
     const css = await readFile(resolve(siteRoot, "app/globals.css"), "utf8");
+    const paper = await readFile(resolve(siteRoot, "styles/vendor/hraness-paper/paper-theme.css"), "utf8");
 
-    expect(css).toContain("--font-heading: var(--font-text);");
+    expect(paper).toContain("--font-heading: var(--font-text);");
     expect(css).not.toMatch(/Iowan Old Style|Baskerville|Times New Roman/u);
     expect(css).not.toMatch(/text-transform:\s*uppercase/u);
-    expect(css).toContain("ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace");
+    expect(paper).toContain('ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace');
   });
 });

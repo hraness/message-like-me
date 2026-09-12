@@ -1,3 +1,38 @@
+# Textbutler redesign scope
+
+The owner has authorized replacing the unused Message Like Me product with
+Textbutler, a macOS message-butler daemon and app at `textbutler.app`.
+`PRODUCT.md` and `docs/textbutler/architecture.md` define the new product.
+The historical constraints below continue to govern the legacy `src/`, `dist/`,
+published message contracts, and their existing release machinery. They do not
+prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
+
+- New agents receive only one contact's brokered files, bounded public web
+  requests, and recipient-bound proposed messaging actions. Never enable shell,
+  arbitrary process tools, inherited plugins, or extra filesystem roots.
+- The exact Textbutler provider SDKs may be development dependencies of the
+  source checkout. Preserve the legacy public runtime's dependency/import
+  restrictions and packed export boundary; it never loads those SDKs.
+- Keep owner settings, credentials, route bindings, and executable plugins
+  outside model-writable contact workspaces. Preserve user data and frozen wire
+  identities throughout migration.
+- Apply disclosure in trusted code, check human takeover immediately before
+  dispatch, and journal send intent. Never retry an indeterminate send.
+- Unqualified provider restrictions and unsupported transport operations must
+  remain unavailable. Synthetic tests do not prove live delivery or sandboxing.
+- Run `bun run check:textbutler` for the new source packages as well as the
+  existing required aggregate. Native build and UI checks are additional gates.
+- Repository/package rename and website deployment must use a reviewed identity
+  migration that preserves the existing release and production protections.
+- Informational site changes may use the explicit site-source promotion path in
+  `docs/publishing.md`, independently of legacy npm/package publication. That
+  path still requires exact current-main CI and site-build admission, reviewed
+  workflow changes, protected conditional ref writes, status-authority cleanup,
+  and verified provider readback. The legacy release path retains its gates.
+- Preserve any existing required environment review. Complete the exact run's
+  review through the normal provider interface; this redesign does not authorize
+  removing runtime-enforced reviewers or other protection settings.
+
 # Contents
 
 - `src/` – the deterministic local iMessage, X archive, Contacts, and private
@@ -55,7 +90,7 @@
   explicitly declares authoritative coverage; apply explicit deletions and
   tombstones separately.
 - Preserve local message bundle v1 as the frozen Beeper contract. Treat bundle
-  v2 as the exact one-account Wrench/Wacli WhatsApp seam: source
+  v2 as the exact one-account Ghostget/Wacli WhatsApp seam: source
   `wacli-local@1.0.0`, provider `whatsapp@0.15.0`, network `whatsapp`, canonical
   supported JIDs, and E.164 handles only when the JID proves them. Never add
   Wacli process, authentication, synchronization, network, or send code to
@@ -187,7 +222,7 @@
   authority. Require owner-admin before/after proof of empty ruleset bypasses,
   and treat every incomplete cleanup receipt as continued quarantine.
 
-<!-- hra-local-efficiency:start -->
+<!-- oompa-local-efficiency:start -->
 - Treat the user's request to change this repository as standing authorization for routine task-owned commits, pushes, pull requests, merges, releases, deployments, and production verification after the gates applicable to that action pass. Do not ask for duplicate confirmation. Build confidence through relevant automated checks, bounded diagnostics, and independent review, not another human approval. Passing checks does not expand task scope or authority.
 - Prefer agentic service provisioning for new infrastructure. Check Vercel Marketplace for a native product that can provision the required resource first; use Stripe Projects as a supported alternative when it better covers the service or the Marketplace route only connects an existing account. Verify the current catalog, account, region, plan, recurring cost and resource capabilities before selecting a route. Prefer supported provider CLIs or APIs over browser-only setup when neither catalog fits, and explain the concrete exception. Reuse existing owner-controlled resources where appropriate; this preference alone does not authorize migrations, duplicate accounts, paid upgrades or wider access. Continue setup already authorized by the task and budget without duplicate confirmation. Keep provider credentials and generated environment files private, complete required interactive authentication, and verify deployment, persistence and recovery separately from successful provisioning.
 - Separate artifact admission from live qualification and operational activation. Use applicable automated source, security, package/install, and provenance evidence for artifact admission; live provider qualification is not a universal publication prerequisite. Preserve explicit live acceptance criteria and require relevant live evidence for claims that depend on it. If publication or an artifact's install, upgrade, or default-use path activates risky unqualified behavior, keep that behavior guarded or disabled, or obtain bounded relevant evidence before shipping or activation.
@@ -197,10 +232,10 @@
 - Keep delivery gates proportional to the failure they prevent. Prefer required checks on the current integration candidate, independent agent review, and atomic or conditional integration. Add a merge queue or another approval stage only for a demonstrated coordination or safety need. Replace redundant queues, serial waits, and duplicate checks through reviewed policy changes while retaining evidence for the integrated result.
 - Preserve useful reasoning fan-out, but avoid unnecessary checkout fan-out. Prefer subagents in the current task for bounded research, review, diagnosis, and focused checks when they can safely share one working tree; create a separate task or worktree only for independently deliverable divergent edits, an isolated verification tree, or a different execution environment.
 - Give each expensive focused validation command and external wait one owner. The integration owner reviews that evidence and runs the repository-required aggregate or final gate once after convergence. Reuse evidence only for the exact Git tree, command, lockfiles, toolchain, relevant environment, and validity period, and never to skip a required final integration, merge, release, deployment, or production-verification gate.
-- On Hraness development machines, use `$hra-local-efficiency` and the installed host scheduler for heavyweight top-level commands when available. Keep ordinary work in the compute lane; give authenticated browser/dev-server/Chromium work one `browser-auth` owner and Mac-only validation one `mac-native` owner.
+- On Hraness development machines, use `$oompa-local-efficiency` and the installed host scheduler for heavyweight top-level commands when available. Keep ordinary work in the compute lane; give authenticated browser/dev-server/Chromium work one `browser-auth` owner and Mac-only validation one `mac-native` owner.
 - When a CI or policy gate scans complete Git history, check out the exact governed SHA and fetch only the fully qualified governed refs before scanning. Preserve the complete-history gate and reject unexpected refs instead of importing unrelated concurrent heads.
 - At closeout, record applicable branch, PR, check, merge, release, deployment, and production evidence. Archive only conclusively finished tasks, never from silence alone, and reclaim only freshly revalidated clean merged worktrees through the guarded exact-path flow.
-<!-- hra-local-efficiency:end -->
+<!-- oompa-local-efficiency:end -->
 
 ## Command Effect ownership
 

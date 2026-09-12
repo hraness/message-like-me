@@ -1,5 +1,5 @@
 name: Promote website production
-run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine') }}
+run-name: ${{ inputs.site_sha != '' && format('Promote site {0} / control {1}', inputs.site_sha, inputs.control_epoch_digest || 'routine') || (github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine')) }}
 
 on:
   workflow_run:
@@ -8,9 +8,25 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Exact immutable Latest release tag to promote
-        required: true
+        description: Exact immutable Latest legacy release tag; omit for a site source
+        required: false
         type: string
+        default: ""
+      site_sha:
+        description: Exact reviewed current-main SHA for an informational site promotion
+        required: false
+        type: string
+        default: ""
+      site_ci_run_id:
+        description: Exact successful current-main CI run for the site source
+        required: false
+        type: string
+        default: ""
+      site_ci_run_attempt:
+        description: Exact successful CI attempt for the site source
+        required: false
+        type: string
+        default: "1"
       control_epoch_digest:
         description: Exact reviewed production control-epoch v2 digest; leave empty for a routine unchanged-workflow range
         required: false
@@ -26,6 +42,7 @@ concurrency:
 
 jobs:
   verify:
+    if: github.event_name != 'workflow_dispatch' || inputs.site_sha == ''
     name: Verify annotated release authority and reviewed ancestry
     permissions:
       contents: read
@@ -357,12 +374,12 @@ jobs:
         id: initial_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -398,12 +415,12 @@ jobs:
         id: pre_precondition_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -431,12 +448,12 @@ jobs:
         id: pre_denial_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -464,12 +481,12 @@ jobs:
         id: pre_attest_pin
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -497,12 +514,12 @@ jobs:
         if: ${{ always() && steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' && steps.precondition.outcome != 'skipped' }}
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -534,12 +551,12 @@ jobs:
         if: ${{ always() && steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' && steps.precondition.outcome != 'skipped' }}
         env:
           APP_TOKEN_SHA256: 8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526
-          PRODUCTION_AUTHORITY_SHA256: c4a701e2e76239787f26590fa3f3c9317d0b50f9461b289394068e84f6a57a2d
-          PROVIDER_SHA256: 26dfc0569475ce3f2630c2ef2bd17025fe2f82f3d5e39d1f1308e5ff3c410123
+          PRODUCTION_AUTHORITY_SHA256: 61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510
+          PROVIDER_SHA256: fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264
           REF_AUTHORITY_SHA256: 402526c0f249536294190445fd5d14e2b5d6b92f5c56627aaa6922304675c768
-          REF_WRITER_SHA256: f722209e3682f44be9e3133c4f61e79e54b209b0b80f5d2e711414fd3399ba7d
+          REF_WRITER_SHA256: 626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc
           STATUS_ATTESTER_SHA256: 811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7
-          WORKFLOW_RANGE_SHA256: 4a82ed76621b91210ce2f8347252b7ce1ca4c00911bc85d1750d0835c4cf9240
+          WORKFLOW_RANGE_SHA256: 22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3
         run: |
           set -euo pipefail
           test "$(shasum -a 256 scripts/release-app-token.mjs | cut -d ' ' -f 1)" = "$APP_TOKEN_SHA256"
@@ -866,7 +883,7 @@ jobs:
     needs:
       - verify
       - provider_outcome
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() && !cancelled() && (github.event_name != 'workflow_dispatch' || inputs.site_sha == '') }}
     permissions:
       contents: read
     runs-on: ubuntu-24.04
@@ -904,3 +921,426 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify.outputs.verified_sha }}
           VERIFIED_TAG: ${{ needs.verify.outputs.verified_tag }}
         run: bun run ./scripts/check-public-release.ts
+
+
+  site_build:
+    name: Admit and build the exact reviewed site source
+    if: github.event_name == 'workflow_dispatch' && inputs.site_sha != ''
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SITE_SOURCE_SHA: ${{ inputs.site_sha }}
+      SITE_CI_RUN_ID: ${{ inputs.site_ci_run_id }}
+      SITE_CI_RUN_ATTEMPT: ${{ inputs.site_ci_run_attempt }}
+      SITE_RELEASE_TAG: ${{ inputs.release_tag }}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      manifest_sha256: ${{ steps.manifest.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Require exact successful CI and current main before building
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node ./scripts/site-production.mjs verify
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile --ignore-scripts
+        working-directory: site
+      - run: bun run check
+        working-directory: site
+      - name: Require generated documents to match the reviewed source
+        run: git diff --exit-code -- site
+      - name: Bind the site build to this exact source and CI attempt
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node ./scripts/site-production.mjs build-manifest
+      - name: Store the bounded site build manifest
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: textbutler-site-build
+          path: ${{ runner.temp }}/textbutler-site-build/site-build.json
+          if-no-files-found: error
+          retention-days: 7
+
+  site_preflight:
+    name: Admit the site artifact and complete control range before key access
+    needs: site_build
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SITE_SOURCE_SHA: ${{ inputs.site_sha }}
+      SITE_CI_RUN_ID: ${{ inputs.site_ci_run_id }}
+      SITE_CI_RUN_ATTEMPT: ${{ inputs.site_ci_run_attempt }}
+      SITE_RELEASE_TAG: ${{ inputs.release_tag }}
+    outputs:
+      advance_required: ${{ steps.baseline.outputs.advance_required }}
+      subject: ${{ steps.admit.outputs.receipt }}
+      baseline: ${{ steps.baseline.outputs.receipt }}
+      workflow: ${{ steps.workflow.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.site_build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/site-artifact
+          merge-multiple: true
+      - name: Admit exact manifest bytes and workflow artifact identity
+        id: admit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_MANIFEST_PATH: ${{ runner.temp }}/site-artifact/site-build.json
+          SITE_MANIFEST_SHA256: ${{ needs.site_build.outputs.manifest_sha256 }}
+          SITE_ARTIFACT_ID: ${{ needs.site_build.outputs.artifact_id }}
+          SITE_ARTIFACT_DIGEST: ${{ needs.site_build.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs admit
+      - name: Snapshot terminal Production deployments and expected old ref
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_SUBJECT_RECEIPT: ${{ steps.admit.outputs.receipt }}
+          SITE_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}
+        run: node ./scripts/site-production.mjs baseline
+      - name: Fetch only the complete governed source and production histories
+        run: |
+          set -euo pipefail
+          git -c credential.helper= -c core.hooksPath=/dev/null fetch --unshallow --no-tags             https://github.com/hraness/message-like-me.git             refs/heads/main:refs/remotes/origin/main             refs/heads/website-production:refs/remotes/origin/website-production
+      - name: Require the exact reviewed workflow-control transition
+        id: workflow
+        if: steps.baseline.outputs.advance_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_SUBJECT_RECEIPT: ${{ steps.admit.outputs.receipt }}
+          SITE_BASELINE_RECEIPT: ${{ steps.baseline.outputs.receipt }}
+          SITE_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}
+        run: node ./scripts/site-production.mjs workflow
+
+  site_write:
+    if: needs.site_preflight.outputs.advance_required == 'true'
+    name: Attest, advance, and consume the admitted site authority
+    needs: site_preflight
+    permissions:
+      contents: write
+      actions: read
+      statuses: read
+      deployments: read
+    environment: { name: production-ref-writer-key, deployment: false }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SITE_SOURCE_SHA: ${{ inputs.site_sha }}
+      SITE_CI_RUN_ID: ${{ inputs.site_ci_run_id }}
+      SITE_CI_RUN_ATTEMPT: ${{ inputs.site_ci_run_attempt }}
+      SITE_RELEASE_TAG: ${{ inputs.release_tag }}
+      SITE_SUBJECT_RECEIPT: ${{ needs.site_preflight.outputs.subject }}
+      SITE_BASELINE_RECEIPT: ${{ needs.site_preflight.outputs.baseline }}
+      SITE_WORKFLOW_RECEIPT: ${{ needs.site_preflight.outputs.workflow }}
+    outputs:
+      precondition: ${{ steps.precondition.outputs.receipt }}
+      denial: ${{ steps.deny.outputs.receipt }}
+      attestation: ${{ steps.attest.outputs.receipt }}
+      consumption: ${{ steps.consume.outputs.receipt }}
+      promotion: ${{ steps.promote.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Fetch only complete governed source and production histories
+        run: |
+          set -euo pipefail
+          git -c credential.helper= -c core.hooksPath=/dev/null fetch --unshallow --no-tags             https://github.com/hraness/message-like-me.git             refs/heads/main:refs/remotes/origin/main             refs/heads/website-production:refs/remotes/origin/website-production
+      - name: Re-admit source artifact and control range before any App credential
+        id: admitted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_CONTROL_EPOCH_DIGEST: ${{ inputs.control_epoch_digest }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs workflow
+      - name: Consume any pre-existing authority for the exact site target
+        id: precondition
+        env:
+          TARGET: ${{ inputs.site_sha }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/release-production-authority.mjs consume
+      - name: Prove the ordinary writer is denied by the required App status
+        id: deny
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
+          AUTHORITY_PRECONDITION_RECEIPT: ${{ steps.precondition.outputs.receipt }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs deny
+      - name: Attest one exact site target with the status-only App
+        id: attest
+        env:
+          TARGET: ${{ inputs.site_sha }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/release-production-authority.mjs attest
+      - name: Advance only the admitted site source with the exact old-ref lease
+        id: promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MLM_RELEASE_REF_TOKEN: ${{ github.token }}
+          SITE_DENIAL_RECEIPT: ${{ steps.deny.outputs.receipt }}
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs promote
+      - name: Consume site authority even when the attempt fails or is cancelled
+        id: consume
+        if: ${{ always() && steps.admitted.outcome == 'success' }}
+        env:
+          TARGET: ${{ inputs.site_sha }}
+          MLM_RELEASE_APP_PRIVATE_KEY: ${{ secrets.MLM_RELEASE_APP_PRIVATE_KEY }}
+          MLM_RELEASE_APP_CLIENT_ID: ${{ vars.MLM_RELEASE_APP_CLIENT_ID }}
+          MLM_RELEASE_APP_ID: ${{ vars.MLM_RELEASE_APP_ID }}
+          MLM_RELEASE_APP_INSTALLATION_ID: ${{ vars.MLM_RELEASE_APP_INSTALLATION_ID }}
+          MLM_RELEASE_APP_SLUG: ${{ vars.MLM_RELEASE_APP_SLUG }}
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+          PROMOTION_RECEIPT_SHA256: ${{ steps.promote.outputs.receipt_sha256 }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/release-production-authority.mjs consume
+      - name: Persist the public site-attempt receipts for interrupted-operation recovery
+        id: evidence
+        if: ${{ always() && steps.admitted.outcome == 'success' }}
+        env:
+          SITE_EVIDENCE_DIR: ${{ runner.temp }}/textbutler-site-evidence
+          SUBJECT: ${{ needs.site_preflight.outputs.subject }}
+          BASELINE: ${{ needs.site_preflight.outputs.baseline }}
+          WORKFLOW: ${{ needs.site_preflight.outputs.workflow }}
+          PRECONDITION: ${{ steps.precondition.outputs.receipt }}
+          DENIAL: ${{ steps.deny.outputs.receipt }}
+          ATTESTATION: ${{ steps.attest.outputs.receipt }}
+          CONSUMPTION: ${{ steps.consume.outputs.receipt }}
+          PROMOTION: ${{ steps.promote.outputs.receipt }}
+          PROMOTION_OUTCOME: ${{ steps.promote.outcome }}
+          CONSUMPTION_OUTCOME: ${{ steps.consume.outcome }}
+        run: |
+          node --input-type=module <<'SITE_EVIDENCE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const receipt = Object.fromEntries(['SUBJECT', 'BASELINE', 'WORKFLOW', 'PRECONDITION', 'DENIAL', 'ATTESTATION', 'CONSUMPTION', 'PROMOTION', 'PROMOTION_OUTCOME', 'CONSUMPTION_OUTCOME'].map(key => [key, process.env[key] ?? '']));
+          const bytes = JSON.stringify(receipt);
+          if (Buffer.byteLength(bytes) > 1024 * 1024) throw new Error('Site attempt receipts exceed bound');
+          mkdirSync(process.env.SITE_EVIDENCE_DIR, { recursive: true, mode: 0o700 });
+          writeFileSync(join(process.env.SITE_EVIDENCE_DIR, 'attempt.json'), bytes, { mode: 0o600, flag: 'wx' });
+          SITE_EVIDENCE
+      - name: Retain public site-attempt evidence
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: textbutler-site-attempt
+          path: ${{ runner.temp }}/textbutler-site-evidence/attempt.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify denial, leased write, consumed status, revocations, and unchanged rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_DENIAL_RECEIPT: ${{ steps.deny.outputs.receipt }}
+          SITE_PROMOTION_RECEIPT: ${{ steps.promote.outputs.receipt }}
+          AUTHORITY_PRECONDITION_RECEIPT: ${{ steps.precondition.outputs.receipt }}
+          AUTHORITY_ATTESTATION_RECEIPT: ${{ steps.attest.outputs.receipt }}
+          AUTHORITY_CONSUMPTION_RECEIPT: ${{ steps.consume.outputs.receipt }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs finalize
+
+  site_provider_outcome:
+    if: ${{ always() && !cancelled() && needs.site_preflight.result == 'success' && ((needs.site_preflight.outputs.advance_required == 'true' && needs.site_write.result == 'success') || (needs.site_preflight.outputs.advance_required == 'false' && needs.site_write.result == 'skipped')) }}
+    name: Verify the admitted site reached exact Vercel Production
+    needs:
+      - site_preflight
+      - site_write
+    permissions:
+      contents: read
+      actions: read
+      statuses: read
+      deployments: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SITE_SOURCE_SHA: ${{ inputs.site_sha }}
+      SITE_CI_RUN_ID: ${{ inputs.site_ci_run_id }}
+      SITE_CI_RUN_ATTEMPT: ${{ inputs.site_ci_run_attempt }}
+      SITE_RELEASE_TAG: ${{ inputs.release_tag }}
+      SITE_SUBJECT_RECEIPT: ${{ needs.site_preflight.outputs.subject }}
+      SITE_BASELINE_RECEIPT: ${{ needs.site_preflight.outputs.baseline }}
+      SITE_WORKFLOW_RECEIPT: ${{ needs.site_preflight.outputs.workflow }}
+      SITE_DENIAL_RECEIPT: ${{ needs.site_write.outputs.denial }}
+      SITE_PROMOTION_RECEIPT: ${{ needs.site_write.outputs.promotion }}
+      AUTHORITY_PRECONDITION_RECEIPT: ${{ needs.site_write.outputs.precondition }}
+      AUTHORITY_ATTESTATION_RECEIPT: ${{ needs.site_write.outputs.attestation }}
+      AUTHORITY_CONSUMPTION_RECEIPT: ${{ needs.site_write.outputs.consumption }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+      - name: Require stable REST and GraphQL provider success for this exact site
+        if: needs.site_preflight.outputs.advance_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs wait
+      - name: Qualify an already-exact site without App credentials or any ref write
+        if: needs.site_preflight.outputs.advance_required == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha256sum --check <<'SITE_AUTHORITY_HASHES'
+          8ba1f4155a7428cc924c4c8b468c38c599e52bb1760654ebc6b4056f0a6cb526  scripts/release-app-token.mjs
+          811be0f7075611b0091a39f02598ac6450f3b768af6cb4278d8ffeb83c0e66f7  scripts/release-status-attester.mjs
+          61a5068c8c1465a51e4150c031dfa520c4d3a3dc2799a6ed448be5f7c1cb9510  scripts/release-production-authority.mjs
+          fb16fe4bdd7fdab0a3b507ea7f33a52945bba9c8da684123e97d3bad749fa264  scripts/release-provider-outcome.mjs
+          626d9db276e98a477e10d08d6e26b7924a44bebbefc325512839892589f62afc  scripts/release-ref-writer.mjs
+          22f6c56d4bd98d31288ed60c47f22ee652ac9065784981013f50613fcf8fdca3  scripts/release-workflow-range.mjs
+          b27f2ac83ad4d24e13a1ee5db5e9b3f10793900e24b754657a5c872eb115e43b  scripts/site-production-subject.mjs
+          70dec16f999d28e3cb657c390094f1f82c26e0eaf034c05e4b46a8d8d72b3c4d  scripts/site-production.mjs
+          SITE_AUTHORITY_HASHES
+          node ./scripts/site-production.mjs qualify

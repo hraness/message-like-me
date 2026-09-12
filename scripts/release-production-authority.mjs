@@ -654,19 +654,21 @@ export function normalizeProductionAuthorityRulesReceipt(value) {
 
 function normalizeProductionDenialReceipt(value) {
   const receipt = record(value, "production writer denial receipt");
+  const site = receipt.schema === "textbutler-site-required-status-denial-v1";
   exactKeys(receipt, [
     "baselineDigest", "denial", "observedAt", "preconditionSha256", "previousSha",
-    "productionRef", "repository", "rules", "schema", "verifiedSha", "verifiedTag",
+    "productionRef", "repository", "rules", "schema", "verifiedSha", site ? "subject" : "verifiedTag",
   ], "production writer denial receipt");
   const denial = record(receipt.denial, "production writer denial");
   exactKeys(denial, ["classification", "diagnosticSha256"], "production writer denial");
-  const verifiedTag = string(receipt.verifiedTag, "production denial verified tag");
+  const subject = site ? parseSiteSubject(receipt.subject) : undefined;
+  const verifiedTag = site ? undefined : string(receipt.verifiedTag, "production denial verified tag");
   if (
-    receipt.schema !== "message-like-me-production-required-status-denial-v3" ||
+    (!site && receipt.schema !== "message-like-me-production-required-status-denial-v3") ||
     receipt.productionRef !== PRODUCTION_REF ||
     receipt.repository !== EXPECTED_REPOSITORY ||
     denial.classification !== "required-status-errored" ||
-    !STABLE_TAG.test(verifiedTag)
+    (site ? subject.sourceSha !== receipt.verifiedSha : !STABLE_TAG.test(verifiedTag))
   ) {
     fail("production writer denial receipt has the wrong boundary");
   }
@@ -688,22 +690,23 @@ function normalizeProductionDenialReceipt(value) {
     productionRef: PRODUCTION_REF,
     repository: EXPECTED_REPOSITORY,
     rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
-    schema: "message-like-me-production-required-status-denial-v3",
+    schema: receipt.schema,
     verifiedSha: sha(receipt.verifiedSha, "production denial verified SHA"),
-    verifiedTag,
+    ...(site ? { subject } : { verifiedTag }),
   });
 }
 
 function normalizeProductionPromotionReceipt(value) {
   const receipt = record(value, "production promotion receipt");
+  const site = receipt.schema === "textbutler-site-provider-promotion-v1";
   exactKeys(receipt, [
     "authority", "baselineDigest", "boundaryAt", "denialSha256", "mode",
     "previousSha", "promotedAt", "productionRef", "receiptSha256",
-    "releasePublishedAt", "repository", "rules", "schema", "verifiedSha",
-    "verifiedTag", "writerPush",
+    ...(site ? [] : ["releasePublishedAt"]), "repository", "rules", "schema", "verifiedSha",
+    site ? "subject" : "verifiedTag", "writerPush",
   ], "production promotion receipt");
   if (
-    receipt.schema !== PROMOTION_SCHEMA ||
+    (!site && receipt.schema !== PROMOTION_SCHEMA) ||
     receipt.mode !== "advanced" ||
     receipt.productionRef !== PRODUCTION_REF ||
     receipt.repository !== EXPECTED_REPOSITORY
@@ -747,12 +750,11 @@ function normalizeProductionPromotionReceipt(value) {
     authority.statusReadbackAt,
     "production promotion authority statusReadbackAt",
   ).value;
-  const releasePublishedAt = secondTimestamp(
-    receipt.releasePublishedAt,
-    "production promotion releasePublishedAt",
-  ).value;
+  const subject = site ? parseSiteSubject(receipt.subject) : undefined;
+  if (site && subject.sourceSha !== verifiedSha) fail("site promotion subject does not match its target");
+  const releasePublishedAt = site ? undefined : secondTimestamp(receipt.releasePublishedAt, "production promotion releasePublishedAt").value;
   if (
-    Date.parse(boundaryAt) <= Date.parse(releasePublishedAt) ||
+    Date.parse(boundaryAt) <= Date.parse(site ? subject.buildCompletedAt : releasePublishedAt) ||
     Date.parse(promotedAt) < Date.parse(statusReadbackAt)
   ) {
     fail("production promotion dates do not bind the release and authority");
@@ -774,16 +776,16 @@ function normalizeProductionPromotionReceipt(value) {
     previousSha,
     promotedAt,
     productionRef: PRODUCTION_REF,
-    releasePublishedAt,
+    ...(site ? { subject } : { releasePublishedAt }),
     repository: EXPECTED_REPOSITORY,
     rules: normalizeProductionAuthorityRulesReceipt(receipt.rules),
-    schema: PROMOTION_SCHEMA,
+    schema: receipt.schema,
     verifiedSha,
-    verifiedTag: (() => {
+    ...(site ? {} : { verifiedTag: (() => {
       const tag = string(receipt.verifiedTag, "production promotion verified tag");
       if (!STABLE_TAG.test(tag)) fail("production promotion verified tag is invalid");
       return tag;
-    })(),
+    })() }),
     writerPush: Object.freeze({
       classification: "fast-forward",
       fromSha: previousSha,
@@ -842,6 +844,31 @@ function parseExactTerminalCombinedStatus(value, consumed) {
   }
 }
 
+export function parseSiteSubject(value) {
+  const item = record(value, "site subject");
+  exactKeys(item, ["kind", "sourceSha", "ciRunId", "ciRunAttempt", "buildRunId", "buildRunAttempt",
+    "buildArtifactId", "buildArtifactDigest", "manifestDigest", "buildCompletedAt", "sourceQualifiedAt"], "site subject");
+  if (item.kind !== "site" || typeof item.buildArtifactDigest !== "string" ||
+      !/^sha256:[0-9a-f]{64}$/u.test(item.buildArtifactDigest)) fail("site subject identity is invalid");
+  return Object.freeze({
+    kind: "site",
+    sourceSha: sha(item.sourceSha, "site subject source"),
+    ciRunId: positiveInteger(item.ciRunId, "site CI run"),
+    ciRunAttempt: positiveInteger(item.ciRunAttempt, "site CI attempt"),
+    buildRunId: positiveInteger(item.buildRunId, "site build run"),
+    buildRunAttempt: positiveInteger(item.buildRunAttempt, "site build attempt"),
+    buildArtifactId: positiveInteger(item.buildArtifactId, "site artifact"),
+    buildArtifactDigest: item.buildArtifactDigest,
+    manifestDigest: sha256(item.manifestDigest, "site manifest digest"),
+    buildCompletedAt: receiptTimestamp(item.buildCompletedAt, "site build completion").value,
+    sourceQualifiedAt: receiptTimestamp(item.sourceQualifiedAt, "site source CI completion").value,
+  });
+}
+
+function siteSubjectMismatch(left, right) {
+  return JSON.stringify(parseSiteSubject(left)) !== JSON.stringify(parseSiteSubject(right));
+}
+
 export async function finalizeProductionAuthority({
   api,
   attestationReceipt,
@@ -875,7 +902,9 @@ export async function finalizeProductionAuthority({
     admittedPromotion.denialSha256 !== digest(denial) ||
     admittedPromotion.baselineDigest !== denial.baselineDigest ||
     admittedPromotion.previousSha !== denial.previousSha ||
-    admittedPromotion.verifiedTag !== denial.verifiedTag
+    (admittedPromotion.subject?.kind === "site"
+      ? siteSubjectMismatch(admittedPromotion.subject, denial.subject)
+      : admittedPromotion.verifiedTag !== denial.verifiedTag || denial.subject !== undefined)
   ) {
     fail("production authority phases do not bind one exact promotion");
   }
@@ -966,7 +995,7 @@ export async function finalizeProductionAuthority({
     precondition,
     promotion: admittedPromotion,
     rules,
-    schema: "message-like-me-production-authority-final-v3",
+    schema: admittedPromotion.subject?.kind === "site" ? "textbutler-site-authority-final-v1" : "message-like-me-production-authority-final-v3",
     terminalStatus: Object.freeze({
       serverDate: terminalStatus.serverDate,
       statusId: consumed.status.statusId,

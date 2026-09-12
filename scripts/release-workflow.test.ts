@@ -400,7 +400,7 @@ test("tag releases use annotated-tag authority and split exact GitHub-first and 
 
 test("site promotion gates complete workflow history before App attestation and a leased workflow-token move", async () => {
   const [
-    workflow,
+    completeWorkflow,
     appTokenHelper,
     providerHelper,
     productionAuthorityHelper,
@@ -418,6 +418,12 @@ test("site promotion gates complete workflow history before App attestation and 
     readFile(WORKFLOW_RANGE, "utf8"),
     readFile(PUBLIC_ADMISSION, "utf8"),
   ]);
+
+  // Keep all legacy path assertions intact; the independent site path is checked below
+  // and in site-production.test.mjs. Both writers are mutually exclusive.
+  const workflow = completeWorkflow.split("\n  site_build:")[0]!;
+  expect(completeWorkflow.match(/^\s+contents: write$/gmu)).toHaveLength(2);
+  expect(completeWorkflow).toContain("if: needs.site_preflight.outputs.advance_required == 'true'");
 
   for (const required of [
     "workflow_run:",
@@ -506,6 +512,7 @@ test("site promotion gates complete workflow history before App attestation and 
 
   expect(workflow).not.toContain('tags:\n      - "v*"');
   expect(workflow.match(/^\s+contents: write$/gmu)).toHaveLength(1);
+  expect(workflow).toContain("if: github.event_name != 'workflow_dispatch' || inputs.site_sha == ''");
   expect(workflow).not.toContain("--method POST");
   expect(workflow).not.toContain("/releases\"");
   expect(workflow).not.toContain("Integration `15368`");
@@ -676,7 +683,7 @@ test("site promotion gates complete workflow history before App attestation and 
   expect(providerOutcomeJob).toContain(
     "${{ always() &&\n          !cancelled() &&\n          needs.verify.result == 'success' &&\n          needs.provider_baseline.result == 'success' &&\n          needs.select_promotion.result == 'success' &&\n          needs.post_promotion_admission.result == 'success' }}",
   );
-  expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() }}");
+  expect(finalPublicJob).toContain("if: ${{ always() && !cancelled() && (github.event_name != 'workflow_dispatch' || inputs.site_sha == '') }}");
   expect(finalPublicJob).toContain("Bind the complete terminal admission chain");
   expect(finalPublicJob).toContain(
     "PROVIDER_OUTCOME_RESULT: ${{ needs.provider_outcome.result }}",
@@ -723,7 +730,7 @@ test("production, canary, and cleanup keep status and ref authority split", asyn
     expect(workflow).not.toMatch(/__[A-Z0-9_]+__/u);
   }
   expect(productionWorkflow).toContain(
-    "run-name: ${{ github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine') }}",
+    "run-name: ${{ inputs.site_sha != '' && format('Promote site {0} / control {1}', inputs.site_sha, inputs.control_epoch_digest || 'routine') || (github.event_name == 'workflow_run' && format('Promote release target {0}', github.event.workflow_run.head_sha) || format('Promote release tag {0} / control {1}', inputs.release_tag, inputs.control_epoch_digest || 'routine')) }}",
   );
   for (const predicate of [
     "if: ${{ steps.workflow_range.outcome == 'success' && steps.pre_precondition_pin.outcome == 'success' }}",
@@ -732,9 +739,9 @@ test("production, canary, and cleanup keep status and ref authority split", asyn
   ]) {
     expect(productionWorkflow).toContain(predicate);
   }
-  expect(productionWorkflow.match(/^\s+MLM_RELEASE_APP_PRIVATE_KEY:/gmu)).toHaveLength(3);
-  expect(productionWorkflow.match(/^\s+MLM_RELEASE_REF_TOKEN:/gmu)).toHaveLength(2);
-  expect(productionWorkflow.match(/^\s+contents: write$/gmu)).toHaveLength(1);
+  expect(productionWorkflow.split("\n  site_build:")[0]!.match(/^\s+MLM_RELEASE_APP_PRIVATE_KEY:/gmu)).toHaveLength(3);
+  expect(productionWorkflow.split("\n  site_build:")[0]!.match(/^\s+MLM_RELEASE_REF_TOKEN:/gmu)).toHaveLength(2);
+  expect(productionWorkflow.split("\n  site_build:")[0]!.match(/^\s+contents: write$/gmu)).toHaveLength(1);
   expect(productionWorkflow).toContain("release-provider-outcome.mjs finalize-authority");
 
   expect(canaryWorkflow).toContain(
@@ -806,6 +813,7 @@ test("workflow changes have one explicit code owner", async () => {
   expect(value).toBe(
     "/.github/workflows/** @0thernet\n" +
     "/.github/CODEOWNERS @0thernet\n" +
+    "/apps/macos/distribution/** @0thernet\n" +
     "/scripts/check-github-release.ts @0thernet\n" +
     "/scripts/check-npm-retry-state.ts @0thernet\n" +
     "/scripts/check-npm-trusted-publishing.ts @0thernet\n" +
@@ -816,6 +824,7 @@ test("workflow changes have one explicit code owner", async () => {
     "/scripts/package-smoke* @0thernet\n" +
     "/scripts/publish-* @0thernet\n" +
     "/scripts/release-* @0thernet\n" +
+    "/scripts/site-production* @0thernet\n" +
     "/docs/publishing.md @0thernet\n" +
     "/package.json @0thernet\n" +
     "/bun.lock @0thernet\n",

@@ -1961,7 +1961,7 @@ async function observeCandidate(api, baseline, promotion, pinnedCandidateId) {
         promotion.verifiedSha,
         `Production deployment ${String(candidate.id)}`,
       );
-      if (candidate.createdMilliseconds <= promotion.releasePublishedMilliseconds) {
+      if (candidate.createdMilliseconds <= subjectBoundaryMilliseconds(promotion)) {
         fail("the latest Production deployment does not postdate the immutable Release");
       }
     }
@@ -1982,7 +1982,7 @@ async function observeCandidate(api, baseline, promotion, pinnedCandidateId) {
       fail("GraphQL and REST candidate Production deployment identities disagree");
     }
     candidate = directCandidate;
-    if (candidate.createdMilliseconds <= promotion.releasePublishedMilliseconds) {
+    if (candidate.createdMilliseconds <= subjectBoundaryMilliseconds(promotion)) {
       fail("the candidate Production deployment predates the immutable Release");
     }
     if (pinnedCandidateId !== undefined && candidate.id !== pinnedCandidateId) {
@@ -1999,11 +1999,16 @@ async function observeCandidate(api, baseline, promotion, pinnedCandidateId) {
   });
 }
 
-async function revalidateTerminalAuthority(api, promotion, workflowSource) {
+async function revalidateTerminalAuthority(api, promotion, workflowSource, revalidateSubject) {
   const refSha = await readProductionRef(api, promotion.repository);
   if (refSha !== promotion.verifiedSha) {
     fail("website-production moved at the terminal provider readback");
   }
+  await revalidateSubject(api, promotion, workflowSource);
+  if (workflowSource !== undefined) await revalidateWorkflowSource(api, promotion.repository, workflowSource);
+}
+
+async function revalidatePublishedSubject(api, promotion, workflowSource) {
   await readVerifiedTagCommit(
     api,
     promotion.repository,
@@ -2019,7 +2024,6 @@ async function revalidateTerminalAuthority(api, promotion, workflowSource) {
     fail("immutable Release publication time changed");
   }
   await readLatestRelease(api, promotion.repository, promotion.verifiedTag);
-  await revalidateWorkflowSource(api, promotion.repository, workflowSource);
 }
 
 function reconcileGraphqlRestStatus(graphCandidate, restCandidate, restStatus) {
@@ -2043,16 +2047,8 @@ function reconcileGraphqlRestStatus(graphCandidate, restCandidate, restStatus) {
   }
 }
 
-async function confirmSuccess(api, baseline, promotion, successSnapshot, workflowSource) {
-  await readVerifiedTagCommit(
-    api,
-    promotion.repository,
-    promotion.verifiedTag,
-    promotion.verifiedSha,
-  );
-  const release = await readImmutableRelease(api, promotion.repository, promotion.verifiedTag);
-  if (release.publishedAt !== promotion.releasePublishedAt) fail("immutable Release publication time changed");
-  await readLatestRelease(api, promotion.repository, promotion.verifiedTag);
+async function confirmSuccess(api, baseline, promotion, successSnapshot, workflowSource, revalidateSubject) {
+  await revalidateSubject(api, promotion, workflowSource);
   const observed = await observeCandidate(api, baseline, promotion, successSnapshot.candidate.id);
   if (observed.candidate === undefined) fail("candidate Production deployment disappeared after success");
   if (observed.graphCandidate === undefined) {
@@ -2090,7 +2086,7 @@ async function confirmSuccess(api, baseline, promotion, successSnapshot, workflo
     fail("candidate Production deployment success changed before final readback");
   }
   reconcileGraphqlRestStatus(observed.graphCandidate, observed.candidate, latest);
-  await revalidateTerminalAuthority(api, promotion, workflowSource);
+  await revalidateTerminalAuthority(api, promotion, workflowSource, revalidateSubject);
   const finalStatuses = await collectDeploymentStatuses(
     api,
     promotion.repository,
@@ -2129,7 +2125,7 @@ async function confirmSuccess(api, baseline, promotion, successSnapshot, workflo
     fail("candidate Production deployment success changed at the terminal inventory");
   }
   reconcileGraphqlRestStatus(terminalGraphCandidate, observed.candidate, finalLatest);
-  await revalidateTerminalAuthority(api, promotion, workflowSource);
+  await revalidateTerminalAuthority(api, promotion, workflowSource, revalidateSubject);
   return true;
 }
 
@@ -2179,6 +2175,25 @@ export async function waitForProviderOutcome({
   await readLatestRelease(api, promotion.repository, promotion.verifiedTag);
   await revalidateWorkflowSource(api, promotion.repository, workflowSource);
 
+  return waitForAdmittedProviderOutcome({ api, baseline, promotion, workflowSource, maxPolls, sleep,
+    pollIntervalMilliseconds, revalidateSubject: revalidatePublishedSubject });
+}
+
+function subjectBoundaryMilliseconds(promotion) {
+  return promotion.subject?.kind === "site"
+    ? Date.parse(promotion.mode === "already-exact" ? promotion.subject.sourceQualifiedAt : promotion.subject.buildCompletedAt)
+    : promotion.releasePublishedMilliseconds;
+}
+
+// Internal shared observation engine. Callers must first admit their closed
+// release or site subject and normalized baseline/promotion receipts.
+export async function waitForAdmittedProviderOutcome({ api, baseline, promotion, workflowSource,
+  maxPolls = MAX_PROVIDER_POLLS, sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+  pollIntervalMilliseconds = PROVIDER_POLL_INTERVAL_MILLISECONDS, revalidateSubject }) {
+  if (!Number.isSafeInteger(maxPolls) || maxPolls < 1 || maxPolls > MAX_PROVIDER_POLLS ||
+      !Number.isSafeInteger(pollIntervalMilliseconds) || pollIntervalMilliseconds < 0 ||
+      pollIntervalMilliseconds > PROVIDER_POLL_INTERVAL_MILLISECONDS || typeof revalidateSubject !== "function" ||
+      !Number.isFinite(subjectBoundaryMilliseconds(promotion))) fail("provider observation boundary is invalid");
   let pinnedCandidateId;
   let pinnedCandidateFingerprint;
   const observedStatuses = new Map();
@@ -2247,7 +2262,7 @@ export async function waitForProviderOutcome({
           reconcileGraphqlRestStatus(graphCandidate, candidate, latest);
         }
         if (currentConverged && graphStatus.state === "SUCCESS" && latest.state === "success") {
-          if (latest.createdMilliseconds <= promotion.releasePublishedMilliseconds) {
+          if (latest.createdMilliseconds <= subjectBoundaryMilliseconds(promotion)) {
             fail("candidate Production deployment success predates the immutable Release");
           }
           const successSnapshot = Object.freeze({
@@ -2255,7 +2270,7 @@ export async function waitForProviderOutcome({
             status: latest,
             statusFingerprint: statusFingerprint(statuses),
           });
-          if (await confirmSuccess(api, baseline, promotion, successSnapshot, workflowSource)) {
+          if (await confirmSuccess(api, baseline, promotion, successSnapshot, workflowSource, revalidateSubject)) {
             return Object.freeze({ deploymentId: candidate.id, statusId: latest.id });
           }
         }
@@ -2369,6 +2384,16 @@ class GitHubApi {
   }
 
 }
+
+// Script-internal primitives shared by the separately admitted website subject.
+// They retain the existing exact repository, provider, pagination and ref guards.
+export const siteProviderPrimitives = Object.freeze({
+  createApi: environment => new GitHubApi(environment),
+  parseBaselineReceipt,
+  baselineReceiptValue,
+  readProductionRefWithServerDate,
+  readFastForwardComparison,
+});
 
 function writeReceiptOutput(receipt) {
   const output = process.env.GITHUB_OUTPUT;

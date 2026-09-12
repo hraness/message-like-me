@@ -23,7 +23,7 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
-  test('dates only the routes changed by the source integration', () => {
+  test('dates all routes changed by the Textbutler rebrand', () => {
     const routeDates = sitemap().map(({ lastModified, url }) => {
       if (!(lastModified instanceof Date)) {
         throw new Error(`Expected a Date lastModified value for ${url}`);
@@ -32,20 +32,20 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-09T00:00:00.000Z'],
-      ['/sources', '2026-09-09T00:00:00.000Z'],
-      ['/docs', '2026-09-06T00:00:00.000Z'],
-      ['/methodology', '2026-08-27T00:00:00.000Z'],
-      ['/research', '2026-08-27T00:00:00.000Z'],
-      ['/about', '2026-08-27T00:00:00.000Z'],
+      ['/', '2026-09-11T00:00:00.000Z'],
+      ['/sources', '2026-09-11T00:00:00.000Z'],
+      ['/docs', '2026-09-11T00:00:00.000Z'],
+      ['/methodology', '2026-09-11T00:00:00.000Z'],
+      ['/research', '2026-09-11T00:00:00.000Z'],
+      ['/about', '2026-09-11T00:00:00.000Z'],
     ]);
   });
 
   test('keeps one exact, source-aware catalog', () => {
     expect(SUPPORTED_SOURCES.map((entry) => entry.id)).toEqual([
       'apple-messages',
-      'beeper-via-wrench',
-      'whatsapp-via-wrench',
+      'beeper-via-ghostget',
+      'whatsapp-via-ghostget',
       'x-data-archive',
       'macos-contacts',
     ]);
@@ -70,8 +70,8 @@ describe('supported source presentation', () => {
     );
     expect(sourceIds).toEqual([
       'apple-messages',
-      'beeper-via-wrench',
-      'whatsapp-via-wrench',
+      'beeper-via-ghostget',
+      'whatsapp-via-ghostget',
       'x-data-archive',
       'macos-contacts',
     ]);
@@ -87,17 +87,17 @@ describe('supported source presentation', () => {
       expect(mark.toLowerCase()).not.toContain('tabindex');
     }
 
-    const beeperMark = marks[sourceIds.indexOf('beeper-via-wrench')];
-    const whatsappMark = marks[sourceIds.indexOf('whatsapp-via-wrench')];
+    const beeperMark = marks[sourceIds.indexOf('beeper-via-ghostget')];
+    const whatsappMark = marks[sourceIds.indexOf('whatsapp-via-ghostget')];
     expect(beeperMark).toContain('data-mark-provider="beeper"');
-    expect(beeperMark).toContain('data-mark-tool="wrench"');
+    expect(beeperMark).toContain('data-mark-tool="ghostget"');
     expect(beeperMark).not.toContain('data-mark-provider="whatsapp"');
     expect(whatsappMark).toContain('data-mark-provider="whatsapp"');
-    expect(whatsappMark).toContain('data-mark-tool="wrench"');
+    expect(whatsappMark).toContain('data-mark-tool="ghostget"');
     expect(whatsappMark).not.toContain('data-mark-provider="beeper"');
     for (const sourceId of ['apple-messages', 'x-data-archive', 'macos-contacts'] as const) {
       expect(marks[sourceIds.indexOf(sourceId)]).not.toContain(
-        'data-mark-tool="wrench"',
+        'data-mark-tool="ghostget"',
       );
     }
 
@@ -112,10 +112,10 @@ describe('supported source presentation', () => {
     );
   });
 
-  test('pins the native WhatsApp Wrench/Wacli contract exactly', () => {
+  test('pins the native WhatsApp Ghostget/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
-      producer: 'Wrench',
-      producerVersion: '0.16.7',
+      producer: 'Ghostget',
+      producerVersion: '0.17.1',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
       bundleSchemaVersion: '2',
@@ -126,16 +126,16 @@ describe('supported source presentation', () => {
       reactionState: 'unproven-omitted',
       reactionWarning: 'reaction-state-unproven',
     });
-    const whatsapp = SUPPORTED_SOURCES.find((entry) => entry.id === 'whatsapp-via-wrench');
-    expect(whatsapp?.name).toBe('WhatsApp via Wrench');
+    const whatsapp = SUPPORTED_SOURCES.find((entry) => entry.id === 'whatsapp-via-ghostget');
+    expect(whatsapp?.name).toBe('WhatsApp via Ghostget');
     expect(whatsapp?.boundary).toContain('omits reaction-shaped rows');
     expect(whatsapp?.boundary).toContain('never operates WhatsApp');
   });
 
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
-      producer: 'Wrench',
-      producerVersion: '0.16.7',
+      producer: 'Ghostget',
+      producerVersion: '0.17.1',
       adapterId: 'beeper-local',
       adapterVersion: '2.4.0',
       reviewedOperationCount: 32,
@@ -156,20 +156,20 @@ describe('supported source presentation', () => {
       BEEPER_COMPATIBILITY.reviewedOperationCount,
     );
 
-    const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-wrench');
-    expect(beeper?.name).toBe('Beeper via Wrench');
+    const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-ghostget');
+    expect(beeper?.name).toBe('Beeper via Ghostget');
     expect(beeper?.summary).toBe(
-      'Adds a finished Beeper bundle from Wrench v0.16.7 and adapter 2.4.0 to the private local evidence corpus.',
+      'Adds a finished Beeper bundle from Ghostget v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
     );
-    expect(beeper?.boundary).toContain('All 32 reviewed operations stay in Wrench');
+    expect(beeper?.boundary).toContain('All 32 reviewed operations stay in Ghostget');
     expect(beeper?.boundary).toContain('26 through one pinned Beeper CLI 0.6.2 executable');
     expect(beeper?.boundary).toContain('including supported actions and writes');
     expect(beeper?.boundary).toContain('plus six fixed Desktop loopback reads');
     expect(beeper?.boundary).toContain('receives no provider credentials');
-    expect(beeper?.boundary).toContain('calls no Wrench or Beeper operation');
+    expect(beeper?.boundary).toContain('calls no Ghostget or Beeper operation');
     expect(beeper?.boundary).toContain('never sends');
     expect(beeper?.boundary).toContain('does not claim complete history');
-    expect(`${beeper?.summary}\n${beeper?.boundary}`).not.toMatch(/Wrench v0\.16\.(?:1|5)/u);
+    expect(`${beeper?.summary}\n${beeper?.boundary}`).not.toMatch(/Ghostget v0\.16\.(?:1|5)/u);
   });
 
   test('publishes the catalog across human and machine discovery surfaces', async () => {
@@ -204,21 +204,19 @@ describe('supported source presentation', () => {
         source('skills/message-like-me/references/privacy.md'),
       ]);
 
-    expect(home).toMatch(
-      /native WhatsApp bundles exported through compatible Wrench releases/u,
-    );
     expect(home).toContain('<ProductHero');
-    expect(home).toContain("{ href: '#install', label: `Install v${SOFTWARE_VERSION}` }");
-    expect(home).toContain('<SourceCard');
+    expect(home).toContain("{ href: '#development', label: 'See what’s ready' }");
     expect(renderedHomePage).toContain('data-hraness-marketing="hero"');
-    expect(renderedHomePage).toContain('messagelikeme ingest imessage --json');
-    expect(renderedHomePage).toContain(
-      'messagelikeme ingest bundle --input /absolute/private/whatsapp-bundle',
-    );
-    expect(sourcesPage).toContain('Beeper via Wrench');
-    expect(sourcesPage).toContain('It owns zero of Wrench’s');
+    expect(renderedHomePage).toContain('View legacy history sources.');
+    expect(renderedHomePage).not.toContain('messagelikeme ingest');
+    expect(renderedSourcesPage).toContain('Legacy history sources');
+    expect(renderedSourcesPage).toContain('separate from Textbutler’s planned live Messages transport');
+    expect(modelText).toContain('## Current Textbutler development status');
+    expect(modelText).toContain('## Legacy Message Like Me history tools');
+    expect(sourcesPage).toContain('Beeper via Ghostget');
+    expect(sourcesPage).toContain('It owns zero of Ghostget’s');
     expect(renderedSourcesPage).toContain(
-      'Wrench v0.16.7 uses beeper-local adapter v2.4.0',
+      'Ghostget v0.17.1 uses beeper-local adapter v2.4.0',
     );
     expect(renderedSourcesPage).toContain(
       'Bring Beeper history into the same private evidence corpus.',
@@ -233,44 +231,44 @@ describe('supported source presentation', () => {
       'that source-package value is provenance only and never overrides the executable runtime identity',
     );
     expect(renderedSourcesPage).toContain(
-      'Message Like Me receives no provider credential or live session, never calls Wrench or a Beeper operation, and never sends',
+      'Message Like Me receives no provider credential or live session, never calls Ghostget or a Beeper operation, and never sends',
     );
     expect(renderedSourcesPage).toContain(
-      'It owns zero of Wrench’s 32 reviewed Beeper operations and receives only the finished bundle',
+      'It owns zero of Ghostget’s 32 reviewed Beeper operations and receives only the finished bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'Wrench’s separate internal bounded export',
+      'Ghostget’s separate internal bounded export',
     );
     expect(renderedSourcesPage).toContain(
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
     );
     expect(renderedSourcesPage).toContain('Every ingest path is read-only with respect to its source');
-    expect(renderedSourcesPage).toContain('Current support in v0.8.7');
+    expect(renderedSourcesPage).toContain('Legacy reader support in v0.8.9');
     expect(renderedSourcesPage).toContain(
-      'wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
+      'ghostget beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.7/docs/local-message-bundle-v1.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.9/docs/local-message-bundle-v1.md',
     );
     expect(renderedSourcesPage).toContain(
-      'wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
+      'ghostget whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'https://github.com/hraness/message-like-me/blob/v0.8.7/docs/local-message-bundle-v2.md',
+      'https://github.com/hraness/message-like-me/blob/v0.8.9/docs/local-message-bundle-v2.md',
     );
     expect(chrome).toContain('href="/sources"');
     expect(sitemap).toContain("absoluteUrl('/sources')");
     expect(llms).toContain("absoluteUrl('/sources')");
     expect(readme).toContain('## Supported sources');
-    const wrenchPackageUrl =
-      `https://www.npmjs.com/package/@hraness/wrench/v/${BEEPER_COMPATIBILITY.producerVersion}`;
+    const ghostgetPackageUrl =
+      `https://github.com/hraness/ghostget/releases/download/v${BEEPER_COMPATIBILITY.producerVersion}/hraness-ghostget-${BEEPER_COMPATIBILITY.producerVersion}.tgz`;
     const beeperCliReleaseUrl =
       'https://github.com/beeper/cli/releases/tag/v' +
       BEEPER_COMPATIBILITY.providerCliVersion.replaceAll('.', '%2E');
     for (const copy of [readme, bundleContract]) {
-      expect(copy).toContain(`](${wrenchPackageUrl})`);
+      expect(copy).toContain(`](${ghostgetPackageUrl})`);
       expect(copy).toContain(
-        `bun add --global @hraness/wrench@${BEEPER_COMPATIBILITY.producerVersion}`,
+        `bun add --global ${ghostgetPackageUrl}`,
       );
     }
     expect(readme).toContain(`](${beeperCliReleaseUrl})`);
@@ -283,7 +281,7 @@ describe('supported source presentation', () => {
       'u',
     );
     for (const copy of [readme, bundleContract]) {
-      expect(copy).toContain(`Wrench v${BEEPER_COMPATIBILITY.producerVersion}`);
+      expect(copy).toContain(`Ghostget v${BEEPER_COMPATIBILITY.producerVersion}`);
       expect(copy).toMatch(providerCliPattern);
       expect(copy).toContain(`beeper-local@${BEEPER_COMPATIBILITY.adapterVersion}`);
       expect(copy).toContain(`${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations`);
@@ -307,7 +305,7 @@ describe('supported source presentation', () => {
       `schema version \`${BEEPER_COMPATIBILITY.bundleSchemaVersion}\``,
     );
     for (const coordinate of [
-      `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion}`,
+      `Ghostget v${WHATSAPP_COMPATIBILITY.producerVersion}`,
       `Wacli v${WHATSAPP_COMPATIBILITY.providerCliVersion}`,
       `schema version \`${WHATSAPP_COMPATIBILITY.bundleSchemaVersion}\``,
       WHATSAPP_COMPATIBILITY.sourceId,
@@ -356,7 +354,7 @@ describe('supported source presentation', () => {
     expect(renderedSourcesPage).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
     expect(renderedSourcesPage).toContain('not evidence of no reactions');
     for (const coordinate of [
-      `Wrench v${BEEPER_COMPATIBILITY.producerVersion}`,
+      `Ghostget v${BEEPER_COMPATIBILITY.producerVersion}`,
       `executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}`,
       `bundle schema ${BEEPER_COMPATIBILITY.bundleSchemaVersion}`,
       BEEPER_COMPATIBILITY.sourceId,
@@ -365,15 +363,15 @@ describe('supported source presentation', () => {
       expect(renderedSourcesPage).toContain(coordinate);
     }
     for (const exactModelClaim of [
-      'Beeper via Wrench lets users bring a finished private bundle into the same local evidence corpus as other sources.',
-      'Wrench v0.16.7 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
+      'Beeper via Ghostget lets users bring a finished private bundle into the same local evidence corpus as other sources.',
+      'Ghostget v0.17.1 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
       'The executable’s reported 0.6.2 is runtime authority; the upstream tagged packages/cli/package.json declaration of 0.6.1 is provenance only.',
-      'Message Like Me receives no provider credentials, never calls Wrench or Beeper operations, and never sends; it does not claim complete history.',
+      'Message Like Me receives no provider credentials, never calls Ghostget or Beeper operations, and never sends; it does not claim complete history.',
       'Every ingest path is read-only with respect to its source.',
     ]) {
       expect(modelText).toContain(exactModelClaim);
     }
-    expect(modelText).not.toMatch(/Wrench v0\.16\.(?:1|5)/u);
+    expect(modelText).not.toMatch(/Ghostget v0\.16\.(?:1|5)/u);
 
     const jsonLdSource = /<script type="application\/ld\+json">([^<]+)<\/script>/u
       .exec(renderedRootLayout)?.[1];
@@ -384,18 +382,16 @@ describe('supported source presentation', () => {
     const softwareApplication = jsonLd['@graph']?.find(
       (entry) => entry['@type'] === 'SoftwareApplication',
     );
-    expect(softwareApplication?.softwareVersion).toBe('0.8.7');
+    expect(softwareApplication?.softwareVersion).toBeUndefined();
     expect(softwareApplication?.featureList).toEqual([
-      'Read-only Apple Messages history ingestion',
-      'Caller-owned X data archive direct-message ingestion',
-      'Every ingest path is read-only with respect to its source',
-      'Finished Beeper bundle from Wrench v0.16.7 and adapter beeper-local v2.4.0; all 32 reviewed operations stay in Wrench (26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus 6 fixed Desktop loopback reads)',
-      'Beeper CLI executable 0.6.2 is runtime authority; upstream tagged packages/cli/package.json declaration 0.6.1 is provenance only',
-      'No provider credentials, Wrench or Beeper operation calls, or sending',
-      'Native WhatsApp bundle ingestion via Wrench and official Wacli',
-      'Optional macOS Contacts label enrichment',
-      'Local deterministic measurement and drafts-only Agent Skill',
+      'Mac control panel and local daemon controls',
+      'Contact-specific guidance and editable memory',
+      'Configurable visible assistant disclosure',
+      'Smart and keyword-only response controls',
+      'Global pause and active contact limits',
     ]);
+    expect(renderedRootLayout).not.toContain('downloadUrl');
+    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; no signed Mac download');
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);

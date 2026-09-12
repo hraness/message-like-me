@@ -1,11 +1,7 @@
 import {
   MarketingCallToAction,
   MarketingFlow,
-  MarketingInstallPanel,
-  MarketingMaker,
   MarketingPage,
-  MarketingPillars,
-  MarketingPrimitives,
   MarketingProofFrame,
   MarketingQuestionList,
   MarketingSection,
@@ -15,9 +11,8 @@ import {
 import Link from 'next/link';
 
 import { SiteFooter, SiteHeader } from './_components/site-chrome';
-import { SourceCard } from './_components/source-card';
-import { SUPPORTED_SOURCES } from './_lib/sources';
 import {
+  ARCHITECTURE_URL,
   GITHUB_URL,
   pageMetadata,
   RELEASE_URL,
@@ -27,103 +22,70 @@ import {
 } from './_lib/site';
 
 export const metadata = pageMetadata({
-  title: 'Message Like Me — Draft messages that sound like you',
+  title: 'Textbutler — Your personal message butler for Mac',
   description: SITE_DESCRIPTION,
   path: '/',
 });
 
-const HERO_FOOTNOTE =
-  'Local-first, drafts only, and free under the MIT license. macOS with Bun 1.3.14 or newer.';
-
+const HERO_FOOTNOTE = 'In development · macOS · iMessage + WhatsApp';
 const HOME_QUESTIONS = [
   {
-    question: 'Does the website receive my messages?',
-    answer:
-      'No. messagelikeme.com is an informational project page. It has no upload, account, message-history, profile, or drafting surface. Everything the CLI reads and writes stays on your machine in private local paths you choose.',
+    question: 'Can I use Textbutler today?',
+    answer: 'You can build the Mac app from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. A signed Mac download is not available yet.',
   },
   {
-    question: 'Do I need an account or an API key?',
-    answer:
-      'No. There is no Message Like Me account, sign-in, server, telemetry, or sync. The CLI never calls a model or an AI provider. Drafting happens in the agent you already use, under that agent’s own account and terms.',
+    question: 'Will it interrupt my conversations?',
+    answer: 'Smart mode waits through message bursts and uses a cheap classifier to decide whether help is welcome. A recent message from you starts a cooldown, and the butler checks conversation activity again before sending. Pause, contact settings, and rate limits take precedence. The current connections do not expose typing activity; keyword-only mode is also available.',
   },
   {
-    question: 'Can it send or schedule a message?',
-    answer:
-      'No. Message Like Me has no send, react, schedule, provider-authentication, or messaging-application command. Drafting ends as text on your screen, and you decide what to do with it.',
+    question: 'Will people know the butler is responding?',
+    answer: 'Yes. The butler speaks as an assistant, with every text reply wrapped in a visible disclosure. The default is 🤖{ hello this is my response }. You can change the character, opening symbol, and closing symbol separately for each contact.',
   },
   {
-    question: 'Which sources are supported?',
-    answer:
-      'Apple Messages, caller-owned X data archives, bounded Beeper and native WhatsApp bundles exported through compatible Wrench releases, and optional macOS Contacts labels. Every path is read-only; Messages, Contacts, archives, and bundles are never changed.',
+    question: 'What can the agent access?',
+    answer: 'The available Claude API route receives brokered access to one contact folder, bounded public web requests, and proposed actions for that conversation. Trusted code checks and sends those actions. Shell commands, other contact folders, credentials, and permission changes are excluded. Claude Code and Codex remain unavailable while their execution boundaries are being qualified.',
   },
   {
-    question: 'What does it cost?',
-    answer:
-      'Nothing. Message Like Me is open source under the MIT license. Install the exact public npm package; the same reviewed bytes are mirrored by an immutable GitHub release. The only cost is whatever the agent you draft with already charges you.',
+    question: 'Which agent can I use?',
+    answer: 'Claude API is the current explicit account option in the packaged runtime. It is billed separately from a Claude Code subscription, and account and model checks must pass before use. Claude Code and Codex are planned choices, currently unavailable. Textbutler never silently switches between them or borrows a subscription credential.',
   },
   {
-    question: 'Which platforms does it run on?',
-    answer:
-      `macOS with Bun 1.3.14 or newer. Apple Messages and Contacts are read from the current macOS user’s local databases. Version ${SOFTWARE_VERSION} is the current release.`,
+    question: 'Does this website receive my messages?',
+    answer: 'No. textbutler.app is informational and has no message upload, contact import, account, or drafting form. The Mac stores contact context locally. When you choose a hosted AI provider, it handles the context it receives under its own data policies.',
   },
   {
-    question: 'Does Message Like Me include an AI model?',
-    answer:
-      'No. The CLI performs deterministic local ingestion and measurement. Semantic analysis and unsent drafting happen through the agent environment you already chose, using the installed Agent Skill.',
+    question: 'Which rich message features will work?',
+    answer: 'The app shows text, files, reactions, stickers, links, and polls according to the connection’s current capabilities and permissions. iMessage rich actions require a separately configured Messages bridge that needs System Integrity Protection disabled; Textbutler never changes that setting. App Clips and mini apps remain unavailable. No Linq integration is included.',
   },
   {
-    question: 'Is the result a digital clone?',
-    answer:
-      'No. The result is revisable evidence for a draft. It does not establish identity, beliefs, intent, consent, or what you would write now. What you mean today always outranks how you wrote before.',
-  },
-  {
-    question: 'Can I use it from TypeScript?',
-    answer:
-      'Yes. The @hraness/message-like-me package exports the versioned corpus, metrics, study-packet, and profile types plus canonical JSON and SHA-256 helpers, with no filesystem or network work on import.',
-  },
-  {
-    question: 'Who made it?',
-    answer:
-      'Ben Guo, a musician and builder, formerly a founder and engineering leader at companies including Venmo and Stripe, now building from Puerto Rico. The source is public on GitHub under the MIT license.',
+    question: 'What happened to Message Like Me?',
+    answer: `Textbutler is the new product direction. Message Like Me’s history readers, evidence methodology, and published v${SOFTWARE_VERSION} artifacts remain available as legacy tools. Installing that package does not install the Textbutler Mac app or enable automatic replies.`,
   },
 ] as const;
 
-const faqStructuredData = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: HOME_QUESTIONS.map(({ answer, question }) => ({
-    '@type': 'Question',
-    name: question,
-    acceptedAnswer: {
-      '@type': 'Answer',
-      text: answer,
-    },
-  })),
-};
-
-function HeroFrame() {
+function ButlerFrame() {
   return (
     <MarketingProofFrame
-      caption="An illustrative, unsent draft—not a measured result. Every message and pattern shown here is synthetic."
-      credit="Synthetic example · no real message history"
-      title="Message Like Me · synthetic example"
+      caption="Synthetic illustration of the intended experience. No real messages, live agent run, or sent reply is shown."
+      credit="Contact context → a clearly identified assistant"
     >
-      <div className="mlm-frame" role="group" aria-label="A synthetic local drafting workflow">
-        <div className="message-stage">
-          <p className="stage-label">Incoming message</p>
-          <div className="bubble bubble-in">yes to friday. also can you send me that link?</div>
-          <p className="stage-label stage-label--draft">Unsent draft</p>
-          <div className="bubble bubble-out">perfect, friday it is</div>
-          <div className="bubble bubble-out bubble-short">yep one sec</div>
-        </div>
-        <div className="draft-notes">
-          <h2>More than word choice</h2>
-          <dl>
-            <div><dt>Tone</dt><dd>Lowercase, casual, and direct.</dd></div>
-            <div><dt>Rhythm</dt><dd>Two short messages instead of one paragraph.</dd></div>
-            <div><dt>Attention</dt><dd>Acknowledge the plans and the link request.</dd></div>
+      <div className="butler-frame" aria-label="Synthetic contact context and disclosed reply">
+        <div className="butler-context">
+          <div className="butler-context-heading"><span className="contact-initials">AM</span><div><strong>Alex Morgan</strong><span>Example contact folder</span></div></div>
+          <dl className="context-files">
+            <div><dt>ABOUT.md</dt><dd>What matters in this relationship.</dd></div>
+            <div><dt>MEMORY.md</dt><dd>Useful context, with sources and dates.</dd></div>
+            <div><dt>STYLE.md</dt><dd>How to help in this conversation.</dd></div>
+            <div><dt>AGENTS.md</dt><dd>Guidance the butler can read and revise.</dd></div>
           </dl>
-          <p>You review the draft. Nothing is sent.</p>
+          <p>You can open and edit every note.</p>
+        </div>
+        <div className="message-stage">
+          <p className="stage-label">Example conversation</p>
+          <div className="bubble bubble-in">butler, can you help me make a packing list?</div>
+          <p className="stage-label stage-label--draft">Butler reply · illustration</p>
+          <div className="bubble bubble-out">{'🤖{ Happy to help. Where are you headed, and for how long? }'}</div>
+          <p className="butler-disclosure-note">Always recognizable. Never pretending to be you.</p>
         </div>
       </div>
     </MarketingProofFrame>
@@ -131,238 +93,66 @@ function HeroFrame() {
 }
 
 export default function Home() {
+  const faq = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: HOME_QUESTIONS.map(({ question, answer }) => ({ '@type': 'Question', name: question, acceptedAnswer: { '@type': 'Answer', text: answer } })) };
   return (
-    <>
+    <div className="textbutler-marketing" data-hraness-marketing-preset="editorial">
       <SiteHeader />
       <main id="main-content" tabIndex={-1}>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqStructuredData) }}
-        />
-
-        <MarketingPage className="mlm-page">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
+        <MarketingPage className="mlm-page textbutler-page">
+          <div className="hraness-marketing-field">
           <ProductHero
-            actions={[
-              { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
-              { href: '#how-it-works', label: 'See how it works' },
-            ]}
+            actions={[{ href: '#development', label: 'See what’s ready' }, { href: ARCHITECTURE_URL, label: 'Explore the architecture' }]}
             boundary={HERO_FOOTNOTE}
             className="mlm-marketing-hero"
-            eyebrow="A local-first CLI and Agent Skill"
-            frame={<HeroFrame />}
-            heading="Draft messages that sound like you"
-            headingId="message-like-me-title"
-            name="Message Like Me"
-            summary="You text different people differently. Message Like Me studies your past conversations with one person, then gives your agent examples and patterns to work from. You get a draft to review, never an automatically sent message."
+            eyebrow=""
+            frame={<ButlerFrame />}
+            heading="A little help in your conversations"
+            headingId="textbutler-title"
+            name="Textbutler"
+            summary="A personal assistant for selected iMessage and WhatsApp conversations. Give each contact a folder of context, decide when it can step in, and stay in control from your Mac."
           />
+          </div>
 
-          <MarketingPillars
-            ariaLabel="Message Like Me in three points"
-            pillars={[
-              {
-                label: 'Read your history',
-                summary: 'Read Apple Messages, an X archive, or a Beeper or WhatsApp bundle from Wrench without changing any of them.',
-              },
-              {
-                label: 'Understand',
-                summary: 'Measure how you write to one person: word choice, timing, bubble shape, and how you answer several things at once.',
-              },
-              {
-                label: 'Draft',
-                summary: 'Hand your agent the evidence and get an unsent draft back. You decide what, if anything, gets sent.',
-              },
-            ]}
-          />
-
-          <MarketingSection
-            heading="Your history comes in from the apps you already use."
-            headingId="sources-title"
-            id="sources"
-            label="Supported sources"
-            summary="Read Apple Messages or an X archive directly. For Beeper and WhatsApp, import a finished local export from Wrench. Contacts can add familiar names. Expand a source for its import command and limits."
-          >
-            <div className="source-grid">
-              {SUPPORTED_SOURCES.map((source) => (
-                <SourceCard key={source.id} source={source} />
-              ))}
-            </div>
-            <p className="mlm-section-link">
-              <Link href="/sources">Compare every source and its limits</Link>
-            </p>
+          <MarketingSection heading="A butler for each relationship" headingId="contacts-title" id="how-it-works" label="" summary="Choose the contacts it can help. Keep their context separate. Pause one conversation or every conversation whenever you need.">
+            <MarketingFlow ariaLabel="How contact-based assistance is designed to work" steps={[
+              { label: 'Choose a contact', detail: 'Choose one direct conversation from a configured connection. New contacts start disabled; the default active limit is five.' },
+              { label: 'Give it context', detail: 'Optionally import recent history as context. Guidance, preferences, and dated memories live in an ordinary folder you can read and edit.' },
+              { label: 'Let it know when', detail: 'Smart mode is the default. The keyword “butler” can summon it directly; keyword-only mode keeps it waiting for that invitation.' },
+              { label: 'Keep the conversation yours', detail: 'Enable a contact only with a ready agent and messaging connection. The butler identifies itself, checks your recent activity, and stops new replies when paused.' },
+            ]} />
           </MarketingSection>
 
-          <MarketingSection
-            heading="The CLI measures. Your agent writes."
-            headingId="how-it-works-title"
-            id="how-it-works"
-            label="How it works"
-            layout="split"
-            summary="The command-line tool reads and measures your history on your Mac. The installed Agent Skill teaches your existing agent how to use those examples and patterns. You choose what it can read, then review its draft."
-          >
-            <MarketingFlow
-              ariaLabel="From history to an unsent draft"
-              steps={[
-                {
-                  code: 'messagelikeme ingest imessage --json',
-                  detail: 'Read a stable copy of Apple Messages, or bring an X archive or a Wrench bundle. Nothing in the source changes.',
-                  label: 'Read history',
-                },
-                {
-                  code: 'messagelikeme inspect tempo <contact-id> --json',
-                  detail: 'See counts, timing, and reply habits for one person. This view uses contact IDs instead of names and leaves out message text.',
-                  label: 'Find patterns',
-                },
-                {
-                  code: 'messagelikeme study prepare <contact-id> --output /absolute/private/study.json --json',
-                  detail: 'Write one evidence packet with real excerpts to a path you name, with owner-only filesystem permissions.',
-                  label: 'Prepare',
-                },
-                {
-                  code: 'Use $message-like-me in your agent',
-                  detail: 'Your agent reads the packet, keeps what is uncertain uncertain, and stops at a draft you can edit or discard.',
-                  label: 'Draft',
-                },
-              ]}
-            />
+          <MarketingSection heading="Memory you can read and change" headingId="memory-title" id="memory" label="" layout="split" summary="The butler’s context belongs in ordinary files. Add what it should know, correct an assumption, or remove a stale note. It is designed to learn from conversation without turning its guesses into facts.">
+            <div className="workspace-example"><pre aria-label="Example contact workspace"><code>{`contact/\n├── AGENTS.md\n├── ABOUT.md\n├── MEMORY.md\n├── STYLE.md\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre><p>One contact workspace. Settings, credentials, and permission grants stay outside the agent’s files.</p><Link href="/methodology">Read the legacy evidence methodology</Link></div>
           </MarketingSection>
 
-          <MarketingPrimitives
-            heading="Voice has a rhythm."
-            headingId="evidence-title"
-            id="evidence"
-            items={[
-              { label: 'Prose', summary: 'Case, punctuation, vocabulary, warmth, humor, and uncertainty.' },
-              { label: 'Tempo', summary: 'Response latency, turns, bursts, and where a conversation pauses.' },
-              { label: 'Shape', summary: 'One long message versus several deliberate bubbles.' },
-              { label: 'Context', summary: 'What changes across play, planning, support, conflict, and reflection.' },
-              { label: 'Coverage', summary: 'How several incoming questions or emotional beats get resolved.' },
-              { label: 'Replies', summary: 'When explicit reply links clarify a dense or delayed thread.' },
-            ]}
-            label="The evidence profile"
-            summary="Word choice matters. So do the pauses, the bursts, the afterthought, and the decision to answer three things in one message or three."
-          />
-
-          <MarketingSection
-            className="mlm-contrast-section"
-            heading="Evidence for a draft."
-            headingId="what-it-is-title"
-            id="what-it-is"
-            label="What it is"
-            layout="split"
-            summary="Message Like Me measures your outgoing prose and reply shape for one person across the sources you import, then gives your agent a profile it can cite line by line."
-          >
-            <div className="mlm-contrast">
-              <p className="mlm-contrast__label">What it is not</p>
-              <h3 className="mlm-contrast__heading">Not a model of you.</h3>
-              <p>
-                It does not train a model, represent your identity, predict your
-                beliefs, or send a message. What you mean now always outranks how
-                you wrote before.
-              </p>
-              <p className="mlm-section-link">
-                <Link href="/research">Read the research review</Link>
-              </p>
-            </div>
+          <MarketingSection heading="Small parts with clear jobs" headingId="architecture-title" id="architecture" label="" summary="A local daemon handles the work while the Mac app gives you the controls. Hooks and adapters provide room to extend the experience without handing an agent unrestricted access.">
+            <dl className="architecture-rows">
+              <div><dt>Textbutler</dt><dd>Contacts, response timing, visible disclosure, scoped memory, pause, and action policy.</dd></div>
+              <div><dt>Ghostget</dt><dd>iMessage and WhatsApp connections, account permissions, conversation identity, and available message actions.</dd></div>
+              <div><dt>Agentrouter</dt><dd>Scoped agent tools and explicit account selection. Claude API is available after setup; native Claude Code and Codex remain under qualification.</dd></div>
+              <div><dt>Your hooks</dt><dd>Developer-authored extensions for context and response decisions. Trusted executable hooks stay separate from the agent’s editable memory.</dd></div>
+            </dl>
+            <p className="mlm-section-link"><a href={ARCHITECTURE_URL}>Read the architecture and capability limits</a></p>
           </MarketingSection>
 
-          <MarketingTrustBoundary
-            className="mlm-marketing-trust"
-            heading="Choose what your agent can read."
-            headingId="privacy-title"
-            id="privacy"
-            items={[
-              {
-                label: 'It stays on your machine',
-                detail: 'Imported history, measurements, and profiles live in a private local data root with owner-only permissions.',
-              },
-              {
-                label: 'Everyday output has no prose',
-                detail: 'Ordinary commands report counts and timing under pseudonymous IDs. They omit message bodies, handles, and contact names.',
-              },
-              {
-                label: 'You choose what an agent sees',
-                detail: 'A study packet holds real excerpts. It reaches an agent only when you write it to a path you name and open it in an environment you trust.',
-              },
-              {
-                label: 'No account, server, or model',
-                detail: 'There is no Message Like Me account, server, AI-provider call, telemetry, or sync. This website is an informational page.',
-              },
-              {
-                label: 'Nothing sends',
-                detail: 'Drafting ends as text on your screen. There is no command that sends, reacts, schedules, or operates a messaging app.',
-              },
-            ]}
-            label="Your data"
-            summary="The CLI keeps your history local. If you open a study packet in a hosted agent, that agent handles its excerpts under its own privacy terms. Share only what you are comfortable giving it."
-          />
+          <MarketingTrustBoundary className="mlm-marketing-trust" heading="Keep the useful boundaries visible" headingId="boundaries-title" id="boundaries" label="" summary="The contact folder is local. Your selected AI provider still receives the context needed for its work. Textbutler’s website has no access to that information." items={[
+            { label: 'A recognizable assistant', detail: 'Every text reply has a configurable character, begin symbol, and end symbol. The default is 🤖{ hello this is my response }.' },
+            { label: 'One conversation at a time', detail: 'The agent boundary is one contact workspace, public web requests, and that conversation’s supported message actions. No shell tools.' },
+            { label: 'Capabilities, not promises', detail: 'Rich actions depend on the selected connection and its permissions. Unsupported features, including mini apps, stay visible as unavailable.' },
+          ]} />
 
-          <MarketingInstallPanel
-            className="mlm-marketing-install"
-            eyebrow={`Install v${SOFTWARE_VERSION}`}
-            heading="Start with an empty store."
-            headingId="install-title"
-            id="install"
-          >
-            <ol className="command-stack" aria-label="Installation and first-check commands">
-              <li><code>bun add --global @hraness/message-like-me@{SOFTWARE_VERSION}</code></li>
-              <li><code>messagelikeme skill install</code></li>
-              <li><code>messagelikeme init</code></li>
-              <li><code>messagelikeme doctor --json</code></li>
-            </ol>
-            <p className="mlm-install-note">
-              The first check imports no history. It reports where Message Like Me
-              will work and whether its private store is healthy, before you choose
-              a source. Requires Bun 1.3.14 or newer.
-              {' '}<a href={RELEASE_URL}>Inspect the release on GitHub</a>
-            </p>
-          </MarketingInstallPanel>
+          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The Mac app and daemon are implemented in source. Setup is explicit, and a signed Mac download is not available yet.">
+            <div className="development-status"><div><h3>Ready to inspect and build</h3><p>Mac controls, background service, iMessage and WhatsApp enrollment, optional history import, editable memory, hooks, and a guarded reply loop. New installations start paused.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the Mac app source</a></div><div><h3>Setup before replies</h3><p>Configure Ghostget and its permissions, check an explicit Claude API account, then enable a contact and resume. Native Claude Code and Codex remain unavailable. Live delivery and rich actions still need verification on your account.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
+            <p className="legacy-note">Looking for the original history tools? <a href={RELEASE_URL}>Message Like Me v{SOFTWARE_VERSION}</a> remains available as a legacy release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>
+          </MarketingSection>
 
-          <MarketingQuestionList
-            className="mlm-marketing-questions"
-            heading="Before you install."
-            headingId="questions-title"
-            id="questions"
-            label="Questions"
-            questions={HOME_QUESTIONS.map(({ answer, question }) => ({
-              answer: <p>{answer}</p>,
-              question,
-            }))}
-          />
-
-          <MarketingMaker
-            heading="Built by Ben Guo"
-            headingId="maker-title"
-            id="maker"
-            label="Built by"
-            links={[
-              { href: 'https://hraness.com', label: 'hraness.com' },
-              { href: 'https://x.com/hraness', label: '@hraness' },
-              { href: GITHUB_URL, label: 'GitHub' },
-            ]}
-          >
-            <p>
-              Message Like Me is built by Ben Guo, a musician and builder, formerly a
-              founder and engineering leader at companies including Venmo and Stripe,
-              now building from Puerto Rico. The source, the method, and the research
-              review are public.
-            </p>
-          </MarketingMaker>
-
-          <MarketingCallToAction
-            actions={[
-              { href: '#install', label: `Install v${SOFTWARE_VERSION}` },
-              { href: '/docs', label: 'Read the docs' },
-            ]}
-            className="mlm-marketing-cta"
-            footnote={HERO_FOOTNOTE}
-            heading="Draft with an agent. Sound like you."
-            headingId="closing-title"
-            id="closing"
-            summary="Install the CLI, import one source, and hand your agent the evidence. Every draft stays on your screen until you decide."
-          />
+          <MarketingQuestionList className="mlm-marketing-questions" heading="A few things to know" headingId="questions-title" id="questions" label="" questions={HOME_QUESTIONS.map(({ answer, question }) => ({ answer: <p>{answer}</p>, question }))} />
+          <MarketingCallToAction actions={[{ href: GITHUB_URL, label: 'Explore the source' }, { href: '/docs', label: 'Read the docs' }]} className="mlm-marketing-cta" footnote={HERO_FOOTNOTE} heading="Make room for a little help" headingId="closing-title" id="closing" summary="Follow the build, read the design, and help shape a butler that knows when to speak—and when to stay quiet." />
         </MarketingPage>
       </main>
       <SiteFooter path="/" />
-    </>
+    </div>
   );
 }

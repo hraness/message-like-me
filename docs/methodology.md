@@ -17,7 +17,7 @@ A caller-owned local message bundle is a separate versioned source
 observation. The CLI verifies its complete fixed inventory and digests before
 ingest, never obtains its provider credential, and does not call its producer.
 Frozen v1 carries bounded Beeper observations. V2 carries one native WhatsApp
-account exported through Wrench's official Wacli adapter. It requires exact
+account exported through Ghostget's official Wacli adapter. It requires exact
 WhatsApp JIDs and projects a phone handle only from an E.164-backed user JID.
 
 A caller-owned X data archive is another offline source observation. The CLI

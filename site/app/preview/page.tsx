@@ -1,48 +1,10 @@
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  title: { absolute: 'Message Like Me — Preview' },
-  robots: { follow: false, index: false },
-};
+export const metadata: Metadata = { title: { absolute: 'Textbutler — Preview' }, robots: { follow: false, index: false } };
 
 export default function PreviewPage() {
-  return (
-    <main id="main-content">
-      <section className="hero" aria-labelledby="message-like-me-preview-heading">
-        <div className="hero-copy">
-          <p className="eyebrow">Local-first · drafts only · macOS</p>
-          <h1 id="message-like-me-preview-heading">
-            Study the evidence. <em>Draft in your voice.</em>
-          </h1>
-          <p className="lede">
-            Message Like Me studies private messaging history locally and gives
-            your own agent bounded evidence for drafts that sound like you.
-          </p>
-          <ul className="signal-list" aria-label="Style signals analyzed">
-            <li>prose</li>
-            <li>tempo</li>
-            <li>bubble rhythm</li>
-            <li>reply habits</li>
-          </ul>
-        </div>
-
-        <div className="hero-visual" aria-label="A synthetic local drafting workflow">
-          <div className="privacy-stamp">
-            <span className="privacy-dot" />
-            no product server
-          </div>
-          <div className="message-stage">
-            <p className="stage-label">synthetic example</p>
-            <div className="bubble bubble-in">yes to friday. can you send me that link?</div>
-            <div className="bubble bubble-out">perfect, friday it is</div>
-            <div className="bubble bubble-out bubble-short">yep one sec</div>
-          </div>
-          <div className="terminal-card">
-            <p><span>$</span> messagelikeme study prepare &lt;contact-id&gt;</p>
-            <p className="terminal-result">✓ bounded local evidence prepared</p>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+  return <main id="main-content"><section className="hero" aria-labelledby="textbutler-preview-heading">
+    <div className="hero-copy"><h1 id="textbutler-preview-heading">A little help in your conversations</h1><p className="lede">Textbutler is a personal message butler for Mac. A folder of context for each contact, guarded iMessage and WhatsApp connections, and replies people can recognize.</p><p className="lede">In development. Explicit messaging and agent setup required; no signed Mac download yet.</p></div>
+    <div className="hero-visual" aria-label="Synthetic illustration of a disclosed butler reply"><div className="message-stage"><p className="stage-label">Synthetic example · no message sent</p><div className="bubble bubble-in">butler, can you help me make a packing list?</div><p className="stage-label stage-label--draft">Butler reply · illustration</p><div className="bubble bubble-out">{'🤖{ Happy to help. Where are you headed, and for how long? }'}</div><p className="butler-disclosure-note">A clearly identified assistant, with you in control.</p></div></div>
+  </section></main>;
 }

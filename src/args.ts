@@ -21,10 +21,14 @@ const VALUE_OPTIONS = new Set([
   "subject",
   "target",
   "draft",
-  "wrench-context",
-  "wrench-receipt",
+  "ghostget-context",
+  "ghostget-receipt",
 ]);
 const FLAG_OPTIONS = new Set(["force", "help", "json", "private", "version"]);
+const LEGACY_OPTION_ALIASES = new Map([
+  ["wrench-context", "ghostget-context"],
+  ["wrench-receipt", "ghostget-receipt"],
+]);
 
 export type ParsedArguments = Readonly<{
   positionals: readonly string[];
@@ -49,7 +53,8 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
       continue;
     }
     const separator = argument.indexOf("=");
-    const key = argument.slice(2, separator < 0 ? undefined : separator);
+    const suppliedKey = argument.slice(2, separator < 0 ? undefined : separator);
+    const key = LEGACY_OPTION_ALIASES.get(suppliedKey) ?? suppliedKey;
     if (key.length === 0) throw new CliError("usage", "Empty option name");
     if (VALUE_OPTIONS.has(key)) {
       if (options.has(key)) throw new CliError("usage", `--${key} may be provided only once`);

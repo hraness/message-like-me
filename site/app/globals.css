@@ -4,54 +4,22 @@
  * compiled recipes so its `components.hraness-design-kit.*` layers sit above
  * the shared foundation in the declared layer order. */
 @import '@hraness/design-kit/product-marketing.css';
+@import '../styles/vendor/hraness-paper/paper-theme.css';
+@import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
 
-/* Palette. Light is the default appearance; dark mirrors every token through
- * the system preference. One accent, bound once for the marketing grammar. */
+/* Product roles alias the shared Paper theme. Message examples retain their
+ * incoming/outgoing distinction without a separate site color system. */
 :root {
-  color-scheme: light dark;
-  --paper: #fbfaf7;
-  --paper-deep: #efece5;
-  --ink: #1b1a17;
-  --muted: #66625a;
-  --line: rgba(27, 26, 23, 0.12);
-  --accent: #1f5eea;
-  --accent-ink: #ffffff;
-  --accent-on-inverse: #9db8ff;
-  --code-background: #16171a;
-  --code-foreground: #ece8df;
-  --code-accent: #9db8ff;
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --surface: #ffffff;
-  --inverse: var(--ink);
-  --inverse-foreground: #f7f3e8;
-  --primary: var(--accent);
-  --hraness-site-accent: var(--accent);
-  --hraness-site-accent-ink: var(--accent-ink);
-  --font-text: "Nebula Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-heading: var(--font-text);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --gutter: clamp(1.25rem, 4vw, 3rem);
-  --measure: 72rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #141310;
-    --paper-deep: #24231f;
-    --ink: #eee9df;
-    --muted: #b3ac9f;
-    --line: rgba(238, 233, 223, 0.14);
-    --accent: #8fb0ff;
-    --accent-ink: #0d1a3d;
-    --accent-on-inverse: #1f5eea;
-    --code-background: #0b0c0f;
-    --code-foreground: #f1ede4;
-    --code-accent: #a9c1ff;
-    --surface: #1c1b18;
-    --inverse: #f0ebdf;
-    --inverse-foreground: #171512;
-  }
+  --paper: var(--background);
+  --paper-deep: var(--secondary);
+  --ink: var(--foreground);
+  --accent-ink: var(--primary-foreground);
+  --accent-on-inverse: var(--inverse-foreground);
+  --code-background: var(--inverse);
+  --code-foreground: var(--inverse-foreground);
+  --code-accent: var(--inverse-foreground);
+  --gutter: var(--hraness-marketing-gutter);
+  --measure: var(--hraness-marketing-measure);
 }
 
 * { box-sizing: border-box; }
@@ -91,24 +59,38 @@ body {
   --hraness-marketing-inverse: var(--inverse);
   --hraness-marketing-inverse-ink: var(--inverse-foreground);
   --hraness-marketing-text-font: var(--font-text);
-  --hraness-marketing-heading-font: var(--font-text);
+  --hraness-marketing-heading-font: var(--hraness-marketing-display-font, var(--font-text));
   --hraness-marketing-mono-font: var(--font-mono);
-  --hraness-marketing-measure: var(--measure);
 }
 
 .mlm-page {
   padding-block-end: clamp(1rem, 4vw, 2.5rem);
 }
 
-.mlm-marketing-hero {
-  --hraness-marketing-copy-measure: 38rem;
-  padding-block-start: clamp(1.5rem, 3vw, 2.5rem);
-  gap: clamp(1.25rem, 2.5vw, 2rem);
+.mlm-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
+
+/* Only the public landing opts into the released editorial preset. The older
+ * component recipes need these role bindings; docs keep their Paper styles. */
+.textbutler-marketing {
+  --gutter: var(--hraness-marketing-gutter);
+  --measure: var(--hraness-marketing-content-measure);
 }
-.mlm-marketing-hero .hraness-marketing-hero__copy { gap: 1rem; }
-.mlm-marketing-hero .hraness-marketing-hero__heading {
-  max-inline-size: 20ch;
-  font-size: clamp(2.3rem, 4.5vw, 3.75rem);
+.textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
+.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; }
+.textbutler-marketing .hraness-marketing-header__brand { font-size: 1.125rem; }
+.textbutler-marketing .hraness-marketing-header__nav a { font-size: 0.875rem; }
+.textbutler-marketing .hraness-marketing-action { padding: 0.625rem 1rem; font-size: 0.875rem; }
+.textbutler-marketing .hraness-marketing-hero__summary { font-size: var(--hraness-paper-summary-size); }
+.textbutler-marketing .hraness-marketing-hero__frame { inline-size: min(100%, 74rem); margin-inline: auto; }
+.textbutler-marketing .hraness-marketing-proof-frame { border-radius: 0.5rem; }
+.textbutler-marketing .hraness-marketing-proof-frame__caption { background: var(--surface); color: var(--muted); }
+.textbutler-marketing :where(section[id]) { scroll-margin-block-start: 6rem; }
+@media (max-width: 760px) {
+  .textbutler-marketing .hraness-marketing-hero { gap: 2rem; }
+  .textbutler-marketing .hraness-marketing-hero__summary { max-inline-size: 34ch; font-size: 1rem; }
+  .textbutler-marketing .hraness-marketing-header__actions { margin-inline-start: auto; }
+  .textbutler-marketing .hraness-marketing-action { min-block-size: 2.75rem; }
+  .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 9rem; }
 }
 
 :where(
@@ -118,7 +100,7 @@ body {
   .mlm-install-note,
   .mlm-section-link
 ) a {
-  color: var(--accent);
+  color: var(--primary);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
@@ -130,9 +112,6 @@ body {
 }
 
 /* The illustrative draft and its plain-language reading notes. */
-.mlm-marketing-hero .hraness-marketing-hero__frame {
-  margin-block-start: clamp(0rem, 1vw, 0.5rem);
-}
 .mlm-frame {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -170,7 +149,7 @@ body {
 .bubble-out {
   align-self: flex-end;
   border-end-end-radius: 0.35rem;
-  background: var(--accent);
+  background: var(--primary);
   color: var(--accent-ink);
 }
 .bubble-short { margin-top: -0.15rem; }
@@ -193,9 +172,9 @@ body {
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--primary);
 }
-.source-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.source-details > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .source-details > summary:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 .visually-hidden {
   position: absolute;
@@ -254,8 +233,8 @@ body {
   width: 48px;
   height: 48px;
   border-radius: 0.625rem;
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-  color: var(--accent);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
 }
 .source-kind {
   margin: 0 0 0.15rem;
@@ -280,9 +259,9 @@ body {
   font-weight: 500;
 }
 .source-badges span:first-child {
-  border-color: color-mix(in oklch, var(--accent) 32%, transparent);
-  background: color-mix(in oklch, var(--accent) 10%, transparent);
-  color: var(--accent);
+  border-color: color-mix(in oklch, var(--primary) 32%, transparent);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
 }
 .source-summary {
   margin: 1rem 0 0;
@@ -392,8 +371,8 @@ nav.message-like-me-ask-ai {
   --ui-foreground: var(--ink);
   --ui-muted: var(--paper-deep);
   --ui-muted-foreground: var(--muted);
-  --ui-primary: var(--accent);
-  --ui-ring: var(--accent);
+  --ui-primary: var(--primary);
+  --ui-ring: var(--primary);
 
   border-top: 1px solid var(--line);
   font-size: inherit;
@@ -470,7 +449,7 @@ nav.message-like-me-ask-ai + footer {
 }
 .section-number {
   margin: 0;
-  color: var(--accent);
+  color: var(--primary);
   font-family: var(--font-mono);
   font-size: 0.78rem;
   font-weight: 500;
@@ -508,7 +487,7 @@ nav.message-like-me-ask-ai + footer {
 }
 .document-page a:not(.button),
 .not-found a:not(.button) {
-  color: var(--accent);
+  color: var(--primary);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
@@ -727,8 +706,8 @@ nav.message-like-me-ask-ai + footer {
   text-decoration: none;
 }
 .button-primary {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--primary);
+  background: var(--primary);
   color: var(--accent-ink);
 }
 
@@ -820,4 +799,56 @@ nav.message-like-me-ask-ai + footer {
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+}
+
+/* Pinned v0.4 marketing recipes predate configurable heading sizes. Keep this
+ * small adapter local so the component runtime can upgrade independently. */
+[data-hraness-theme="paper"] :where(.hraness-marketing-hero__heading, .hraness-marketing-cta__heading):not(.textbutler-marketing *) {
+  font-size: var(--hraness-paper-heading-size);
+  line-height: var(--hraness-paper-heading-leading);
+  letter-spacing: var(--hraness-paper-heading-tracking);
+}
+[data-hraness-theme="paper"] :where(.hraness-marketing-section__heading, .hraness-marketing-install__heading, .hraness-marketing-primitives__heading, .hraness-marketing-interfaces__heading, .hraness-marketing-trust__heading, .hraness-marketing-quotes__heading, .hraness-marketing-pricing__heading, .hraness-marketing-questions__heading, .hraness-marketing-maker__heading):not(.textbutler-marketing *) {
+  font-size: var(--hraness-paper-section-heading-size);
+  line-height: var(--hraness-paper-heading-leading);
+}
+[data-hraness-theme="paper"] .hraness-marketing-hero__summary:not(.textbutler-marketing *) {
+  font-size: var(--hraness-paper-summary-size);
+}
+
+/* Textbutler expands the incumbent Paper surface with a contact workspace. */
+.textbutler-page .hraness-marketing-hero__eyebrow:empty,
+.textbutler-page .hraness-marketing-section__label:empty,
+.textbutler-page .hraness-marketing-label:empty { display: none; }
+.butler-frame { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
+.butler-context { padding: clamp(1.25rem, 3vw, 2rem); border-inline-end: 1px solid var(--line); background: var(--paper-deep); }
+.butler-context-heading { display: flex; align-items: center; gap: 0.8rem; }
+.contact-initials { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; flex: none; border-radius: 50%; background: var(--surface); color: var(--ink); font-weight: 500; }
+.butler-context-heading strong { display: block; font-size: 1.05rem; font-weight: 600; }
+.butler-context-heading div > span { display: block; margin-top: 0.1rem; color: var(--muted); font-size: 0.85rem; }
+.context-files { display: grid; gap: 0.9rem; margin: 1.75rem 0; }
+.context-files dt { font: 500 0.8rem var(--font-mono); }
+.context-files dd { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.4; }
+.butler-context > p, .butler-disclosure-note { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+.butler-disclosure-note { margin-top: 1.25rem; max-width: 30ch; }
+.workspace-example { min-width: 0; }
+.workspace-example pre { margin: 0; padding: 1.5rem 1.75rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--surface); font: 0.9rem/1.8 var(--font-mono); overflow: auto; }
+.workspace-example p { color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
+.workspace-example a, .development-status a, .legacy-note a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.16em; }
+.architecture-rows { margin: 0; }
+.architecture-rows > div { display: grid; grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr); gap: 2rem; padding-block: 1.35rem; border-block-start: 1px solid var(--line); }
+.architecture-rows dt { font-size: 1.1rem; font-weight: 600; }
+.architecture-rows dd { margin: 0; color: var(--muted); max-width: 66ch; }
+.development-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 4rem); }
+.development-status > div { border-block-start: 1px solid var(--line); padding-block-start: 1.5rem; }
+.development-status h3 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.development-status p { margin-block: 0.75rem 1rem; color: var(--muted); max-width: 55ch; }
+.legacy-note { margin-block: 1.5rem 0; padding-block-start: 1.5rem; border-block-start: 1px solid var(--line); color: var(--muted); font-size: 0.95rem; max-width: 75ch; }
+.document-page > .legacy-note { margin-bottom: 1.5rem; }
+::selection { background: var(--primary); color: var(--primary-foreground); }
+html { scrollbar-color: var(--muted) var(--paper); }
+@media (max-width: 48rem) {
+  .butler-frame, .development-status { grid-template-columns: minmax(0, 1fr); }
+  .butler-context { border-inline-end: 0; border-block-end: 1px solid var(--line); }
+  .architecture-rows > div { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
 }

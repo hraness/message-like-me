@@ -17,6 +17,8 @@ const PRODUCTION_CONTROL_EPOCH_DOMAIN = "message-like-me/control-epoch/productio
 const CANARY_CONTROL_EPOCH_DOMAIN = "message-like-me/control-epoch/canary/v2";
 const PRODUCTION_CONTROL_EPOCH_SCHEMA = "message-like-me-production-control-epoch-v2";
 const CANARY_CONTROL_EPOCH_SCHEMA = "message-like-me-canary-control-epoch-v2";
+const SITE_CONTROL_EPOCH_DOMAIN = "textbutler/control-epoch/site/v1";
+const SITE_CONTROL_EPOCH_SCHEMA = "textbutler-site-control-epoch-v1";
 export const CONTROL_EPOCH_CANARY_NO_TAG = "no-tag";
 const MAXIMUM_GIT_OUTPUT_BYTES = 256 * 1024;
 const GIT_TIMEOUT_MILLISECONDS = 120_000;
@@ -380,6 +382,9 @@ function exactPositiveInteger(value, label) {
 }
 
 function controlEpochBoundary(mode) {
+  if (mode === "site") {
+    return Object.freeze({ domain: SITE_CONTROL_EPOCH_DOMAIN, protectedRef: PRODUCTION_REF, schema: SITE_CONTROL_EPOCH_SCHEMA });
+  }
   if (mode === "production") {
     return Object.freeze({
       domain: PRODUCTION_CONTROL_EPOCH_DOMAIN,
@@ -398,6 +403,7 @@ function controlEpochBoundary(mode) {
 }
 
 function controlEpochModeForReceipt(receipt) {
+  if (receipt.schema === SITE_CONTROL_EPOCH_SCHEMA && receipt.domain === SITE_CONTROL_EPOCH_DOMAIN && receipt.protectedRef === PRODUCTION_REF) return "site";
   if (
     receipt.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
     && receipt.domain === PRODUCTION_CONTROL_EPOCH_DOMAIN
@@ -508,8 +514,8 @@ function normalizedControlEpochReceipt(value) {
   const previousSha = expectSha(receipt.previousSha, "control-epoch receipt previousSha");
   const targetSha = expectSha(receipt.targetSha, "control-epoch receipt targetSha");
   const workflowSha = expectSha(receipt.workflowSha, "control-epoch receipt workflowSha");
-  const tag = exactString(receipt.tag, "control-epoch receipt tag");
-  if (mode === "production" ? !STABLE_TAG.test(tag) : tag !== CONTROL_EPOCH_CANARY_NO_TAG) {
+  const tag = mode === "site" ? receipt.tag : exactString(receipt.tag, "control-epoch receipt tag");
+  if (mode === "site" ? tag !== null : mode === "production" ? !STABLE_TAG.test(tag) : tag !== CONTROL_EPOCH_CANARY_NO_TAG) {
     fail("control-epoch receipt has the wrong production tag or canary no-tag sentinel.");
   }
   if (!Array.isArray(receipt.inventory) || receipt.inventory.length < 2 || receipt.inventory.length > MAXIMUM_WORKFLOW_RANGE_COMMITS + 1) {
@@ -567,6 +573,10 @@ function normalizedControlEpochReceipt(value) {
 }
 
 function exactControlEpochTag(mode, tag, targetSha, git) {
+  if (mode === "site") {
+    if (tag !== null) fail("Site control epoch cannot claim a package release tag.");
+    return null;
+  }
   if (mode === "canary") {
     if (tag !== CONTROL_EPOCH_CANARY_NO_TAG) {
       fail("Canary control epoch requires the exact no-tag sentinel.");
@@ -634,7 +644,7 @@ function inspectControlEpochCoordinate({
   if (range.git(["merge-base", "--is-ancestor", target, source]).exitCode !== 0) {
     fail("control-epoch target is not in current workflow-source history.");
   }
-  if (mode === "canary" && target !== source) {
+  if ((mode === "canary" || mode === "site") && target !== source) {
     fail("canary control epoch target is not the current workflow source SHA.");
   }
   const exactTag = exactControlEpochTag(mode, tag, target, range.git);
@@ -735,6 +745,22 @@ export function verifyProductionWorkflowAdmission(input) {
   });
 }
 
+export function verifySiteWorkflowAdmission(input) {
+  return verifyProtectedWorkflowAdmission({ ...input, mode: "site", protectedRef: PRODUCTION_REF, tag: null });
+}
+
+export function assertSiteWorkflowAdmissionReceipt(value, expected) {
+  if (isRecord(value) && value.schema === SITE_CONTROL_EPOCH_SCHEMA) {
+    const receipt = normalizedControlEpochReceipt(value);
+    if (controlEpochModeForReceipt(receipt) !== "site" || receipt.previousSha !== expected.previousSha ||
+        receipt.targetSha !== expected.targetSha || receipt.workflowSha !== expected.targetSha || receipt.tag !== null) {
+      fail("site control epoch does not bind the exact current-main transition.");
+    }
+    return receipt;
+  }
+  return assertWorkflowRangeReceipt(value, { previousSha: expected.previousSha, verifiedSha: expected.targetSha });
+}
+
 export function verifyCanaryWorkflowAdmission(input) {
   return verifyProtectedWorkflowAdmission({
     ...input,
@@ -801,6 +827,7 @@ export function encodeWorkflowAdmissionReceipt(value) {
   if (isRecord(value) && (
     value.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
     || value.schema === CANARY_CONTROL_EPOCH_SCHEMA
+    || value.schema === SITE_CONTROL_EPOCH_SCHEMA
   )) return encodeControlEpochReceipt(value);
   return encodeWorkflowRangeReceipt(value);
 }
@@ -821,6 +848,7 @@ export function decodeWorkflowAdmissionReceipt(value) {
   return isRecord(decoded) && (
     decoded.schema === PRODUCTION_CONTROL_EPOCH_SCHEMA
     || decoded.schema === CANARY_CONTROL_EPOCH_SCHEMA
+    || decoded.schema === SITE_CONTROL_EPOCH_SCHEMA
   )
     ? decodeControlEpochReceipt(value)
     : decodeWorkflowRangeReceipt(value);

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.9 (2026-09-10)
+
+- Use the shared Paper theme on the informational website, with warm neutral surfaces, compact Nebula Sans headings, and a blue action color in light and dark appearances.
+- Verify the theme snapshot's immutable source and file digests independently of the existing component package versions.
+- Route installation to the exact public `@hraness/message-like-me@0.8.9` npm package after release admission, with the same reviewed bytes mirrored in the immutable GitHub Release. CLI behavior and private data boundaries remain unchanged.
+
+## 0.8.8 (2026-09-09)
+
+- Route installation to the exact public `@hraness/message-like-me@0.8.8` npm package after release admission, with the same reviewed bytes in the immutable GitHub Release.
+- Use Ghostget in current CLI options, SDK names, source guidance, and the public site. Keep the original Wrench options and exports as compatibility aliases.
+- Accept `ghostgetContext` when preparing a handoff while preserving the existing serialized handoff, receipt, contract hashes, and local history. Reject simultaneous context aliases.
+- Point Ghostget setup to its exact canonical GitHub Release archive.
+
 ## 0.8.7 (2026-09-09)
 
 - Make the exact public `@hraness/message-like-me@0.8.7` npm package the

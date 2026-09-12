@@ -1,6 +1,6 @@
 import { Effect, Exit, type Scope } from "effect";
 import { integerOption, parseArguments, rejectUnused } from "./args.ts";
-import { AGENTIC_MESSAGING_V1_LIMITS, AgenticMessagingV1ContractError, createAgentMessageHandoffV1, parseAgentMessageDraftV1, parseAgentMessageHandoffRequestV1, parseAgentMessageHandoffV1, parseWrenchMessagingContextBindingV1, wrenchMessagingTurnDigestV1 } from "./agentic-messaging-v1.ts";
+import { AGENTIC_MESSAGING_V1_LIMITS, AgenticMessagingV1ContractError, createAgentMessageHandoffV1, parseAgentMessageDraftV1, parseAgentMessageHandoffRequestV1, parseAgentMessageHandoffV1, parseGhostgetMessagingContextBindingV1, ghostgetMessagingTurnDigestV1 } from "./agentic-messaging-v1.ts";
 import { prettyJson, sha256 } from "./canonical-json.ts";
 import { HELP, handoffExpiry, metricOptions, canonicalTimestampOption, ensoulSubjectOption, compactMetrics, absolutePrivatePath } from "./command-input.ts";
 import { agenticContractFailure, commandFailure, usageFailure, type CommandFailure } from "./command-failure.ts";
@@ -563,21 +563,21 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
     }
     if (command === "handoff" && subcommand === "prepare" && identifier !== undefined) {
       rejectUnused(parsed, [
-        "data-dir", "request", "wrench-context", "draft", "output",
+        "data-dir", "request", "ghostget-context", "draft", "output",
       ], ["json"]);
       const requestPath = absolutePrivatePath(parsed.options.get("request"), "--request");
-      const wrenchContextPath = absolutePrivatePath(parsed.options.get("wrench-context"), "--wrench-context");
+      const ghostgetContextPath = absolutePrivatePath(parsed.options.get("ghostget-context"), "--ghostget-context");
       const draftPath = absolutePrivatePath(parsed.options.get("draft"), "--draft");
       const output = absolutePrivatePath(parsed.options.get("output"), "--output");
-      if (new Set([requestPath, wrenchContextPath, draftPath, output]).size !== 4) {
-        return yield* Effect.fail(commandFailure(new CliError("usage", "Handoff request, Wrench context, draft, and output paths must be different")));
+      if (new Set([requestPath, ghostgetContextPath, draftPath, output]).size !== 4) {
+        return yield* Effect.fail(commandFailure(new CliError("usage", "Handoff request, Ghostget context, draft, and output paths must be different")));
       }
       const request = yield* platform.readPrivateJson(requestPath, "Private handoff request file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
         Effect.flatMap((value) => Effect.try({ try: () => parseAgentMessageHandoffRequestV1(value), catch: commandFailure })),
         Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")),
       );
-      const wrenchContext = yield* platform.readPrivateJson(wrenchContextPath, "Private Wrench context file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
-        Effect.flatMap((value) => Effect.try({ try: () => parseWrenchMessagingContextBindingV1(value), catch: commandFailure })),
+      const ghostgetContext = yield* platform.readPrivateJson(ghostgetContextPath, "Private Ghostget context file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
+        Effect.flatMap((value) => Effect.try({ try: () => parseGhostgetMessagingContextBindingV1(value), catch: commandFailure })),
         Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")),
       );
       const draft = yield* platform.readPrivateJson(draftPath, "Private draft file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
@@ -585,13 +585,13 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
         Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private handoff input")),
       );
       const createdAt = (yield* platform.now);
-      if (wrenchContext.validatedAt > createdAt || wrenchContext.expiresAt <= createdAt) {
-        return yield* Effect.fail(commandFailure(new CliError("conflict", "The private Wrench context is not current; collect a fresh exact context")));
+      if (ghostgetContext.validatedAt > createdAt || ghostgetContext.expiresAt <= createdAt) {
+        return yield* Effect.fail(commandFailure(new CliError("conflict", "The private Ghostget context is not current; collect a fresh exact context")));
       }
       const context = (yield* platform.existingSession(parsed.options.get("data-dir")));
       yield* Effect.gen(function* () {
         const preparation = (yield* context.store.handoffPreparation(identifier, request.routeCandidateId));
-        const expiresAt = handoffExpiry(createdAt, wrenchContext.expiresAt, AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds);
+        const expiresAt = handoffExpiry(createdAt, ghostgetContext.expiresAt, AGENTIC_MESSAGING_V1_LIMITS.handoffLifetimeMilliseconds);
         const handoff = yield* Effect.try({ try: () => createAgentMessageHandoffV1({
           createdAt,
           expiresAt,
@@ -607,7 +607,7 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
             profileState: preparation.profileState,
             profileEvidenceRevision: preparation.profileEvidenceRevision,
           },
-          wrenchContext,
+          ghostgetContext,
           draft,
         }), catch: commandFailure });
         const audit = yield* artifacts.publishWithReceipt(output, prettyJson(handoff), context.store.recordPreparedHandoff(handoff), context.store.preparedHandoffReceiptStatus(handoff));
@@ -640,7 +640,7 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
         contextRefSha256: handoff.wrench.contextRefSha256,
         exactDataRevisionSha256: handoff.wrench.exactDataRevision,
         latestMessageRevisionSha256: handoff.wrench.latestMessageRevision,
-        turnDigest: wrenchMessagingTurnDigestV1(handoff),
+        turnDigest: ghostgetMessagingTurnDigestV1(handoff),
         partCount: handoff.turn.bubbles.length,
         createdAt: handoff.createdAt,
         expiresAt: handoff.expiresAt,
@@ -650,15 +650,15 @@ export function commandProgram(argv: readonly string[]): Effect.Effect<void, Com
       return;
     }
     if (command === "handoff" && subcommand === "record" && identifier !== undefined) {
-      rejectUnused(parsed, ["data-dir", "wrench-receipt"], ["json"]);
-      const receiptPath = absolutePrivatePath(parsed.options.get("wrench-receipt"), "--wrench-receipt");
-      const receipt = yield* platform.readPrivateJson(receiptPath, "Private Wrench receipt file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
-        Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private Wrench receipt file")),
+      rejectUnused(parsed, ["data-dir", "ghostget-receipt"], ["json"]);
+      const receiptPath = absolutePrivatePath(parsed.options.get("ghostget-receipt"), "--ghostget-receipt");
+      const receipt = yield* platform.readPrivateJson(receiptPath, "Private Ghostget receipt file", AGENTIC_MESSAGING_V1_LIMITS.privateJsonBytes).pipe(
+        Effect.mapError((failure) => agenticContractFailure(failure.cause, "Private Ghostget receipt file")),
       );
       const context = (yield* platform.existingSession(parsed.options.get("data-dir")));
       const audit = yield* context.store.recordHandoffReceipt(identifier, receipt).pipe(Effect.mapError((failure) =>
-        failure.cause instanceof AgenticMessagingV1ContractError ? agenticContractFailure(failure.cause, "Private Wrench receipt file") : failure));
-      yield* platform.emit(json, audit, `Recorded body-free Wrench audit for ${audit.handoffId}`);
+        failure.cause instanceof AgenticMessagingV1ContractError ? agenticContractFailure(failure.cause, "Private Ghostget receipt file") : failure));
+      yield* platform.emit(json, audit, `Recorded body-free Ghostget audit for ${audit.handoffId}`);
       return;
     }
     if (command === "handoffs" && subcommand === "show" && identifier !== undefined) {

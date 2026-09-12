@@ -24,8 +24,8 @@ following values are sensitive even when they do not contain an obvious name:
 - the per-install HMAC key and all normalized corpus records;
 - aggregate metrics, study packets, style profiles, drafting context, and
   unsent drafts;
-- opaque Wrench route and context references, private handoff files, and full
-  Wrench receipts before their body-free audit projection.
+- opaque Ghostget route and context references, private handoff files, and full
+  Ghostget receipts before their body-free audit projection.
 
 The default data root is
 `~/Library/Application Support/Message Like Me/` on macOS. The CLI creates
@@ -49,19 +49,19 @@ participant set. X archives are evidence-only. Handoff v1 also rejects group
 candidates, and an ambiguous direct-candidate inventory does not choose a
 route automatically.
 
-`handoff prepare` reads a mode-`0600`, singly linked route request, Wrench
+`handoff prepare` reads a mode-`0600`, singly linked route request, Ghostget
 context file, and draft file through stable file descriptors. A route candidate
 never appears in argv or stdout. It rejects symlinks,
 foreign ownership, broader permissions, file replacement, invalid UTF-8,
 unknown contract fields, unsupported contract hashes, stale context, controls,
 duplicate bubble IDs, and byte or count overages. The output is another
-explicit mode-`0600` file. Message text and raw Wrench route or context
+explicit mode-`0600` file. Message text and raw Ghostget route or context
 references never enter argv, ordinary stdout, diagnostics, or the SQLite audit
 table.
 
-The body-free Wrench receipt binding contains no raw route or context
+The body-free Ghostget receipt binding contains no raw route or context
 reference. Its pinned contract binds hashes of those references, the client
-intent, the exact ordered turn, and the private preview. The generic Wrench
+intent, the exact ordered turn, and the private preview. The generic Ghostget
 field is `clientIntentSha256`; Message Like Me sets it to the exact private
 handoff digest. The binding also carries its proven-prefix state and canonical
 receipt digest. The local handoff audit stores those hashes, counts,

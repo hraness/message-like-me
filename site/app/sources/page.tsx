@@ -15,14 +15,14 @@ import {
 } from '../_lib/site';
 
 export const metadata = pageMetadata({
-  title: 'Supported sources',
+  title: 'Legacy history sources',
   description:
-    'The exact Apple Messages, X archive, Beeper, native WhatsApp, and macOS Contacts inputs supported by Message Like Me.',
+    'Legacy Message Like Me history-reader inputs: the exact Apple Messages, X archive, Beeper, native WhatsApp, and macOS Contacts inputs supported by Message Like Me.',
   path: '/sources',
 });
 
 const beeperProducerSummary =
-  `Verified producer Wrench v${BEEPER_COMPATIBILITY.producerVersion} uses ` +
+  `Verified producer Ghostget v${BEEPER_COMPATIBILITY.producerVersion} uses ` +
   `${BEEPER_COMPATIBILITY.adapterId} adapter v${BEEPER_COMPATIBILITY.adapterVersion}. ` +
   `Its ${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations comprise ` +
   `${BEEPER_COMPATIBILITY.pinnedCliOperationCount} through one pinned Beeper CLI ` +
@@ -37,7 +37,7 @@ const beeperProvenanceSummary =
   'provenance only and never overrides the executable runtime identity.';
 
 const whatsappProducerSummary =
-  `Wrench v${WHATSAPP_COMPATIBILITY.producerVersion} owns official ` +
+  `Ghostget v${WHATSAPP_COMPATIBILITY.producerVersion} owns official ` +
   `${WHATSAPP_COMPATIBILITY.providerCli} v${WHATSAPP_COMPATIBILITY.providerCliVersion}, ` +
   'linked-device authentication, synchronization, and the bounded local export. ' +
   `It omits reaction-shaped rows with ${WHATSAPP_COMPATIBILITY.reactionWarning} ` +
@@ -49,8 +49,8 @@ export default function SourcesPage() {
       <SiteHeader />
       <main className="document-page sources-page" id="main-content" tabIndex={-1}>
         <header className="document-hero sources-hero">
-          <p className="eyebrow">Supported sources</p>
-          <h1>Know exactly what enters the evidence.</h1>
+          <h1>Legacy history sources</h1>
+          <p className="legacy-note">These are the published Message Like Me history readers. Their import capabilities are separate from Textbutler’s planned live Messages transport, which remains disabled pending qualification.</p>
           <p>
             Message Like Me supports {MESSAGING_HISTORY_SOURCES.length} messaging-history
             inputs and one optional Contacts enrichment source. The messaging inputs
@@ -62,7 +62,7 @@ export default function SourcesPage() {
 
         <section className="source-directory" aria-labelledby="source-directory-title">
           <div className="section-heading">
-            <p className="eyebrow">Current support in v{SOFTWARE_VERSION}</p>
+            <p className="eyebrow">Legacy reader support in v{SOFTWARE_VERSION}</p>
             <h2 id="source-directory-title">The source is part of the evidence.</h2>
             <p>
               These labels describe observed inputs—not account connections, complete
@@ -78,10 +78,10 @@ export default function SourcesPage() {
 
         <section className="beeper-workflow" aria-labelledby="beeper-workflow-title">
           <div className="beeper-workflow-intro">
-            <p className="eyebrow">Beeper via Wrench</p>
+            <p className="eyebrow">Beeper via Ghostget</p>
             <h2 id="beeper-workflow-title">Bring Beeper history into the same private evidence corpus.</h2>
             <p>
-              Wrench turns bounded Beeper reads into a finished private bundle. Message
+              Ghostget turns bounded Beeper reads into a finished private bundle. Message
               Like Me verifies that bundle into the same local corpus as its other
               read-only sources. The two tools do not share credentials or a live session.
             </p>
@@ -90,10 +90,10 @@ export default function SourcesPage() {
             <li>
               <span aria-hidden="true">01</span>
               <div>
-                <h3>Wrench writes the private bundle.</h3>
+                <h3>Ghostget writes the private bundle.</h3>
                 <p>{beeperProducerSummary}</p>
                 <p>{beeperProvenanceSummary}</p>
-                <code className="workflow-command">wrench beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle</code>
+                <code className="workflow-command">ghostget beeper export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/beeper-bundle</code>
               </div>
             </li>
             <li>
@@ -112,25 +112,25 @@ export default function SourcesPage() {
           </ol>
           <aside className="beeper-boundary" aria-label="Beeper operation boundary">
             <strong>What this does not mean:</strong> Message Like Me receives no provider
-            credential or live session, never calls Wrench or a Beeper operation, and never
-            sends. It owns zero of Wrench’s {BEEPER_COMPATIBILITY.reviewedOperationCount}{' '}
+            credential or live session, never calls Ghostget or a Beeper operation, and never
+            sends. It owns zero of Ghostget’s {BEEPER_COMPATIBILITY.reviewedOperationCount}{' '}
             reviewed Beeper operations and receives only the finished bundle. The command above
-            enters Wrench’s separate internal bounded export; it does not expose Beeper’s
+            enters Ghostget’s separate internal bounded export; it does not expose Beeper’s
             raw export arguments or establish complete-history coverage.
           </aside>
           <div className="source-links">
-            <a href="https://wrench.rip/providers/beeper/">Inspect Wrench’s Beeper surface ↗</a>
+            <a href="https://ghostget.com/providers/beeper/">Inspect Ghostget’s Beeper surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v1.md`}>Read the versioned bundle contract ↗</a>
-            <Link href="/docs">Open Message Like Me docs →</Link>
+            <Link href="/docs">Open the project docs →</Link>
           </div>
         </section>
 
         <section className="beeper-workflow" aria-labelledby="whatsapp-workflow-title">
           <div className="beeper-workflow-intro">
-            <p className="eyebrow">Native WhatsApp via Wrench</p>
+            <p className="eyebrow">Native WhatsApp via Ghostget</p>
             <h2 id="whatsapp-workflow-title">Exact JIDs in. No provider session crosses over.</h2>
             <p>
-              Wrench owns Wacli and the live linked-device boundary. Message Like Me
+              Ghostget owns Wacli and the live linked-device boundary. Message Like Me
               receives only one finished private v2 directory and performs no process,
               authentication, synchronization, network, preview, or send operation.
             </p>
@@ -139,9 +139,9 @@ export default function SourcesPage() {
             <li>
               <span aria-hidden="true">01</span>
               <div>
-                <h3>Wrench writes one native account observation.</h3>
+                <h3>Ghostget writes one native account observation.</h3>
                 <p>{whatsappProducerSummary}</p>
-                <code className="workflow-command">wrench whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle</code>
+                <code className="workflow-command">ghostget whatsapp export-message-like-me --auth &lt;id&gt; --output /absolute/private/path/whatsapp-bundle</code>
               </div>
             </li>
             <li>
@@ -167,9 +167,9 @@ export default function SourcesPage() {
             reactions.
           </aside>
           <div className="source-links">
-            <a href="https://wrench.rip/providers/whatsapp/">Inspect Wrench’s WhatsApp surface ↗</a>
+            <a href="https://ghostget.com/providers/whatsapp/">Inspect Ghostget’s WhatsApp surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v2.md`}>Read the native bundle contract ↗</a>
-            <Link href="/docs">Open Message Like Me docs →</Link>
+            <Link href="/docs">Open the project docs →</Link>
           </div>
         </section>
 

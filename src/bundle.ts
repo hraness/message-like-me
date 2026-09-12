@@ -980,7 +980,7 @@ function normalizeBundle(
   return Object.freeze(result);
 }
 
-/** Read one complete private Wrench-produced replacement-snapshot bundle. */
+/** Read one complete private Ghostget-produced replacement-snapshot bundle. */
 export async function readMessageBundle(
   path: string,
   options: Readonly<{ hmacKey: string | Uint8Array }>,

@@ -1,13 +1,14 @@
 {
   "name": "message-like-me-site",
-  "version": "0.8.7",
+  "version": "0.8.9",
   "private": true,
   "engines": {
     "node": "24.x"
   },
   "scripts": {
+    "check:theme": "bun scripts/check-paper-theme.mjs",
     "sync:readme": "bun scripts/sync-readme.ts",
-    "test": "bun test scripts",
+    "test": "bun run check:theme && bun test scripts",
     "dev": "bun run sync:readme && next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
