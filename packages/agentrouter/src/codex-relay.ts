@@ -176,7 +176,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     if (body.reasoning != null) {
       const reasoning = requestObject(body.reasoning, ["effort", "summary", "context"], "REASONING");
       codexAssert(reasoning.effort === undefined || ["none", "minimal", "low", "medium", "high", "xhigh"].includes(String(reasoning.effort)), "CODEX_REASONING_EFFORT_INVALID");
-      if (task?.settings.model.reasoningEffort !== null) codexAssert(reasoning.effort === task?.settings.model.reasoningEffort, "CODEX_TASK_REASONING_MISMATCH");
+      if (task && task.settings.model.reasoningEffort !== null) codexAssert(reasoning.effort === task.settings.model.reasoningEffort, "CODEX_TASK_REASONING_MISMATCH");
       codexAssert(reasoning.summary === undefined || ["auto", "concise", "detailed", "none"].includes(String(reasoning.summary)), "CODEX_REASONING_SUMMARY_INVALID");
       codexAssert(reasoning.context === undefined || ["auto", "current_turn", "all_turns"].includes(String(reasoning.context)), "CODEX_REASONING_CONTEXT_INVALID");
     }
