@@ -127,6 +127,10 @@ try {
         const style = getComputedStyle(heading);
         const headerInner = document.querySelector('.hraness-marketing-header__inner');
         const field = document.querySelector('.hraness-marketing-field');
+        const hero = document.querySelector('.hraness-marketing-hero');
+        const summary = document.querySelector('.hraness-marketing-hero__summary');
+        const workspace = document.querySelector('.workspace-example pre');
+        const frame = document.querySelector('.hraness-marketing-proof-frame');
         const layers = [];
         const visit = (rules) => {
           for (const rule of rules) {
@@ -139,6 +143,7 @@ try {
         return { paper: document.documentElement.dataset.hranessTheme,
           background: getComputedStyle(document.body).backgroundColor,
           bodyFont: getComputedStyle(document.body).fontFamily,
+          bodyInk: getComputedStyle(document.body).color,
           coarse: matchMedia('(pointer: coarse)').matches,
           overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth,
           forms: document.querySelectorAll('form,input,textarea').length,
@@ -148,7 +153,21 @@ try {
           preset: document.querySelector('[data-hraness-marketing-preset]')?.getAttribute('data-hraness-marketing-preset') ?? null,
           headingFont: style.fontFamily, headingSize: Number.parseFloat(style.fontSize),
           headingLeading: Number.parseFloat(style.lineHeight), headingWeight: style.fontWeight,
+          headingTracking: Number.parseFloat(style.letterSpacing),
           headerMinHeight: headerInner && getComputedStyle(headerInner).minHeight,
+          headerWidth: headerInner?.getBoundingClientRect().width,
+          gutter: headerInner && getComputedStyle(headerInner).paddingInlineStart,
+          heroPadding: hero && [getComputedStyle(hero).paddingBlockStart, getComputedStyle(hero).paddingBlockEnd],
+          summarySize: summary && Number.parseFloat(getComputedStyle(summary).fontSize),
+          summaryLeading: summary && Number.parseFloat(getComputedStyle(summary).lineHeight),
+          workspaceInk: workspace && getComputedStyle(workspace).color,
+          workspaceBackground: workspace && getComputedStyle(workspace).backgroundColor,
+          frameBackground: frame && getComputedStyle(frame).backgroundColor,
+          sections: [...document.querySelectorAll('.textbutler-marketing h2')].map((element) => {
+            const style = getComputedStyle(element);
+            return { font: style.fontFamily, weight: style.fontWeight, size: Number.parseFloat(style.fontSize),
+              leading: Number.parseFloat(style.lineHeight), tracking: Number.parseFloat(style.letterSpacing) };
+          }),
           fieldBackground: field && getComputedStyle(field).backgroundImage,
           actionHeights: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => action.getBoundingClientRect().height),
           actionRadii: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => getComputedStyle(action).borderRadius),

@@ -50,11 +50,17 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     forms: 0, headers: 1, footers: 1, askAi: 1, preset: 'editorial',
     layers: ['components.hraness-ui.priority1', 'components.hraness-design-kit.priority1'],
     fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }],
-    headingSize: 64, headingLeading: 67.84, headingWeight: '400', headerMinHeight: '72px',
+    headingSize: 64, headingLeading: 67.84, headingTracking: -1.6, headingWeight: '400', headerMinHeight: '72px',
+    headerWidth: 1216, gutter: '32px', heroPadding: ['56px', '64px'],
+    sections: Array.from({ length: 7 }, () => ({ font: '"Instrument Serif", serif', weight: '400', size: 52, leading: 56.16, tracking: -1.04 })),
+    summarySize: 17, summaryLeading: 27.2, workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
+    workspaceBackground: 'rgb(255, 253, 249)', frameBackground: 'rgb(255, 253, 249)',
     actionHeights: [42, 42, 42, 42, 42], actionRadii: ['4px'], fieldBackground: 'linear-gradient(red, blue)' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
   for (const change of [{ layers: [] }, { renderedFonts: [] }, { fontWeights: [] }, { forms: 1 },
-    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] }]) {
+    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] },
+    { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { summaryLeading: 24.65 },
+    { heroPadding: ['112px', '72px'] }, { gutter: '20px' }]) {
     expect(() => assertPresentation({ ...valid, ...change }, sample)).toThrow();
   }
 });

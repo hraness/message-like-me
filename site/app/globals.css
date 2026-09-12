@@ -68,18 +68,42 @@ body {
 
 .mlm-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
 
-/* Only the public landing opts into the released editorial preset. The older
- * component recipes need these role bindings; docs keep their Paper styles. */
+/* Only the public landing opts into the released editorial preset. Compiled
+ * v0.6.3 atoms outrank the snapshot's legacy layer, so bridge its role variables
+ * here without changing the immutable snapshot. Docs keep their Paper styles. */
 .textbutler-marketing {
   --gutter: var(--hraness-marketing-gutter);
   --measure: var(--hraness-marketing-content-measure);
 }
 .textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
-.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; }
+.textbutler-marketing .hraness-marketing-header {
+  background-color: var(--hraness-marketing-header-background);
+  -webkit-backdrop-filter: var(--hraness-marketing-header-backdrop);
+  backdrop-filter: var(--hraness-marketing-header-backdrop);
+}
+.textbutler-marketing .hraness-marketing-header__inner { min-block-size: var(--hraness-marketing-header-height); }
+.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; padding-block: var(--hraness-marketing-hero-space); }
+.textbutler-marketing .hraness-marketing-hero__heading {
+  font-size: var(--hraness-marketing-h1-size);
+  line-height: var(--hraness-marketing-h1-leading);
+  letter-spacing: var(--hraness-marketing-h1-tracking);
+}
+.textbutler-marketing :where(.hraness-marketing-section__heading, .hraness-marketing-trust__heading, .hraness-marketing-questions__heading, .hraness-marketing-cta__heading) {
+  font-size: var(--hraness-marketing-h2-size);
+  line-height: var(--hraness-marketing-h2-leading);
+  letter-spacing: var(--hraness-marketing-h2-tracking);
+}
 .textbutler-marketing .hraness-marketing-header__brand { font-size: 1.125rem; }
 .textbutler-marketing .hraness-marketing-header__nav a { font-size: 0.875rem; }
-.textbutler-marketing .hraness-marketing-action { padding: 0.625rem 1rem; font-size: 0.875rem; }
-.textbutler-marketing .hraness-marketing-hero__summary { font-size: var(--hraness-paper-summary-size); }
+.textbutler-marketing .hraness-marketing-action {
+  min-block-size: var(--hraness-marketing-action-height);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+}
+.textbutler-marketing .hraness-marketing-hero__summary {
+  font-size: var(--hraness-paper-summary-size);
+  line-height: var(--hraness-marketing-summary-leading);
+}
 .textbutler-marketing .hraness-marketing-hero__frame { inline-size: min(100%, 74rem); margin-inline: auto; }
 .textbutler-marketing .hraness-marketing-proof-frame { border-radius: 0.5rem; }
 .textbutler-marketing .hraness-marketing-proof-frame__caption { background: var(--surface); color: var(--muted); }
@@ -831,7 +855,7 @@ nav.message-like-me-ask-ai + footer {
 .butler-context > p, .butler-disclosure-note { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
 .butler-disclosure-note { margin-top: 1.25rem; max-width: 30ch; }
 .workspace-example { min-width: 0; }
-.workspace-example pre { margin: 0; padding: 1.5rem 1.75rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--surface); font: 0.9rem/1.8 var(--font-mono); overflow: auto; }
+.workspace-example pre { margin: 0; padding: 1.5rem 1.75rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--surface); color: var(--ink); font: 0.9rem/1.8 var(--font-mono); overflow: auto; }
 .workspace-example p { color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
 .workspace-example a, .development-status a, .legacy-note a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.16em; }
 .architecture-rows { margin: 0; }
