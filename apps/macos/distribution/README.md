@@ -10,8 +10,8 @@ memory are preserved. Installation does not qualify or activate message sending.
 
 This directory prepares an independent desktop artifact. It does not invoke the
 legacy `v*` package release or advance the website production ref. The intended
-desktop coordinate is `desktop-v0.1.0-macos-arm64`, with assets
-`Textbutler-0.1.0-macos-arm64.zip`, `desktop-manifest.json`, `SHA256SUMS`, and
+desktop coordinate is `desktop-v0.1.1-macos-arm64`, with assets
+`Textbutler-0.1.1-macos-arm64.zip`, `desktop-manifest.json`, `SHA256SUMS`, and
 GitHub artifact provenance. A source build or ad hoc signature is not a signed
 release. Do not advertise a download until its verified publication exists.
 
@@ -107,7 +107,7 @@ environment reviewers. Read the registered numeric ID of
 workflow is bound to repository ID `1342143606` and owner actor ID `894119`.
 
 After complete source CI succeeds for unchanged current main, create the direct
-tag `desktop-v0.1.0-macos-arm64` at that exact commit. Dispatch the workflow from
+tag `desktop-v0.1.1-macos-arm64` at that exact commit. Dispatch the workflow from
 `main` with `tag`, `ci_run_id`, and `ci_run_attempt`. The code revalidates main,
 tag, current CI attempt and both required jobs at each authority boundary. The
 desktop tag is independent of the legacy `v*` npm/package release. Do not advance
