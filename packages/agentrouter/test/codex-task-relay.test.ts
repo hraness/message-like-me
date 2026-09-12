@@ -34,6 +34,7 @@ test("task relay binds generic profile, instructions, effort and service tier an
         include: [], text: { verbosity: "low" } }) });
     expect(response.status).toBe(200);
     expect(relay.resultText()).toBe("A retained finding.");
+    relay.observeFinal("A retained finding.");
     expect(relay.result()).toBe("A retained finding.");
     expect(relay.usage()).toEqual({ inputTokens: 31, outputTokens: 7, totalTokens: 38 });
     expect(received[0]).toMatchObject({ model, instructions: settings.instructions.base, service_tier: "default" });
