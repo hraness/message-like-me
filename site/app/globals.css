@@ -7,6 +7,7 @@
  * bundler load it first and the preflight would override the grammar. */
 @import '@hraness/design-kit/product-marketing.css';
 @import '../styles/vendor/hraness-paper/paper-theme.css';
+@import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
 
 /* Product roles alias the shared Paper theme. Message examples retain their
  * incoming/outgoing distinction without a separate site color system. */
@@ -60,7 +61,7 @@ body {
   --hraness-marketing-inverse: var(--inverse);
   --hraness-marketing-inverse-ink: var(--inverse-foreground);
   --hraness-marketing-text-font: var(--font-text);
-  --hraness-marketing-heading-font: var(--font-text);
+  --hraness-marketing-heading-font: var(--hraness-marketing-display-font, var(--font-text));
   --hraness-marketing-mono-font: var(--font-mono);
 }
 
@@ -68,15 +69,30 @@ body {
   padding-block-end: clamp(1rem, 4vw, 2.5rem);
 }
 
-.mlm-marketing-hero {
-  --hraness-marketing-copy-measure: 38rem;
-  padding-block-start: clamp(1.5rem, 3vw, 2.5rem);
-  gap: clamp(1.25rem, 2.5vw, 2rem);
+.mlm-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
+
+/* Only the public landing opts into the released editorial preset. The older
+ * component recipes need these role bindings; docs keep their Paper styles. */
+.textbutler-marketing {
+  --gutter: var(--hraness-marketing-gutter);
+  --measure: var(--hraness-marketing-content-measure);
 }
-.mlm-marketing-hero .hraness-marketing-hero__copy { gap: 1rem; }
-.mlm-marketing-hero .hraness-marketing-hero__heading {
-  max-inline-size: 20ch;
-  font-size: var(--hraness-paper-heading-size);
+.textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
+.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; }
+.textbutler-marketing .hraness-marketing-header__brand { font-size: 1.125rem; }
+.textbutler-marketing .hraness-marketing-header__nav a { font-size: 0.875rem; }
+.textbutler-marketing .hraness-marketing-action { padding: 0.625rem 1rem; font-size: 0.875rem; }
+.textbutler-marketing .hraness-marketing-hero__summary { font-size: var(--hraness-paper-summary-size); }
+.textbutler-marketing .hraness-marketing-hero__frame { inline-size: min(100%, 74rem); margin-inline: auto; }
+.textbutler-marketing .hraness-marketing-proof-frame { border-radius: 0.5rem; }
+.textbutler-marketing .hraness-marketing-proof-frame__caption { background: var(--surface); color: var(--muted); }
+.textbutler-marketing :where(section[id]) { scroll-margin-block-start: 6rem; }
+@media (max-width: 760px) {
+  .textbutler-marketing .hraness-marketing-hero { gap: 2rem; }
+  .textbutler-marketing .hraness-marketing-hero__summary { max-inline-size: 34ch; font-size: 1rem; }
+  .textbutler-marketing .hraness-marketing-header__actions { margin-inline-start: auto; }
+  .textbutler-marketing .hraness-marketing-action { min-block-size: 2.75rem; }
+  .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 9rem; }
 }
 
 :where(
@@ -98,9 +114,6 @@ body {
 }
 
 /* The illustrative draft and its plain-language reading notes. */
-.mlm-marketing-hero .hraness-marketing-hero__frame {
-  margin-block-start: clamp(0rem, 1vw, 0.5rem);
-}
 .mlm-frame {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -792,16 +805,16 @@ nav.message-like-me-ask-ai + footer {
 
 /* Pinned v0.4 marketing recipes predate configurable heading sizes. Keep this
  * small adapter local so the component runtime can upgrade independently. */
-[data-hraness-theme="paper"] :where(.hraness-marketing-hero__heading, .hraness-marketing-cta__heading) {
+[data-hraness-theme="paper"] :where(.hraness-marketing-hero__heading, .hraness-marketing-cta__heading):not(.textbutler-marketing *) {
   font-size: var(--hraness-paper-heading-size);
   line-height: var(--hraness-paper-heading-leading);
   letter-spacing: var(--hraness-paper-heading-tracking);
 }
-[data-hraness-theme="paper"] :where(.hraness-marketing-section__heading, .hraness-marketing-install__heading, .hraness-marketing-primitives__heading, .hraness-marketing-interfaces__heading, .hraness-marketing-trust__heading, .hraness-marketing-quotes__heading, .hraness-marketing-pricing__heading, .hraness-marketing-questions__heading, .hraness-marketing-maker__heading) {
+[data-hraness-theme="paper"] :where(.hraness-marketing-section__heading, .hraness-marketing-install__heading, .hraness-marketing-primitives__heading, .hraness-marketing-interfaces__heading, .hraness-marketing-trust__heading, .hraness-marketing-quotes__heading, .hraness-marketing-pricing__heading, .hraness-marketing-questions__heading, .hraness-marketing-maker__heading):not(.textbutler-marketing *) {
   font-size: var(--hraness-paper-section-heading-size);
   line-height: var(--hraness-paper-heading-leading);
 }
-[data-hraness-theme="paper"] .hraness-marketing-hero__summary {
+[data-hraness-theme="paper"] .hraness-marketing-hero__summary:not(.textbutler-marketing *) {
   font-size: var(--hraness-paper-summary-size);
 }
 

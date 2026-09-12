@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
 export const SITE_DESCRIPTION =
-  'A personal message butler for Mac, with your coding agent, contact-specific memory, and clearly identified replies. In development.';
+  'A personal message butler for Mac, with contact-specific memory, clearly identified replies, and guarded iMessage and WhatsApp connections. In development.';
 export const GITHUB_URL = 'https://github.com/hraness/message-like-me';
 export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/architecture.md`;
 // The immutable legacy release coordinate; not a Textbutler app version.

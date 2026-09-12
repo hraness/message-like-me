@@ -27,15 +27,15 @@ export const metadata = pageMetadata({
   path: '/',
 });
 
-const HERO_FOOTNOTE = 'In development · macOS · bring your own coding agent';
+const HERO_FOOTNOTE = 'In development · macOS · iMessage + WhatsApp';
 const HOME_QUESTIONS = [
   {
     question: 'Can I use Textbutler today?',
-    answer: 'The source includes the Mac control panel, local daemon controls, contact workspaces, and response-policy foundations. Live automatic replies are disabled while the Ghostget transport and agent execution are qualified. A signed Mac download is not available yet.',
+    answer: 'You can build the Mac app from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. A signed Mac download is not available yet.',
   },
   {
     question: 'Will it interrupt my conversations?',
-    answer: 'Smart response is designed to wait through message bursts and yield while you are actively talking. A cheap classifier can choose whether a response is helpful, but global pause, contact settings, owner activity, and rate limits take precedence. Keyword-only mode is also available.',
+    answer: 'Smart mode waits through message bursts and uses a cheap classifier to decide whether help is welcome. A recent message from you starts a cooldown, and the butler checks conversation activity again before sending. Pause, contact settings, and rate limits take precedence. The current connections do not expose typing activity; keyword-only mode is also available.',
   },
   {
     question: 'Will people know the butler is responding?',
@@ -43,15 +43,19 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'What can the agent access?',
-    answer: 'The intended agent boundary is one contact folder, public web requests, and the messaging actions offered for that conversation. Shell commands, other contact folders, account credentials, and permission changes are outside that boundary. Live operation stays disabled until the selected provider can enforce it.',
+    answer: 'The available Claude API route receives brokered access to one contact folder, bounded public web requests, and proposed actions for that conversation. Trusted code checks and sends those actions. Shell commands, other contact folders, credentials, and permission changes are excluded. Claude Code and Codex remain unavailable while their execution boundaries are being qualified.',
+  },
+  {
+    question: 'Which agent can I use?',
+    answer: 'Claude API is the current explicit account option in the packaged runtime. It is billed separately from a Claude Code subscription, and account and model checks must pass before use. Claude Code and Codex are planned choices, currently unavailable. Textbutler never silently switches between them or borrows a subscription credential.',
   },
   {
     question: 'Does this website receive my messages?',
-    answer: 'No. textbutler.app is informational and has no message upload, contact import, account, or drafting form. The Mac stores contact context locally. When you choose a hosted coding agent, that provider handles the context it receives under its own data policies.',
+    answer: 'No. textbutler.app is informational and has no message upload, contact import, account, or drafting form. The Mac stores contact context locally. When you choose a hosted AI provider, it handles the context it receives under its own data policies.',
   },
   {
     question: 'Which rich message features will work?',
-    answer: 'Files and reactions have explicit places in the transport design. Stickers and iMessage apps remain unavailable until a transport proves support. The app shows negotiated capabilities, so unsupported features are visible. No Linq integration or iMessage mini-app support is claimed as available.',
+    answer: 'The app shows text, files, reactions, stickers, links, and polls according to the connection’s current capabilities and permissions. iMessage rich actions require a separately configured Messages bridge that needs System Integrity Protection disabled; Textbutler never changes that setting. App Clips and mini apps remain unavailable. No Linq integration is included.',
   },
   {
     question: 'What happened to Message Like Me?',
@@ -91,11 +95,12 @@ function ButlerFrame() {
 export default function Home() {
   const faq = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: HOME_QUESTIONS.map(({ question, answer }) => ({ '@type': 'Question', name: question, acceptedAnswer: { '@type': 'Answer', text: answer } })) };
   return (
-    <>
+    <div className="textbutler-marketing" data-hraness-marketing-preset="editorial">
       <SiteHeader />
       <main id="main-content" tabIndex={-1}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
         <MarketingPage className="mlm-page textbutler-page">
+          <div className="hraness-marketing-field">
           <ProductHero
             actions={[{ href: '#development', label: 'See what’s ready' }, { href: ARCHITECTURE_URL, label: 'Explore the architecture' }]}
             boundary={HERO_FOOTNOTE}
@@ -105,15 +110,16 @@ export default function Home() {
             heading="A little help in your conversations"
             headingId="textbutler-title"
             name="Textbutler"
-            summary="Give a few people access to your personal message butler. Choose your coding agent, give each contact a folder of context, and decide when it can step in. Built for your Mac, with you in control."
+            summary="A personal assistant for selected iMessage and WhatsApp conversations. Give each contact a folder of context, decide when it can step in, and stay in control from your Mac."
           />
+          </div>
 
           <MarketingSection heading="A butler for each relationship" headingId="contacts-title" id="how-it-works" label="" summary="Choose the contacts it can help. Keep their context separate. Pause one conversation or every conversation whenever you need.">
             <MarketingFlow ariaLabel="How contact-based assistance is designed to work" steps={[
-              { label: 'Choose a contact', detail: 'Activation is explicit. Start with a limit of five active contacts and adjust it in settings.' },
-              { label: 'Give it context', detail: 'Guidance, preferences, and dated memories live in that contact’s folder. Review and edit them as the relationship changes.' },
+              { label: 'Choose a contact', detail: 'Choose one direct conversation from a configured connection. New contacts start disabled; the default active limit is five.' },
+              { label: 'Give it context', detail: 'Optionally import recent history as context. Guidance, preferences, and dated memories live in an ordinary folder you can read and edit.' },
               { label: 'Let it know when', detail: 'Smart mode is the default. The keyword “butler” can summon it directly; keyword-only mode keeps it waiting for that invitation.' },
-              { label: 'Keep the conversation yours', detail: 'The butler identifies itself, yields when you are talking, and stops when you pause it. Live replies remain disabled during qualification.' },
+              { label: 'Keep the conversation yours', detail: 'Enable a contact only with a ready agent and messaging connection. The butler identifies itself, checks your recent activity, and stops new replies when paused.' },
             ]} />
           </MarketingSection>
 
@@ -124,21 +130,21 @@ export default function Home() {
           <MarketingSection heading="Small parts with clear jobs" headingId="architecture-title" id="architecture" label="" summary="A local daemon handles the work while the Mac app gives you the controls. Hooks and adapters provide room to extend the experience without handing an agent unrestricted access.">
             <dl className="architecture-rows">
               <div><dt>Textbutler</dt><dd>Contacts, response timing, visible disclosure, scoped memory, pause, and action policy.</dd></div>
-              <div><dt>Ghostget</dt><dd>The required boundary for Messages and Contacts access, permission checks, and transport capabilities.</dd></div>
-              <div><dt>Agentrouter</dt><dd>Reusable Codex and Claude account and execution foundations. The provider must enforce the requested tool and file scope.</dd></div>
+              <div><dt>Ghostget</dt><dd>iMessage and WhatsApp connections, account permissions, conversation identity, and available message actions.</dd></div>
+              <div><dt>Agentrouter</dt><dd>Scoped agent tools and explicit account selection. Claude API is available after setup; native Claude Code and Codex remain under qualification.</dd></div>
               <div><dt>Your hooks</dt><dd>Developer-authored extensions for context and response decisions. Trusted executable hooks stay separate from the agent’s editable memory.</dd></div>
             </dl>
             <p className="mlm-section-link"><a href={ARCHITECTURE_URL}>Read the architecture and capability limits</a></p>
           </MarketingSection>
 
-          <MarketingTrustBoundary className="mlm-marketing-trust" heading="Keep the useful boundaries visible" headingId="boundaries-title" id="boundaries" label="" summary="The contact folder is local. Your chosen coding-agent provider still receives the context needed for its work. Textbutler’s website has no access to that information." items={[
+          <MarketingTrustBoundary className="mlm-marketing-trust" heading="Keep the useful boundaries visible" headingId="boundaries-title" id="boundaries" label="" summary="The contact folder is local. Your selected AI provider still receives the context needed for its work. Textbutler’s website has no access to that information." items={[
             { label: 'A recognizable assistant', detail: 'Every text reply has a configurable character, begin symbol, and end symbol. The default is 🤖{ hello this is my response }.' },
             { label: 'One conversation at a time', detail: 'The agent boundary is one contact workspace, public web requests, and that conversation’s supported message actions. No shell tools.' },
-            { label: 'Capabilities, not promises', detail: 'Files, reactions, stickers, and iMessage apps appear as available only after transport qualification. Unsupported features stay explicit.' },
+            { label: 'Capabilities, not promises', detail: 'Rich actions depend on the selected connection and its permissions. Unsupported features, including mini apps, stay visible as unavailable.' },
           ]} />
 
-          <MarketingSection heading="The foundation is here. Live replies are next." headingId="development-title" id="development" label="" summary="Textbutler is in development. You can inspect and build the source now; a signed Mac download is not available yet.">
-            <div className="development-status"><div><h3>Implemented in source</h3><p>Mac settings panel, local daemon control channel, contact workspaces, editable memory, disclosure and response policy, and synthetic tests.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the Mac app source</a></div><div><h3>Still being qualified</h3><p>Ghostget Messages and Contacts integration, permission-scoped agent execution, message delivery, and rich transport features. Automatic replies remain disabled.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
+          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The Mac app and daemon are implemented in source. Setup is explicit, and a signed Mac download is not available yet.">
+            <div className="development-status"><div><h3>Ready to inspect and build</h3><p>Mac controls, background service, iMessage and WhatsApp enrollment, optional history import, editable memory, hooks, and a guarded reply loop. New installations start paused.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the Mac app source</a></div><div><h3>Setup before replies</h3><p>Configure Ghostget and its permissions, check an explicit Claude API account, then enable a contact and resume. Native Claude Code and Codex remain unavailable. Live delivery and rich actions still need verification on your account.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
             <p className="legacy-note">Looking for the original history tools? <a href={RELEASE_URL}>Message Like Me v{SOFTWARE_VERSION}</a> remains available as a legacy release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>
           </MarketingSection>
 
@@ -147,6 +153,6 @@ export default function Home() {
         </MarketingPage>
       </main>
       <SiteFooter path="/" />
-    </>
+    </div>
   );
 }

@@ -387,11 +387,11 @@ describe('supported source presentation', () => {
       'Mac control panel and local daemon controls',
       'Contact-specific guidance and editable memory',
       'Configurable visible assistant disclosure',
-      'Smart and keyword-only response policy foundations',
+      'Smart and keyword-only response controls',
       'Global pause and active contact limits',
     ]);
     expect(renderedRootLayout).not.toContain('downloadUrl');
-    expect(renderedRootLayout).toContain('In development; live automatic replies disabled pending qualification');
+    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; no signed Mac download');
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);
