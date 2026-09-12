@@ -18,7 +18,7 @@ export function isPreviewPolicyBlock(request, { path, origin, verifiedCsp, autho
   const url = new URL(request.url);
   if (url.origin !== origin || url.search || url.hash) return false;
   return (request.resourceType === 'script' && /^\/_next\/static\/chunks\/[\w./-]+\.js$/u.test(url.pathname))
-    || (request.resourceType === 'manifest' && url.pathname === '/manifest.webmanifest');
+    || (['manifest', 'other'].includes(request.resourceType) && url.pathname === '/manifest.webmanifest');
 }
 
 export function assertBuildJoin(before, after, exitCode) {
@@ -30,7 +30,8 @@ export function assertBuildJoin(before, after, exitCode) {
 export function assertServerExit(exit) {
   assert.equal(exit.stopRequested, true, 'Next exited before owned teardown.');
   assert.equal(exit.forced, false, 'Next required forced termination.');
-  assert.ok((exit.code === 0 && exit.signal === null) || (exit.code === null && exit.signal === 'SIGTERM'),
+  // Next 16.2.6 awaits its SIGTERM cleanup, then explicitly exits with 143.
+  assert.ok(([0, 143].includes(exit.code) && exit.signal === null) || (exit.code === null && exit.signal === 'SIGTERM'),
     `Unexpected Next exit: ${exit.code}/${exit.signal}`);
 }
 

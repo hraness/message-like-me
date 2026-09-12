@@ -32,8 +32,9 @@ test('only preview script and manifest blocks from the verified restrictive CSP 
   const valid = { url: policy.authoredAssets[0]!, method: 'GET', resourceType: 'script', error: 'csp', mainFrame: true };
   expect(isPreviewPolicyBlock(valid, policy)).toBe(true);
   expect(isPreviewPolicyBlock({ ...valid, resourceType: 'manifest', url: policy.origin + '/manifest.webmanifest' }, policy)).toBe(true);
+  expect(isPreviewPolicyBlock({ ...valid, resourceType: 'other', url: policy.origin + '/manifest.webmanifest' }, policy)).toBe(true);
   for (const change of [{ method: 'POST' }, { error: 'net::ERR_ABORTED' }, { error: 'net::ERR_FAILED' }, { mainFrame: false },
-    { resourceType: 'stylesheet' }, { resourceType: 'fetch' }, { resourceType: 'document' },
+    { resourceType: 'stylesheet' }, { resourceType: 'fetch' }, { resourceType: 'document' }, { resourceType: 'other' },
     { url: valid.url + '?other=1' }, { url: origin + '/_next/static/chunks/unknown.js' },
     { url: policy.origin + '/script.js' }, { url: 'https://example.com/_next/static/chunks/a.js' },
     { resourceType: 'image', url: policy.origin + '/icon.svg' }]) {
@@ -56,8 +57,9 @@ test('a successful browser build must join the exact clean source and lockfile',
 test('server cleanup rejects spontaneous, failing and forced exits', () => {
   const valid = { code: 0, signal: null, stopRequested: true, forced: false };
   expect(() => assertServerExit(valid)).not.toThrow();
+  expect(() => assertServerExit({ ...valid, code: 143 })).not.toThrow();
   expect(() => assertServerExit({ ...valid, code: null, signal: 'SIGTERM' })).not.toThrow();
-  for (const change of [{ stopRequested: false }, { code: 1 }, { forced: true }, { code: null, signal: 'SIGKILL' }]) {
+  for (const change of [{ stopRequested: false }, { stopRequested: false, code: 143 }, { code: 1 }, { forced: true }, { code: null, signal: 'SIGKILL' }]) {
     expect(() => assertServerExit({ ...valid, ...change })).toThrow();
   }
 });
