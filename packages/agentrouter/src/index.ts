@@ -12,3 +12,5 @@ export { createClaudeApiAdapter } from "./claude-api.ts";
 export type { ClaudeApiAdapterOptions } from "./claude-api.ts";
 export { discoverClaudeModels, parseClaudePriceCatalog } from "./claude-api-models.ts";
 export type { ClaudePriceCatalog, ClaudeModelDiscoveryOptions } from "./claude-api-models.ts";
+export { createCodexTaskAdapter } from "./codex-task-adapter.ts";
+export type { CodexTaskAdapterOptions } from "./codex-task-adapter.ts";
