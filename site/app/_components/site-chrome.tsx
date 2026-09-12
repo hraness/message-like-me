@@ -9,7 +9,7 @@ import {
   ARCHITECTURE_URL,
 } from '../_lib/site';
 
-export function SiteHeader() {
+export function SiteHeader({ lantern = false }: Readonly<{ lantern?: boolean }>) {
   return (
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
@@ -18,7 +18,7 @@ export function SiteHeader() {
         ariaLabel="Primary navigation"
         brand="Textbutler"
         brandLabel="Textbutler home"
-        className="site-header"
+        className={lantern ? "site-header hraness-material-chrome" : "site-header"}
         links={[
           { href: '/#how-it-works', label: 'How it works' },
           { href: '/docs', label: 'Docs' },

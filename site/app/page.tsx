@@ -66,6 +66,7 @@ const HOME_QUESTIONS = [
 function ButlerFrame() {
   return (
     <MarketingProofFrame
+      className="hraness-material-pane"
       caption="Synthetic illustration of the intended experience. No real messages, live agent run, or sent reply is shown."
       credit="Contact context → a clearly identified assistant"
     >
@@ -95,12 +96,12 @@ function ButlerFrame() {
 export default function Home() {
   const faq = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: HOME_QUESTIONS.map(({ question, answer }) => ({ '@type': 'Question', name: question, acceptedAnswer: { '@type': 'Answer', text: answer } })) };
   return (
-    <div className="textbutler-marketing" data-hraness-marketing-preset="editorial">
-      <SiteHeader />
+    <div className="textbutler-marketing" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">
+      <SiteHeader lantern />
       <main id="main-content" tabIndex={-1}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
         <MarketingPage className="mlm-page textbutler-page">
-          <div className="hraness-marketing-field">
+          <div className="hraness-material-wall">
           <ProductHero
             actions={[{ href: '#development', label: 'See what’s ready' }, { href: ARCHITECTURE_URL, label: 'Explore the architecture' }]}
             boundary={HERO_FOOTNOTE}

@@ -113,10 +113,14 @@ test('admits the released finite marketing snapshot and scopes it to the landing
   expect(snapshot.source.commit).toBe('898d80364085a41c858350f1b492ac28b5a0384b');
   expect(snapshot.files['product-marketing-preset.css'].sha256).toBe('e1474dbfa5dcb17e840ecd48e2b767e88e808a1f6124cd9bb8fe720e1076a4a7');
   const html = renderToStaticMarkup(<Home />);
-  expect(html).toStartWith('<div class="textbutler-marketing" data-hraness-marketing-preset="editorial">');
-  expect(html).toContain('<div class="hraness-marketing-field">');
+  expect(html).toStartWith('<div class="textbutler-marketing" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">');
+  expect(html).toContain('<div class="hraness-material-wall">');
   expect(renderToStaticMarkup(<About />)).not.toContain('data-hraness-marketing-preset');
   expect(renderToStaticMarkup(<Preview />)).not.toContain('data-hraness-marketing-preset');
+  expect(renderToStaticMarkup(<About />)).not.toContain('hraness-material');
+  expect(renderToStaticMarkup(<Preview />)).not.toContain('hraness-material');
+  expect(html).toContain('hraness-material-chrome');
+  expect(html).toContain('hraness-material-pane');
 });
 
 test('keeps machine-readable setup and unavailable choices consistent with the landing', async () => {

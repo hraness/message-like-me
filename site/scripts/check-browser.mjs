@@ -213,7 +213,7 @@ try {
         const heading = document.querySelector('h1');
         const style = getComputedStyle(heading);
         const headerInner = document.querySelector('.hraness-marketing-header__inner');
-        const field = document.querySelector('.hraness-marketing-field');
+        const field = document.querySelector('.hraness-material-wall');
         const hero = document.querySelector('.hraness-marketing-hero');
         const summary = document.querySelector('.hraness-marketing-hero__summary');
         const workspace = document.querySelector('.workspace-example pre');
@@ -256,6 +256,8 @@ try {
               leading: Number.parseFloat(style.lineHeight), tracking: Number.parseFloat(style.letterSpacing) };
           }),
           fieldBackground: field && getComputedStyle(field).backgroundImage,
+          material: document.querySelector('[data-hraness-material]')?.getAttribute('data-hraness-material') ?? null,
+          headerBackdrop: headerInner && getComputedStyle(headerInner.closest('header')).backdropFilter,
           actionHeights: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => action.getBoundingClientRect().height),
           actionRadii: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => getComputedStyle(action).borderRadius),
           fontWeights: [...document.fonts].filter((font) => font.status === 'loaded' && font.family.includes('Nebula Sans')).map((font) => font.weight),

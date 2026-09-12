@@ -29,3 +29,8 @@ const { checkMarketingSnapshot } = await import("../styles/vendor/hraness-market
 const marketing = await checkMarketingSnapshot();
 assert.equal(marketing.source.commit, "898d80364085a41c858350f1b492ac28b5a0384b");
 console.log("Marketing preset v0.6.7 snapshot verified.");
+
+const { checkLanternMaterialSnapshot } = await import("../styles/vendor/hraness-lantern/check.mjs");
+const lantern = await checkLanternMaterialSnapshot();
+assert.equal(lantern.source.commit, "eccb0341d8d0ba960a0f02248cf59888062afb0a");
+console.log("Lantern v0.7.0 snapshot verified.");
