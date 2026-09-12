@@ -5,6 +5,7 @@
 @import '@hraness/design-kit/styles.css';
 @import '../styles/vendor/hraness-paper/paper-theme.css';
 @import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
+@import '../styles/vendor/hraness-lantern/lantern-material.css';
 
 /* Product roles alias the shared Paper theme. Message examples retain their
  * incoming/outgoing distinction without a separate site color system. */
@@ -78,9 +79,9 @@ body {
 .textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
 .textbutler-marketing .hraness-marketing-header {
   --hraness-marketing-measure: var(--hraness-marketing-header-measure);
-  background-color: var(--hraness-marketing-header-background);
-  -webkit-backdrop-filter: var(--hraness-marketing-header-backdrop);
-  backdrop-filter: var(--hraness-marketing-header-backdrop);
+  background-color: var(--hraness-material-chrome-paint);
+  -webkit-backdrop-filter: var(--hraness-material-chrome-blur);
+  backdrop-filter: var(--hraness-material-chrome-blur);
 }
 .textbutler-marketing .hraness-marketing-header__inner { min-block-size: var(--hraness-marketing-header-height); }
 .textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; padding-block: var(--hraness-marketing-hero-space); }
@@ -875,4 +876,22 @@ html { scrollbar-color: var(--muted) var(--paper); }
   .butler-frame, .development-status { grid-template-columns: minmax(0, 1fr); }
   .butler-context { border-inline-end: 0; border-block-end: 1px solid var(--line); }
   .architecture-rows > div { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+}
+
+/* Lantern adds material to the public landing. Paper owns the palette and the
+ * existing message bubbles; documents and the inert preview remain unchanged. */
+.textbutler-marketing .hraness-material-wall > .hraness-marketing-hero {
+  padding-inline: var(--hraness-marketing-gutter);
+}
+.textbutler-marketing .hraness-material-chrome {
+  border-block-end-color: var(--hraness-material-seam);
+}
+.textbutler-marketing .hraness-marketing-proof-frame.hraness-material-pane {
+  background-color: var(--hraness-material-plane);
+  border-color: var(--hraness-material-seam);
+  box-shadow: var(--hraness-material-lift);
+}
+.textbutler-marketing .hraness-marketing-question[open] > summary {
+  background-color: var(--hraness-material-warm-plane);
+  color: var(--hraness-material-ink);
 }

@@ -127,7 +127,7 @@ test('browser waits have a bounded deadline', async () => {
 test('presentation admission rejects missing atoms, fallback fonts, collection and preset leaks', () => {
   const sample = { width: 1440, theme: 'light', path: '/' };
   const valid = { paper: 'paper', background: 'rgb(248, 247, 244)', bodyFont: '"Nebula Sans", sans-serif', coarse: false, overflow: 0,
-    forms: 0, headers: 1, footers: 1, askAi: 1, preset: 'editorial',
+    forms: 0, headers: 1, footers: 1, askAi: 1, preset: 'editorial', material: 'lantern', headerBackdrop: 'blur(20px) saturate(1.1)',
     layers: ['components.hraness-ui.priority1', 'components.hraness-design-kit.priority1'],
     fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }],
     headingSize: 64, headingLeading: 67.84, headingTracking: -1.6, headingWeight: '400', headerMinHeight: '72px',
@@ -135,9 +135,10 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     sections: Array.from({ length: 7 }, () => ({ font: '"Instrument Serif", serif', weight: '400', size: 52, leading: 56.16, tracking: -1.04 })),
     summarySize: 17, summaryLeading: 27.2, workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', frameBackground: 'rgb(255, 253, 249)',
-    actionHeights: [42, 42, 42, 42, 42], actionRadii: ['4px'], fieldBackground: 'linear-gradient(red, blue)' };
+    actionHeights: [42, 42, 42, 42, 42], actionRadii: ['4px'], fieldBackground: 'repeating-linear-gradient(red, blue), repeating-linear-gradient(red, blue), radial-gradient(red, blue), linear-gradient(red, blue)' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
   for (const change of [{ layers: [] }, { renderedFonts: [] }, { fontWeights: [] }, { forms: 1 },
+    { material: null }, { headerBackdrop: 'none' }, { fieldBackground: 'linear-gradient(red, blue)' },
     { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] },
     { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { summaryLeading: 24.65 },
     { heroPadding: ['112px', '72px'] }, { gutter: '20px' }, { headerWidth: 1120 }]) {

@@ -21,14 +21,18 @@ code. Body text is 16px, with a 17px desktop / 16px mobile lead.
 The marketing wrapper includes the sticky header and page. Main measure is
 70rem, header measure 76rem, gutters 32px on desktop and 20px on narrow screens,
 and header height 72px before phone navigation wraps into a second row. The
-header uses the preset's 82% surface and 14px blur where supported, with opaque
+landing header uses Lantern's 90% surface and 20px blur where supported, with opaque
 accessibility fallbacks. Buttons use 4px corners and at least 44px phone targets.
 
-A shared gradient, unfilled cell seams and deterministic grain sit behind the
-opening copy and synthetic product frame. They are background assets, never
-overlays on content. The message frame stays opaque and legible. Light and dark
-follow system preference; Paper retains authority for product surfaces,
-disclosure bubbles, links and focus.
+Lantern v0.7.0 at `eccb0341d8d0ba960a0f02248cf59888062afb0a` is the
+independent material layer. `styles/vendor/hraness-lantern/` is its immutable
+five-file snapshot, checked alongside the existing palette and editorial preset.
+The homepage alone opts in. Warm transmitted light and square glass seams sit
+behind the opening copy and synthetic product frame. The message frame stays
+opaque; expanded questions use warm paired paint and ink. Native reduced
+transparency and forced colors remove decorative effects. No material is applied
+to logos, documentation, the inert preview, or the Mac app. Paper retains its
+incoming/outgoing bubble colors, links and focus.
 
 The opening pairs a direct outcome with a contact folder and visibly disclosed
 reply. The example is synthetic and carries a caption. Subsequent sections use a
