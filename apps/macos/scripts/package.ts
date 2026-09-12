@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { command, inventory, requireValue, sha256 } from "../distribution/common.ts";
 import { buildRuntimeBundle } from "./runtime-bundle.ts";
@@ -6,6 +6,16 @@ import { buildRuntimeBundle } from "./runtime-bundle.ts";
 export const appRoot = resolve(import.meta.dir, "..");
 export const repository = resolve(appRoot, "../..");
 export const bundlePath = join(appRoot, "src-tauri/target/release/bundle/macos/Textbutler.app");
+async function normalizeRuntimePermissions(path: string): Promise<void> {
+  const info = await lstat(path);
+  requireValue(!info.isSymbolicLink(), "Runtime bundle contains a symbolic link");
+  if (info.isDirectory()) {
+    await chmod(path, 0o755);
+    for (const name of await readdir(path)) await normalizeRuntimePermissions(join(path, name));
+    return;
+  }
+  await chmod(path, path.endsWith("/textbutler-bun") ? 0o755 : 0o644);
+}
 export function sourceCoordinate(): { schema: "textbutler.desktop-build.v1"; sourceSha: string; sourceTree: string; clean: boolean } {
   return { schema: "textbutler.desktop-build.v1", sourceSha: command("git", ["rev-parse", "HEAD"], { cwd: repository }).toString("utf8").trim(), sourceTree: command("git", ["rev-parse", "HEAD^{tree}"], { cwd: repository }).toString("utf8").trim(), clean: command("git", ["status", "--porcelain"], { cwd: repository }).length === 0 };
 }
@@ -24,6 +34,9 @@ export async function stageRuntime(source = sourceCoordinate()): Promise<string>
   for (const [input, output] of [["@anthropic-ai/sdk/LICENSE", "ANTHROPIC-SDK-LICENSE.txt"], ["@anthropic-ai/sdk/src/internal/qs/LICENSE.md", "SDK-QS-LICENSE.md"], ["zod/LICENSE", "ZOD-LICENSE.txt"]]) await copyFile(join(repository, "node_modules", input!), join(notices, output!));
   await copyFile(join(appRoot, "src-tauri/Cargo.lock"), join(notices, "Cargo.lock"));
   await writeFile(join(root, "build-source.json"), `${JSON.stringify(source)}\n`);
+  // Build tools and runner umasks may produce group/world-writable resources.
+  // Normalize the complete staged tree before inventory seals its permissions.
+  await normalizeRuntimePermissions(root);
   await writeFile(join(root, "runtime-manifest.json"), `${JSON.stringify({ schema: "textbutler.runtime.v1", bunVersion: Bun.version, files: inventory(root) })}\n`);
   return root;
 }
