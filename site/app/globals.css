@@ -77,6 +77,7 @@ body {
 }
 .textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
 .textbutler-marketing .hraness-marketing-header {
+  --hraness-marketing-measure: var(--hraness-marketing-header-measure);
   background-color: var(--hraness-marketing-header-background);
   -webkit-backdrop-filter: var(--hraness-marketing-header-backdrop);
   backdrop-filter: var(--hraness-marketing-header-backdrop);

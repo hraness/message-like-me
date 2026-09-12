@@ -5,6 +5,13 @@ export function browserCases() {
     ['/', '/docs', '/sources', '/preview'].map((path) => ({ width, theme, path }))));
 }
 
+// The source-owned README badge is external; this offline gate substitutes only
+// its exact image request, never a document, API, script, or another asset.
+export function isSyntheticBadge(request) {
+  return request.url === 'https://skills.sh/b/hraness/message-like-me'
+    && request.method === 'GET' && request.resourceType === 'image';
+}
+
 /** @returns {Record<string, string>} */
 export function browserEnvironment(source, home) {
   const keys = ['PATH', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TZ', 'NODE_OPTIONS',

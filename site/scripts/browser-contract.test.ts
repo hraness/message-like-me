@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline } from './browser-contract.mjs';
+import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isSyntheticBadge } from './browser-contract.mjs';
 
 test('the native matrix covers four separate surfaces, both themes and touch', () => {
   const cases = browserCases();
@@ -12,6 +12,16 @@ test('browser children receive no inherited credentials or personal home', () =>
     ANTHROPIC_API_KEY: 'synthetic', NODE_OPTIONS: '--max-old-space-size=2048', UV_THREADPOOL_SIZE: '3' }, '/fixture');
   expect(env).toEqual({ PATH: '/bin', HOME: '/fixture', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
     NODE_OPTIONS: '--max-old-space-size=2048', UV_THREADPOOL_SIZE: '3' });
+});
+
+test('only the exact external README image receives a recorded synthetic fixture', () => {
+  const valid = { url: 'https://skills.sh/b/hraness/message-like-me', method: 'GET', resourceType: 'image' };
+  expect(isSyntheticBadge(valid)).toBe(true);
+  for (const change of [{ method: 'POST' }, { method: 'HEAD' }, { resourceType: 'document' },
+    { resourceType: 'fetch' }, { url: valid.url + '?other=1' }, { url: valid.url + '/other' },
+    { url: valid.url.replace('skills.sh', 'example.com') }]) {
+    expect(isSyntheticBadge({ ...valid, ...change })).toBe(false);
+  }
 });
 
 test('the owner joins a late acquisition during interruption and closes once', async () => {
@@ -60,7 +70,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
   for (const change of [{ layers: [] }, { renderedFonts: [] }, { fontWeights: [] }, { forms: 1 },
     { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] },
     { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { summaryLeading: 24.65 },
-    { heroPadding: ['112px', '72px'] }, { gutter: '20px' }]) {
+    { heroPadding: ['112px', '72px'] }, { gutter: '20px' }, { headerWidth: 1120 }]) {
     expect(() => assertPresentation({ ...valid, ...change }, sample)).toThrow();
   }
 });

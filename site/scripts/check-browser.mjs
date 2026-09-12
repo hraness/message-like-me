@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline } from './browser-contract.mjs';
+import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isSyntheticBadge } from './browser-contract.mjs';
 
 // This gate serves only the built informational website. It never runs the CLI,
 // Mac application, messaging providers, account checks, or personal-data readers.
@@ -28,6 +28,7 @@ const home = join(directory, 'runtime-home');
 const profile = join(directory, 'chromium-profile');
 await mkdir(home, { recursive: true, mode: 0o700 });
 const env = browserEnvironment(process.env, home);
+const badgeFixture = await readFile(join(root, 'scripts/fixtures/skills-badge.svg'));
 const nodeVersion = execFileSync(node, ['--version'], { env, encoding: 'utf8' }).trim();
 assert.match(nodeVersion, /^v24\./u);
 const report = { head, tree, dirty: false, nodeVersion, bunVersion: process.versions.bun,
@@ -95,10 +96,14 @@ try {
       const unexpected = [];
       const failures = [];
       const assets = new Set();
+      item.syntheticAssets = [];
       await context.route('**/*', async (route) => {
         const request = route.request();
         const url = new URL(request.url());
-        if ((url.origin === origin || ['data:', 'blob:'].includes(url.protocol)) && ['GET', 'HEAD'].includes(request.method())) {
+        if (isSyntheticBadge({ url: request.url(), method: request.method(), resourceType: request.resourceType() })) {
+          item.syntheticAssets.push('Repository fixture: README skills.sh badge (no external request).');
+          await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: badgeFixture });
+        } else if ((url.origin === origin || ['data:', 'blob:'].includes(url.protocol)) && ['GET', 'HEAD'].includes(request.method())) {
           await route.continue();
         } else {
           unexpected.push({ origin: url.origin, path: url.pathname, method: request.method() });

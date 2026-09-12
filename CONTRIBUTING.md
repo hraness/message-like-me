@@ -81,7 +81,10 @@ browser profile remain in ignored `site/.browser-artifacts/` for review.
 This check starts and stops its own loopback server and fresh browser. It blocks
 external requests, uses no personal browser profile or inherited credentials,
 and never launches a messaging reader, Mac app, agent, account check, or data
-entry workflow. It is not live provider or production-delivery verification.
+entry workflow. The README's exact external skills.sh badge image is replaced
+with a labeled repository SVG fixture and recorded in the receipt; the external
+badge service is not verified. All other request failures remain fatal. This is
+not live provider or production-delivery verification.
 
 By contributing, you agree that your contribution is licensed under the MIT
 License.
