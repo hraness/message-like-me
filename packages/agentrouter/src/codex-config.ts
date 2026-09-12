@@ -1,5 +1,8 @@
 import { BROKER_TOOL_NAMES, type BrokerToolName } from "./broker.ts";
-import { boundedText, safeInteger } from "./validation.ts";
+import { boundedText, object, safeInteger } from "./validation.ts";
+import { createHash } from "node:crypto";
+import { assertCapabilityProfile, type CapabilityProfile, type CapabilityProfileIdentity } from "./capabilities.ts";
+import type { AgentTaskModel } from "./task-runtime.ts";
 
 /** Exact inspected source contract; this is not runtime qualification. */
 export const CODEX_VERSION = "0.153.4";
@@ -42,6 +45,61 @@ export function codexTools(names: readonly BrokerToolName[]): readonly CodexTool
 }
 export function codexResponseTools(tools: readonly CodexTool[]): readonly Record<string, unknown>[] {
   return tools.map(({ name, description, inputSchema }) => ({ type: "function", name, description, strict: false, parameters: codexResponseSchema(inputSchema) }));
+}
+
+export type CodexCapabilityMapping = Readonly<{
+  profile: CapabilityProfileIdentity;
+  tools: readonly CodexTool[];
+  /** Binds the original native descriptors, not an observed serialized manifest. */
+  descriptorDigest: string;
+  nativeName(capabilityName: string): string | null;
+  capabilityName(nativeName: string): string | null;
+}>;
+const capabilityMappings = new WeakMap<CodexCapabilityMapping, CapabilityProfile>();
+/** Names use the immutable profile and index, so punctuation and truncation can
+ * never alias two tools. The host broker remains the semantic input authority. */
+export function createCodexCapabilityMapping(profile: CapabilityProfile): CodexCapabilityMapping {
+  assertCapabilityProfile(profile, profile);
+  const forward = new Map<string, string>(), reverse = new Map<string, string>();
+  const tools = Object.freeze(profile.tools.map((tool, index) => {
+    const name = `ar_${profile.digest.slice(0, 16)}_${index}`;
+    forward.set(tool.name, name); reverse.set(name, tool.name);
+    return Object.freeze({ type: "function" as const, name, description: tool.description, inputSchema: tool.inputSchema });
+  }));
+  const identity = Object.freeze({ id: profile.id, version: profile.version, digest: profile.digest });
+  const mapping: CodexCapabilityMapping = Object.freeze({ profile: identity, tools,
+    descriptorDigest: createHash("sha256").update(canonicalJson({ profile: identity, tools })).digest("hex"),
+    nativeName: (name: string) => forward.get(name) ?? null,
+    capabilityName: (name: string) => reverse.get(name) ?? null,
+  });
+  capabilityMappings.set(mapping, profile); return mapping;
+}
+export function assertCodexCapabilityMapping(mapping: CodexCapabilityMapping, expected: CapabilityProfileIdentity): void {
+  const registered = capabilityMappings.get(mapping);
+  if (!registered) throw Error("CODEX_CAPABILITY_MAPPING_UNREGISTERED");
+  assertCapabilityProfile(registered, expected);
+}
+
+export type CodexTaskSettings = Readonly<{ model: AgentTaskModel;
+  instructions: Readonly<{ base: string; developer: string }>; instructionDigest: string }>;
+/** Settings are trusted host intent. Null effort/tier means no override; a
+ * provider's eventual default must be recorded separately from this request. */
+export function codexTaskSettings(input: { model: AgentTaskModel; instructions: { base: string; developer: string } }): CodexTaskSettings {
+  object(input, ["model", "instructions"]);
+  const m = object(input.model, ["id", "reasoningEffort", "serviceTier"]);
+  const i = object(input.instructions, ["base", "developer"]);
+  const model = Object.freeze({ id: boundedText(m.id, 160),
+    reasoningEffort: m.reasoningEffort === null ? null : boundedText(m.reasoningEffort, 160),
+    serviceTier: m.serviceTier === null ? null : boundedText(m.serviceTier, 160) });
+  const instructions = Object.freeze({ base: boundedText(i.base, 64 * 1024), developer: boundedText(i.developer, 64 * 1024) });
+  return Object.freeze({ model, instructions, instructionDigest: createHash("sha256").update(canonicalJson(instructions)).digest("hex") });
+}
+export function codexTaskConfiguration(settings: CodexTaskSettings, baseUrl: string): string {
+  const admitted = codexTaskSettings({ model: settings.model, instructions: settings.instructions });
+  if (admitted.instructionDigest !== settings.instructionDigest) throw Error("CODEX_TASK_SETTINGS_CHANGED");
+  // Reasoning effort and service tier belong to the explicit turn/start request;
+  // this pinned config surface has no reviewed global keys for either value.
+  return codexConfiguration(admitted.model.id, baseUrl);
 }
 /**
  * Pinned tools/src/json_schema/types.rs deserializes these fixed host schemas and
