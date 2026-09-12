@@ -1,9 +1,11 @@
 import { initializeOwnerState, TEXTBUTLER_CONTROL_PROTOCOL } from "./control-service.ts";
 import { defaultDataDirectory, requestDaemon, startDaemon } from "./daemon.ts";
 import { createLaunchAgentLifecycle, type LaunchAgentLifecycle } from "./launch-agent.ts";
+import type { ClaudeApiAdapterOptions } from "../../agentrouter/src/claude-api.ts";
 
-export const CLI_USAGE = "textbutler init|doctor|daemon run|daemon install|daemon uninstall|daemon status [--data-dir /physical/private/path]";
-export async function runTextbutlerCli(argv: readonly string[], output: { write(text: string): unknown } = process.stdout, options: { launchAgent?: LaunchAgentLifecycle } = {}): Promise<number> {
+export const CLI_USAGE = "textbutler init|doctor|providers list|providers check ACCOUNT|daemon run|daemon install|daemon uninstall|daemon status [--data-dir /physical/private/path]";
+export async function runTextbutlerCli(argv: readonly string[], output: { write(text: string): unknown } = process.stdout, options: { launchAgent?: LaunchAgentLifecycle;
+  providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"] } = {}): Promise<number> {
   if (argv.length === 0 || argv.length === 1 && ["--help", "help", "-h"].includes(argv[0]!)) { output.write(`${CLI_USAGE}\n`); return 0; }
   const args = [...argv]; let dataDir = defaultDataDirectory();
   const option = args.indexOf("--data-dir");
@@ -12,8 +14,21 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     dataDir = args[option + 1]!; args.splice(option, 2);
   }
   const command = args.join(" ");
-  if (!["init", "doctor", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command)) throw new Error(CLI_USAGE);
+  const checkAccount = args.length === 3 && args[0] === "providers" && args[1] === "check" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(args[2]!) ? args[2] : undefined;
+  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount) throw new Error(CLI_USAGE);
   const print = (value: unknown): void => { output.write(`${JSON.stringify(value)}\n`); };
+  if (command === "providers list" || checkAccount) {
+    let response = await requestDaemon({ dataDir, request: checkAccount
+      ? { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "provider.accounts.check", accountId: checkAccount }
+      : { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" } });
+    const deadline = Date.now() + 120_000;
+    while (response.ok && response.kind === "job" && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      response = await requestDaemon({ dataDir, request: { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "owner.job.read", jobId: response.jobId } });
+    }
+    if (response.ok && response.kind === "snapshot") { print({ ok: true, accounts: response.snapshot.providerAccounts ?? [] }); return 0; }
+    print(response.ok ? { ok: false, detail: "Provider check is still pending; inspect daemon status before retrying." } : response); return 1;
+  }
   if (command === "init") {
     const state = await initializeOwnerState(dataDir);
     print({ ok: true, status: "initialized", dataDir: state.dataDir, automation: "unavailable", detail: "Owner settings are private and paused. No contacts, providers, agents, or launch agents were installed." });
@@ -45,7 +60,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     }
   }
   if (process.platform !== "darwin") throw new Error("The Textbutler foreground daemon is supported on macOS only.");
-  const daemon = await startDaemon({ dataDir });
+  const daemon = await startDaemon({ dataDir, ...(options.providerArtifact === undefined ? {} : { providerArtifact: options.providerArtifact }) });
   print({ ok: true, status: "running", socketPath: daemon.socketPath, automation: "unavailable", detail: "Foreground owner control service; settings and contact memory are available. Automatic replies are not active." });
   await new Promise<void>(resolve_ => {
     const stopped = (): void => { process.off("SIGINT", stopped); process.off("SIGTERM", stopped); resolve_(); };

@@ -10,6 +10,11 @@ import { loadHostConfig } from "./host-config.ts";
 import { createGhostgetOwnerReadPort } from "./ghostget-owner-read.ts";
 import type { OwnerConversationReadPort } from "./enrollment.ts";
 import { DaemonCustody } from "./daemon-custody.ts";
+import { createProviderHost } from "./provider-host.ts";
+import type { ClaudeApiAdapterOptions } from "../../agentrouter/src/claude-api.ts";
+import { createGhostgetAutomationProcess } from "./ghostget-automation-process.ts";
+import { createAutomationOwnerPort } from "./automation-owner.ts";
+import { createDaemonReplyLoop } from "./reply-loop.ts";
 
 export const MAX_CONTROL_FRAME_BYTES = 1_048_576;
 const MAX_CONNECTIONS = 16;
@@ -38,8 +43,10 @@ async function inspectDataDirectory(dataDir: string): Promise<void> {
 }
 export interface RunningDaemon { readonly socketPath: string; readonly service: TextbutlerControlService; readonly extensions: LoadedExtensions; close(): Promise<void> }
 
-/** Foreground control daemon. No launchd installation, provider process, model, or message send. */
-export async function startDaemon(options: { dataDir?: string; initialSettings?: Settings; enrollment?: OwnerConversationReadPort } = {}): Promise<RunningDaemon> {
+/** Foreground owner daemon. Explicit configured messaging accounts may start a
+ * Ghostget control process; only enabled contacts with grants can run replies. */
+export async function startDaemon(options: { dataDir?: string; initialSettings?: Settings; enrollment?: OwnerConversationReadPort;
+  providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"] } = {}): Promise<RunningDaemon> {
   const dataDir = await ensurePrivateDirectory(options.dataDir ?? defaultDataDirectory());
   const path = daemonSocketPath(dataDir);
   // SQLite retains an OS lock for this lifetime, with committed socket custody.
@@ -47,6 +54,8 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
   const custody = await DaemonCustody.acquire(dataDir, path);
   let service: TextbutlerControlService | undefined;
   let extensions: LoadedExtensions | undefined;
+  let messaging: Awaited<ReturnType<typeof createGhostgetAutomationProcess>> | undefined;
+  let replyLoop: Awaited<ReturnType<typeof createDaemonReplyLoop>> | undefined;
   let closing = false, pending = 0;
   const clients = new Set<Socket>(), work = new Set<Promise<unknown>>();
   const server = createServer(socket => {
@@ -84,15 +93,28 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     await custody.publish(server);
     await socketIdentity(path);
     const host = await loadHostConfig(dataDir);
-    const enrollment = options.enrollment ?? (host.ghostget === undefined ? undefined : createGhostgetOwnerReadPort({ ...host.ghostget, custodyDirectory: join(dataDir, "state") }));
+    let messagingUnavailable = false;
+    if (host.ghostget?.automationAccounts) {
+      try { messaging = await createGhostgetAutomationProcess({ executable: host.ghostget.executable, providers: host.ghostget.automationAccounts, custodyDirectory: join(dataDir, "state"),
+        ...(host.ghostget.runtimeExecutable === undefined ? {} : { runtimeExecutable: host.ghostget.runtimeExecutable }), ...(host.ghostget.stateHome === undefined ? {} : { stateHome: host.ghostget.stateHome }) }); }
+      catch { messagingUnavailable = true; }
+    }
+    const automation = messaging && host.ghostget?.automationAccounts ? createAutomationOwnerPort({ client: messaging.client, providers: host.ghostget.automationAccounts.map(account => account.provider) }) : undefined;
+    const enrollment = options.enrollment ?? (host.ghostget === undefined || host.ghostget.automationAccounts ? undefined : createGhostgetOwnerReadPort({ ...host.ghostget, custodyDirectory: join(dataDir, "state") }));
     extensions = await loadOwnerExtensions(dataDir);
-    service = await TextbutlerControlService.open({ dataDir, ...(options.initialSettings === undefined ? {} : { initialSettings: options.initialSettings }), ...(enrollment === undefined ? {} : { enrollment }), recoverRuns: true });
+    service = await TextbutlerControlService.open({ dataDir, ...(options.initialSettings === undefined ? {} : { initialSettings: options.initialSettings }), ...(enrollment === undefined ? {} : { enrollment }), ...(automation === undefined ? {} : { automation }), recoverRuns: true,
+      providers: leases => createProviderHost({ dataDir, config: host, leases, ...(options.providerArtifact === undefined ? {} : { runtimeArtifact: options.providerArtifact }) }) });
+    await service.recoverInactiveGrants();
+    if (messaging) replyLoop = await createDaemonReplyLoop({ service, client: messaging.client, hooks: extensions.hooks, onStatus: value => service!.setRuntimeStatus(value) });
+    else if (messagingUnavailable) service.setRuntimeStatus({ state: "unavailable", detail: "Ghostget automation setup or previous process custody needs owner attention. No automatic replies are running." });
   } catch (error) {
     for (const client of clients) client.destroy();
-    try {
-      if (server.listening) await new Promise<void>(resolve_ => server.close(() => resolve_()));
-      await service?.close();
-    } finally { await custody.close(); }
+    const failures: unknown[] = [error];
+    for (const cleanup of [
+      async () => { if (server.listening) await new Promise<void>(resolve_ => server.close(() => resolve_())); },
+      async () => replyLoop?.close(), async () => messaging?.close(), async () => service?.close(), async () => custody.close(),
+    ]) { try { await cleanup(); } catch (failure) { failures.push(failure); } }
+    if (failures.length > 1) throw new AggregateError(failures, "Daemon startup and cleanup require attention");
     throw error;
   }
   let closePromise: Promise<void> | undefined;
@@ -100,11 +122,13 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     closePromise ??= (async () => {
       closing = true;
       for (const client of clients) client.destroy();
-      try {
-        await new Promise<void>((resolve_, reject) => server.close(error => error ? reject(error) : resolve_()));
-        await Promise.allSettled([...work]);
-        await service!.close();
-      } finally { await custody.close(); }
+      const failures: unknown[] = [];
+      for (const cleanup of [
+        async () => new Promise<void>((resolve_, reject) => server.close(error => error ? reject(error) : resolve_())),
+        async () => { await Promise.allSettled([...work]); },
+        async () => replyLoop?.close(), async () => messaging?.close(), async () => service!.close(), async () => custody.close(),
+      ]) { try { await cleanup(); } catch (error) { failures.push(error); } }
+      if (failures.length) throw new AggregateError(failures, "Daemon cleanup requires attention");
     })();
     return closePromise;
   } };

@@ -1,92 +1,83 @@
 # Ghostget integration contract
 
-Textbutler consumes Ghostget's public CLI surface. It does not share Ghostget's
-desktop helper socket, read its private permission store, access `chat.db`, or
-automate Messages independently. This keeps Textbutler's lifecycle separate
-from ongoing Ghostget permission, vault, and desktop work.
+Textbutler owns reply policy and contact memory. Ghostget owns messaging
+accounts, native permissions, synchronization, event storage and outward
+actions. Textbutler communicates with its own Ghostget owner process through
+`ghostget messaging automation serve --stdio`; it does not share the Ghostget
+Mac app's private helper or open provider databases.
 
-## Current source evidence
+## Owner process
 
-Inspection of Ghostget 0.18.0 at `dc70c58` on 2026-09-11 found:
+The private protocol is `ghostget.messaging-automation/1`. Every bounded JSON
+request has an ID, method and parameters; every response repeats its protocol
+and ID and carries either a checked result or a typed error. Initialization
+selects up to two explicit accounts, one per network, through stdin. Contact
+memory and model tools cannot configure that process or invoke its control API.
 
-| Surface | Current usable boundary |
+Textbutler records process custody before launch, bounds its streams and queue,
+and removes custody only after a successful close response and verified clean
+process exit. Cancellation and revocation can interrupt an active submission.
+A malformed response, crash or uncertain cleanup retains the recovery fence.
+Restarting Textbutler does not silently clear it.
+
+## Contacts, events and grants
+
+| Surface | Implemented contract |
 | --- | --- |
-| Conversation listing | Bounded direct-iMessage conversation metadata |
-| Exact conversation read | Account incarnation plus chat GUID, service and observed row ID; bounded recent history |
-| Native Contacts directory | No public operation in this surface |
-| Generic messaging routes | Newly minted opaque references that expire after 15 minutes |
-| Text sending | Exact preview and owner-confirmed plan with receipts |
-| Autonomous send permission | No renewable, recipient-scoped grant contract |
-| Durable message events | No cursor/replay contract or continuation for these reads |
-| Rich actions | Internal helper methods exist, but are not admitted public operations here |
+| `status`, `start` | Observe capabilities; explicitly start supported synchronization. |
+| `conversations`, `enroll`, `enrollments` | Exact account generation and direct participant-bound conversation enrollment. |
+| `poll`, `history`, `events` | Bounded history, durable observation cursors, revisions, catch-up and gap detection. |
+| `grant`, `grant.get`, `grant.by-intent`, `revoke` | Recipient, action, expiry and quota limits; idempotent issuance lookup and immediate revocation. |
+| `asset`, `prepare` | Admit exact attachment bytes and bind the ordered action list to a context revision and expiry. |
+| `submit`, `cancel`, `run` | Journal an action claim before dispatch and retain accepted, failed, partial or indeterminate results. |
+| `close` | Wait for owned provider cleanup before acknowledging shutdown. |
 
-Textbutler can persist read-only conversation coordinates outside contact
-memory, recheck account and participant identity, and initialize bounded
-history after owner selection. Such a binding is not send authority. A rolling
-history poll could observe new messages, but cannot prove that no messages
-were missed; no lossless-subscription claim follows from polling.
+Enrollment records contain the provider account incarnation, source generation,
+implementation identity, exact conversation coordinate and participants. Display
+titles are labels, not authority. Account or participant replacement invalidates
+the binding. Existing Textbutler version 1 read bindings remain readable;
+automation requires explicit version 2 enrollment.
 
-The current Ghostget desktop helper is tied to its application lifetime.
-Textbutler's own LaunchAgent must not rely on that helper remaining alive or
-take over its process custody.
+Ghostget's managed permissions must explicitly allow each requested operation.
+A broad capability advertisement does not create a grant. Textbutler activation
+issues a bounded grant only after checking the selected agent account and
+conversation. It renews standing enabled-contact grants within their limits,
+and persists grant intent before issuance so a lost response can be resolved
+without blindly creating another grant. Disabled and uncommitted grants are
+reconciled through revocation.
 
-## Needed for unattended replies
-
-The following describes required semantics, not invented callable methods.
-Ghostget can choose its public naming and implementation.
-
-1. **Stable conversation binding.** Issue an opaque binding for a client,
-   provider account and account incarnation, exact conversation and participant
-   set. Resolve or renew it without making the agent choose raw recipient
-   coordinates. Participant/account changes invalidate the old binding.
-2. **Explicit owner grant.** Bind authority to the client, conversation binding,
-   allowed action kinds, expiry, revision and limits. Enrollment is the owner's
-   explicit grant step. Revocation and narrowing take effect at the provider's
-   send boundary. An operation-wide permission or one-time preview confirmation
-   must not be promoted into this grant.
-3. **Recoverable events.** Provide a bounded cursor, replay, gap detection and
-   catch-up status for the selected conversations. Preserve message identity,
-   author, provider time, revision, reaction distinction and outgoing owner
-   activity. An unknown gap pauses automation. History catch-up never itself
-   triggers a response.
-4. **Prepared actions.** Bind the exact ordered action list, context revision,
-   contact grant, expiry and caller idempotency key in a digest. Recheck those
-   facts atomically immediately before the provider's effect. Reject stale
-   context or revoked grants before submitting any part.
-5. **Durable outcome.** Journal before the effect and return a receipt with
-   submitted, failed, partial or indeterminate state. Provide an independent
-   reconciliation operation for uncertain outcomes. Neither side blindly
-   retries a possibly submitted action.
-
-Textbutler retains owner cooldown, global/contact pause, burst collection,
-rate limits, classification, contact memory, and disclosure. A grant does not
-skip those checks. Textbutler's journal is additional protection; it cannot
-replace the provider's own atomic permission and effect checks.
+Startup, re-enablement and recovery drain old events silently. An unresolved gap
+pauses automation. Textbutler waits for a new eligible inbound event and applies
+debounce, owner cooldown, classification and rate limits. Ghostget rechecks
+identity, permission, context and grant before dispatch, and observes intervening
+conversation changes between actions. Neither component retries an uncertain
+send automatically.
 
 ## Rich actions
 
-Advertise each capability independently: attachments, reactions, stickers,
-links, App Clips and experiences. Validate file ownership and exact bytes,
-message-target membership, payload bounds, and account capability at prepare
-and submit. Include supported reaction forms and experience identifiers in
-capability metadata; arbitrary native payload injection is not a capability.
+Attachments, reactions, stickers, rich links and native polls are separate
+capabilities. They become available only when the installed provider, current
+account and managed permission admit them. Message targets must belong to the
+enrolled conversation. Attachment and sticker paths are resolved by Textbutler's
+contact file broker; Ghostget receives admitted bytes, not arbitrary paths.
 
-A Textbutler response containing only nontext actions starts with a disclosed
-text companion. Ordered execution must stop if that companion fails. The
-provider receipt identifies each submitted part, including partial or unknown
-outcomes, so Textbutler can avoid undisclosed or repeated follow-up actions.
+Every response starts with disclosed text. For a nontext response, Textbutler
+inserts a companion such as `🤖{ … }` before the rich actions. Execution stops
+when a preceding action fails or the conversation changes. An accepted receipt
+does not claim delivery.
 
-Linq's hosted rich-message APIs are a reference for experience design, not
-evidence that the current Ghostget adapter implements them. An optional Linq
-transport needs its own explicit sender/account setup and authenticated event
-ingress. It cannot silently substitute another sender for the owner's native
-iMessage conversation.
+Native iMessage exposes text and files through the pinned helper and its
+currently usable rich methods for six standard tapbacks, stickers, links and
+polls. Rich methods require the owner's separately configured native bridge.
+App Clips and arbitrary mini-app experiences remain unavailable: no reviewed
+native executor exists. Linq's hosted APIs are a design reference and cannot
+silently substitute another sender for the owner's personal conversation.
 
-## Activation evidence
+## Verification boundary
 
-Before enabling unattended replies, run synthetic boundary tests, then a
-bounded owner-authorized live test with exact conversation/account identity,
-grant issue and revocation, owner takeover, event reconnect/gap handling,
-ordered disclosure and rich actions, cancellation, and uncertain-send
-reconciliation. Record the exact Ghostget/runtime versions and capability
-receipt. Unsupported operations remain unavailable after source publication.
+The source tests cover account changes, cursor restart and gaps, grant revocation
+and lost responses, exact byte admission, ordered actions, cancellation and
+uncertain results using synthetic accounts. They do not establish live provider
+delivery. A bounded live acceptance test needs explicit account, recipient and
+message authorization and must record the exact provider/runtime versions.
+See [WhatsApp](whatsapp.md) and [the architecture](architecture.md).

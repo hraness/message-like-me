@@ -1,6 +1,6 @@
 /** Provider-neutral broker contract. Agents receive contact-bound tools, never this port. */
 export const TRANSPORT_PROTOCOL = "textbutler.transport/1" as const;
-export type Capability = "history" | "contacts" | "events" | "text" | "attachment" | "reaction" | "sticker" | "link" | "app-clip" | "experience" | "autonomous-send";
+export type Capability = "history" | "contacts" | "events" | "text" | "attachment" | "reaction" | "sticker" | "link" | "poll" | "app-clip" | "experience" | "autonomous-send";
 export interface CapabilityStatus { readonly capability: Capability; readonly available: boolean; readonly reason: string | null }
 export interface TransportCapabilities { readonly protocol: typeof TRANSPORT_PROTOCOL; readonly provider: string; readonly capabilities: readonly CapabilityStatus[] }
 export type TransportErrorCode = "unsupported" | "invalid-input" | "contract-mismatch" | "unavailable" | "stale-context" | "authorization-required" | "indeterminate";
@@ -17,6 +17,7 @@ export type ActionIntent =
   | { readonly kind: "reaction"; readonly messageId: string; readonly emoji: string; readonly action: "add" | "remove" }
   | { readonly kind: "sticker"; readonly file: string; readonly messageId: string | null }
   | { readonly kind: "link"; readonly url: string }
+  | { readonly kind: "poll"; readonly question: string; readonly options: readonly string[]; readonly maximumSelections: number | null }
   | { readonly kind: "app-clip"; readonly url: string }
   | { readonly kind: "experience"; readonly experienceId: string; readonly parameters: Readonly<Record<string, unknown>> };
 export interface PrepareRequest { readonly intentId: string; readonly conversationId: string; readonly contextId: string; readonly actions: readonly ActionIntent[] }
@@ -30,5 +31,5 @@ export interface TextbutlerTransport {
   history(request: { readonly conversationId: string; readonly cursor?: string; readonly limit?: number }): Promise<TransportResult<HistoryPage>>;
   events(request: { readonly conversationIds: readonly string[]; readonly cursor: string | null; readonly limit?: number }): Promise<TransportResult<EventPage>>;
   prepare(request: PrepareRequest): Promise<TransportResult<ActionPlan>>;
-  submit(plan: ActionPlan, authorization: SendAuthorization): Promise<TransportResult<SendReceipt>>;
+  submit(plan: ActionPlan, authorization: SendAuthorization, signal?: AbortSignal): Promise<TransportResult<SendReceipt>>;
 }

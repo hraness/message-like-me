@@ -1,91 +1,34 @@
 # Textbutler transport
 
-Typed boundaries between the Textbutler daemon and its messaging provider.
-Import `src/index.ts` for `TextbutlerTransport`, rich `ActionIntent` values,
-`createGhostgetTransport`, and the private-output-verifying CLI invoker.
+This package validates the boundary between Textbutler and Ghostget. The daemon
+owns the client; a model receives only recipient-free proposed action tools.
+It never receives account configuration, grant IDs or the Ghostget control API.
 
-The daemon owns this port. Its agent-facing broker must bind each operation to
-one enabled contact, format the bot attribution, and reject foreign contacts or
-files before invoking it. Contact-relative file paths express an intent; the
-file broker must bind them to owned bytes before a future attachment executor
-can read them. This package never reads `chat.db` or Contacts directly.
+`createGhostgetAutomationClient()` validates the private
+`ghostget.messaging-automation/1` owner protocol. The Textbutler daemon supplies
+the supervised stdio process. `createGhostgetAutomationTransport()` binds a
+transport instance to one durable enrollment and a trusted attachment-byte
+admission function. Neither constructor reads provider databases.
 
-## Existing Ghostget support
+The client covers exact enrollment, current capabilities, durable observations,
+bounded history, grant issuance and recovery, byte admission, prepared actions
+and durable outcomes. Plans bind their action order, bytes, conversation revision
+and expiry. Submission consumes the local claim before invoking Ghostget;
+missing or invalid receipts remain indeterminate. Cancellation requests the
+provider stop and still waits for its original result.
 
-The adapter negotiates `imessage-direct` local CLI contract version 1 from
-`ghostget capabilities imessage-direct --json`. It uses the existing
-`messaging routes`, `messaging resolve`, `messaging context`, `messaging preview`,
-and `confirm` commands. These commands preserve Ghostget's own permission,
-provider identity, context freshness, and at-most-once dispatch checks.
+Action intents include text, attachments, reactions, stickers, links and polls.
+App Clips and experiences have typed intents but no current native executor.
+Unsupported operations stay unavailable. Textbutler applies disclosure and
+contact policy before preparation; Ghostget independently enforces its managed
+permissions, recipient grant and dispatch checks.
 
-`createGhostgetCliInvoker` receives an exact trusted Ghostget CLI source path
-and admitted Bun executable. It does not discover executables or import another
-checkout. Private inputs travel over stdin. Outputs use owner-only temporary
-files, bounded process streams, SHA-256 artifact receipts, and exact run/binding
-checks. Ambient credential and runtime-hook environment variables are removed.
-Process failure after confirmation produces an indeterminate result; callers
-must retain the Ghostget journal and never automatically repeat that send.
+`createGhostgetTransport()` and `createGhostgetWhatsAppTransport()` preserve the
+older bounded-read/owner-confirmed CLI contracts. Their expiring opaque routes
+are not durable automation enrollment. They do not acquire new authority when
+the owner protocol is installed.
 
-Route discovery returns short-lived opaque list candidates. Resolving a
-candidate deliberately mints a **new** route reference; `history()` returns
-this as its `conversationId`. Use that value and its `contextId` for `prepare()`.
-The references expire and are capabilities, not persistent contact identities.
-A bounded history window is not authoritative coverage and has no pagination
-cursor in the current provider contract.
-
-The installed contract supports text previews and exact owner-confirmed sends.
-Native Contacts discovery, durable event cursors, contact-scoped delegation,
-attachments, tapbacks, stickers, rich links, App Clips, and experiences return
-explicit `unsupported` errors. Receiving an arbitrary rich intent never silently
-converts it to a plain text message. `text` capability means an installed
-executor; it does not attest a current account grant or live device readiness.
-There is no automatic reply loop until the required event and scoped delegation
-contracts exist and are negotiated.
-
-## Upstream extension contract
-
-WhatsApp uses `createGhostgetWhatsAppTransport()` and Ghostget's existing
-`whatsapp-web` adapter backed by its pinned wacli linked device. It admits
-bounded conversation/history reads only; a local projection does not supply
-fresh context or autonomous send authority. No WPPConnect dependency, direct
-wacli invocation, pairing, or synchronization is added to Textbutler. The Mac
-app's WhatsApp enrollment still needs a durable upstream account/conversation
-binding. See [the WhatsApp seam](../../docs/textbutler/whatsapp.md) for exact
-current behavior and the upstream event, grant and rich-action requirements.
-
-Ghostget should own stable account/conversation bindings, OS access, Contacts
-selection, ordered resumable incoming and owner-outgoing events, attachment
-materialization, and provider-specific rich execution. Textbutler should own
-contact activation, history initialization, conversational timing, model choice,
-memory, hooks, attribution, and its action journal. Delegate explicit capability
-names with exact account/contact bounds and revocable grant revisions. Upstream
-permission denial always wins. Events need cursor expiry and history-gap
-recovery; ambiguous sends need reconciliation, never implied safe retry.
-
-Ghostget's native control helper is presently app-lifetime and offers separate
-administrative stdio and approval/web-only agent IPC. Textbutler must not reuse
-its administrative channel, claim its socket is a message event daemon, or
-change Ghostget permissions through an agent-facing tool.
-
-Ghostget still consumes the frozen Message Like Me `message-bundle-v1/v2`
-package exports. Preserve those immutable artifacts. A later extraction into
-an independent contract package can remove that historical dependency without
-making Ghostget depend on the Textbutler application.
-
-Provider evidence: [Ghostget iMessage contract](https://github.com/hraness/ghostget/blob/main/docs/imessage-direct-provider.md),
-[native control architecture](https://github.com/hraness/ghostget/blob/main/docs/control-panel.md).
-Linq's separate [message API](https://docs.linqapp.com/channel/imessage/api/resources/chats/subresources/messages/)
-provides rich features but is not implemented or provisioned by this package.
-Its app-card and App Clip behavior cannot be inferred as available through
-Ghostget's AppleScript transport.
-
-## Verify
-
-```sh
-bun test packages/transport
-bunx tsc --noEmit -p packages/transport/tsconfig.json
-```
-
-All fixtures are synthetic. Tests neither inspect personal data nor send
-messages. Live OS permission, upstream rich capability, and unattended daemon
-qualification remain separate acceptance requirements.
+See [the Ghostget contract](../../docs/textbutler/ghostget-contract.md),
+[WhatsApp behavior](../../docs/textbutler/whatsapp.md), and
+[runtime setup](../textbutler/README.md). Tests use synthetic identities and do
+not assert real message delivery.

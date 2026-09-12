@@ -46,6 +46,12 @@ export function parseActionIntent(value: unknown): ActionIntent {
     case "reaction": exact(item, ["kind", "messageId", "emoji", "action"]); if (item.action !== "add" && item.action !== "remove") throw new Error("Invalid reaction action"); return { kind: "reaction", messageId: string(item.messageId), emoji: string(item.emoji, 64), action: item.action };
     case "sticker": exact(item, ["kind", "file", "messageId"]); return { kind: "sticker", file: relativeFile(item.file), messageId: nullableString(item.messageId) };
     case "link": case "app-clip": exact(item, ["kind", "url"]); return { kind: item.kind, url: https(item.url) };
+    case "poll": {
+      exact(item, ["kind", "question", "options", "maximumSelections"]);
+      const options = array(item.options, 12).map(option => string(option, 256));
+      if (options.length < 2 || new Set(options).size !== options.length) throw new Error("Polls need distinct options");
+      return { kind: "poll", question: string(item.question, 1024), options: Object.freeze(options), maximumSelections: item.maximumSelections === null ? null : integer(item.maximumSelections, 1, options.length) };
+    }
     case "experience": {
       exact(item, ["kind", "experienceId", "parameters"]);
       const parameters = object(item.parameters);

@@ -1,8 +1,8 @@
 import { basename } from "node:path";
-import {
-  AgentRouter, assertQualified, createPublicWeb, createToolBroker, selectClassifierModel,
-  type ModelCatalog, type PublicWeb, type RuntimeQualification,
-} from "../../agentrouter/src/index.ts";
+import { AgentRouter, assertQualified, type RuntimeQualification } from "../../agentrouter/src/runtime.ts";
+import { createPublicWeb } from "../../agentrouter/src/public-web.ts";
+import { createToolBroker, type PublicWeb } from "../../agentrouter/src/broker.ts";
+import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
 import { parseActionIntent, type ActionIntent } from "../../transport/src/index.ts";
 import type { ContactSettings } from "./config.ts";
 import { CLASSIFIER_INSTRUCTIONS } from "./decision.ts";
@@ -78,13 +78,14 @@ export function createRoutedButlerAgent(options: RoutedAgentOptions): ButlerAgen
         },
       },
     });
-    const instructions = purpose === "classify" ? CLASSIFIER_INSTRUCTIONS : `${CONTACT_GUIDANCE}\nRespond with strict JSON {"summary":string,"actions":ActionIntent[]}. Actions are proposals, never a delivery receipt. If you staged message-tool proposals, return an empty actions array; do not duplicate them in the final output. Otherwise return 1–7 text, attachment, reaction, sticker, link, app-clip, or experience actions conforming to the supplied transport schema. The host validates supported capabilities and applies disclosure. Useful memory updates should be concise and cite message IDs. Use files.read on a known path before conditional editing it. File inventory below contains the only admitted names. Keep application policy separate from editable context.`;
+    const instructions = purpose === "classify" ? CLASSIFIER_INSTRUCTIONS : `${CONTACT_GUIDANCE}\nRespond with strict JSON {"summary":string,"actions":ActionIntent[]}. Actions are proposals, never a delivery receipt. If you staged message-tool proposals, return an empty actions array; do not duplicate them in the final output. Otherwise return 1–7 text, attachment, reaction, sticker, link, poll, app-clip, or experience actions conforming to the supplied transport schema. The host validates supported capabilities and applies disclosure. Useful memory updates should be concise and cite message IDs. Use files.read on a known path before conditional editing it. File inventory below contains the only admitted names. Keep application policy separate from editable context.`;
     const actionContract = purpose === "respond" ? `\nAction fields (closed objects; omit no fields and add none):\n${JSON.stringify([
       { kind: "text", text: "response text" },
       { kind: "attachment", file: "outbox/document.txt", mimeType: "text/plain", name: "document.txt" },
       { kind: "reaction", messageId: "an ID from this conversation", emoji: "👍", action: "add" },
       { kind: "sticker", file: "outbox/sticker.png", messageId: null },
       { kind: "link", url: "https://example.com" },
+      { kind: "poll", question: "Which day works?", options: ["Saturday", "Sunday"], maximumSelections: null },
       { kind: "app-clip", url: "https://example.com" },
       { kind: "experience", experienceId: "an installed experience ID", parameters: {} },
     ])}\nReaction action is add or remove. Files must exist in this contact workspace before submission; use the file tools to create new text attachments. Links must be HTTPS, and message targets must come from this conversation. Capability support is determined by the host; these shapes are not a promise that a connected provider supports every action.` : "";

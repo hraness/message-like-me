@@ -1,16 +1,22 @@
 /** Owner-only desktop control protocol. Messaging authority is never a UI command. */
 export const CONTROL_PROTOCOL = "textbutler.control.v1" as const;
-export type CapabilityId = "messages" | "contacts" | "agent" | "attachments" | "reactions" | "stickers" | "mini-apps";
+export type CapabilityId = "messages" | "contacts" | "agent" | "attachments" | "reactions" | "stickers" | "links" | "polls" | "mini-apps";
 export interface Capability { id: CapabilityId; status: "available" | "setup-required" | "unsupported"; detail: string }
 export interface ContactSettings {
   enabled: boolean;
   responseMode: "smart" | "keyword";
   keyword: string;
   provider: "codex" | "claude";
+  accountId?: string;
   disclosure: { character: string; begin: string; end: string };
 }
-export interface Contact { id: string; name: string; subtitle: string; settings: ContactSettings }
+export interface Contact { id: string; name: string; subtitle: string; settings: ContactSettings;
+  messaging?: { provider: "imessage" | "whatsapp"; state: "active" | "missing" | "revocation-pending" | "recovery-required"; detail: string; grantExpiresAt: string | null } }
 export interface Activity { id: string; at: string; contactId: string | null; title: string; detail: string }
+export interface ProviderAccountDiagnostic {
+  id: string; label: string; provider: "claude" | "codex"; route: "claude-api" | "claude-code" | "codex";
+  status: "ready" | "setup-required" | "unavailable"; detail: string; defaultReplyModel: string | null; classifierModel: string | null;
+}
 export interface DesktopSnapshot {
   protocol: typeof CONTROL_PROTOCOL;
   revision: number;
@@ -20,6 +26,9 @@ export interface DesktopSnapshot {
   contacts: Contact[];
   capabilities: Capability[];
   activity: Activity[];
+  providerAccounts?: readonly ProviderAccountDiagnostic[];
+  automation?: { state: "running" | "paused" | "unavailable"; detail: string };
+  messagingProviders?: readonly ("imessage" | "whatsapp")[];
 }
 export interface ConversationCandidate { id: string; name: string; subtitle: string; eligible: boolean; reason: string }
 export type ControlRequest =
@@ -27,6 +36,8 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.enroll"; candidateId: string; expectedRevision: number; initializeHistory: boolean }
   | { protocol: typeof CONTROL_PROTOCOL; command: "owner.job.read"; jobId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot" }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.check"; accountId: string }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "messaging.start"; provider: "imessage" | "whatsapp" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.settings.update"; contactId: string; expectedRevision: number; settings: ContactSettings }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.read"; contactId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.write"; contactId: string; expectedRevision: string; content: string }
@@ -50,6 +61,7 @@ export function disclosurePreview(settings: ContactSettings, text = "Hello, this
   return `${character}${begin} ${text} ${end}`;
 }
 export function validateContactSettings(settings: ContactSettings): string | null {
+  if (settings.accountId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(settings.accountId)) return "Choose a configured account.";
   if (typeof settings.enabled !== "boolean" || !["smart", "keyword"].includes(settings.responseMode)
     || !["codex", "claude"].includes(settings.provider)) return "Choose a supported response mode and agent provider.";
   if (typeof settings.keyword !== "string" || !settings.keyword.trim() || settings.keyword.length > 40
@@ -75,6 +87,8 @@ export function disconnectedSnapshot(detail = "The Textbutler daemon is not conn
       { id: "attachments", status: "setup-required", detail: "File sending must be reported by the connected provider." },
       { id: "reactions", status: "setup-required", detail: "Available only when the transport supports reactions." },
       { id: "stickers", status: "unsupported", detail: "No qualified sticker transport is connected." },
+      { id: "links", status: "setup-required", detail: "Connect messaging to check rich link support." },
+      { id: "polls", status: "setup-required", detail: "Connect messaging to check native poll support." },
       { id: "mini-apps", status: "unsupported", detail: "No qualified iMessage app transport is connected." },
     ],
   };
@@ -113,6 +127,7 @@ function settings(value: unknown): ContactSettings {
   const result: ContactSettings = {
     enabled: bool(row.enabled), responseMode: oneOf(row.responseMode, ["smart", "keyword"]),
     keyword: text(row.keyword, 40), provider: oneOf(row.provider, ["codex", "claude"]),
+    ...(row.accountId === undefined ? {} : { accountId: text(row.accountId, 80) }),
     disclosure: { character: text(symbols.character, 16), begin: text(symbols.begin, 16), end: text(symbols.end, 16) },
   };
   const error = validateContactSettings(result); if (error) throw new Error(error);
@@ -144,11 +159,26 @@ export function parseControlResponse(value: unknown): ControlResponse {
   const snapshot: DesktopSnapshot = {
     protocol: CONTROL_PROTOCOL, revision: integer(source.revision), connection: oneOf(source.connection, ["connected", "disconnected", "demo"]),
     detail: text(source.detail), settings: { paused: bool(global.paused), activeContactLimit: integer(global.activeContactLimit, 1, 50) },
-    contacts: list(source.contacts, 1_000).map(value => { const row = record(value); return { id: text(row.id, 256), name: text(row.name, 256), subtitle: text(row.subtitle, 512), settings: settings(row.settings) }; }),
-    capabilities: list(source.capabilities, 7).map(value => { const row = record(value); return { id: oneOf(row.id, ["messages", "contacts", "agent", "attachments", "reactions", "stickers", "mini-apps"]), status: oneOf(row.status, ["available", "setup-required", "unsupported"]), detail: text(row.detail) }; }),
+    contacts: list(source.contacts, 1_000).map(value => { const row = record(value); return { id: text(row.id, 256), name: text(row.name, 256), subtitle: text(row.subtitle, 512), settings: settings(row.settings),
+      ...(row.messaging === undefined ? {} : { messaging: { provider: oneOf(record(row.messaging).provider, ["imessage", "whatsapp"]), state: oneOf(record(row.messaging).state, ["active", "missing", "revocation-pending", "recovery-required"]), detail: text(record(row.messaging).detail, 512), grantExpiresAt: record(row.messaging).grantExpiresAt === null ? null : text(record(row.messaging).grantExpiresAt, 32) } }) }; }),
+    capabilities: list(source.capabilities, 9).map(value => { const row = record(value); return { id: oneOf(row.id, ["messages", "contacts", "agent", "attachments", "reactions", "stickers", "links", "polls", "mini-apps"]), status: oneOf(row.status, ["available", "setup-required", "unsupported"]), detail: text(row.detail) }; }),
     activity: list(source.activity, 200).map(value => { const row = record(value); return { id: text(row.id, 256), at: text(row.at, 64), contactId: row.contactId === null ? null : text(row.contactId, 256), title: text(row.title, 256), detail: text(row.detail) }; }),
+    ...(source.providerAccounts === undefined ? {} : { providerAccounts: list(source.providerAccounts, 10).map(value => {
+      const account = record(value);
+      return { id: text(account.id, 80), label: text(account.label, 100), provider: oneOf(account.provider, ["claude", "codex"]),
+        route: oneOf(account.route, ["claude-api", "claude-code", "codex"]), status: oneOf(account.status, ["ready", "setup-required", "unavailable"]),
+        detail: text(account.detail, 512), defaultReplyModel: account.defaultReplyModel === null ? null : text(account.defaultReplyModel, 160),
+        classifierModel: account.classifierModel === null ? null : text(account.classifierModel, 160) };
+    }) }),
+    ...(source.automation === undefined ? {} : { automation: { state: oneOf(record(source.automation).state, ["running", "paused", "unavailable"]), detail: text(record(source.automation).detail, 512) } }),
+    ...(source.messagingProviders === undefined ? {} : { messagingProviders: list(source.messagingProviders, 2).map(value => oneOf(value, ["imessage", "whatsapp"])) }),
   };
   if (new Set(snapshot.contacts.map(contact => contact.id)).size !== snapshot.contacts.length
-    || new Set(snapshot.capabilities.map(capability => capability.id)).size !== snapshot.capabilities.length) throw new Error("Duplicate identity in control response.");
+    || new Set(snapshot.capabilities.map(capability => capability.id)).size !== snapshot.capabilities.length
+    || snapshot.providerAccounts && new Set(snapshot.providerAccounts.map(account => account.id)).size !== snapshot.providerAccounts.length) throw new Error("Duplicate identity in control response.");
+  for (const account of snapshot.providerAccounts ?? []) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(account.id) || account.provider !== (account.route === "codex" ? "codex" : "claude")) throw new Error("Invalid provider account identity.");
+    if (account.status === "ready" && (account.route !== "claude-api" || !account.classifierModel || !account.defaultReplyModel)) throw new Error("Invalid provider readiness.");
+  }
   return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot };
 }

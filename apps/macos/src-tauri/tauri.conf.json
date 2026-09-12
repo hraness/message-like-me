@@ -12,5 +12,10 @@
       "capabilities": ["main"]
     }
   },
-  "bundle": { "active": true, "targets": ["app"], "macOS": { "minimumSystemVersion": "14.5" } }
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["icons/icon.icns", "icons/icon.png"],
+    "macOS": { "minimumSystemVersion": "14.5" }
+  }
 }

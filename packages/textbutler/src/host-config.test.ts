@@ -37,3 +37,21 @@ test("owner configuration rejects linked or non-private files without exposing t
   await chmod(file, 0o600); await writeFile(file, "do not echo this invalid content");
   await expect(loadHostConfig(root)).rejects.toThrow("Invalid private Textbutler host configuration");
 });
+
+test("provider config contains explicit routes and credential filenames, never credentials or authority receipts", () => {
+  const account = { id: "api-personal", label: "Personal API", route: "claude-api", credentialFile: "personal-api", replyModel: "synthetic-reply",
+    prices: { observedAt: 1, models: [{ id: "synthetic-reply", inputUsdPerMillion: 1, outputUsdPerMillion: 3, classifierEligible: true }] } };
+  expect(parseHostConfig({ schemaVersion: 1, providerAccounts: [account] }).providerAccounts?.[0]).toMatchObject({ ...account, maxBudgetUsd: 0.25 });
+  expect(parseHostConfig({ schemaVersion: 1, providerAccounts: [{ id: "code-personal", label: "Personal Code", route: "claude-code" }] }).providerAccounts?.[0]?.route).toBe("claude-code");
+  for (const changes of [{ credentialFile: "../private" }, { credentialFile: "/tmp/key" }, { id: "native-codex" }, { apiKey: "not-a-credential" }, { runtimeArtifact: { sha256: "f".repeat(64) } }, { endpoint: "https://example.com" }, { maxBudgetUsd: 100 }, { prices: { observedAt: 1, models: [] }, route: "claude-code" }]) {
+    expect(() => parseHostConfig({ schemaVersion: 1, providerAccounts: [{ ...account, ...changes }] })).toThrow("Invalid private");
+  }
+  expect(() => parseHostConfig({ schemaVersion: 1, providerAccounts: [account, account] })).toThrow("Invalid private");
+});
+test("automation accounts explicitly select up to one configured account per messaging network", () => {
+  const ghostget = { executable: "/opt/ghostget", authId: "legacy", automationAccounts: [{ provider: "imessage" as const, authId: "messages" }, { provider: "whatsapp" as const, authId: "whatsapp" }] };
+  expect(parseHostConfig({ schemaVersion: 1, ghostget }).ghostget?.automationAccounts).toEqual(ghostget.automationAccounts);
+  for (const automationAccounts of [[], [ghostget.automationAccounts[0], ghostget.automationAccounts[0]], [{ provider: "other", authId: "account" }], [{ provider: "whatsapp", authId: "account", credential: "never" }]]) {
+    expect(() => parseHostConfig({ schemaVersion: 1, ghostget: { ...ghostget, automationAccounts } })).toThrow("Invalid private");
+  }
+});

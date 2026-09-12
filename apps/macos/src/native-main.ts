@@ -1,3 +1,4 @@
 import { mountPanel } from "./panel.ts";
 import { nativePort } from "./native-port.ts";
-mountPanel(document.querySelector<HTMLElement>("#app")!, nativePort);
+import { nativeLifecyclePort } from "./lifecycle.ts";
+mountPanel(document.querySelector<HTMLElement>("#app")!, nativePort, nativeLifecyclePort);

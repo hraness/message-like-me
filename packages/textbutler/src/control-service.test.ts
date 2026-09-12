@@ -5,6 +5,8 @@ import { newContact, type Settings } from "./config.ts";
 import { TextbutlerControlService, TEXTBUTLER_CONTROL_PROTOCOL as protocol, initializeOwnerState, parseControlRequest } from "./control-service.ts";
 import { ContactWorkspace } from "./workspace.ts";
 import { RunJournal } from "./journal.ts";
+import { createProviderHost } from "./provider-host.ts";
+import { parseHostConfig } from "./host-config.ts";
 
 const roots: string[] = [], services: TextbutlerControlService[] = [];
 afterEach(async () => { for (const service of services.splice(0)) await service.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -15,6 +17,14 @@ async function setup(contacts = true) {
   return { service, dataDir };
 }
 describe("persistent owner control service", () => {
+  test("provider shutdown failure still closes the private journal before custody can be released", async () => {
+    const { service, dataDir } = await setup(false); await service.close(); services.splice(services.indexOf(service), 1);
+    const reopened = await TextbutlerControlService.open({ dataDir, providers: leases => ({ ...createProviderHost({ dataDir, config: { schemaVersion: 1 }, leases }),
+      async close() { throw new Error("Synthetic provider shutdown failure"); } }) });
+    const journal = reopened.runJournal();
+    await expect(reopened.close()).rejects.toThrow("Synthetic provider shutdown failure");
+    expect(() => journal.claim("after-close", "contact", "event", 1)).toThrow();
+  });
   test("fresh initialization is paused with no invented contacts or available provider capabilities", async () => {
     const { service } = await setup(false); const snapshot = await service.snapshot();
     expect(snapshot.connection).toBe("connected"); expect(snapshot.contacts).toEqual([]);
@@ -50,7 +60,42 @@ describe("persistent owner control service", () => {
     expect((await service.snapshot()).revision).toBe(1);
   });
   test("unknown fields, direct send commands and traversal never reach a handler", () => {
-    for (const request of [{ protocol, command: "snapshot", shell: "whoami" }, { protocol, command: "send" }, { protocol, command: "contact.memory.read", contactId: "../other" }, { protocol, command: "contact.memory.write", contactId: "synthetic-a", expectedRevision: 1, content: "x" }]) expect(() => parseControlRequest(request)).toThrow();
+    for (const request of [{ protocol, command: "snapshot", shell: "whoami" }, { protocol, command: "send" }, { protocol, command: "contact.memory.read", contactId: "../other" }, { protocol, command: "contact.memory.write", contactId: "synthetic-a", expectedRevision: 1, content: "x" }, { protocol, command: "provider.accounts.check", accountId: "account", credential: "private" }, { protocol, command: "provider.accounts.check", accountId: "../other" }]) expect(() => parseControlRequest(request)).toThrow();
+  });
+  test("account selection is explicit and older settings retain their existing binding", async () => {
+    const { service, dataDir } = await setup(); await service.close(); services.splice(services.indexOf(service), 1);
+    const config = parseHostConfig({ schemaVersion: 1, providerAccounts: [{ id: "api-owner", label: "API owner", route: "claude-api", credentialFile: "api-owner-key", replyModel: "synthetic-model", prices: { observedAt: 1, models: [{ id: "synthetic-model", inputUsdPerMillion: 1, outputUsdPerMillion: 2, classifierEligible: true }] } }] });
+    const reopened = await TextbutlerControlService.open({ dataDir, providers: leases => createProviderHost({ dataDir, config, leases }) }); services.push(reopened);
+    const initial = await reopened.snapshot(), { accountId: _accountId, ...oldSettings } = initial.contacts[0]!.settings;
+    const legacy = await reopened.request({ protocol, command: "contact.settings.update", contactId: "synthetic-a", expectedRevision: 1, settings: { ...oldSettings, provider: "claude" } });
+    expect(legacy).toMatchObject({ ok: true, kind: "snapshot", snapshot: { contacts: [{ settings: { accountId: "default", provider: "claude" } }, {}] } });
+    const selected = await reopened.request({ protocol, command: "contact.settings.update", contactId: "synthetic-a", expectedRevision: 2, settings: { ...oldSettings, provider: "claude", accountId: "api-owner" } });
+    expect(selected.ok).toBe(true);
+    expect(await reopened.request({ protocol, command: "contact.settings.update", contactId: "synthetic-a", expectedRevision: 3, settings: { ...oldSettings, provider: "claude" } })).toMatchObject({ ok: true });
+    expect((await reopened.settings()).contacts[0]).toMatchObject({ accountId: "api-owner", provider: "claude" });
+    expect(await reopened.request({ protocol, command: "contact.settings.update", contactId: "synthetic-a", expectedRevision: 4, settings: { ...oldSettings, provider: "codex", accountId: "api-owner" } })).toMatchObject({ ok: false, code: "invalid-request" });
+    const snapshot = await reopened.snapshot(); expect(snapshot.revision).toBe(4);
+    expect(snapshot.providerAccounts?.some(account => account.id === "api-owner" && account.route === "claude-api")).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain("api-owner-key");
+    expect(snapshot.settings.paused).toBe(true);
+  });
+  test("provider checks use bounded owner jobs without changing settings or blocking pause", async () => {
+    const { service, dataDir } = await setup(); await service.close(); services.splice(services.indexOf(service), 1);
+    let finish!: () => void, checked = "";
+    const ready = new Promise<void>(resolve => { finish = resolve; });
+    const reopened = await TextbutlerControlService.open({ dataDir, providers: leases => ({ ...createProviderHost({ dataDir, config: { schemaVersion: 1 }, leases }),
+      async check(accountId, signal) { checked = accountId; await ready; signal.throwIfAborted(); },
+    }) }); services.push(reopened);
+    const job = await reopened.request({ protocol, command: "provider.accounts.check", accountId: "synthetic-api" });
+    if (!job.ok || job.kind !== "job") throw new Error("Expected owner job");
+    expect(checked).toBe("synthetic-api");
+    expect(await reopened.request({ protocol, command: "provider.accounts.check", accountId: "synthetic-api" })).toMatchObject({ ok: false, code: "capacity" });
+    expect(await reopened.request({ protocol, command: "global.settings.update", expectedRevision: 1, settings: { paused: true, activeContactLimit: 1 } })).toMatchObject({ ok: true });
+    finish();
+    let response = await reopened.request({ protocol, command: "owner.job.read", jobId: job.jobId });
+    for (let i = 0; response.ok && response.kind === "job" && i < 5; i++) response = await reopened.request({ protocol, command: "owner.job.read", jobId: job.jobId });
+    expect(response).toMatchObject({ ok: true, kind: "snapshot", snapshot: { revision: 2, settings: { paused: true } } });
+    expect((await reopened.snapshot()).activity).toEqual([]);
   });
   test("activity projects actual journal runs", async () => {
     const { service, dataDir } = await setup();

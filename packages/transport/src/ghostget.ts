@@ -11,7 +11,7 @@ export type GhostgetInvocation =
 /** Invokers return parsed, receipt-verified private artifacts for messaging commands. */
 export type GhostgetInvoker = (request: GhostgetInvocation) => Promise<unknown>;
 export interface GhostgetTransportOptions { readonly invoke: GhostgetInvoker; readonly authId: string; readonly clock?: () => Date }
-const capabilities: readonly Capability[] = ["history", "contacts", "events", "text", "attachment", "reaction", "sticker", "link", "app-clip", "experience", "autonomous-send"];
+const capabilities: readonly Capability[] = ["history", "contacts", "events", "text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience", "autonomous-send"];
 const requiredOperations = ["messaging.list", "conversations.read", "messaging.read", "messaging.send"] as const;
 function hash(value: unknown): string { return createHash("sha256").update(canonicalJson(value)).digest("hex"); }
 function ref(value: unknown, kind: "wmroute" | "wmcontext"): string {

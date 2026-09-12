@@ -16,7 +16,74 @@ It provides:
 `src/index.ts` exports the complete current interface. `createPublicWeb()` provides bounded public HTTPS GETs with address pinning, redirect checks, no ambient authentication, a 15-second deadline, and a 256 KiB maximum text response. Run `bun test
 packages/agentrouter` from the repository root.
 
-## Provider execution status
+## Opt-in Claude API route
+
+`createClaudeApiAdapter()` is an additional, explicitly selected **Claude API**
+route. It does not run Claude Code, use a coding-agent subscription, discover
+accounts, or substitute itself for a selected Codex/Claude Code route. The host
+executes its tool loop: API responses can invoke only the supplied broker's six
+operations. No shell, subprocess, native configuration, plugin or server-side
+tool is exposed. Unknown tool names receive a denied result; unexpected response
+capabilities fail the run. Classification sends an empty tool array.
+
+This adapter admits its code-enforced execution profile after checking the pinned
+Anthropic SDK 0.125.0 and verifying the compiled runtime's exact bytes. The
+24-hour runtime qualification describes that local authority boundary; it does
+not attest live account availability or messaging delivery. Recreate an expired
+adapter and refresh model availability before continuing. Native fixture receipts
+play no part in API admission.
+
+The trusted embedding host supplies `runtimeArtifact: {entrypoint, sha256}` from
+its reviewed compiled distribution. The adapter verifies the physical regular
+file and exact bytes, then binds the runtime identity to that digest and pinned SDK
+version. A colocated self-authored manifest is not proof of authenticity: the host
+must establish its distribution signature or reviewed build provenance separately.
+This input must never come from contact settings or an untrusted plugin.
+
+The host must explicitly bind a credential and supply observed prices:
+
+```ts
+const credentials = createFileClaudeApiKeyResolver({
+  directory: privateCredentialDirectory,
+  bindings: { "owner-api-account": "anthropic-api-key" },
+});
+const modelCatalog = await discoverClaudeModels({
+  credentials,
+  accountId: "owner-api-account",
+  priceCatalog: ownerReviewedPrices,
+  signal,
+});
+const adapter = await createClaudeApiAdapter({
+  runtimeArtifact: verifiedCompiledRuntime,
+  credentials,
+  modelCatalog: async () => modelCatalog,
+});
+```
+
+The credential directory must be physical, owned by the current user and mode
+0700. Each selected file must be a single-link regular file with private read/write
+permissions; it contains only the API key, optionally followed by one newline.
+Files are read through bounded, checked descriptors on each use. The application
+owns credential creation/removal and keeps this directory outside contact memory.
+The existing explicit environment-variable resolver remains available.
+
+Model discovery calls only the authenticated Models API. It does not send a
+prompt or execute an agent. `ClaudePriceCatalog` contains `observedAt` and exact
+`id`, `inputUsdPerMillion`, `outputUsdPerMillion`, `classifierEligible` entries;
+prices older than 30 days are rejected. The API supplies availability and structured
+output capability, not prices. Unknown/unpriced models remain excluded. The
+classifier selects the lowest estimated cost from the eligible observed entries.
+
+Requests go only to the fixed Anthropic HTTPS origin, with explicitly reconstructed
+headers, no cookies, redirects, retries, custom endpoints or ambient proxy
+configuration. Responses are bounded before SDK parsing. Defaults are eight
+turns, 4,096 output tokens (512 for classification), a 120-second deadline and
+a $0.25 conservative local reservation using supplied prices. That reservation
+is not a provider billing cap. Cancellation prevents subsequent tool calls and
+releases account custody once all awaited local work has stopped. Errors omit
+provider response bodies and credentials.
+
+## Native coding-agent execution status
 
 `createClaudeSdkAdapter()` implements the pinned Claude Agent SDK subprocess
 protocol with API-key authentication. Its execution gate requires a trusted host

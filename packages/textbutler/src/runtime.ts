@@ -112,7 +112,7 @@ export class ButlerRuntime {
       if (controller.signal.aborted || dispatchSettings.paused || !dispatchSettings.contacts.some(c => c.id === contact.id && c.enabled && c.revision === contact.revision && c.pausedUntil <= this.clock())) return finish("cancelled", "cancelled-at-dispatch");
       this.ports.journal.transition(runId, "running", "dispatching", "intent-recorded", this.clock(), plan.value.digest);
       state = "dispatching";
-      const receipt = await this.ports.transport.submit(plan.value, { mode: "delegated", grantId: grant });
+      const receipt = await this.ports.transport.submit(plan.value, { mode: "delegated", grantId: grant }, controller.signal);
       if (!receipt.ok) return finish("indeterminate", "dispatch-result-unknown");
       const result = finish(receipt.value.state, receipt.value.state);
       try { await this.ports.hooks.emit("reply.sent", hook); } catch { /* Receipt remains authoritative if a notification hook fails. */ }

@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "The bundled main window may use only the typed local Textbutler control channel.",
   "windows": ["main"],
-  "permissions": ["allow-control-request"]
+  "permissions": ["allow-control-request", "allow-lifecycle-request"]
 }

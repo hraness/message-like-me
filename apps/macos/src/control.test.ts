@@ -38,6 +38,19 @@ describe("desktop control boundary", () => {
     expect(snapshot.settings.paused).toBe(true);
     expect(snapshot.capabilities.some(capability => capability.status === "available")).toBe(false);
   });
+  test("account metadata stays distinct from provider and synthetic preview cannot authenticate", async () => {
+    const snapshot = disconnectedSnapshot();
+    snapshot.providerAccounts = [{ id: "api-owner", label: "Owner API", provider: "claude", route: "claude-api", status: "ready", detail: "Synthetic fixture", defaultReplyModel: "reply", classifierModel: "cheap" }];
+    const parsed = parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot });
+    expect(parsed).toMatchObject({ ok: true, snapshot: { providerAccounts: [{ route: "claude-api", classifierModel: "cheap" }] } });
+    expect(validateContactSettings({ ...DEFAULT_CONTACT_SETTINGS, accountId: "../other" })).not.toBeNull();
+    snapshot.providerAccounts = [...snapshot.providerAccounts, ...snapshot.providerAccounts];
+    expect(() => parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot })).toThrow("Duplicate");
+    snapshot.providerAccounts = [{ ...snapshot.providerAccounts[0]!, provider: "codex" }];
+    expect(() => parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot })).toThrow("identity");
+    const demo = createDemoPort();
+    expect(await demo.request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.check", accountId: "synthetic" })).toMatchObject({ ok: false, message: "This synthetic preview does not connect provider accounts." });
+  });
 });
 
 describe("separate synthetic preview", () => {

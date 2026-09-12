@@ -58,3 +58,24 @@ test("an interrupted atomic-write stage does not obstruct memory recovery", asyn
   expect(await workspace.read("notes/recovery.md")).toBe("The original memory is available.");
   await expect(workspace.read(".staging/interrupted-write")).rejects.toThrow();
 });
+
+test("binary attachments are admitted as owned snapshots without widening text tools", async () => {
+  const { workspace } = await setup(); const bytes = Buffer.alloc(2 * 1024 * 1024, 255);
+  await writeFile(join(workspace.root, "outbox", "fixture.bin"), bytes, { mode: 0o600 });
+  const asset = await workspace.admitAsset("outbox/fixture.bin");
+  expect(asset.bytes).toEqual(bytes); expect(asset.sha256).toHaveLength(64);
+  expect((await workspace.list()).find(entry => entry.path === "outbox/fixture.bin")?.bytes).toBe(bytes.length);
+  await expect(workspace.read("outbox/fixture.bin")).rejects.toThrow();
+  await expect(workspace.admitAsset("MEMORY.md")).rejects.toThrow();
+  await writeFile(join(workspace.root, "outbox", "fixture.bin"), "owner changed", { mode: 0o600 });
+  expect(asset.bytes).toEqual(bytes);
+});
+test("attachment admission refuses links and oversized assets", async () => {
+  const { root, workspace } = await setup(); const outside = join(root, "other.bin");
+  await writeFile(outside, "private", { mode: 0o600 });
+  await symlink(outside, join(workspace.root, "outbox", "link.bin"));
+  await link(outside, join(workspace.root, "outbox", "hard.bin"));
+  for (const path of ["outbox/link.bin", "outbox/hard.bin", "../other.bin"]) await expect(workspace.admitAsset(path)).rejects.toThrow();
+  await writeFile(join(workspace.root, "outbox", "large.bin"), Buffer.alloc(16 * 1024 * 1024 + 1), { mode: 0o600 });
+  await expect(workspace.admitAsset("outbox/large.bin")).rejects.toThrow();
+});

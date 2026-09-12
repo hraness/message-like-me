@@ -80,6 +80,9 @@ test("a recorded living PID or a matching socket that still accepts connections 
 test("graceful shutdown preserves a replacement at the canonical socket pathname", async () => {
   const dataDir = await fixture(), daemon = await startDaemon({ dataDir });
   await rename(daemon.socketPath, join(dataDir, "moved.sock")); await writeFile(daemon.socketPath, "replacement", { mode: 0o600 });
-  await expect(daemon.close()).rejects.toThrow("unknown or unsafe");
+  await expect(daemon.close()).rejects.toMatchObject({
+    name: "AggregateError", message: "Daemon cleanup requires attention",
+    errors: [expect.objectContaining({ message: "An unknown or unsafe Textbutler socket entry already exists." })],
+  });
   expect(await readFile(daemon.socketPath, "utf8")).toBe("replacement");
 });

@@ -10,7 +10,7 @@ export interface GhostgetWhatsAppOptions {
   readonly clock?: () => Date;
 }
 const adapterId = "whatsapp-web";
-const capabilities: readonly Capability[] = ["history", "contacts", "events", "text", "attachment", "reaction", "sticker", "link", "app-clip", "experience", "autonomous-send"];
+const capabilities: readonly Capability[] = ["history", "contacts", "events", "text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience", "autonomous-send"];
 const readOperations = ["messaging.list", "messaging.read"];
 function routeRef(value: unknown): string {
   const ref = string(value, 64);
