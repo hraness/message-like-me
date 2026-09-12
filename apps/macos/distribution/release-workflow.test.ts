@@ -86,6 +86,8 @@ test("uncertain upload stops and another attempt cannot adopt retained draft", a
 });
 test("workflow separates Apple secrets, credential-free checks, checkout-free OIDC and sole writer", () => {
   const source = readFileSync(join(import.meta.dir, "../../../.github/workflows/desktop-release.yml"), "utf8");
+  const owners = readFileSync(join(import.meta.dir, "../../../.github/CODEOWNERS"), "utf8");
+  expect(owners.split("\n")).toContain("/apps/macos/distribution/** @0thernet");
   const sign = source.split("\n  sign:\n")[1]!.split("\n  verify:\n")[0]!, attest = source.split("\n  attest:\n")[1]!.split("\n  publish:\n")[0]!;
   expect(source.match(/contents: write/gu)).toHaveLength(1); expect(source.match(/id-token: write/gu)).toHaveLength(1);
   expect(sign).toContain("environment: desktop-signing"); expect(sign).not.toMatch(/run:.*(?:bun install|native:package|native:smoke)/u); expect(sign).toContain("notary-submission.json");
