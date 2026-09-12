@@ -16,24 +16,32 @@ if (import.meta.main) {
   const keychain = join(scratch, "signing.keychain-db"), keychainPassword = randomBytes(32).toString("hex");
   let keychainAttempted = false;
   const environment = { HOME: process.env.HOME ?? "", TMPDIR: scratch, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
-  const apple = (program: string, args: readonly string[], timeout = 60_000) => command(program, args, { environment, timeout });
+  const apple = (program: string, args: readonly string[], timeout = 60_000, input?: string) => command(program, args, { environment, timeout, ...(input === undefined ? {} : { input }) });
   try {
     command("/usr/bin/python3", ["-I", join(import.meta.dir, "archive.py"), "unsigned", join(input, "unsigned.zip"), tree], { timeout: 180_000 });
     const app = join(tree, "Textbutler.app");
     requireValue(sha256(JSON.stringify(inventory(app))) === receipt.bundleSha256, "Extracted unsigned app differs");
     const paths = nativePaths(app);
     const team = process.env.APPLE_TEAM_ID ?? "", identity = (process.env.APPLE_SIGNING_IDENTITY_SHA1 ?? "").toLowerCase(), keyId = process.env.APPLE_API_KEY_ID ?? "", issuer = process.env.APPLE_API_ISSUER ?? "";
-    requireValue(/^[A-Z0-9]{10}$/u.test(team) && /^[A-Z0-9]{10}$/u.test(keyId) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(issuer), "Complete Apple team and notary API identity are required"); digest(identity, 40);
-    const certificate = process.env.APPLE_CERTIFICATE_BASE64 ?? "", password = process.env.APPLE_CERTIFICATE_PASSWORD ?? "", privateKey = process.env.APPLE_API_PRIVATE_KEY ?? "";
-    requireValue(certificate.length > 0 && certificate.length <= 128 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/u.test(certificate) && password.length > 0 && password.length <= 1024 && privateKey.length <= 16 * 1024 && privateKey.startsWith("-----BEGIN PRIVATE KEY-----\n"), "Complete protected signing secrets are required");
+    const privateKey = process.env.APPLE_API_PRIVATE_KEY ?? "";
+    const appleId = process.env.APPLE_NOTARY_APPLE_ID ?? "", appPassword = process.env.APPLE_NOTARY_APP_PASSWORD ?? "";
+    const apiMode = keyId.length > 0 || issuer.length > 0 || privateKey.length > 0;
+    const appMode = appleId.length > 0 || appPassword.length > 0;
+    requireValue(!(apiMode && appMode), "Choose one notarization credential mode");
+    requireValue((apiMode && /^[A-Z0-9]{10}$/u.test(keyId) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(issuer))
+      || (appMode && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(appleId) && appPassword.length > 0 && appPassword.length <= 1024), "Complete notarization credentials are required");
+    requireValue(/^[A-Z0-9]{10}$/u.test(team), "A Developer ID team is required"); digest(identity, 40);
+    const certificate = process.env.APPLE_CERTIFICATE_BASE64 ?? "", password = process.env.APPLE_CERTIFICATE_PASSWORD ?? "";
+    requireValue(certificate.length > 0 && certificate.length <= 128 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/u.test(certificate) && password.length > 0 && password.length <= 1024 && (!apiMode || (privateKey.length <= 16 * 1024 && privateKey.startsWith("-----BEGIN PRIVATE KEY-----\n"))), "Complete protected signing secrets are required");
     writeFileSync(join(scratch, "certificate.p12"), Buffer.from(certificate, "base64"), { flag: "wx", mode: 0o600 });
-    writeFileSync(join(scratch, "notary.p8"), privateKey, { flag: "wx", mode: 0o600 });
+    if (apiMode) writeFileSync(join(scratch, "notary.p8"), privateKey, { flag: "wx", mode: 0o600 });
     keychainAttempted = true;
     apple("/usr/bin/security", ["create-keychain", "-p", keychainPassword, keychain]);
     apple("/usr/bin/security", ["set-keychain-settings", "-lut", "3600", keychain]);
     apple("/usr/bin/security", ["unlock-keychain", "-p", keychainPassword, keychain]);
     apple("/usr/bin/security", ["import", join(scratch, "certificate.p12"), "-k", keychain, "-P", password, "-T", "/usr/bin/codesign"]);
     apple("/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:,codesign:", "-s", "-k", keychainPassword, keychain]);
+    if (appMode) apple("/usr/bin/xcrun", ["notarytool", "store-credentials", "textbutler-notary", "--apple-id", appleId, "--team-id", team, "--keychain", keychain], 120_000, `${appPassword}\n`);
     const identities = apple("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning", keychain]).toString("utf8");
     requireValue(identities.split("\n").some(line => line.includes(identity.toUpperCase()) && line.includes('"Developer ID Application:') && line.includes(`(${team})`)), "Certificate is not the exact selected Developer ID Application identity");
     const runtimePath = paths.find(path => path.endsWith("/textbutler-bun"))!;
@@ -46,7 +54,8 @@ if (import.meta.main) {
     apple("/usr/bin/codesign", ["--verify", "--deep", "--strict", app]); assertSignature(app, team, IDENTIFIER);
     const submission = join(scratch, "submission.zip"); apple("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, submission], 180_000);
     writeFileSync(join(out, "notary-attempt.json"), `${JSON.stringify({ schema: "textbutler.notary-attempt.v1", sourceSha: source, unsignedReceiptSha256: receiptDigest, submissionSha256: sha256(readPhysical(submission)), startedAt: new Date().toISOString(), status: "submission-outcome-pending" })}\n`, { flag: "wx", mode: 0o600 });
-    const auth = ["--key", join(scratch, "notary.p8"), "--key-id", keyId, "--issuer", issuer];
+    const auth = apiMode ? ["--key", join(scratch, "notary.p8"), "--key-id", keyId, "--issuer", issuer]
+      : ["--keychain-profile", "textbutler-notary", "--keychain", keychain];
     const submitted = object(JSON.parse(apple("/usr/bin/xcrun", ["notarytool", "submit", submission, ...auth, "--output-format", "json"], 180_000).toString("utf8")));
     requireValue(typeof submitted.id === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(submitted.id), "Notary submission identity is missing");
     writeFileSync(join(out, "notary-submission.json"), `${JSON.stringify({ sourceSha: source, unsignedReceiptSha256: receiptDigest, id: submitted.id })}\n`, { flag: "wx", mode: 0o600 });

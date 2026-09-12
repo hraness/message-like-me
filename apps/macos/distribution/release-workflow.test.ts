@@ -91,6 +91,7 @@ test("workflow separates Apple secrets, credential-free checks, checkout-free OI
   const sign = source.split("\n  sign:\n")[1]!.split("\n  verify:\n")[0]!, attest = source.split("\n  attest:\n")[1]!.split("\n  publish:\n")[0]!;
   expect(source.match(/contents: write/gu)).toHaveLength(1); expect(source.match(/id-token: write/gu)).toHaveLength(1);
   expect(sign).toContain("environment: desktop-signing"); expect(sign).not.toMatch(/run:.*(?:bun install|native:package|native:smoke)/u); expect(sign).toContain("notary-submission.json");
+  expect(sign).toContain("APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}"); expect(sign).toContain("APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}");
   expect(attest).not.toContain("actions/checkout"); expect(attest).not.toContain("secrets."); expect(source).not.toContain("npm publish"); expect(source).not.toContain("production-ref-writer");
   const inline = attest.match(/node <<'NODE'\n([\s\S]+?)\n          NODE/u)![1]!.split("\n").map(line => line.slice(10)).join("\n"); expect(() => new Script(inline)).not.toThrow();
   expect(source).toContain("--no-env-file --no-install"); expect(source).toContain("artifact-ids: ${{ needs.attest.outputs.artifact_id }}");

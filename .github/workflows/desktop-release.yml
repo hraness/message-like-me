@@ -148,6 +148,8 @@ jobs:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
         run: bun --no-env-file --no-install apps/macos/distribution/sign.ts "$RUNNER_TEMP/textbutler-input" "$RECEIPT_SHA256" "$GITHUB_SHA" "$RUNNER_TEMP/textbutler-signed"
       - name: Preserve exact notarization custody on failure
         if: failure()

@@ -54,7 +54,8 @@ argument list, environment, shell command, or data directory.
 ## Signing prerequisites
 
 The owner needs an active Apple Developer Program membership, the exact
-Developer ID Application certificate and private key, and a notarytool API key.
+Developer ID Application certificate and private key, and one of the two
+supported `notarytool` credential modes.
 Use a dedicated protected `desktop-signing` environment restricted to reviewed
 `main`. Preserve all required provider reviews and administrator controls. Do
 not repurpose the website's status-signing App or broaden its permissions.
@@ -68,6 +69,16 @@ not repurpose the website's status-signing App or broaden its permissions.
 | `APPLE_CERTIFICATE_BASE64` | Secret | Password-protected certificate/private-key P12, encoded as Base64 |
 | `APPLE_CERTIFICATE_PASSWORD` | Secret | P12 password |
 | `APPLE_API_PRIVATE_KEY` | Secret | Complete notary P8 private key |
+| `APPLE_NOTARY_APPLE_ID` | Secret | Apple Account email for app-specific-password notarization (alternative to API key) |
+| `APPLE_NOTARY_APP_PASSWORD` | Secret | Apple Account app-specific password (alternative to API key) |
+
+Configure exactly one mode: either all three `APPLE_API_*` values, or both
+`APPLE_NOTARY_*` values. For app-specific-password mode, create a label such as
+`Textbutler notarization` at [account.apple.com → Sign-In and Security → App-Specific Passwords](https://account.apple.com/)
+and add the generated value to the protected environment. The signer supplies it
+to `notarytool` through its secure prompt and stores it only in the temporary
+keychain deleted after the run. It is never placed in a command argument,
+receipt, log, or app.
 
 Inspect only credential names and nonsecret identity metadata. Never place
 private keys, passwords, credential exports, or their contents in shell history,
