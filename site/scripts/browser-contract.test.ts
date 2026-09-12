@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isPreviewPolicyBlock, isSyntheticBadge } from './browser-contract.mjs';
+import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, browserEnvironment, browserOwner,
+  deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, routeTasks } from './browser-contract.mjs';
 
 test('the native matrix covers four separate surfaces, both themes and touch', () => {
   const cases = browserCases();
@@ -25,18 +26,70 @@ test('only the exact external README image receives a recorded synthetic fixture
 });
 
 test('only preview script and manifest blocks from the verified restrictive CSP are expected', () => {
-  const policy = { path: '/preview', origin: 'http://127.0.0.1:3210', verifiedCsp: true };
-  const valid = { url: policy.origin + '/_next/static/chunks/app/page-123.js', method: 'GET', resourceType: 'script', error: 'csp' };
+  const origin = 'http://127.0.0.1:3210';
+  const policy = { path: '/preview', origin, verifiedCsp: true,
+    authoredAssets: [origin + '/_next/static/chunks/app/page-123.js', origin + '/manifest.webmanifest'] };
+  const valid = { url: policy.authoredAssets[0]!, method: 'GET', resourceType: 'script', error: 'csp', mainFrame: true };
   expect(isPreviewPolicyBlock(valid, policy)).toBe(true);
   expect(isPreviewPolicyBlock({ ...valid, resourceType: 'manifest', url: policy.origin + '/manifest.webmanifest' }, policy)).toBe(true);
-  for (const change of [{ method: 'POST' }, { error: 'net::ERR_ABORTED' }, { error: 'net::ERR_FAILED' },
+  for (const change of [{ method: 'POST' }, { error: 'net::ERR_ABORTED' }, { error: 'net::ERR_FAILED' }, { mainFrame: false },
     { resourceType: 'stylesheet' }, { resourceType: 'fetch' }, { resourceType: 'document' },
-    { url: valid.url + '?other=1' }, { url: policy.origin + '/script.js' }, { url: 'https://example.com/_next/static/chunks/a.js' },
+    { url: valid.url + '?other=1' }, { url: origin + '/_next/static/chunks/unknown.js' },
+    { url: policy.origin + '/script.js' }, { url: 'https://example.com/_next/static/chunks/a.js' },
     { resourceType: 'image', url: policy.origin + '/icon.svg' }]) {
     expect(isPreviewPolicyBlock({ ...valid, ...change }, policy)).toBe(false);
   }
   expect(isPreviewPolicyBlock(valid, { ...policy, verifiedCsp: false })).toBe(false);
   expect(isPreviewPolicyBlock(valid, { ...policy, path: '/' })).toBe(false);
+});
+
+test('a successful browser build must join the exact clean source and lockfile', () => {
+  const source = { head: 'a', tree: 'b', status: '', lock: 'c', manifest: 'd' };
+  expect(() => assertBuildJoin(source, { ...source }, 0)).not.toThrow();
+  for (const change of [{ head: 'old' }, { tree: 'old' }, { status: ' M app/page.tsx' }, { lock: 'old' }, { manifest: 'old' }]) {
+    expect(() => assertBuildJoin(source, { ...source, ...change }, 0)).toThrow();
+  }
+  expect(() => assertBuildJoin(source, source, 1)).toThrow();
+  expect(() => assertBuildJoin({ ...source, status: 'dirty' }, { ...source, status: 'dirty' }, 0)).toThrow();
+});
+
+test('server cleanup rejects spontaneous, failing and forced exits', () => {
+  const valid = { code: 0, signal: null, stopRequested: true, forced: false };
+  expect(() => assertServerExit(valid)).not.toThrow();
+  expect(() => assertServerExit({ ...valid, code: null, signal: 'SIGTERM' })).not.toThrow();
+  for (const change of [{ stopRequested: false }, { code: 1 }, { forced: true }, { code: null, signal: 'SIGKILL' }]) {
+    expect(() => assertServerExit({ ...valid, ...change })).toThrow();
+  }
+});
+
+test('late route failures are joined after close and cannot mark a case passed', async () => {
+  const failures: string[] = [];
+  const tasks = routeTasks(failures);
+  let reject!: (reason: Error) => void;
+  const pending = new Promise<void>((_, fail) => { reject = fail; });
+  void tasks.run(() => pending);
+  const events: string[] = [];
+  await expect(finishBrowserCase({ primary: undefined, settle: async () => { events.push('settle'); },
+    close: async () => { events.push('close'); reject(new Error('late failure')); },
+    drain: () => tasks.drain(), check: () => {
+      events.push('check');
+      if (failures.length) throw new Error(failures.join('\n'));
+    } })).rejects.toThrow('late failure');
+  expect(tasks.size).toBe(0);
+  expect(events).toEqual(['settle', 'close', 'check']);
+});
+
+test('case failure preserves primary, settlement, teardown and late errors together', async () => {
+  const fail = (message: string) => async () => { throw new Error(message); };
+  try {
+    await finishBrowserCase({ primary: new Error('primary'), settle: fail('settlement'), close: fail('cleanup'),
+      drain: fail('route drain'), check: fail('late request') });
+    throw new Error('Expected case rejection.');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toHaveLength(5);
+    expect((error as Error).message).toBe('primary\nsettlement\ncleanup\nroute drain\nlate request');
+  }
 });
 
 test('the owner joins a late acquisition during interruption and closes once', async () => {

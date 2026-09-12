@@ -12,12 +12,56 @@ export function isSyntheticBadge(request) {
     && request.method === 'GET' && request.resourceType === 'image';
 }
 
-export function isPreviewPolicyBlock(request, { path, origin, verifiedCsp }) {
-  if (path !== '/preview' || !verifiedCsp || request.method !== 'GET' || request.error !== 'csp') return false;
+export function isPreviewPolicyBlock(request, { path, origin, verifiedCsp, authoredAssets }) {
+  if (path !== '/preview' || !verifiedCsp || !request.mainFrame || request.method !== 'GET' || request.error !== 'csp'
+    || !authoredAssets.includes(request.url)) return false;
   const url = new URL(request.url);
   if (url.origin !== origin || url.search || url.hash) return false;
   return (request.resourceType === 'script' && /^\/_next\/static\/chunks\/[\w./-]+\.js$/u.test(url.pathname))
     || (request.resourceType === 'manifest' && url.pathname === '/manifest.webmanifest');
+}
+
+export function assertBuildJoin(before, after, exitCode) {
+  assert.equal(before.status, '', 'The browser build must start from a clean source.');
+  assert.equal(exitCode, 0, 'The same-invocation browser build failed.');
+  assert.deepEqual(after, before, 'Browser build inputs changed while compiling.');
+}
+
+export function assertServerExit(exit) {
+  assert.equal(exit.stopRequested, true, 'Next exited before owned teardown.');
+  assert.equal(exit.forced, false, 'Next required forced termination.');
+  assert.ok((exit.code === 0 && exit.signal === null) || (exit.code === null && exit.signal === 'SIGTERM'),
+    `Unexpected Next exit: ${exit.code}/${exit.signal}`);
+}
+
+export function routeTasks(errors) {
+  const pending = new Set();
+  return {
+    get size() { return pending.size; },
+    run(operation) {
+      const task = Promise.resolve().then(operation).catch((error) => {
+        errors.push(`Route handler failed: ${error instanceof Error ? error.message : String(error)}`);
+      }).finally(() => pending.delete(task));
+      pending.add(task);
+      return task;
+    },
+    drain() {
+      return deadline((async () => {
+        while (pending.size > 0) await Promise.all([...pending]);
+      })(), 'Route handler settlement');
+    },
+  };
+}
+
+// Every phase runs even after a primary failure. In particular, teardown cannot
+// erase an earlier assertion, and no case passes before late events are joined.
+export async function finishBrowserCase({ primary, settle, close, drain, check }) {
+  const errors = primary ? [primary] : [];
+  for (const action of [settle, close, drain, check]) {
+    try { await action(); } catch (error) { errors.push(error); }
+  }
+  if (errors.length > 0) throw new AggregateError(errors,
+    errors.map((error) => error instanceof Error ? error.message : String(error)).join('\n'));
 }
 
 /** @returns {Record<string, string>} */
