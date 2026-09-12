@@ -1,5 +1,6 @@
 node_modules/
 coverage/
+site/.browser-artifacts/
 *.tgz
 *.tsbuildinfo
 .DS_Store

@@ -63,6 +63,35 @@ The packed consumer must work from the standalone public repository without a
 sibling checkout, private package, ambient Messages database, or network
 access.
 
+## Informational-site browser check
+
+Check the site with `bun run --cwd site check`. Set
+`TEXTBUTLER_BROWSER_EXECUTABLE` to an installed Chromium executable and
+`TEXTBUTLER_NODE_EXECUTABLE` to an installed Node 24 executable, using absolute
+paths, then run `bun run --cwd site check:browser` on the committed candidate.
+Use the exclusive browser lane when a host or repository scheduler is present.
+The verifier makes its own sterile production build in that same invocation and
+joins the clean Git source and lockfile before and after compilation and teardown.
+
+The 16 cases cover the editorial landing, documentation, legacy source catalog,
+and frame-safe preview in both system appearances at desktop and touch widths.
+They check actual rendered fonts, compiled stylesheet layers, Paper and preset
+roles, responsive geometry, keyboard disclosures, document links, and collection
+boundaries. Screenshots, the exact Git/build/browser receipt, and an isolated
+browser profile remain in ignored `site/.browser-artifacts/` for review.
+
+This check starts and stops its own loopback server and fresh browser. It blocks
+external requests, uses no personal browser profile or inherited credentials,
+and never launches a messaging reader, Mac app, agent, account check, or data
+entry workflow. The README's exact external skills.sh badge image is replaced
+with a labeled repository SVG fixture and recorded in the receipt; the external
+badge service is not verified. All other request failures remain fatal. This is
+not live provider or production-delivery verification. The script-free preview
+must expose its restrictive CSP and block its framework scripts and manifest;
+only those exact policy blocks are recorded separately from unexpected failures.
+Every case settles requests, joins context teardown and route handlers, then
+checks late failures before accepting evidence. Unexpected server exits fail.
+
 By contributing, you agree that your contribution is licensed under the MIT
 License.
 

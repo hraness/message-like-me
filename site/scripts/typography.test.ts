@@ -16,15 +16,27 @@ describe("site typography", () => {
     };
 
     expect(manifest.dependencies?.["@hraness/design-kit"])
-      .toBe("github:hraness/design-kit#v0.4.0");
+      .toBe("github:hraness/design-kit#v0.6.3");
     expect(layout).toContain("import '@hraness/design-kit/fonts.css';");
     expect(layout.indexOf("@hraness/design-kit/fonts.css"))
       .toBeLessThan(layout.indexOf("./globals.css"));
-    expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
-    expect(css.indexOf("@import 'tailwindcss';"))
-      .toBeLessThan(css.indexOf("@import '@hraness/design-kit/product-marketing.css';"));
+    expect(css).toContain("@import '@hraness/design-kit/styles.css';");
+    expect(css).not.toContain("@import '@hraness/design-kit/product-marketing.css';");
+    expect(css).not.toContain("@import 'tail" + "windcss';");
+    expect(css.indexOf("@import '@hraness/ui/stylex.css';"))
+      .toBeLessThan(css.indexOf("@import '@hraness/design-kit/styles.css';"));
     expect(css).toContain('font-family: "Nebula Sans", ui-sans-serif, system-ui');
     expect(css).not.toContain("font-family: Inter");
+  });
+
+  test("the complete Design Kit export reaches its compiled React recipes", async () => {
+    const styles = await readFile(new URL(import.meta.resolve("@hraness/design-kit/styles.css")), "utf8");
+    const components = await readFile(new URL(import.meta.resolve("@hraness/design-kit/components.css")), "utf8");
+    const compiled = await readFile(new URL(import.meta.resolve("@hraness/design-kit/stylex.css")), "utf8");
+    expect(styles).toContain('@import "./components.css";');
+    expect(styles).toContain('@import "./product-marketing-foundation.css";');
+    expect(components).toContain('@import "../dist/stylex.css";');
+    expect(compiled).toContain("@layer components.hraness-design-kit.priority");
   });
 
   test("keeps one proportional face and an explicit mono role", async () => {

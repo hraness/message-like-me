@@ -51,14 +51,14 @@ test('renders Textbutler with the shared grammar and honest development status',
 
 test('keeps the hero outcome-led and free of contract vocabulary', () => {
   const html = renderToStaticMarkup(<Home />);
-  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<div class="hraness-marketing-hero__frame">/u.exec(html);
+  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<div\b[^>]*class="[^"]*\bhraness-marketing-hero__frame\b[^"]*"[^>]*>/u.exec(html);
   expect(hero).not.toBeNull();
   const heroCopy = (hero?.[0] ?? '').replace(/<[^>]+>/gu, ' ').toLowerCase();
   const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(8);
   expect(heading).not.toMatch(/\.$/u);
   expect(heroCopy).toContain('your');
-  const boundary = /<p class="hraness-marketing-hero__boundary">([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
+  const boundary = /<p\b[^>]*class="[^"]*\bhraness-marketing-hero__boundary\b[^"]*"[^>]*>([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
   expect(boundary).toBe('In development · macOS · iMessage + WhatsApp');
   expect(boundary).not.toContain(SOFTWARE_VERSION);
   for (const word of HERO_VOCABULARY_TO_AVOID) expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
@@ -78,7 +78,7 @@ test('shows synthetic contact context and disclosure without claiming transport 
   expect(html).toContain('under its own data policies');
 });
 
-test('binds the existing Design Kit release to the portable Paper palette', async () => {
+test('binds Design Kit v0.6.3 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -90,10 +90,10 @@ test('binds the existing Design Kit release to the portable Paper palette', asyn
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.4.0');
+    .toBe('github:hraness/design-kit#v0.6.3');
   expect(manifest.dependencies?.['@hraness/ui'])
-    .toBe('github:hraness/ui#v0.4.10');
-  expect(css).toContain("@import '@hraness/design-kit/product-marketing.css';");
+    .toBe('github:hraness/ui#v0.5.13');
+  expect(css).toContain("@import '@hraness/design-kit/styles.css';");
   expect(layout).toContain("colorScheme: 'light dark'");
   expect(layout).toContain('data-hraness-theme="paper"');
   expect(css).toContain("@import '../styles/vendor/hraness-paper/paper-theme.css';");
