@@ -339,3 +339,11 @@ future shared interface is sanitized usage/account metadata, not this execution
 port. Account sign-in and product-provider terms need separate qualification;
 [Anthropic's SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) directs
 third-party product integrations to supported API authentication unless approved.
+
+`createCodexTaskAdapter()` is the native subscription adapter seam for application
+capability profiles. It maps the exact `CapabilityBroker` inventory into one
+Codex session, passes only host-supplied instructions and task settings, and
+retains the process receipt until `AgentRouter.runTask()` has joined the adapter
+stop and broker close. Constructing the adapter does not discover credentials,
+select an account, or qualify the installed native runtime; those remain explicit
+host and qualification inputs.

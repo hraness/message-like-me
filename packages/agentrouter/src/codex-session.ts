@@ -1,13 +1,16 @@
 import type { ToolBroker } from "./broker.ts";
-import { CODEX_BASE_INSTRUCTIONS, CODEX_DEVELOPER_INSTRUCTIONS, CODEX_PROVIDER, codexConfiguration, codexTools } from "./codex-config.ts";
+import type { CapabilityBroker } from "./capabilities.ts";
+import { assertCapabilityProfile } from "./capabilities.ts";
+import { CODEX_BASE_INSTRUCTIONS, CODEX_DEVELOPER_INSTRUCTIONS, CODEX_PROVIDER, codexConfiguration, codexTaskConfiguration, codexTools } from "./codex-config.ts";
 import type { CodexProcessHandle, CodexProcessLauncher, CodexProcessReceipt } from "./codex-process.ts";
 import { codexAssert, codexBounded, codexLimits, codexRecord, startCodexRelay,
-  type CodexLimits, type CodexRelay, type CodexRelayReceipt, type CodexResponsesUpstream } from "./codex-relay.ts";
+  type CodexLimits, type CodexRelay, type CodexRelayReceipt, type CodexResponsesUpstream, type CodexTaskRelayOptions } from "./codex-relay.ts";
 import type { AgentRunRequest } from "./runtime.ts";
 import { boundedText, identifier, object } from "./validation.ts";
 
 export type CodexSessionReceipt = Readonly<{
   status: "completed" | "failed"; productionQualified: false; initialized: boolean; turnCompleted: boolean;
+  usage: Readonly<{ inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }>;
   process: CodexProcessReceipt | null; relay: CodexRelayReceipt | null;
   handlersJoined: boolean; processStopped: boolean; failures: readonly string[]; frames: number; stdoutBytes: number;
   unexpectedNotification: string | null;
@@ -25,10 +28,12 @@ export class CodexSessionError extends Error {
  * No module import, account discovery, adapter registration or credential-bearing network operation.
  */
 export async function runCodexSession(options: {
-  request: AgentRunRequest; broker: ToolBroker; upstream: CodexResponsesUpstream;
-  launcher: CodexProcessLauncher; limits?: Partial<CodexLimits>;
+  request: AgentRunRequest; broker: ToolBroker | CapabilityBroker; upstream: CodexResponsesUpstream;
+  launcher: CodexProcessLauncher; limits?: Partial<CodexLimits>; task?: CodexTaskRelayOptions;
 }): Promise<{ output: unknown; receipt: CodexSessionReceipt }> {
   const request = Object.freeze({ ...options.request }), broker = options.broker, launcher = options.launcher, upstream = options.upstream;
+  const task = options.task;
+  if (task) assertCapabilityProfile((broker as CapabilityBroker).profile, task.mapping.profile);
   const limits = codexLimits(options.limits), controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, request.signal]);
   const failures: string[] = []; let resolveFatal!: () => void;
@@ -134,7 +139,7 @@ export async function runCodexSession(options: {
       }
       // A terminal turn cannot acquire another broker effect while queued frames drain.
       codexAssert(!turnCompleted, "CODEX_REQUEST_AFTER_TURN_COMPLETION");
-      const call = relay!.claimCall(params);
+      const call = task ? relay!.claimTaskCall(params) : relay!.claimCall(params);
       let text: string, success: boolean;
       try {
         const result = await broker.invoke(call.name, call.input); signal.throwIfAborted();
@@ -217,12 +222,12 @@ export async function runCodexSession(options: {
     identifier(request.runId); identifier(request.accountId); identifier(request.workspaceId); boundedText(request.prompt, 512 * 1024); boundedText(request.model, 160);
     codexAssert(request.provider === "codex" && ["classify", "respond"].includes(request.purpose), "CODEX_REQUEST_INVALID");
     codexAssert(request.workspaceId === broker.workspaceId && request.runId === broker.runId, "CODEX_BROKER_SCOPE_MISMATCH");
-    codexAssert(request.purpose !== "classify" || broker.tools.length === 0, "CODEX_CLASSIFIER_TOOLS_FORBIDDEN"); signal.throwIfAborted();
-    const tools = codexTools([...broker.tools]);
-    relay = startCodexRelay({ model: request.model, prompt: request.prompt, tools, upstream, signal, limits, fail });
+    codexAssert(request.purpose !== "classify" || (task ? task.mapping.tools.length : (broker as ToolBroker).tools.length) === 0, "CODEX_CLASSIFIER_TOOLS_FORBIDDEN"); signal.throwIfAborted();
+    const tools = task?.mapping.tools ?? codexTools([...(broker as ToolBroker).tools]);
+    relay = startCodexRelay({ model: request.model, prompt: request.prompt, tools, upstream, signal, limits, fail, ...(task ? { task } : {}) });
     // The launcher owns preparation cancellation and must return an owned handle once it spawns.
     process = await launcher.launch({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
-      configuration: codexConfiguration(request.model, relay.baseUrl), relayPort: relay.port, signal });
+      configuration: task ? codexTaskConfiguration(task.settings, relay.baseUrl) : codexConfiguration(request.model, relay.baseUrl), relayPort: relay.port, signal });
     process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
     workflow = (async () => {
       await process!.ready; signal.throwIfAborted();
@@ -232,7 +237,8 @@ export async function runCodexSession(options: {
       stage = "thread/start";
       await rpc("thread/start", { model: request.model, modelProvider: CODEX_PROVIDER, cwd: process!.cwd, approvalPolicy: "never",
         sandbox: "read-only", ephemeral: true, environments: [], dynamicTools: tools,
-        baseInstructions: CODEX_BASE_INSTRUCTIONS, developerInstructions: CODEX_DEVELOPER_INSTRUCTIONS,
+        baseInstructions: task?.settings.instructions.base ?? CODEX_BASE_INSTRUCTIONS,
+        developerInstructions: task?.settings.instructions.developer ?? CODEX_DEVELOPER_INSTRUCTIONS,
         allowProviderModelFallback: false });
       stage = "turn/start";
       await rpc("turn/start", { threadId, input: [{ type: "text", text: request.prompt }] });
@@ -270,7 +276,9 @@ export async function runCodexSession(options: {
     && processReceipt.cleanupErrors.length === 0 && relayReceipt?.joined === true && handlersJoined;
   if (processReceipt?.runtimeErrors.length) fail("CODEX_NATIVE_RUNTIME_FAILED");
   if (!stopped) fail("CODEX_CUSTODY_UNPROVEN");
+  const usage = relay?.usage() ?? Object.freeze({ inputTokens: null, outputTokens: null, totalTokens: null });
   const receipt: CodexSessionReceipt = Object.freeze({ status: failures.length === 0 ? "completed" : "failed", productionQualified: false,
+    usage,
     initialized, turnCompleted, process: processReceipt, relay: relayReceipt, handlersJoined, processStopped: stopped,
     failures: Object.freeze([...failures]), frames, stdoutBytes, unexpectedNotification, failureStage, deniedNativeRequest });
   if (failures.length) throw new CodexSessionError(receipt);
