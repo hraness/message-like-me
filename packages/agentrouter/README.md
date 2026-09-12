@@ -16,6 +16,75 @@ It provides:
 `src/index.ts` exports the complete current interface. `createPublicWeb()` provides bounded public HTTPS GETs with address pinning, redirect checks, no ambient authentication, a 15-second deadline, and a 256 KiB maximum text response. Run `bun test
 packages/agentrouter` from the repository root.
 
+## Application-owned capability profiles
+
+An application can define its own tools with `createCapabilityProfile()` and
+bind them to one host-selected workspace and run with `createCapabilityBroker()`.
+The host supplies every descriptor, input parser and handler. Model arguments
+cannot replace the bound workspace, credentials or handler implementation. This
+separate interface leaves Textbutler's existing contact broker and
+`AgentRouter.run()` path unchanged.
+
+For example, this host stores bounded notes in memory:
+
+```ts
+import { createCapabilityProfile, createCapabilityBroker } from "@hraness/agentrouter";
+
+const notes = new Map<string, unknown>();
+const hostState = { active: true };
+const profile = createCapabilityProfile({
+  id: "notes", version: 1,
+  tools: [{
+    name: "notes.write", description: "Replace the bound workspace's note.",
+    inputSchema: {
+      type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 4096 } },
+      required: ["text"], additionalProperties: false,
+    },
+    parseInput(input) {
+      if (typeof input.text !== "string" || !input.text.length
+        || Buffer.byteLength(input.text) > 4096) throw new Error("INVALID_NOTE");
+      return input;
+    },
+    execute(input, context) {
+      context.assertActive();
+      notes.set(context.workspaceId, input);
+      return { stored: true };
+    },
+  }],
+});
+const broker = createCapabilityBroker({
+  profile, workspaceId: "workspace-1", runId: "run-1",
+  isActive: () => hostState.active,
+});
+await broker.invoke("notes.write", { text: "First note." });
+await broker.close();
+```
+
+Profiles and their descriptors are immutable. Their SHA-256 digest binds the
+profile ID, version and ordered tool descriptors, including each input schema.
+It does not identify handler code or prove runtime confinement; the host must
+establish that provenance and qualify the adapter for the exact profile separately.
+The broker checks a closed outer input object; trusted parsers enforce the full
+semantic contract. Schema descriptors do not fetch references or execute code.
+
+Calls are serialized, and inputs are copied before queuing. JSON inputs and
+outputs are bounded to 256 KiB, with structural limits; schemas are limited to
+32 KiB per tool and profiles to 64 tools. Unknown tools are denied. Revocation or
+an aborted signal prevents queued work and withholds late results. A trusted
+handler must call `context.assertActive()` immediately before every effect,
+including after its own awaits, and retain the application's conditional-write
+and authorization checks. Revocation cannot undo an effect already performed.
+`revoke()` stops admission immediately; `close()` also waits for admitted handlers
+to settle. Neither proves that an external provider process has stopped.
+
+Use `AgentRouter.runTask(request, broker)` with explicitly supplied `taskAdapters`
+for application profiles. The request selects the exact route, authentication
+kind, account, profile, model, reasoning effort, service tier and run limits.
+The adapter needs current qualification for that exact route, runtime and profile.
+No live task adapter is bundled, and a selected subscription route is never
+replaced with an API route. Registering a capability profile does not enable a
+provider or establish account availability.
+
 ## Opt-in Claude API route
 
 `createClaudeApiAdapter()` is an additional, explicitly selected **Claude API**

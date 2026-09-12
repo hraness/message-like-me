@@ -1,5 +1,7 @@
 import type { AccountLease, AccountLeaseStore } from "./accounts.ts";
 import type { ToolBroker } from "./broker.ts";
+import type { CapabilityBroker } from "./capabilities.ts";
+import { runAgentTask, type AgentTaskAdapter, type AgentTaskRequest, type AgentTaskResult } from "./task-runtime.ts";
 import { boundedText, identifier, provider, safeInteger, type AgentProvider } from "./validation.ts";
 
 export const CONTACT_TOOL_PROFILE = "agentrouter.scoped-tools.v1" as const;
@@ -68,12 +70,20 @@ export type AccountBinding = Readonly<{ provider: AgentProvider; accountId: stri
 export interface AccountResolver { resolve(provider: AgentProvider, accountId: string): Promise<AccountBinding> }
 
 export class AgentRouter {
+  private readonly taskAdapters: readonly AgentTaskAdapter[];
   constructor(private readonly options: {
     adapters: readonly AgentAdapter[];
+    taskAdapters?: readonly AgentTaskAdapter[];
     leases: AccountLeaseStore;
     now: () => number;
   }) {
     if (new Set(options.adapters.map((adapter) => adapter.provider)).size !== options.adapters.length) throw new Error("DUPLICATE_PROVIDER");
+    this.taskAdapters = Object.freeze([...(options.taskAdapters ?? [])]);
+  }
+
+  /** Additive execution path for an application's exact capability profile. */
+  async runTask(request: AgentTaskRequest, broker: CapabilityBroker): Promise<AgentTaskResult> {
+    return await runAgentTask({ adapters: this.taskAdapters, leases: this.options.leases, now: this.options.now }, request, broker);
   }
 
   async run(request: AgentRunRequest, broker: ToolBroker): Promise<AgentRunResult> {
