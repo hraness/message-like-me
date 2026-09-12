@@ -166,13 +166,63 @@ denies the Skill tool, wraps task text, and retains strict empty-catalog checks 
 a configuration-drift guard. Native evidence checks every API request's tool
 manifest and actual denied results; catalog absence alone is not a scope proof.
 
-Codex execution remains unavailable. A credential-free probe of installed Codex
-**0.153.4** found default-on `code_mode_host`, shell, browser, computer, image,
-plugins, hooks and workspace dependency capabilities. Disabling the old `js_repl`
-flag does not remove current code execution. App-server dynamic tools are additive,
-and `thread/start` exposes no complete effective tool inventory. Reusing Oompa's
-transport or login implementation would therefore not establish Textbutler's
-required scope. See the [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+Codex remains unavailable in the app. The experimental `codex-config.ts`,
+`codex-process.ts`, `codex-relay.ts` and `codex-session.ts` modules implement a
+pinned **0.153.4** app-server driver. They have no credential discovery, live
+provider transport or production adapter registration. The launcher copies the
+verified executable into a private runtime directory, keeps contact folders
+outside native scratch, and records process custody before protocol startup.
+The trusted host must also supply an independently admitted SHA-256 for its
+actual Bun 1.3.14 executable. The launcher checks that identity before startup
+and after joined shutdown. Before spawning, it verifies the private scratch
+directory's closed inventory, permissions, link counts and exact configuration
+bytes. Version 2 custody records bind the parent runtime and scratch digests;
+older records cannot supply those proofs. Runtime drift retains the run's state.
+The relay checks the exact ordered tool inventory on every model request, using
+the pinned native schema representation. Codex omits string-length and numeric
+range hints on the wire; the broker still enforces those limits. Each result
+stays bound to its native call, exact broker output and stable history identity.
+The relay bounds native client metadata and removes
+it before forwarding, including that field's workspace and installation
+identifiers. Classification has no tools. Unsupported
+response shapes fail closed; the current relay accepts a deliberately small
+Responses SSE contract and is not a general provider streaming implementation.
+Remote control is explicitly disabled at CLI startup. Its disabled-state
+notification and bounded native timestamps carry no authority; active states and
+unreviewed notifications fail the session.
+
+The internal `codex-api-response.ts` module admits a narrow, buffered OpenAI
+Responses JSON result and translates it into that three-event contract. It binds
+one dated model snapshot, exact broker descriptors and an output-token cap,
+preserves measured usage, and rejects incomplete responses, reasoning, duplicate
+JSON keys and extra effects. It makes no HTTP request and is not an API adapter.
+The host still needs credential and account custody, request construction,
+billing admission, response-body cleanup and cross-response call-ID checks. No
+Codex API account or model route is registered by importing it.
+
+On 2026-09-12 the actual pinned native executable completed a scripted response
+through all six broker tools and a separate zero-tool classification through
+these modules. Every request carried the expected inventory; contact memory,
+staged actions, process exit and listener cleanup matched the fixture. The model,
+web responses and contacts were synthetic; nothing was sent or billed. These
+checks establish runtime compatibility, not production qualification. Direct
+filesystem and process confinement, adversarial runtime custody, and
+account/model transport admission remain required. Session receipts always
+report `productionQualified: false`.
+Nine scripted native rejection cases also passed: foreign paths and file aliases,
+stale writes, forbidden shell/skill/input tools, duplicate calls, cancellation,
+an upstream deadline and malformed SSE. They verified unchanged protected
+fixtures, no staged sends, and joined process, broker and listener cleanup.
+An adversarial kernel helper also demonstrated that host-supplied ordinary file
+descriptors and preexisting hard links retain access across sandbox startup.
+Production admission must prove the launcher's clean descriptor and scratch
+setup; the profile alone cannot undo authority supplied by the host.
+A separate helper test under pinned Bun 1.3.14 passed on 2026-09-12: the child
+had exactly three communication sockets, all four deliberately inheritable
+parent descriptors were absent, and process and listener cleanup joined. That
+test substituted a descriptor-inspection helper for Codex and does not qualify
+the native agent itself.
+See the [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 and [App Server documentation](https://learn.chatgpt.com/docs/app-server).
 
 The [Claude custom-tools documentation](https://code.claude.com/docs/en/agent-sdk/custom-tools)
