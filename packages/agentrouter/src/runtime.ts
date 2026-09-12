@@ -50,7 +50,7 @@ export interface AgentAdapter {
 }
 
 export const UNQUALIFIED_PROVIDER_REASONS = Object.freeze({
-  codex: "Codex 0.153.4 dynamicTools are additive; default-on code_mode_host, browser/computer tools and other built-ins have no attested broker-only inventory.",
+  codex: "Codex 0.153.4 has a restricted experimental driver; native confinement, adversarial custody and account transport qualification remain incomplete.",
   claude: "Claude tool selection is documented; isolated configuration and contact-only read confinement require exact-runtime adversarial qualification.",
 });
 
@@ -139,8 +139,8 @@ export function createProviderLaunchPlan(binding: AccountBinding, workspaceId: s
       transport: "app-server", commandTools: false, inheritedConfig: false, dynamicTools: "broker-only",
       readPolicy: "contact-only", writePolicy: "contact-only", approvalPolicy: "never",
       observedRuntime: "0.153.4",
-      unresolvedControls: Object.freeze(["dynamicTools is additive", "no effective tool inventory in thread/start",
-        "code_mode_host", "browser_use", "computer_use", "view_image", "image_generation", "plugins", "hooks", "workspace_dependencies"]),
+      unresolvedControls: Object.freeze(["native adversarial qualification", "direct filesystem and process confinement",
+        "inherited descriptor isolation", "failure custody", "account transport and model admission"]),
     } : {
       transport: "agent-sdk", tools: Object.freeze([]), settingSources: Object.freeze([]),
       permissionMode: "dontAsk", mcpServers: "broker-only", allowedTools: "exact-broker-manifest",

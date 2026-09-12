@@ -6,6 +6,11 @@ actions. Textbutler communicates with its own Ghostget owner process through
 `ghostget messaging automation serve --stdio`; it does not share the Ghostget
 Mac app's private helper or open provider databases.
 
+[Ghostget 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2) is the
+verified published dependency for this contract. Its package includes both
+private messaging runtimes; installation is explicit and starts no provider.
+Older generic CLI routes do not become automation grants.
+
 ## Owner process
 
 The private protocol is `ghostget.messaging-automation/1`. Every bounded JSON
