@@ -6,6 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "check:browser": "bun --no-env-file scripts/check-browser.mjs",
     "check:theme": "bun scripts/check-paper-theme.mjs",
     "sync:readme": "bun scripts/sync-readme.ts",
     "test": "bun run check:theme && bun test scripts",
@@ -30,6 +31,7 @@
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "playwright-core": "1.62.0",
     "typescript": "5.9.3"
   },
   "type": "module"
