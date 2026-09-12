@@ -1,6 +1,6 @@
 [package]
 name = "textbutler-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local macOS control panel for Textbutler"
 license = "MIT"
 edition = "2021"
