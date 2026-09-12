@@ -8,7 +8,8 @@ test('server-renders an honest script-independent preview with no navigation', (
   const html = renderToStaticMarkup(<PreviewPage />);
 
   expect(html).toContain('A little help in your conversations');
-  expect(html).toContain('Live replies remain disabled');
+  expect(html).toContain('Explicit messaging and agent setup required');
+  expect(html).toContain('no signed Mac download yet');
   expect(html).toContain('Synthetic example · no message sent');
   expect(html).not.toMatch(/<(?:a|button|form|script)\b/u);
   expect(metadata.robots).toEqual({ follow: false, index: false });

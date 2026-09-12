@@ -813,6 +813,7 @@ test("workflow changes have one explicit code owner", async () => {
   expect(value).toBe(
     "/.github/workflows/** @0thernet\n" +
     "/.github/CODEOWNERS @0thernet\n" +
+    "/apps/macos/distribution/** @0thernet\n" +
     "/scripts/check-github-release.ts @0thernet\n" +
     "/scripts/check-npm-retry-state.ts @0thernet\n" +
     "/scripts/check-npm-trusted-publishing.ts @0thernet\n" +

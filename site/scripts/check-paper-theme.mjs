@@ -23,3 +23,9 @@ for (const relative of directories) {
   }
 }
 console.log("Paper theme snapshots verified.");
+
+// Keep the opt-in marketing assets pinned independently of the Paper palette.
+const { checkMarketingSnapshot } = await import("../styles/vendor/hraness-marketing/check.mjs");
+const marketing = await checkMarketingSnapshot();
+assert.equal(marketing.source.commit, "898d80364085a41c858350f1b492ac28b5a0384b");
+console.log("Marketing preset v0.6.7 snapshot verified.");
