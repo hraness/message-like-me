@@ -12,6 +12,14 @@ export function isSyntheticBadge(request) {
     && request.method === 'GET' && request.resourceType === 'image';
 }
 
+export function isPreviewPolicyBlock(request, { path, origin, verifiedCsp }) {
+  if (path !== '/preview' || !verifiedCsp || request.method !== 'GET' || request.error !== 'csp') return false;
+  const url = new URL(request.url);
+  if (url.origin !== origin || url.search || url.hash) return false;
+  return (request.resourceType === 'script' && /^\/_next\/static\/chunks\/[\w./-]+\.js$/u.test(url.pathname))
+    || (request.resourceType === 'manifest' && url.pathname === '/manifest.webmanifest');
+}
+
 /** @returns {Record<string, string>} */
 export function browserEnvironment(source, home) {
   const keys = ['PATH', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TZ', 'NODE_OPTIONS',

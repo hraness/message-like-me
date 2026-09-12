@@ -84,7 +84,9 @@ and never launches a messaging reader, Mac app, agent, account check, or data
 entry workflow. The README's exact external skills.sh badge image is replaced
 with a labeled repository SVG fixture and recorded in the receipt; the external
 badge service is not verified. All other request failures remain fatal. This is
-not live provider or production-delivery verification.
+not live provider or production-delivery verification. The script-free preview
+must expose its restrictive CSP and block its framework scripts and manifest;
+only those exact policy blocks are recorded separately from unexpected failures.
 
 By contributing, you agree that your contribution is licensed under the MIT
 License.

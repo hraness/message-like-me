@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isSyntheticBadge } from './browser-contract.mjs';
+import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isPreviewPolicyBlock, isSyntheticBadge } from './browser-contract.mjs';
 
 // This gate serves only the built informational website. It never runs the CLI,
 // Mac application, messaging providers, account checks, or personal-data readers.
@@ -95,8 +95,10 @@ try {
     try {
       const unexpected = [];
       const failures = [];
+      const failedRequests = [];
       const assets = new Set();
       item.syntheticAssets = [];
+      item.failedRequests = failedRequests;
       await context.route('**/*', async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -114,13 +116,23 @@ try {
       page.setDefaultTimeout(10_000);
       page.setDefaultNavigationTimeout(15_000);
       page.on('pageerror', (error) => failures.push(error.message));
-      page.on('requestfailed', (request) => failures.push(`Request failed: ${new URL(request.url()).pathname} ${request.failure()?.errorText}`));
+      page.on('requestfailed', (request) => failedRequests.push({ url: request.url(), method: request.method(),
+        resourceType: request.resourceType(), error: request.failure()?.errorText }));
       page.on('response', (response) => {
         const path = new URL(response.url()).pathname;
         if (response.status() >= 400) failures.push(`${response.status()} ${path}`);
         if (/\.(?:css|woff2|svg)(?:$|\?)/u.test(path)) assets.add(path);
       });
-      assert.equal((await page.goto(origin + sample.path, { waitUntil: 'load' })).status(), 200);
+      const response = await page.goto(origin + sample.path, { waitUntil: 'load' });
+      assert.equal(response.status(), 200);
+      const csp = (await response.allHeaders())['content-security-policy'];
+      const verifiedCsp = ["default-src 'none'", "script-src 'none'", "style-src 'self'", "font-src 'self' data:",
+        'frame-ancestors https://hraness.com https://www.hraness.com'].every((directive) => csp?.split(';').map((part) => part.trim()).includes(directive));
+      if (sample.path === '/preview') {
+        assert.equal(verifiedCsp, true, 'The frame-safe preview must retain its actual script-free response policy.');
+        assert.equal(await page.evaluate(() => Object.hasOwn(window, '__next_f')), false, 'Preview scripts must not execute.');
+        item.previewCsp = csp;
+      }
       await deadline(page.evaluate(async (landing) => {
         for (const weight of ['400', '500', '600', '700']) await document.fonts.load(`${weight} 16px "Nebula Sans"`, 'Textbutler');
         if (landing) await document.fonts.load('400 48px "Instrument Serif"', 'conversations');
@@ -215,7 +227,14 @@ try {
         item.skipLink = 'Keyboard skip link focused the main content.';
       }
       await deadline(page.evaluate(() => window.scrollTo(0, 0)), 'Screenshot scroll');
+      await page.screenshot({ path: join(directory, `${name}-viewport.png`), fullPage: false });
       await page.screenshot({ path: join(directory, `${name}.png`), fullPage: true });
+      item.policyBlocks = [];
+      for (const request of failedRequests) {
+        if (isPreviewPolicyBlock(request, { path: sample.path, origin, verifiedCsp })) item.policyBlocks.push(request);
+        else failures.push(`Request failed: ${new URL(request.url).pathname} ${request.error}`);
+      }
+      if (sample.path === '/preview') assert.ok(item.policyBlocks.length > 0, 'Native CSP enforcement must be observed.');
       assert.deepEqual(unexpected, [], 'The isolated browser must not send external requests or writes.');
       assert.deepEqual(failures, [], 'Browser and asset failures must remain visible.');
       item.passed = true;

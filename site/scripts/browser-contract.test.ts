@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isSyntheticBadge } from './browser-contract.mjs';
+import { assertPresentation, browserCases, browserEnvironment, browserOwner, deadline, isPreviewPolicyBlock, isSyntheticBadge } from './browser-contract.mjs';
 
 test('the native matrix covers four separate surfaces, both themes and touch', () => {
   const cases = browserCases();
@@ -22,6 +22,21 @@ test('only the exact external README image receives a recorded synthetic fixture
     { url: valid.url.replace('skills.sh', 'example.com') }]) {
     expect(isSyntheticBadge({ ...valid, ...change })).toBe(false);
   }
+});
+
+test('only preview script and manifest blocks from the verified restrictive CSP are expected', () => {
+  const policy = { path: '/preview', origin: 'http://127.0.0.1:3210', verifiedCsp: true };
+  const valid = { url: policy.origin + '/_next/static/chunks/app/page-123.js', method: 'GET', resourceType: 'script', error: 'csp' };
+  expect(isPreviewPolicyBlock(valid, policy)).toBe(true);
+  expect(isPreviewPolicyBlock({ ...valid, resourceType: 'manifest', url: policy.origin + '/manifest.webmanifest' }, policy)).toBe(true);
+  for (const change of [{ method: 'POST' }, { error: 'net::ERR_ABORTED' }, { error: 'net::ERR_FAILED' },
+    { resourceType: 'stylesheet' }, { resourceType: 'fetch' }, { resourceType: 'document' },
+    { url: valid.url + '?other=1' }, { url: policy.origin + '/script.js' }, { url: 'https://example.com/_next/static/chunks/a.js' },
+    { resourceType: 'image', url: policy.origin + '/icon.svg' }]) {
+    expect(isPreviewPolicyBlock({ ...valid, ...change }, policy)).toBe(false);
+  }
+  expect(isPreviewPolicyBlock(valid, { ...policy, verifiedCsp: false })).toBe(false);
+  expect(isPreviewPolicyBlock(valid, { ...policy, path: '/' })).toBe(false);
 });
 
 test('the owner joins a late acquisition during interruption and closes once', async () => {
