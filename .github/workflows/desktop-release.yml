@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing direct desktop-v0.1.1-macos-arm64 tag at exact current main
+        description: Existing direct desktop-v0.1.2-macos-arm64 tag at exact current main
         required: true
         type: string
       ci_run_id:
@@ -169,7 +169,7 @@ jobs:
         with:
           name: textbutler-desktop-signed-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/textbutler-signed/Textbutler-0.1.1-macos-arm64.zip
+            ${{ runner.temp }}/textbutler-signed/Textbutler-0.1.2-macos-arm64.zip
             ${{ runner.temp }}/textbutler-signed/signed-manifest.json
           if-no-files-found: error
           retention-days: 30
@@ -250,7 +250,7 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const fs=require('node:fs'),p=require('node:path'),c=require('node:crypto'),cp=require('node:child_process'),e=process.env;
-          const repo='hraness/message-like-me',repoId=1342143606,prefix=`repos/${repo}`,workflow='.github/workflows/desktop-release.yml',sha=e.GITHUB_SHA,tag='desktop-v0.1.1-macos-arm64';
+          const repo='hraness/message-like-me',repoId=1342143606,prefix=`repos/${repo}`,workflow='.github/workflows/desktop-release.yml',sha=e.GITHUB_SHA,tag='desktop-v0.1.2-macos-arm64';
           const need=v=>{if(!v)throw Error('Desktop provenance authority or artifact differs');};
           const id=v=>{need(/^[1-9][0-9]*$/.test(String(v)));const n=Number(v);need(Number.isSafeInteger(n)&&n>0);return n;};
           const get=path=>JSON.parse(cp.execFileSync('gh',['api','--hostname','github.com','--method','GET',`${prefix}/${path}`],{timeout:30000,maxBuffer:4194304}));
@@ -263,7 +263,7 @@ jobs:
           for(const path of[`actions/runs/${id(e.DESKTOP_CI_RUN_ID)}`,`actions/runs/${id(e.DESKTOP_CI_RUN_ID)}/attempts/${id(e.DESKTOP_CI_RUN_ATTEMPT)}`]){const r=get(path);need(r.id===id(e.DESKTOP_CI_RUN_ID)&&r.run_attempt===id(e.DESKTOP_CI_RUN_ATTEMPT)&&r.workflow_id===ci.id&&r.path===ci.path&&r.name==='CI'&&r.event==='push'&&r.head_branch==='main'&&r.head_sha===sha&&r.status==='completed'&&r.conclusion==='success');for(const q of[r.repository,r.head_repository])need(q.id===repoId&&q.full_name===repo);}
           const jobs=get(`actions/runs/${id(e.DESKTOP_CI_RUN_ID)}/attempts/${id(e.DESKTOP_CI_RUN_ATTEMPT)}/jobs?per_page=100`);need(jobs.total_count===2&&jobs.jobs.length===2&&jobs.jobs.map(j=>j.name).sort().join(',')===['Standalone package','macOS synthetic Messages and Contacts fixtures'].sort().join(','));for(const j of jobs.jobs)need(j.run_id===id(e.DESKTOP_CI_RUN_ID)&&j.run_attempt===id(e.DESKTOP_CI_RUN_ATTEMPT)&&j.head_sha===sha&&j.status==='completed'&&j.conclusion==='success'&&Number.isFinite(Date.parse(j.completed_at)));
           const artifact=get(`actions/artifacts/${id(e.ARTIFACT_ID)}`);need(artifact.id===id(e.ARTIFACT_ID)&&artifact.name===`textbutler-desktop-verified-${e.GITHUB_RUN_ID}-${e.GITHUB_RUN_ATTEMPT}`&&artifact.expired===false&&/^sha256:[a-f0-9]{64}$/.test(artifact.digest)&&artifact.size_in_bytes>0&&artifact.size_in_bytes<=838860800&&artifact.workflow_run.id===id(e.GITHUB_RUN_ID)&&artifact.workflow_run.head_sha===sha&&artifact.workflow_run.head_branch==='main');
-          const names=['Textbutler-0.1.1-macos-arm64.zip','desktop-manifest.json','SHA256SUMS'],dir=e.DIRECTORY,hashes=JSON.parse(e.EXPECTED_HASHES);
+          const names=['Textbutler-0.1.2-macos-arm64.zip','desktop-manifest.json','SHA256SUMS'],dir=e.DIRECTORY,hashes=JSON.parse(e.EXPECTED_HASHES);
           need(fs.readdirSync(dir).sort().join(',')===[...names].sort().join(',')&&Object.keys(hashes).sort().join(',')===[...names].sort().join(','));
           for(const name of names){const path=p.join(dir,name),s=fs.lstatSync(path);need(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1&&(s.mode&0o022)===0&&s.size>0&&s.size<=(name===names[0]?805306368:1048576));need(/^[a-f0-9]{64}$/.test(hashes[name])&&c.createHash('sha256').update(fs.readFileSync(path)).digest('hex')===hashes[name]);}
           const m=JSON.parse(fs.readFileSync(p.join(dir,'desktop-manifest.json'),'utf8')),a=m.workflowAuthority;need(m.schema==='textbutler.desktop-release.v1'&&m.unsigned.sourceSha===sha&&m.unsigned.tag===tag&&m.archive.sha256===hashes[names[0]]&&m.notarization.status==='Accepted'&&m.notarization.stapled===true&&a.repository===repo&&a.repositoryId===repoId&&a.workflow===workflow&&a.workflowSha===sha&&a.workflowId===w.id&&a.runId===id(e.GITHUB_RUN_ID)&&a.runAttempt===id(e.GITHUB_RUN_ATTEMPT)&&a.ciRunId===id(e.DESKTOP_CI_RUN_ID)&&a.ciRunAttempt===id(e.DESKTOP_CI_RUN_ATTEMPT));
