@@ -44,17 +44,25 @@ test("task relay binds generic profile, instructions, effort and service tier an
   }
 });
 
-test("task relay refuses a changed effort or service tier without an upstream call", async () => {
+test.each(["changed-effort", "absent-reasoning", "null-reasoning", "absent-effort", "changed-tier", "absent-tier", "null-tier"])(
+  "task relay refuses %s without an upstream call", async kind => {
   let calls = 0;
   const relay = startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
     limits: codexLimits({ ioMs: 1000, cleanupMs: 1000 }), task: { mapping, settings, executionDeadlineUnixMs: Date.now() + 120_000, maxOutputBytes: 4096 },
     fail: () => {}, upstream: { async request() { calls++; return sse(events("unused")); } } });
   relay.bindTurn("task-thread", "task-turn");
   try {
-    const response = await fetch(`${relay.baseUrl}/responses`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model, instructions: settings.instructions.base,
+    const body: Record<string, unknown> = { model, instructions: settings.instructions.base,
         input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }], tools: [], tool_choice: "auto",
-        parallel_tool_calls: false, reasoning: { effort: "low", summary: "auto" }, service_tier: "default", store: false, stream: true, include: [] }) });
+        parallel_tool_calls: false, reasoning: { effort: "high", summary: "auto" }, service_tier: "default", store: false, stream: true, include: [] };
+    if (kind === "changed-effort") body.reasoning = { effort: "low", summary: "auto" };
+    if (kind === "absent-reasoning") delete body.reasoning;
+    if (kind === "null-reasoning") body.reasoning = null;
+    if (kind === "absent-effort") body.reasoning = { summary: "auto" };
+    if (kind === "changed-tier") body.service_tier = "priority";
+    if (kind === "absent-tier") delete body.service_tier;
+    if (kind === "null-tier") body.service_tier = null;
+    const response = await fetch(`${relay.baseUrl}/responses`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     expect(response.status).toBe(400); expect(calls).toBe(0);
   } finally { expect((await relay.close()).joined).toBe(true); }
 });
