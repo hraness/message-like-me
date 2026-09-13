@@ -37,7 +37,7 @@ test('only preview script and manifest blocks from the verified restrictive CSP 
     { resourceType: 'stylesheet' }, { resourceType: 'fetch' }, { resourceType: 'document' }, { resourceType: 'other' },
     { url: valid.url + '?other=1' }, { url: origin + '/_next/static/chunks/unknown.js' },
     { url: policy.origin + '/script.js' }, { url: 'https://example.com/_next/static/chunks/a.js' },
-    { resourceType: 'image', url: policy.origin + '/icon.svg' }]) {
+    { resourceType: 'image', url: policy.origin + '/icon.png' }]) {
     expect(isPreviewPolicyBlock({ ...valid, ...change }, policy)).toBe(false);
   }
   expect(isPreviewPolicyBlock(valid, { ...policy, verifiedCsp: false })).toBe(false);

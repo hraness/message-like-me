@@ -895,3 +895,5 @@ html { scrollbar-color: var(--muted) var(--paper); }
   background-color: var(--hraness-material-warm-plane);
   color: var(--hraness-material-ink);
 }
+
+.product-brand-mark { display: inline-block; margin-inline-end: .5em; font-size: 1.25em; line-height: 1; }

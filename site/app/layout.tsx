@@ -26,8 +26,8 @@ export const metadata: Metadata = {
   keywords: ['Textbutler', 'Mac message assistant', 'personal message butler', 'coding agent', 'contact memory', 'Ghostget', 'iMessage', 'WhatsApp', 'Claude API'],
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-    shortcut: '/icon.svg',
+    icon: [{ url: '/icon.png', type: 'image/png' }],
+    shortcut: '/icon.png',
   },
   robots: {
     index: true,

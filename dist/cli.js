@@ -24750,7 +24750,7 @@ function rejectUnused(parsed, allowedOptions, allowedFlags) {
 import { isAbsolute as isAbsolute6, resolve as resolve8 } from "path";
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.8.9";
+var MESSAGE_LIKE_ME_VERSION = "0.8.10";
 
 // src/command-input.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
@@ -27504,6 +27504,19 @@ function runClosed(effect2) {
   return exports_Effect.runPromise(effect2);
 }
 
+// src/cli-intro.ts
+function terminalIntro(terminal) {
+  if (terminal.isTTY !== true || terminal.term === "dumb" || (terminal.columns ?? 80) < 48)
+    return "";
+  return `   _|_
+ .----- .   textbutler
+ | o o |   A little help in your conversations.
+ | === |
+ '-----'
+
+`;
+}
+
 // src/io.ts
 var processIo = {
   stdout: (text3) => process.stdout.write(text3),
@@ -27514,7 +27527,12 @@ var processIo = {
 // src/cli.ts
 async function main(argv, io = processIo) {
   try {
-    await runCommand(argv, io);
+    const rootHelp = argv.length === 0 || argv.length === 1 && argv[0] === "--help";
+    const output = rootHelp && io === processIo ? {
+      ...io,
+      stdout: (text3) => io.stdout((text3 === HELP ? terminalIntro({ isTTY: process.stdout.isTTY, columns: process.stdout.columns, term: process.env.TERM }) : "") + text3)
+    } : io;
+    await runCommand(argv, output);
     return 0;
   } catch (error) {
     io.stderr(`${errorMessage(error)}

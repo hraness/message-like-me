@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.10 (2026-09-13)
+
+- Show a compact ASCII robot before interactive root help. Piped output,
+  machine-readable commands, version output, and command help stay unchanged.
+- Refine the informational site's shared surfaces and robot identity. The native
+  Textbutler app remains in development; this package does not enable replies.
+- Route legacy installation to the exact public `@hraness/message-like-me@0.8.10` npm package after release admission, with the same reviewed bytes mirrored in the immutable GitHub Release.
+
 ## 0.8.9 (2026-09-10)
 
 - Use the shared Paper theme on the informational website, with warm neutral surfaces, compact Nebula Sans headings, and a blue action color in light and dark appearances.
