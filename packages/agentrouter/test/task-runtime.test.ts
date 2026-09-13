@@ -49,7 +49,7 @@ describe("generic task admission", () => {
       const acquire = f.leases.acquire.bind(f.leases);
       f.leases.acquire = input => { acquisitions++; return acquire(input); };
       f.adapter.run = async r => { seen = r.accountLease;
-        expect(seen).toEqual(f.leases.inspect("codex", f.request.accountId)); return f.complete(r); };
+        expect(f.leases.inspect("codex", f.request.accountId)).toEqual(seen); return f.complete(r); };
       f.adapter.stop = async r => { stopLease = r.accountLease; return f.stopped(r); };
       const result = await runAgentTask(f.options, f.request, f.broker);
       expect(acquisitions).toBe(1); expect(stopLease).toBe(seen); expect(Object.isFrozen(seen)).toBe(true);
