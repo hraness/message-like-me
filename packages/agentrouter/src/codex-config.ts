@@ -1,4 +1,5 @@
 import { BROKER_TOOL_NAMES, type BrokerToolName } from "./broker.ts";
+import { brokerDescriptors } from "./broker-descriptors.ts";
 import { boundedText, object, safeInteger } from "./validation.ts";
 import { createHash } from "node:crypto";
 import { assertCapabilityProfile, type CapabilityProfile, type CapabilityProfileIdentity } from "./capabilities.ts";
@@ -25,23 +26,8 @@ export const CODEX_TOOL_NAMES: Readonly<Record<BrokerToolName, string>> = Object
 export type CodexTool = Readonly<{ type: "function"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>> }>;
 export function codexTools(names: readonly BrokerToolName[]): readonly CodexTool[] {
   if (new Set(names).size !== names.length || names.some(name => !BROKER_TOOL_NAMES.includes(name))) throw new Error("CODEX_INVALID_TOOL_SET");
-  const path = { type: "string", minLength: 1, maxLength: 1024 };
-  const id = { type: "string", minLength: 1, maxLength: 160 };
-  const fields: Record<BrokerToolName, Record<string, unknown>> = {
-    "files.read": { path },
-    "files.write": { path, text: { type: "string", maxLength: 256 * 1024 }, expectedRevision: { anyOf: [id, { type: "null" }] } },
-    "web.fetch": { url: { type: "string", minLength: 1, maxLength: 8192 }, maxBytes: { type: "integer", minimum: 1, maximum: 256 * 1024 } },
-    "messages.propose_text": { text: { type: "string", minLength: 1, maxLength: 16 * 1024 }, idempotencyKey: id },
-    "messages.propose_reaction": { messageId: id, reaction: { type: "string", enum: ["love", "like", "dislike", "laugh", "emphasize", "question"] }, idempotencyKey: id },
-    "messages.propose_attachment": { path, caption: { type: "string", maxLength: 16 * 1024 }, idempotencyKey: id },
-  };
-  return Object.freeze(names.map(name => Object.freeze({ type: "function" as const, name: CODEX_TOOL_NAMES[name],
-    description: name === "files.read" ? "Read this contact's relative file and revision."
-      : name === "files.write" ? "Conditionally write this contact's relative file; use the read revision, or null for creation."
-      : name === "web.fetch" ? "Read bounded public HTTPS text through the host."
-      : "Stage this contact's proposed message action; this does not send anything.",
-    inputSchema: Object.freeze({ type: "object", properties: fields[name], required: Object.keys(fields[name]), additionalProperties: false }),
-  })));
+  return Object.freeze(brokerDescriptors(names).map(tool => Object.freeze({ type: "function" as const,
+    name: CODEX_TOOL_NAMES[tool.name as BrokerToolName], description: tool.description, inputSchema: tool.inputSchema })));
 }
 export function codexResponseTools(tools: readonly CodexTool[]): readonly Record<string, unknown>[] {
   return tools.map(({ name, description, inputSchema }) => ({ type: "function", name, description, strict: false, parameters: codexResponseSchema(inputSchema) }));

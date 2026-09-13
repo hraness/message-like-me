@@ -9,7 +9,7 @@ import { RunJournal } from "./journal.ts";
 import { OwnerReadRecoveryError, assertSameConversation, bindingDigest, boundedHistory, parseConversationBinding, type ConversationBinding, type ObservedConversation, type OwnerConversationReadPort } from "./enrollment.ts";
 import type { ProviderHost } from "./provider-host.ts";
 import type { AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
-import { assertQualified } from "../../agentrouter/src/runtime.ts";
+import { selectButlerModel } from "./routed-agent.ts";
 import { parseAutomationBinding, type AutomationBinding, type AutomationCandidate, type OwnerAutomationPort } from "./automation-owner.ts";
 import { automationBindingDigest, parseAutomationGrant, type AutomationGrant } from "../../transport/src/automation.ts";
 
@@ -434,7 +434,10 @@ export class TextbutlerControlService {
     const response = this.startJob(async signal => {
       let created: AutomationGrant | undefined;
       try {
-        assertQualified((await this.providers!.selection(contact)).qualification, Date.now()); signal.throwIfAborted();
+        for (const purpose of contact.mode === "smart" ? ["classify", "respond"] as const : ["respond"] as const) {
+          selectButlerModel(await this.providers!.selection(contact, purpose), contact, purpose, Date.now(), true);
+          signal.throwIfAborted();
+        }
         const prior = current.state.grants[contact.id]; if (prior) await this.automation!.revoke(prior.id, signal);
         const intentId = randomUUID();
         this.journal.recordGrantIntent({ id: intentId, contactId: contact.id, enrollmentId: binding.enrollmentId, bindingDigest: binding.bindingDigest });

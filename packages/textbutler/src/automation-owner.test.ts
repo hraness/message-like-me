@@ -5,9 +5,11 @@ import { AUTOMATION_ACTIONS, automationBindingDigest, createGhostgetAutomationCl
   type AutomationEnrollment, type AutomationProvider } from "../../transport/src/automation.ts";
 import { createAutomationOwnerPort, parseAutomationBinding, automationBinding } from "./automation-owner.ts";
 import { TextbutlerControlService, TEXTBUTLER_CONTROL_PROTOCOL as protocol } from "./control-service.ts";
-import { createProviderHost } from "./provider-host.ts";
+import { createProviderHost, type ProviderHost } from "./provider-host.ts";
 import { parseHostConfig } from "./host-config.ts";
 import { parseControlResponse, type ControlResponse } from "../../control/src/index.ts";
+import { contactCapabilityIdentity, type ButlerPurpose } from "./contact-capabilities.ts";
+import type { ProviderSelection } from "./routed-agent.ts";
 
 const roots: string[] = [], services: TextbutlerControlService[] = [];
 afterEach(async () => { for (const service of services.splice(0)) await service.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -59,20 +61,82 @@ async function waitForMessagingState(service: TextbutlerControlService, contactI
   } while (performance.now() < deadline);
   expect(state).toBe(expected);
 }
-async function serviceFixture(f: ReturnType<typeof fixture>) {
+function syntheticModels(provider: "claude" | "codex") {
+  return { provider, observedAt: Date.now(), models: [{ id: "synthetic-model", available: true, supportsStructuredOutput: true,
+    classifierEligible: true, inputUsdPerMillion: 1, outputUsdPerMillion: 2 }] };
+}
+function managedSelection(purpose: ButlerPurpose): Extract<ProviderSelection, { kind: "managed" }> {
+  const route = { id: `synthetic-codex-${purpose}`, provider: "codex" as const, authentication: "subscription" as const };
+  return { kind: "managed", route, defaultReplyModel: "synthetic-model", modelCatalog: syntheticModels("codex"),
+    qualification: { status: "qualified", route, profile: contactCapabilityIdentity(purpose), runtimeVersion: "synthetic-control-fixture",
+      runtimeDigest: "1".repeat(64), evidenceDigest: "2".repeat(64), expiresAt: Date.now() + 600_000,
+      controls: { noCommandTools: true, exactToolInventory: true, workspaceReadIsolation: true, workspaceWriteIsolation: true,
+        isolatedConfiguration: true, authOutsideWorkspace: true, hostBrokerOnly: true } } };
+}
+async function serviceFixture(f: ReturnType<typeof fixture>, selection?: ProviderHost["selection"]) {
   const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-automation-")); roots.push(dataDir);
   const config = parseHostConfig({ schemaVersion: 1, providerAccounts: [{ id: "synthetic-api", label: "Synthetic API", route: "claude-api", credentialFile: "synthetic-key", replyModel: "synthetic-model",
-    prices: { observedAt: Date.now(), models: [{ id: "synthetic-model", inputUsdPerMillion: 1, outputUsdPerMillion: 2, classifierEligible: true }] } }] });
+    prices: { observedAt: Date.now(), models: [{ id: "synthetic-model", inputUsdPerMillion: 1, outputUsdPerMillion: 2, classifierEligible: true }] } },
+    { id: "synthetic-managed", label: "Synthetic managed account", route: "codex" }] });
   const service = await TextbutlerControlService.open({ dataDir, automation: f.port, providers: leases => ({ ...createProviderHost({ dataDir, config, leases }),
-    async selection() { return { qualification: { status: "qualified", profile: "agentrouter.scoped-tools.v1", runtimeVersion: "synthetic-control-fixture", runtimeDigest: "1".repeat(64), evidenceDigest: "2".repeat(64), expiresAt: Date.now() + 60_000,
+    selection: selection ?? (async () => ({ qualification: { status: "qualified", profile: "agentrouter.scoped-tools.v1", runtimeVersion: "synthetic-control-fixture", runtimeDigest: "1".repeat(64), evidenceDigest: "2".repeat(64), expiresAt: Date.now() + 60_000,
       controls: { noCommandTools: true, exactToolInventory: true, contactReadIsolation: true, contactWriteIsolation: true, isolatedConfiguration: true, authOutsideWorkspace: true, hostBrokerOnly: true } },
-      defaultReplyModel: "synthetic-model", modelCatalog: { provider: "claude", observedAt: Date.now(), models: [] } }; },
+      defaultReplyModel: "synthetic-model", modelCatalog: syntheticModels("claude") })),
   }) }); services.push(service);
   const listing = await finish(service, await service.request({ protocol, command: "conversations.list" }));
   if (!listing.ok || listing.kind !== "conversations") throw new Error("Missing synthetic conversations");
   const enrolled = await finish(service, await service.request({ protocol, command: "contact.enroll", candidateId: listing.candidates[0]!.id, expectedRevision: 1, initializeHistory: true }));
   if (!enrolled.ok || enrolled.kind !== "enrolled") throw new Error("Missing synthetic enrollment");
   return { service, dataDir, contactId: enrolled.contactId, initial: enrolled.snapshot.contacts[0]!.settings };
+}
+
+for (const responseMode of ["smart", "keyword"] as const) {
+  test(`${responseMode} activation validates every required purpose before granting messaging access`, async () => {
+    const f = fixture(), purposes: ButlerPurpose[] = [];
+    const { service, contactId, initial } = await serviceFixture(f, async (contact, purpose) => {
+      if (!purpose) throw Error("Readiness requires an explicit purpose");
+      expect(contact).toMatchObject({ provider: "codex", accountId: "synthetic-managed", mode: responseMode });
+      expect(f.calls).not.toContain("grant"); purposes.push(purpose);
+      return managedSelection(purpose);
+    });
+    const result = await finish(service, await service.request({ protocol, command: "contact.settings.update", contactId, expectedRevision: 2,
+      settings: { ...initial, enabled: true, responseMode, provider: "codex", accountId: "synthetic-managed" } }));
+    expect(result).toMatchObject({ ok: true, kind: "snapshot" });
+    expect(purposes).toEqual(responseMode === "smart" ? ["classify", "respond"] : ["respond"]);
+    expect(f.grants).toHaveLength(1); expect((await service.settings()).contacts[0]!.enabled).toBe(true);
+  });
+}
+
+for (const defect of ["missing-classifier", "stale-classifier", "stale-response", "wrong-classifier-profile", "wrong-response-profile",
+  "malformed-runtime-digest", "malformed-evidence-digest", "missing-runtime-version"] as const) {
+  test(`smart activation refuses ${defect} before any messaging grant or intent`, async () => {
+    const f = fixture(), purposes: ButlerPurpose[] = [];
+    const failingPurpose = defect === "stale-response" || defect === "wrong-response-profile" ? "respond" : "classify";
+    const { service, contactId, initial } = await serviceFixture(f, async (_, purpose) => {
+      if (!purpose) throw Error("Readiness requires an explicit purpose");
+      purposes.push(purpose);
+      const value = managedSelection(purpose);
+      if (purpose !== failingPurpose) return value;
+      if (defect === "missing-classifier") return { ...value, modelCatalog: { ...value.modelCatalog,
+        models: value.modelCatalog.models.map(model => ({ ...model, classifierEligible: false })) } };
+      if (defect === "stale-classifier" || defect === "stale-response") return { ...value,
+        modelCatalog: { ...value.modelCatalog, observedAt: Date.now() - 86_400_001 } };
+      if (value.qualification.status !== "qualified") throw Error("Expected qualified synthetic fixture");
+      if (defect === "wrong-classifier-profile" || defect === "wrong-response-profile") return { ...value,
+        qualification: { ...value.qualification, profile: contactCapabilityIdentity(purpose === "classify" ? "respond" : "classify") } };
+      if (defect === "malformed-runtime-digest") return { ...value, qualification: { ...value.qualification, runtimeDigest: "invalid" } };
+      if (defect === "malformed-evidence-digest") return { ...value, qualification: { ...value.qualification, evidenceDigest: "invalid" } };
+      const { runtimeVersion: _omitted, ...qualification } = value.qualification;
+      return { ...value, qualification } as unknown as ProviderSelection;
+    });
+    const result = await finish(service, await service.request({ protocol, command: "contact.settings.update", contactId, expectedRevision: 2,
+      settings: { ...initial, enabled: true, responseMode: "smart", provider: "codex", accountId: "synthetic-managed" } }));
+    expect(result.ok).toBe(false);
+    expect(purposes).toEqual(failingPurpose === "respond" ? ["classify", "respond"] : ["classify"]);
+    expect(f.calls).not.toContain("grant"); expect(f.grants).toEqual([]);
+    expect(service.runJournal().grantIntents()).toEqual([]); expect(service.runJournal().pendingGrants()).toEqual([]);
+    expect((await service.runtimeState()).grants).toEqual({}); expect((await service.settings()).contacts[0]!.enabled).toBe(false);
+  });
 }
 
 test("owner automation has explicit startup, exact network identity and opt-in context import", async () => {
