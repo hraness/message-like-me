@@ -70,7 +70,8 @@ native process factory, so these controls are absent from its account rows.
 
 Synthetic tests cover the controller, stdio protocol and owner controls. They
 do not establish successful live sign-in or contact-scoped native execution.
-The existing credential-free Codex task process uses a loopback model relay;
-managed subscription execution requires a separately admitted native mode
-using Codex-managed authentication and the built-in provider. The account
+The credential-free Codex task process uses a loopback model relay. The separate
+`createCodexManagedTaskAdapter()` supports managed subscription tasks through
+the built-in provider, but still requires a host launcher and current execution
+qualification. Neither task adapter is enabled by account sign-in. The account
 protocol supplies no inference proxy or token-export bridge between them.

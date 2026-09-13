@@ -348,9 +348,10 @@ port. Account sign-in and product-provider terms need separate qualification;
 [Anthropic's SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) directs
 third-party product integrations to supported API authentication unless approved.
 
-`createCodexTaskAdapter()` is the low-level native adapter seam for application
-capability profiles. It maps the exact `CapabilityBroker` inventory into one
-Codex session, passes only host-supplied instructions and task settings, and
+`createCodexTaskAdapter()` is the relay-backed task adapter for application
+capability profiles. It requires a host `CodexResponsesUpstream`; selecting a
+subscription route does not provide subscription authentication. It maps the
+exact `CapabilityBroker` inventory into one Codex session, passes only host-supplied instructions and task settings, and
 retains the process receipt until `AgentRouter.runTask()` has joined the adapter
 stop and broker close. Constructing the adapter does not discover credentials,
 select an account, or qualify the installed native runtime; those remain explicit
@@ -373,3 +374,41 @@ The relay requires those exact selections in the model request, including when
 reasoning is absent. Null settings leave the native defaults in place. Generic
 task effort names follow the pinned protocol's bounded string contract, including
 `ultra`; the older six-tool driver keeps its existing effort inventory.
+
+`createCodexManagedTaskAdapter()` adds an experimental task transport for the
+official Codex app-server's managed ChatGPT authentication. The host must supply
+a `CodexManagedProcessLauncher` that owns the native process and keeps its
+authentication state outside application workspaces. Codex owns sign-in, token
+refresh and provider traffic. This adapter has no API upstream or token input,
+and no native managed launcher is bundled.
+
+The adapter defaults to unqualified. `AgentRouter.runTask()` refuses it before
+account acquisition or process launch unless the trusted host supplies current
+qualification for the exact route, runtime and capability profile. Direct
+adapter calls also refuse missing qualification. Synthetic fixtures are not
+qualification evidence and do not enable the route in Textbutler or another app.
+
+The managed session checks ChatGPT account type and native thread settings before
+sending the task. Its bounded callback ledger binds tool starts, broker calls,
+results and completions to one thread and turn, rejects duplicates and unsupported
+native operations, and records native token usage with unknown monetary cost.
+Cancellation revokes the broker and joins the process and admitted handlers;
+uncertain stop evidence retains account custody.
+
+An observed ChatGPT account does not distinguish native-managed storage from
+externally supplied tokens. The trusted launcher must establish the authentication
+mode and configuration isolation independently. Likewise, dynamic tools add a
+broker surface; they do not prove that built-in tools are absent. Callback
+filtering cannot prevent an unobserved built-in operation. Session receipts
+therefore report `productionQualified: false` and
+`exactToolInventoryObserved: false`. Live activation still requires evidence of
+the effective tool inventory and host read/write confinement. The existing
+relay-only process launcher's network policy is unchanged.
+
+On 2026-09-13, Codex **0.154.0-alpha.6.2** accepted the managed configuration
+and an empty ephemeral thread in separate native diagnostics with fresh private
+state and network access denied. Configuration and thread-setting readback
+passed, and root exit, process-group absence and stdio closure were verified.
+The diagnostics made no account, login or turn requests. They establish
+configuration and thread-response compatibility for that binary, not
+authenticated execution or tool confinement.
