@@ -6,8 +6,14 @@ import { inspect } from "node:util";
 import { notaryAppCredentials, notaryPreflight, storeNotaryCredentials, NOTARY_PROFILE } from "./notary-preflight.ts";
 
 const credentials = { appleId: "synthetic-apple-id@example.invalid", appPassword: "aaaa-bbbb-cccc-dddd", team: "XXXXXXXXXX" };
-const result = (status = 0, stderr = ""): childProcess.SpawnSyncReturns<Buffer> => ({ pid: 1, output: [null, Buffer.from("synthetic-private-stdout"), Buffer.from(stderr)], stdout: Buffer.from("synthetic-private-stdout"), stderr: Buffer.from(stderr), status, signal: null });
+const result = (status = 0, stderr = ""): childProcess.SpawnSyncReturns<Buffer<ArrayBuffer>> => ({ pid: 1, output: [null, Buffer.from("synthetic-private-stdout"), Buffer.from(stderr)], stdout: Buffer.from("synthetic-private-stdout"), stderr: Buffer.from(stderr), status, signal: null });
 type Call = { program: string; args: readonly string[]; options: childProcess.SpawnSyncOptions };
+function mockBufferSpawn(implementation: (...values: unknown[]) => childProcess.SpawnSyncReturns<Buffer<ArrayBuffer>>) {
+  // Preserve spawnSync's overloads while intercepting the Buffer-only calls under test.
+  return spyOn(childProcess, "spawnSync").mockImplementation(new Proxy(childProcess.spawnSync, {
+    apply: (_target, _receiver, values: unknown[]) => implementation(...values),
+  }));
+}
 
 test("credential parsing removes only trailing password newlines and freezes the result", () => {
   for (const ending of ["", "\n", "\r\n", "\n\r\n"]) {
@@ -44,7 +50,7 @@ test("malformed, missing, multiline, oversized and control-bearing credential va
 
 test("shared store path uses the real validation command and normalized password only on stdin", () => {
   const calls: Call[] = [];
-  const spawn = spyOn(childProcess, "spawnSync").mockImplementation((...values: unknown[]) => {
+  const spawn = mockBufferSpawn((...values: unknown[]) => {
     const [program, args, options] = values as [string, readonly string[], childProcess.SpawnSyncOptions];
     calls.push({ program, args, options }); return result();
   });
@@ -63,7 +69,7 @@ test("shared store path uses the real validation command and normalized password
 
 function exercisePreflight(failedStage?: "create" | "store" | "delete") {
   const calls: Call[] = []; let scratch = "";
-  const spawn = spyOn(childProcess, "spawnSync").mockImplementation((...values: unknown[]) => {
+  const spawn = mockBufferSpawn((...values: unknown[]) => {
     const [program, args, options] = values as [string, readonly string[], childProcess.SpawnSyncOptions];
     calls.push({ program, args, options });
     const action = args[0];
