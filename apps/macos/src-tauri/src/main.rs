@@ -118,7 +118,9 @@ fn allowed_request(request: &Value) -> bool {
     let fields: &[&str] = match row.get("command").and_then(Value::as_str) {
         Some("snapshot" | "activity.list" | "conversations.list") => &["protocol", "command"],
         Some("owner.job.read") => &["protocol", "command", "jobId"],
-        Some("provider.accounts.check") => &["protocol", "command", "accountId"],
+        Some("provider.accounts.check" | "provider.accounts.logout") => &["protocol", "command", "accountId"],
+        Some("provider.accounts.login.start") => &["protocol", "command", "accountId", "method"],
+        Some("provider.accounts.login.cancel") => &["protocol", "command", "accountId", "loginId"],
         Some("messaging.start") => &["protocol", "command", "provider"],
         Some("contact.enroll") => &["protocol", "command", "candidateId", "expectedRevision", "initializeHistory"],
         Some("contact.memory.read") => &["protocol", "command", "contactId"],
@@ -261,6 +263,10 @@ mod tests {
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "conversations.list" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "owner.job.read", "jobId": "test-job" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.check", "accountId": "test-account" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.login.start", "accountId": "test-account", "method": "chatgptDeviceCode" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.login.cancel", "accountId": "test-account", "loginId": "synthetic-login" })));
+        assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.logout", "accountId": "test-account" })));
+        assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.login.start", "accountId": "test-account", "method": "chatgpt", "accessToken": "not-allowed" })));
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "provider.accounts.check", "accountId": "test-account", "credential": "not-allowed" })));
         assert!(allowed_request(&json!({ "protocol": PROTOCOL, "command": "messaging.start", "provider": "whatsapp" })));
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "messaging.start", "provider": "whatsapp", "credential": "not-allowed" })));

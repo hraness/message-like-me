@@ -126,7 +126,7 @@ select { min-width: 155px; }
 .capability-list { margin-top: 16px; }
 .capability-row { display: flex; align-items: flex-start; gap: 22px; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .capability-row:last-child { border-bottom: 0; padding-bottom: 0; }
-.capability-row > div { flex: 1; }
+.capability-row > div { flex: 1; min-width: 0; }
 .capability-row p { color: var(--muted); font-size: 12px; margin-top: 5px; max-width: 64ch; }
 .capability-state { white-space: nowrap; font-size: 11px; color: var(--muted); padding-top: 2px; }
 .capability-state.available { color: var(--success); }
@@ -175,3 +175,8 @@ select { min-width: 155px; }
 .history-choice { margin: 28px 0 20px; }
 .history-choice label { display: flex; gap: 10px; align-items: center; }
 .history-choice p { margin: 8px 0 0 25px; max-width: 64ch; color: var(--muted); line-height: 1.6; }
+/* Transient owner sign-in fields stay selectable inside the local webview. */
+.provider-login { margin-top: 16px; max-width: 100%; }
+.provider-login label { display: block; margin-top: 10px; margin-bottom: 5px; }
+.provider-login input { display: block; width: 100%; min-width: 0; box-sizing: border-box; }
+.provider-login .button { margin-top: 12px; }

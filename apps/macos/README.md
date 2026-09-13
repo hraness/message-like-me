@@ -33,6 +33,14 @@ The loopback preview is explicitly synthetic and uses an in-memory control port.
 
 Capability availability comes from the daemon snapshot. Owner-configured iMessage and WhatsApp connections, bounded conversation enrollment, optional history initialization and explicit agent account selection are described in the [runtime documentation](../../packages/textbutler/README.md). Rich actions remain unavailable unless their exact provider reports and admits them; unsupported iMessage app experiences are not simulated as live.
 
+When an embedding host supplies a trusted managed Codex account controller,
+Agent accounts also exposes ChatGPT sign-in, cancellation, sign-out and checks.
+The device address and code stay in temporary view memory and are copied into
+the owner's browser; the webview's navigation restrictions remain in force.
+Signed-in accounts still show reply availability separately. The default bundled
+host does not yet supply a native account process factory. See the
+[account integration contract](../../packages/agentrouter/MANAGED-CODEX.md).
+
 ## Local design references
 
 `PRODUCT.md` and `DESIGN.md` record the desktop scope and native utility direction. Ghostget informed the small Tauri-wrapper structure; its source, private runtime, permission state and credentials are not bundled here.

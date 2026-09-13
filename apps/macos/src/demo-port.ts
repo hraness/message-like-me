@@ -20,7 +20,7 @@ export function createDemoPort(): DesktopControlPort {
   return { async request(request) {
     if (request.command === "snapshot" || request.command === "activity.list") return snapshot();
     if (request.command === "owner.job.read") return failure("invalid-request", "This synthetic preview has no background job.");
-    if (request.command === "provider.accounts.check") return failure("invalid-request", "This synthetic preview does not connect provider accounts.");
+    if (request.command === "provider.accounts.check" || request.command === "provider.accounts.login.start" || request.command === "provider.accounts.login.cancel" || request.command === "provider.accounts.logout") return failure("invalid-request", "This synthetic preview does not connect provider accounts.");
     if (request.command === "messaging.start") return failure("invalid-request", "This synthetic preview does not connect messaging providers.");
     if (request.command === "conversations.list") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "conversations", detail: "Synthetic examples only. No Messages or Contacts data was read.", candidates: state.contacts.some(contact => contact.id === "synthetic-casey") ? [] : [
       { id: "synthetic-candidate-casey", name: "Casey Jordan", subtitle: "Sample one-to-one conversation", eligible: true, reason: "Ready to add" },

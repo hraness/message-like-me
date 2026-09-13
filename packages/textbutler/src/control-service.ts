@@ -58,9 +58,20 @@ export function parseControlRequest(value: unknown): ControlRequest {
   if (item.command === "owner.job.read") {
     exact(item, ["protocol", "command", "jobId"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, jobId: contactId(item.jobId) };
   }
-  if (item.command === "provider.accounts.check") {
+  if (item.command === "provider.accounts.check" || item.command === "provider.accounts.logout") {
     exact(item, ["protocol", "command", "accountId"]);
     return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, accountId: contactId(item.accountId) };
+  }
+  if (item.command === "provider.accounts.login.start") {
+    exact(item, ["protocol", "command", "accountId", "method"]);
+    if (item.method !== "chatgpt" && item.method !== "chatgptDeviceCode") fail("invalid-request", "Choose a supported Codex sign-in method.");
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, accountId: contactId(item.accountId), method: item.method };
+  }
+  if (item.command === "provider.accounts.login.cancel") {
+    exact(item, ["protocol", "command", "accountId", "loginId"]);
+    const loginId = text(item.loginId, 160);
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u.test(loginId)) fail("invalid-request", "Invalid provider sign-in identity.");
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, accountId: contactId(item.accountId), loginId };
   }
   if (item.command === "messaging.start") {
     exact(item, ["protocol", "command", "provider"]);
@@ -460,6 +471,22 @@ export class TextbutlerControlService {
       if (!this.providers) fail("unavailable", "Provider accounts are not configured.");
       return this.startJob(async signal => { await this.providers!.check(request.accountId, signal); signal.throwIfAborted();
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() }; });
+    }
+    if (request.command === "provider.accounts.login.start") {
+      if (!this.providers) fail("unavailable", "Provider accounts are not configured.");
+      return this.startJob(async signal => {
+        const challenge = await this.providers!.startLogin(request.accountId, request.method, signal); signal.throwIfAborted();
+        return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "provider-login", accountId: request.accountId, challenge, snapshot: await this.snapshot() };
+      });
+    }
+    if (request.command === "provider.accounts.login.cancel" || request.command === "provider.accounts.logout") {
+      if (!this.providers) fail("unavailable", "Provider accounts are not configured.");
+      return this.startJob(async signal => {
+        if (request.command === "provider.accounts.login.cancel") await this.providers!.cancelLogin(request.accountId, request.loginId, signal);
+        else await this.providers!.logout(request.accountId, signal);
+        signal.throwIfAborted();
+        return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
+      });
     }
     if (request.command === "messaging.start") {
       if (!this.automation) fail("unavailable", "Messaging automation is not configured.");

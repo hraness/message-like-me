@@ -35,7 +35,8 @@ tests do not attest a signed Mac release or live delivery on a particular accoun
 - `host-config.ts`: private owner configuration of the installed Ghostget CLI;
   no account or message reads occur just by loading configuration.
 - `provider-host.ts`: explicit account selection, current model availability,
-  credential generation fencing, and shared account leases.
+  credential generation fencing, shared account leases, and optional trusted
+  [managed Codex account controls](../agentrouter/MANAGED-CODEX.md).
 - `automation-owner.ts`: owner-only network setup, exact enrollment identity,
   scoped grants and current provider capabilities.
 - `reply-loop.ts`: incoming-event polling, debounce, takeover cancellation and

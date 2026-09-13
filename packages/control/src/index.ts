@@ -16,7 +16,12 @@ export interface Activity { id: string; at: string; contactId: string | null; ti
 export interface ProviderAccountDiagnostic {
   id: string; label: string; provider: "claude" | "codex"; route: "claude-api" | "claude-code" | "codex";
   status: "ready" | "setup-required" | "unavailable"; detail: string; defaultReplyModel: string | null; classifierModel: string | null;
+  managedAccount?: { state: "unchecked" | "signed-out" | "signing-in" | "signed-in" | "unavailable" | "recovery-required" | "closed"; generation: number; modelCount: number; pendingLoginId: string | null };
 }
+/** A transient owner response. Never persist this challenge in contact memory or activity. */
+export type ProviderLoginChallenge =
+  | { type: "chatgpt"; loginId: string; authUrl: string }
+  | { type: "chatgptDeviceCode"; loginId: string; verificationUrl: string; userCode: string };
 export interface DesktopSnapshot {
   protocol: typeof CONTROL_PROTOCOL;
   revision: number;
@@ -37,6 +42,9 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "owner.job.read"; jobId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.check"; accountId: string }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.login.start"; accountId: string; method: "chatgpt" | "chatgptDeviceCode" }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.login.cancel"; accountId: string; loginId: string }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.logout"; accountId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "messaging.start"; provider: "imessage" | "whatsapp" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.settings.update"; contactId: string; expectedRevision: number; settings: ContactSettings }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.read"; contactId: string }
@@ -44,6 +52,7 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "global.settings.update"; expectedRevision: number; settings: DesktopSnapshot["settings"] }
   | { protocol: typeof CONTROL_PROTOCOL; command: "activity.list" };
 export type ControlResponse =
+  | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "provider-login"; accountId: string; challenge: ProviderLoginChallenge; snapshot: DesktopSnapshot }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "job"; jobId: string }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "conversations"; candidates: ConversationCandidate[]; detail: string }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "enrolled"; snapshot: DesktopSnapshot; contactId: string; historyCount: number; historyOmittedCount: number; historyShortenedCount: number; historyInitialized: boolean }
@@ -139,6 +148,15 @@ export function parseControlResponse(value: unknown): ControlResponse {
   if (row.ok === false) return { protocol: CONTROL_PROTOCOL, ok: false,
     code: oneOf(row.code, ["disconnected", "invalid-request", "conflict", "capacity", "unavailable"]), message: text(row.message) };
   if (row.ok !== true) throw new Error("Invalid control response outcome.");
+  if (row.kind === "provider-login") {
+    const response = parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: row.snapshot });
+    const accountId = text(row.accountId, 80);
+    if (!response.ok || response.kind !== "snapshot" || !response.snapshot.providerAccounts?.some(account => account.id === accountId && account.route === "codex" && account.managedAccount)) throw new Error("Invalid managed account login response.");
+    const challenge = parseProviderLoginChallenge(row.challenge);
+    const native = response.snapshot.providerAccounts.find(account => account.id === accountId)!.managedAccount!;
+    if (native.state !== "signing-in" || native.pendingLoginId !== challenge.loginId) throw new Error("Stale managed account login response.");
+    return { protocol: CONTROL_PROTOCOL, ok: true, kind: "provider-login", accountId, challenge, snapshot: response.snapshot };
+  }
   if (row.kind === "job") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "job", jobId: text(row.jobId, 80) };
   if (row.kind === "conversations") {
     const candidates = list(row.candidates, 200).map(value => { const item = record(value); return { id: text(item.id, 80), name: text(item.name, 200), subtitle: text(item.subtitle, 512), eligible: bool(item.eligible), reason: text(item.reason, 512) }; });
@@ -168,7 +186,12 @@ export function parseControlResponse(value: unknown): ControlResponse {
       return { id: text(account.id, 80), label: text(account.label, 100), provider: oneOf(account.provider, ["claude", "codex"]),
         route: oneOf(account.route, ["claude-api", "claude-code", "codex"]), status: oneOf(account.status, ["ready", "setup-required", "unavailable"]),
         detail: text(account.detail, 512), defaultReplyModel: account.defaultReplyModel === null ? null : text(account.defaultReplyModel, 160),
-        classifierModel: account.classifierModel === null ? null : text(account.classifierModel, 160) };
+        classifierModel: account.classifierModel === null ? null : text(account.classifierModel, 160),
+        ...(account.managedAccount === undefined ? {} : { managedAccount: {
+          state: oneOf(record(account.managedAccount).state, ["unchecked", "signed-out", "signing-in", "signed-in", "unavailable", "recovery-required", "closed"]),
+          generation: integer(record(account.managedAccount).generation, 0), modelCount: integer(record(account.managedAccount).modelCount, 0, 5000),
+          pendingLoginId: record(account.managedAccount).pendingLoginId === null ? null : text(record(account.managedAccount).pendingLoginId, 160),
+        } }) };
     }) }),
     ...(source.automation === undefined ? {} : { automation: { state: oneOf(record(source.automation).state, ["running", "paused", "unavailable"]), detail: text(record(source.automation).detail, 512) } }),
     ...(source.messagingProviders === undefined ? {} : { messagingProviders: list(source.messagingProviders, 2).map(value => oneOf(value, ["imessage", "whatsapp"])) }),
@@ -179,6 +202,31 @@ export function parseControlResponse(value: unknown): ControlResponse {
   for (const account of snapshot.providerAccounts ?? []) {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(account.id) || account.provider !== (account.route === "codex" ? "codex" : "claude")) throw new Error("Invalid provider account identity.");
     if (account.status === "ready" && (account.route !== "claude-api" || !account.classifierModel || !account.defaultReplyModel)) throw new Error("Invalid provider readiness.");
+    if (account.managedAccount && (account.route !== "codex" || account.status === "ready" || account.managedAccount.state !== "signed-in" && account.managedAccount.modelCount !== 0)) throw new Error("Invalid managed account readiness.");
+    if (account.managedAccount?.pendingLoginId != null && !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u.test(account.managedAccount.pendingLoginId)) throw new Error("Invalid managed login identity.");
   }
   return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot };
+}
+
+/** Only known HTTPS sign-in destinations may reach the owner interface. */
+export function parseProviderLoginChallenge(value: unknown): ProviderLoginChallenge {
+  const row = record(value), loginId = text(row.loginId, 160);
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u.test(loginId)) throw new Error("Invalid provider login identity.");
+  const signInUrl = (value: unknown, device: boolean): string => {
+    const raw = text(value, 8192);
+    if (!raw.startsWith("https://") || /[\u0000-\u0020\u007f\\]/u.test(raw)) throw new Error("Invalid provider sign-in destination.");
+    let url: URL;
+    try { url = new URL(raw); } catch { throw new Error("Invalid provider sign-in destination."); }
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash
+      || !(device ? url.origin === "https://auth.openai.com" && url.pathname === "/codex/device" && !url.search
+        : ["https://auth.openai.com", "https://chatgpt.com"].includes(url.origin))) throw new Error("Invalid provider sign-in destination.");
+    return raw;
+  };
+  if (row.type === "chatgpt" && Object.keys(row).sort().join(",") === "authUrl,loginId,type") return { type: "chatgpt", loginId, authUrl: signInUrl(row.authUrl, false) };
+  if (row.type === "chatgptDeviceCode" && Object.keys(row).sort().join(",") === "loginId,type,userCode,verificationUrl") {
+    const userCode = text(row.userCode, 64);
+    if (!/^[A-Za-z0-9-]+$/u.test(userCode)) throw new Error("Invalid provider device code.");
+    return { type: "chatgptDeviceCode", loginId, verificationUrl: signInUrl(row.verificationUrl, true), userCode };
+  }
+  throw new Error("Unsupported managed login challenge.");
 }
