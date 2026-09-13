@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { ARCHIVE, BUN_VERSION, command, digest, IDENTIFIER, inventory, loadUnsigned, object, readPhysical, requireValue, sha256 } from "./common.ts";
+import { ARCHIVE, BUN_VERSION, command, digest, IDENTIFIER, inventory, loadUnsigned, object, readPhysical, requireValue, sha256, type CommandStage } from "./common.ts";
 import { assertSignature, entitlements, nativePaths, plist } from "./native.ts";
 
 // Dependency-free Apple-secret consumer. Run on a clean signing host after
@@ -16,9 +16,9 @@ if (import.meta.main) {
   const keychain = join(scratch, "signing.keychain-db"), keychainPassword = randomBytes(32).toString("hex");
   let keychainAttempted = false;
   const environment = { HOME: process.env.HOME ?? "", TMPDIR: scratch, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
-  const apple = (program: string, args: readonly string[], timeout = 60_000, input?: string) => command(program, args, { environment, timeout, ...(input === undefined ? {} : { input }) });
+  const apple = (stage: CommandStage, program: string, args: readonly string[], timeout = 60_000, input?: string) => command(program, args, { environment, timeout, stage, ...(input === undefined ? {} : { input }) });
   try {
-    command("/usr/bin/python3", ["-I", join(import.meta.dir, "archive.py"), "unsigned", join(input, "unsigned.zip"), tree], { timeout: 180_000 });
+    command("/usr/bin/python3", ["-I", join(import.meta.dir, "archive.py"), "unsigned", join(input, "unsigned.zip"), tree], { timeout: 180_000, stage: "unsigned-archive-extract" });
     const app = join(tree, "Textbutler.app");
     requireValue(sha256(JSON.stringify(inventory(app))) === receipt.bundleSha256, "Extracted unsigned app differs");
     const paths = nativePaths(app);
@@ -37,39 +37,39 @@ if (import.meta.main) {
     writeFileSync(join(scratch, "certificate.p12"), certificateBytes, { flag: "wx", mode: 0o600 });
     if (apiMode) writeFileSync(join(scratch, "notary.p8"), privateKey, { flag: "wx", mode: 0o600 });
     keychainAttempted = true;
-    apple("/usr/bin/security", ["create-keychain", "-p", keychainPassword, keychain]);
-    apple("/usr/bin/security", ["set-keychain-settings", "-lut", "3600", keychain]);
-    apple("/usr/bin/security", ["unlock-keychain", "-p", keychainPassword, keychain]);
-    apple("/usr/bin/security", ["import", join(scratch, "certificate.p12"), "-k", keychain, "-P", password, "-T", "/usr/bin/codesign"]);
-    apple("/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:,codesign:", "-s", "-k", keychainPassword, keychain]);
-    if (appMode) apple("/usr/bin/xcrun", ["notarytool", "store-credentials", "textbutler-notary", "--apple-id", appleId, "--team-id", team, "--keychain", keychain], 120_000, `${appPassword}\n`);
-    const identities = apple("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning", keychain]).toString("utf8");
+    apple("keychain-create", "/usr/bin/security", ["create-keychain", "-p", keychainPassword, keychain]);
+    apple("keychain-configure", "/usr/bin/security", ["set-keychain-settings", "-lut", "3600", keychain]);
+    apple("keychain-unlock", "/usr/bin/security", ["unlock-keychain", "-p", keychainPassword, keychain]);
+    apple("certificate-import", "/usr/bin/security", ["import", join(scratch, "certificate.p12"), "-k", keychain, "-P", password, "-T", "/usr/bin/codesign"]);
+    apple("keychain-partition", "/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:,codesign:", "-s", "-k", keychainPassword, keychain]);
+    if (appMode) apple("notary-store-credentials", "/usr/bin/xcrun", ["notarytool", "store-credentials", "textbutler-notary", "--apple-id", appleId, "--team-id", team, "--keychain", keychain], 120_000, `${appPassword}\n`);
+    const identities = apple("signing-identity", "/usr/bin/security", ["find-identity", "-v", "-p", "codesigning", keychain]).toString("utf8");
     requireValue(identities.split("\n").some(line => line.includes(identity.toUpperCase()) && line.includes('"Developer ID Application:') && line.includes(`(${team})`)), "Certificate is not the exact selected Developer ID Application identity");
     const runtimePath = paths.find(path => path.endsWith("/textbutler-bun"))!;
     const entitlementPath = join(scratch, "entitlements.plist"); writeFileSync(entitlementPath, plist(entitlements(runtimePath)), { mode: 0o600 });
-    apple("/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--entitlements", entitlementPath, join(app, runtimePath)]);
+    apple("runtime-sign", "/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--entitlements", entitlementPath, join(app, runtimePath)]);
     assertSignature(join(app, runtimePath), team);
     const runtime = join(app, "Contents/Resources/textbutler-runtime");
     writeFileSync(join(runtime, "runtime-manifest.json"), `${JSON.stringify({ schema: "textbutler.runtime.v1", bunVersion: BUN_VERSION, files: inventory(runtime).filter(file => file.path !== "runtime-manifest.json") })}\n`);
-    apple("/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--identifier", IDENTIFIER, app]);
-    apple("/usr/bin/codesign", ["--verify", "--deep", "--strict", app]); assertSignature(app, team, IDENTIFIER);
-    const submission = join(scratch, "submission.zip"); apple("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, submission], 180_000);
+    apple("app-sign", "/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--identifier", IDENTIFIER, app]);
+    apple("signature-verify", "/usr/bin/codesign", ["--verify", "--deep", "--strict", app]); assertSignature(app, team, IDENTIFIER);
+    const submission = join(scratch, "submission.zip"); apple("notary-archive", "/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, submission], 180_000);
     writeFileSync(join(out, "notary-attempt.json"), `${JSON.stringify({ schema: "textbutler.notary-attempt.v1", sourceSha: source, unsignedReceiptSha256: receiptDigest, submissionSha256: sha256(readPhysical(submission)), startedAt: new Date().toISOString(), status: "submission-outcome-pending" })}\n`, { flag: "wx", mode: 0o600 });
     const auth = apiMode ? ["--key", join(scratch, "notary.p8"), "--key-id", keyId, "--issuer", issuer]
       : ["--keychain-profile", "textbutler-notary", "--keychain", keychain];
-    const submitted = object(JSON.parse(apple("/usr/bin/xcrun", ["notarytool", "submit", submission, ...auth, "--output-format", "json"], 180_000).toString("utf8")));
+    const submitted = object(JSON.parse(apple("notary-submit", "/usr/bin/xcrun", ["notarytool", "submit", submission, ...auth, "--output-format", "json"], 180_000).toString("utf8")));
     requireValue(typeof submitted.id === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(submitted.id), "Notary submission identity is missing");
     writeFileSync(join(out, "notary-submission.json"), `${JSON.stringify({ sourceSha: source, unsignedReceiptSha256: receiptDigest, id: submitted.id })}\n`, { flag: "wx", mode: 0o600 });
-    const accepted = object(JSON.parse(apple("/usr/bin/xcrun", ["notarytool", "wait", submitted.id, ...auth, "--timeout", "30m", "--output-format", "json"], 1_850_000).toString("utf8")));
+    const accepted = object(JSON.parse(apple("notary-wait", "/usr/bin/xcrun", ["notarytool", "wait", submitted.id, ...auth, "--timeout", "30m", "--output-format", "json"], 1_850_000).toString("utf8")));
     requireValue(accepted.id === submitted.id && accepted.status === "Accepted", "Exact notarization submission was not accepted");
-    apple("/usr/bin/xcrun", ["stapler", "staple", app], 120_000); apple("/usr/bin/xcrun", ["stapler", "validate", app]);
-    apple("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, join(out, ARCHIVE)], 180_000);
+    apple("staple", "/usr/bin/xcrun", ["stapler", "staple", app], 120_000); apple("staple-validate", "/usr/bin/xcrun", ["stapler", "validate", app]);
+    apple("signed-archive", "/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, join(out, ARCHIVE)], 180_000);
     const archive = readPhysical(join(out, ARCHIVE));
     const manifest = { schema: "textbutler.desktop-signed.v1", unsigned: receipt, unsignedReceiptSha256: receiptDigest, teamId: team, signingIdentitySha1: identity, notarization: { id: accepted.id, status: "Accepted", stapled: true }, archive: { name: ARCHIVE, sha256: sha256(archive), bytes: archive.length }, runtimeManifestSha256: sha256(readPhysical(join(runtime, "runtime-manifest.json"))) };
     const bytes = `${JSON.stringify(manifest)}\n`; writeFileSync(join(out, "signed-manifest.json"), bytes, { flag: "wx", mode: 0o600 });
     console.log(JSON.stringify({ status: "signed-awaiting-independent-verification", sourceSha: source, receiptSha256: sha256(bytes), archiveSha256: sha256(archive) }));
   } finally {
-    try { if (keychainAttempted) apple("/usr/bin/security", ["delete-keychain", keychain]); }
+    try { if (keychainAttempted) apple("keychain-delete", "/usr/bin/security", ["delete-keychain", keychain]); }
     finally { rmSync(scratch, { recursive: true, force: true }); }
   }
 }
