@@ -152,10 +152,16 @@ test("a stopped process snapshot cannot replace settlement of its cleanup promis
 });
 
 test("the supplied clock closes a turn at the original deadline before broker effects", async () => {
-  let now = Date.now(), peer!: ReturnType<typeof managedPeer>;
+  let now = 0, peer!: ReturnType<typeof managedPeer>;
   peer = managedPeer({ onTurn() { now = peer.request.executionDeadlineUnixMs; } });
-  await expect(runCodexManagedSession({ ...peer, now: () => now })).rejects.toBeInstanceOf(CodexManagedSessionError);
-  expect(peer.counts().invocations).toBe(0); expect(peer.counts().stopped).toBe(true);
+  now = peer.request.admittedAtUnixMs;
+  const receipt = await runCodexManagedSession({ ...peer, now: () => now }).then(
+    () => { throw Error("Expected deadline failure"); },
+    error => { expect(error).toBeInstanceOf(CodexManagedSessionError); return (error as CodexManagedSessionError).receipt; },
+  );
+  expect(receipt.failures).toContain("CODEX_MANAGED_EXECUTION_DEADLINE");
+  expect(receipt).toMatchObject({ launchAttempted: true, processStopped: true });
+  expect(peer.counts()).toEqual({ invocations: 0, launches: 1, stopped: true });
 });
 
 test("low-level invalid output or cleanup allocation cannot launch", async () => {
