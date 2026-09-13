@@ -9,7 +9,7 @@ import { PassThrough, Writable } from "node:stream";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { CodexAccountBinding } from "../src/codex-account.ts";
 import type { CodexHostRuntime } from "../src/codex-host.ts";
-import { codexAccountOfflineConfiguration, codexAccountOfflineSandbox, createCodexAccountProcess, type CodexAccountOwnedProcessPort, type CodexAccountProcessOptions, type CodexAccountProcessSystem, type CodexAccountSpawn } from "../src/codex-account-process.ts";
+import { codexAccountDeviceCodeSandbox, codexAccountOfflineConfiguration, codexAccountOfflineSandbox, createCodexAccountProcess, type CodexAccountOwnedProcessPort, type CodexAccountProcessOptions, type CodexAccountProcessSystem, type CodexAccountSpawn } from "../src/codex-account-process.ts";
 
 const sha = (input: string) => createHash("sha256").update(input).digest("hex");
 const binding: CodexAccountBinding = { accountId: "synthetic-account", owner: "synthetic-owner", leaseGeneration: 2, processGeneration: 3 };
@@ -55,7 +55,7 @@ async function fixture(input: {
     },
   };
   const options: CodexAccountProcessOptions = { binding, stateRoot, mode: "offline", runtime: { executablePath, version: "synthetic-1", sha256: sha("synthetic executable bytes; never run"), schemaSha256: schemaSha, parentRuntime: { expectedSha256: parentSha } } };
-  const create = (overrides: Partial<CodexAccountProcessOptions> = {}, system = host) => { const port = createCodexAccountProcess({ ...options, ...overrides }, system); ports.push(port); return port; };
+  const create = (overrides: Partial<CodexAccountProcessOptions> = {}, system = host) => { const port = createCodexAccountProcess({ ...options, ...overrides } as CodexAccountProcessOptions, system); ports.push(port); return port; };
   const stop = (port: CodexAccountOwnedProcessPort, milliseconds = 1000) => port.stopAndJoin({ binding: port.binding, deadlineMs: Date.now() + milliseconds });
   cleanups.push(async () => { finish(); for (const port of ports) await stop(port, 1000); await rm(root, { recursive: true, force: true }); });
   return { root, stateRoot, options, parent, create, host, spawns, signals, writes, native, stdin, stdout, stderr, stop, finish, exitRoot, closeStreams, emitClose,
@@ -63,6 +63,10 @@ async function fixture(input: {
 }
 function expectJoined(result: Awaited<ReturnType<CodexAccountOwnedProcessPort["stopAndJoin"]>>, expected = binding) {
   expect(result).toEqual({ binding: expected, processExited: true, processGroupStopped: true, stdoutEnded: true, stderrEnded: true });
+}
+function deviceCodeOptions(f: Awaited<ReturnType<typeof fixture>>) {
+  return { mode: "device-code" as const, deviceCodeAdmission: { profile: "codex-account-device-code-tcp443-dns-v1" as const,
+    nativeSha256: f.options.runtime.sha256, schemaSha256: schemaSha, parentSha256: parentSha } };
 }
 
 test("launches only the immutable offline snapshot with a closed environment and preserves persistent account files", async () => {
@@ -252,4 +256,76 @@ test("the sandbox rejects writable executable placement and never infers broader
   for (const executable of ["/private/account/codex", "/private/scratch/codex"]) expect(() => codexAccountOfflineSandbox({ executable, scratch: "/private/scratch", accountHome: "/private/account" })).toThrow("LAYOUT_INVALID");
   const configuration = codexAccountOfflineConfiguration(); expect(configuration).toContain('forced_login_method = "chatgpt"'); expect(configuration).toContain('cli_auth_credentials_store = "file"');
   expect(configuration).not.toContain("api_key"); expect(configuration).not.toContain("base_url");
+});
+
+test("explicit device-code admission adds exactly TCP443 and resolver access while preserving fixed native inputs", async () => {
+  const f = await fixture(), port = f.create(deviceCodeOptions(f)); await port.ready;
+  const request = f.spawns[0]!, profile = await readFile(request.args[1]!, "utf8");
+  const paths = { executable: request.args[2]!, scratch: dirname(request.cwd), accountHome: request.env.CODEX_HOME! };
+  expect(profile).toBe(codexAccountOfflineSandbox(paths) + '(allow network-outbound (literal "/private/var/run/mDNSResponder") (remote tcp "*:443"))\n');
+  expect(profile).not.toMatch(/\(allow (?:mach-|network-inbound|process-fork)|remote udp|system-network|keychain/iu);
+  expect(Object.keys(request.env).sort()).toEqual(["CODEX_HOME", "CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED", "HOME", "NO_COLOR", "PATH", "TMPDIR"]);
+  expect(request.args.slice(3)).toEqual(["app-server", "--strict-config", "--listen", "stdio://"]);
+  expect(await readFile(join(paths.accountHome, "config.toml"), "utf8")).toBe(codexAccountOfflineConfiguration());
+  expect(await readdir(request.env.HOME!)).toEqual([]); expect(f.writes).toEqual([]);
+  expect(port.receipt()).toMatchObject({ productionQualified: false, network: "tcp443-system-resolver-candidate", profileSha256: sha(profile) });
+  await writeFile(join(paths.accountHome, "synthetic-persistent-state"), "untouched", { mode: 0o600 });
+  expectJoined(await f.stop(port)); expect(await readFile(join(paths.accountHome, "synthetic-persistent-state"), "utf8")).toBe("untouched");
+  const snapshots = (await readFile(port.receipt().journalPath!, "utf8")).trim().split("\n").map(line => JSON.parse(line).snapshot);
+  expect(snapshots.every(value => value.productionQualified === false && value.network === "tcp443-system-resolver-candidate")).toBe(true);
+  expect(snapshots.find(value => value.phase === "launch-pending")).toMatchObject({ pid: null, launchAttempted: true, profileSha256: sha(profile) });
+});
+
+test("device-code mode requires separate admission and offline mode never accepts a network activation input", async () => {
+  const f = await fixture(), device = deviceCodeOptions(f);
+  expect(() => f.create({ mode: "device-code" } as any)).toThrow();
+  expect(() => f.create({ ...device, deviceCodeAdmission: true } as any)).toThrow();
+  expect(() => f.create({ mode: "offline", deviceCodeAdmission: device.deviceCodeAdmission } as any)).toThrow("NETWORK_ADMISSION_UNEXPECTED");
+  expect(() => f.create({ mode: "offline", deviceCodeAdmission: undefined } as any)).toThrow("NETWORK_ADMISSION_UNEXPECTED");
+  expect(() => f.create({ ...device, deviceCodeAdmission: { ...device.deviceCodeAdmission, profile: "any-network" } } as any)).toThrow("NETWORK_ADMISSION_MISMATCH");
+  expect(() => f.create({ ...device, deviceCodeAdmission: { ...device.deviceCodeAdmission, qualified: true } } as any)).toThrow("UNKNOWN_FIELD");
+  expect(f.spawns).toHaveLength(0); expect(await readdir(f.stateRoot)).toEqual([]);
+});
+
+test.each(["nativeSha256", "schemaSha256", "parentSha256"] as const)("stale device-code admission %s cannot launch or acquire filesystem custody", async key => {
+  const f = await fixture(), device = deviceCodeOptions(f); device.deviceCodeAdmission[key] = sha("different admission");
+  expect(() => f.create(device)).toThrow("NETWORK_ADMISSION_MISMATCH"); expect(f.spawns).toHaveLength(0); expect(await readdir(f.stateRoot)).toEqual([]);
+});
+
+test("device-code admission is snapshotted synchronously and rejects accessors without invoking them", async () => {
+  const parent = deferred<CodexHostRuntime>(), f = await fixture({ parent: parent.promise }), device = deviceCodeOptions(f);
+  let accessed = false; const accessor = { ...device.deviceCodeAdmission };
+  Object.defineProperty(accessor, "nativeSha256", { get() { accessed = true; return f.options.runtime.sha256; } });
+  expect(() => f.create({ ...device, deviceCodeAdmission: accessor })).toThrow("ACCESSOR_DENIED"); expect(accessed).toBe(false);
+  const port = f.create(device); device.deviceCodeAdmission.nativeSha256 = sha("changed after admission");
+  parent.resolve(f.parent); await port.ready;
+  expect(port.receipt().nativeSha256).toBe(f.options.runtime.sha256); expect(port.receipt().network).toBe("tcp443-system-resolver-candidate"); expectJoined(await f.stop(port));
+});
+
+test("offline and device-code owners share the same exclusive account-home lock", async () => {
+  const f = await fixture(), port = f.create(deviceCodeOptions(f)); await port.ready;
+  const original = await readFile(join(f.accountRoot, "active.json"), "utf8");
+  const offline = f.create({ binding: { ...binding, processGeneration: 4, owner: "offline-contender" } });
+  await expect(offline.ready).rejects.toThrow("UNAVAILABLE"); expectJoined(await f.stop(offline), offline.binding);
+  expect(offline.receipt().network).toBe("denied"); expect(await readFile(join(f.accountRoot, "active.json"), "utf8")).toBe(original);
+  expect(f.spawns).toHaveLength(1); expect(f.signals).toHaveLength(0); expectJoined(await f.stop(port));
+});
+
+test("device-code cleanup retains custody until actual native streams join", async () => {
+  const f = await fixture({ stop: "root-and-close" }), port = f.create(deviceCodeOptions(f)); await port.ready;
+  expect((await f.stop(port, 20)).processGroupStopped).toBe(false);
+  expect(port.receipt()).toMatchObject({ network: "tcp443-system-resolver-candidate", productionQualified: false, lockReleased: false, phase: "recovery-required" });
+  f.closeStreams(); expectJoined(await f.stop(port));
+});
+
+test("an uncertain device-code launcher cannot release or relabel its admitted custody", async () => {
+  const f = await fixture({ onSpawn() { throw new Error("synthetic uncertain launch"); } }), port = f.create(deviceCodeOptions(f));
+  await expect(port.ready).rejects.toThrow("UNAVAILABLE"); expect((await f.stop(port)).processGroupStopped).toBe(false);
+  expect(port.receipt()).toMatchObject({ network: "tcp443-system-resolver-candidate", productionQualified: false, pid: null, launchAttempted: true, lockReleased: false });
+  expect(await readFile(join(f.accountRoot, "active.json"), "utf8")).toContain("synthetic-account");
+});
+
+test("device-code policy generation preserves the offline path-confinement validation", () => {
+  for (const executable of ["/private/account/codex", "/private/scratch/codex"]) expect(() => codexAccountDeviceCodeSandbox({ executable, scratch: "/private/scratch", accountHome: "/private/account" })).toThrow("LAYOUT_INVALID");
+  expect(() => codexAccountDeviceCodeSandbox({ executable: "/private/runtime/codex", scratch: "/private/scratch", accountHome: '/private/account"' })).toThrow("PATH_INVALID");
 });
