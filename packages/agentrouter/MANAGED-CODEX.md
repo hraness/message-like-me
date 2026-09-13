@@ -39,8 +39,9 @@ code, not an owner-JSON setting or an agent tool.
 `createCodexAccountProcess()` in `src/codex-account-process.ts` supplies a macOS
 process port for offline account-protocol checks. The caller provides an admitted
 executable, its expected hash and version, a schema digest, a parent-runtime hash,
-and an owner-private state directory. These inputs are checked identities;
-supplying them does not establish provenance or execution qualification.
+and an owner-private state directory. The helper verifies executable and parent
+runtime hashes and records the caller-admitted version and schema digest. These
+inputs do not establish provenance or execution qualification.
 
 The helper copies the checked executable into an immutable run snapshot and uses
 fixed app-server arguments, configuration and environment. Network access, process
