@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 
-export const VERSION = "0.1.4";
+export const VERSION = "0.1.5";
 export const IDENTIFIER = "app.textbutler.desktop";
 export const ARCHIVE = `Textbutler-${VERSION}-macos-arm64.zip`;
 export const TAG = `desktop-v${VERSION}-macos-arm64`;
@@ -13,10 +13,40 @@ export const requireValue: (value: unknown, message: string) => asserts value = 
 export const sha256 = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
 export function object(value: unknown): Record<string, unknown> { requireValue(!!value && typeof value === "object" && !Array.isArray(value), "Expected an object"); return value as Record<string, unknown>; }
 export function digest(value: unknown, length = 64): string { requireValue(typeof value === "string" && new RegExp(`^[a-f0-9]{${length}}$`, "u").test(value), "Invalid content digest"); return value; }
-export function command(program: string, args: readonly string[], options: { cwd?: string; environment?: Record<string, string>; timeout?: number; maximum?: number; input?: string | Buffer } = {}): Buffer {
-  const result = spawnSync(program, args, { cwd: options.cwd, env: options.environment ?? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, input: options.input, stdio: ["pipe", "pipe", "pipe"], timeout: options.timeout ?? 30_000, killSignal: "SIGKILL", maxBuffer: options.maximum ?? 1024 * 1024 });
-  // Never include argv or child output: signing commands can contain passwords.
-  requireValue(result.error === undefined && result.status === 0 && result.signal === null, `Distribution command failed: ${program.split("/").at(-1)}`);
+const COMMAND_STAGES = ["command", "unsigned-archive-extract", "keychain-create", "keychain-configure", "keychain-unlock", "certificate-import", "keychain-partition", "notary-store-credentials", "signing-identity", "runtime-sign", "app-sign", "signature-verify", "notary-archive", "notary-submit", "notary-wait", "staple", "staple-validate", "signed-archive", "keychain-delete"] as const;
+const COMMAND_SIGNALS = ["SIGABRT", "SIGALRM", "SIGBUS", "SIGFPE", "SIGHUP", "SIGILL", "SIGINT", "SIGKILL", "SIGPIPE", "SIGQUIT", "SIGSEGV", "SIGSYS", "SIGTERM", "SIGTRAP", "SIGXCPU", "SIGXFSZ"] as const;
+const COMMAND_ERROR_CODES = ["E2BIG", "EACCES", "EAGAIN", "EINVAL", "EISDIR", "ELOOP", "EMFILE", "ENAMETOOLONG", "ENFILE", "ENOBUFS", "ENOENT", "ENOEXEC", "ENOMEM", "ENOTDIR", "EPERM", "ETIMEDOUT", "ERR_INVALID_ARG_TYPE", "ERR_INVALID_ARG_VALUE", "ERR_OUT_OF_RANGE"] as const;
+export type CommandStage = typeof COMMAND_STAGES[number];
+type CommandFailureDetails = Readonly<{ stage: CommandStage; status: number | null; signal: typeof COMMAND_SIGNALS[number] | null; code: typeof COMMAND_ERROR_CODES[number] | null; diagnostic: "notary-http-401" | null }>;
+function commandErrorCode(error: unknown): CommandFailureDetails["code"] {
+  // Spawn exceptions can be arbitrary values. Never coerce them or retain a cause.
+  try {
+    const code: unknown = error !== null && typeof error === "object" ? (error as { code?: unknown }).code : undefined;
+    return COMMAND_ERROR_CODES.find(allowed => allowed === code) ?? null;
+  } catch { return null; }
+}
+export class DistributionCommandError extends Error {
+  readonly details: CommandFailureDetails;
+  constructor(stage: CommandStage, status: unknown, signal: unknown, error: unknown, stderr?: unknown) {
+    // Literal documented at https://github.com/electron/notarize#validating-credentials.
+    // This reports an observed HTTP code, not a guessed reason or a retry decision.
+    const diagnostic = stage === "notary-store-credentials" && status === 1 && signal === null && error === undefined && Buffer.isBuffer(stderr) && stderr.length <= 65_536
+      && /(?:^|[\r\n])Error: HTTP status code: 401\.(?:[ \t\r\n]|$)/u.test(stderr.toString("utf8")) ? "notary-http-401" : null;
+    const details = Object.freeze({ stage: COMMAND_STAGES.find(allowed => allowed === stage) ?? "command", status: typeof status === "number" && Number.isSafeInteger(status) && status >= 0 ? status : null, signal: COMMAND_SIGNALS.find(allowed => allowed === signal) ?? null, code: commandErrorCode(error), diagnostic });
+    super(`Distribution command failed: ${JSON.stringify(details)}`);
+    this.name = "DistributionCommandError";
+    this.details = details;
+  }
+}
+export function command(program: string, args: readonly string[], options: { stage?: CommandStage; cwd?: string; environment?: Record<string, string>; timeout?: number; maximum?: number; input?: string | Buffer } = {}): Buffer {
+  const stage = options.stage === undefined ? "command" : options.stage;
+  requireValue(COMMAND_STAGES.some(allowed => allowed === stage), "Invalid distribution command stage");
+  let result: SpawnSyncReturns<Buffer>;
+  try {
+    result = spawnSync(program, args, { shell: false, cwd: options.cwd, env: options.environment ?? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, input: options.input, stdio: ["pipe", "pipe", "pipe"], timeout: options.timeout ?? 30_000, killSignal: "SIGKILL", maxBuffer: options.maximum ?? 1024 * 1024 });
+  } catch (error) { throw new DistributionCommandError(stage, null, null, error); }
+  // Signing commands can contain passwords. Only fixed labels and numeric status escape.
+  if (result.error !== undefined || result.status !== 0 || result.signal !== null) throw new DistributionCommandError(stage, result.status, result.signal, result.error, result.stderr);
   return result.stdout;
 }
 export function readPhysical(path: string, maximum = 512 * 1024 * 1024): Buffer {

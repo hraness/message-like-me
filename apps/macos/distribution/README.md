@@ -10,8 +10,8 @@ memory are preserved. Installation does not qualify or activate message sending.
 
 This directory prepares an independent desktop artifact. It does not invoke the
 legacy `v*` package release or advance the website production ref. The intended
-desktop coordinate is `desktop-v0.1.4-macos-arm64`, with assets
-`Textbutler-0.1.4-macos-arm64.zip`, `desktop-manifest.json`, `SHA256SUMS`, and
+desktop coordinate is `desktop-v0.1.5-macos-arm64`, with assets
+`Textbutler-0.1.5-macos-arm64.zip`, `desktop-manifest.json`, `SHA256SUMS`, and
 GitHub artifact provenance. A source build or ad hoc signature is not a signed
 release. Do not advertise a download until its verified publication exists.
 
@@ -25,6 +25,7 @@ Bun1.3.14 and the locked Cargo dependencies. Install the root dependencies with
 bun run --cwd apps/macos native:package
 bun run --cwd apps/macos native:smoke
 cargo test --manifest-path apps/macos/src-tauri/Cargo.toml --locked
+bun --no-env-file --no-install apps/macos/distribution/notary-prompt-smoke.ts
 ```
 
 The local app is written under
@@ -80,6 +81,22 @@ to `notarytool` through its secure prompt and stores it only in the temporary
 keychain deleted after the run. It is never placed in a command argument,
 receipt, log, or app.
 
+The synthetic password-input check runs in macOS source CI and the release
+builder before Apple credentials are available. It uses a disposable private
+keychain and dummy values with validation disabled to check the secure prompt's
+stdin behavior on that runner. It does not establish that real credentials are
+valid. The production signer always retains Apple's credential validation.
+
+Command failures report a fixed operation stage, exit status, signal and
+allowlisted process error code. Arguments, credentials and child output remain
+private. The fixed `notary-http-401` diagnostic reports a recognized Apple
+HTTP401 response without copying its text or guessing its cause.
+A failure at `notary-store-credentials` precedes artifact submission;
+an exit status alone does not prove the password is wrong. Check whether the
+synthetic prompt test passed, then distinguish a timeout or process failure from
+an Apple credential-validation failure before replacing credentials. Preserve
+the existing attempt's custody records when submission may have occurred.
+
 Inspect only credential names and nonsecret identity metadata. Never place
 private keys, passwords, credential exports, or their contents in shell history,
 source control, build artifacts, receipts, or agent-visible output.
@@ -107,7 +124,7 @@ environment reviewers. Read the registered numeric ID of
 workflow is bound to repository ID `1342143606` and owner actor ID `894119`.
 
 After complete source CI succeeds for unchanged current main, create the direct
-tag `desktop-v0.1.4-macos-arm64` at that exact commit. Dispatch the workflow from
+tag `desktop-v0.1.5-macos-arm64` at that exact commit. Dispatch the workflow from
 `main` with `tag`, `ci_run_id`, and `ci_run_attempt`. The code revalidates main,
 tag, current CI attempt and both required jobs at each authority boundary. The
 desktop tag is independent of the legacy `v*` npm/package release. Do not advance
