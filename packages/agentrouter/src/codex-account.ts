@@ -80,9 +80,11 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
   let snapshot: CodexAccountSnapshot = freezeSnapshot("unchecked");
   let lease: AccountLease | undefined, binding: CodexAccountBinding | undefined, transport: CodexAccountTransport | undefined;
   let loginDispatch = false;
+  let unresolvedLogin = false;
   const earlyLoginCompletions = new Map<string, boolean>();
   let active: AbortController | undefined;
   const unsettled = new Set<Promise<unknown>>();
+  const unsettledCloses = new Set<Promise<CodexAccountCloseReceipt>>();
   let closing = false;
   let closeTask: Promise<Readonly<{ released: boolean; state: "closed" | "recovery-required" }>> | undefined;
 
@@ -95,7 +97,7 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
     publish(state, detail === undefined ? {} : { detail });
   }
   function onEvent(event: CodexAccountEvent): void {
-    if (closing || binding === undefined || !sameBinding(event.binding, binding)) return;
+    if (closing || unresolvedLogin || binding === undefined || !sameBinding(event.binding, binding)) return;
     if (event.type === "login-completed") {
       if (typeof event.loginId !== "string" || typeof event.success !== "boolean") return;
       if (pendingLogin === undefined && loginDispatch) {
@@ -132,7 +134,7 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
   async function run<T>(signal: AbortSignal | undefined, action: (driver: CodexAccountTransport, request: CodexAccountRequest) => Promise<T>): Promise<T> {
     if (closing || snapshot.state === "closed" || snapshot.state === "recovery-required") throw new Error("CODEX_ACCOUNT_UNAVAILABLE");
     if (signal?.aborted) throw new Error("CODEX_ACCOUNT_ABORTED");
-    if (active !== undefined) throw new Error("CODEX_ACCOUNT_BUSY");
+    if (active !== undefined || loginDispatch) throw new Error("CODEX_ACCOUNT_BUSY");
     const controller = new AbortController(); active = controller;
     const abort = () => controller.abort();
     signal?.addEventListener("abort", abort, { once: true });
@@ -188,18 +190,27 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
     startLogin: (method: CodexManagedLoginMethod, signal?: AbortSignal) => {
       if (method !== "chatgpt" && method !== "chatgptDeviceCode") return Promise.reject(new Error("CODEX_MANAGED_LOGIN_REQUIRED"));
       if (pendingLogin !== undefined) return Promise.reject(new Error("CODEX_LOGIN_PENDING"));
+      let dispatched = false, completed = false;
       return run(signal, async (driver, request) => {
-        loginDispatch = true;
-        try {
-          const challenge = parseChallenge(response(request, await driver.startLogin({ ...request, method })), method);
-          if (earlyLoginCompletions.has(challenge.loginId)) {
-            const success = earlyLoginCompletions.get(challenge.loginId)!;
-            invalidate("unchecked", success ? undefined : "CODEX_LOGIN_FAILED");
-            throw new Error("CODEX_ACCOUNT_STALE");
-          }
-          pendingLogin = challenge.loginId; publish("signing-in"); return challenge;
-        } finally { loginDispatch = false; earlyLoginCompletions.clear(); }
-      });
+        loginDispatch = true; dispatched = true;
+        const challenge = parseChallenge(response(request, await driver.startLogin({ ...request, method })), method);
+        if (earlyLoginCompletions.has(challenge.loginId)) {
+          const success = earlyLoginCompletions.get(challenge.loginId)!;
+          completed = true;
+          invalidate("unchecked", success ? undefined : "CODEX_LOGIN_FAILED");
+          throw new Error("CODEX_ACCOUNT_STALE");
+        }
+        pendingLogin = challenge.loginId; publish("signing-in"); return challenge;
+      }).catch(error => {
+        if (dispatched && !completed && !closing) {
+          // Losing login/start's response does not cancel native polling. Its
+          // unknown login ID cannot authorize another attempt or an account
+          // recheck. Only joined close can retire this process and its lease.
+          unresolvedLogin = true; pendingLogin = undefined; earlyLoginCompletions.clear();
+          invalidate("recovery-required", "CODEX_LOGIN_OUTCOME_UNRESOLVED");
+        }
+        throw error;
+      }).finally(() => { if (dispatched) { loginDispatch = false; earlyLoginCompletions.clear(); } });
     },
     cancelLogin: (loginId: string, signal?: AbortSignal) => {
       try { cleanText(loginId, 160); } catch { return Promise.reject(new Error("INVALID_LOGIN_ID")); }
@@ -233,9 +244,12 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
             if (duration <= 0) throw new Error("CLOSE_UNPROVEN");
             return Math.min(duration, closeTimeoutMs);
           };
-          const receipt = await bounded(transport.close({ binding, deadlineMs }), remaining());
-          await bounded(Promise.allSettled([...unsettled]), remaining());
-          if (!sameBinding(receipt.binding, binding) || receipt.processExited !== true || receipt.processGroupStopped !== true || receipt.stdoutEnded !== true || receipt.stderrEnded !== true || receipt.writesSettled !== true || receipt.requestsSettled !== true || receipt.notificationsSettled !== true || unsettled.size !== 0) throw new Error("CLOSE_UNPROVEN");
+          const stop = Promise.resolve().then(() => transport!.close({ binding: binding!, deadlineMs }));
+          unsettledCloses.add(stop);
+          void stop.then(() => unsettledCloses.delete(stop), () => unsettledCloses.delete(stop));
+          const receipt = await bounded(stop, remaining());
+          await bounded(Promise.allSettled([...unsettled, ...unsettledCloses]), remaining());
+          if (!sameBinding(receipt.binding, binding) || receipt.processExited !== true || receipt.processGroupStopped !== true || receipt.stdoutEnded !== true || receipt.stderrEnded !== true || receipt.writesSettled !== true || receipt.requestsSettled !== true || receipt.notificationsSettled !== true || unsettled.size !== 0 || unsettledCloses.size !== 0) throw new Error("CLOSE_UNPROVEN");
           if (!options.leases.release(lease)) throw new Error("LEASE_RELEASE_UNPROVEN");
           publish("closed"); return Object.freeze({ released: true, state: "closed" as const });
         } catch { publish("recovery-required", { detail: "CODEX_ACCOUNT_STOP_UNPROVEN" }); return Object.freeze({ released: false, state: "recovery-required" as const }); }

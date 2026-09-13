@@ -63,7 +63,18 @@ export function createProviderHost(options: {
   async function managedOperation<T>(id: string, external: AbortSignal, work: (controller: ManagedCodexAccountController, signal: AbortSignal) => Promise<T>): Promise<T> {
     const signal = AbortSignal.any([external, shutdown.signal]); signal.throwIfAborted();
     const controller = managedAccount(id);
-    const task = Promise.resolve().then(() => { signal.throwIfAborted(); return work(controller, signal); });
+    const task = Promise.resolve().then(() => { signal.throwIfAborted(); return work(controller, signal); }).catch(async error => {
+      // An interrupted login may still be polling natively. Retire this exact
+      // controller only after joined cleanup; never retry the owner's operation.
+      if (controller.snapshot().state === "recovery-required") {
+        try {
+          const receipt = await controller.close();
+          if (receipt.released && receipt.state === "closed" && controller.snapshot().state === "closed"
+            && managed.get(id) === controller) managed.delete(id);
+        } catch { /* Keep custody and its visible recovery state for host close. */ }
+      }
+      throw error;
+    });
     pending.add(task);
     try { const result = await task; signal.throwIfAborted(); return result; }
     finally { pending.delete(task); }
