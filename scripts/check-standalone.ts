@@ -111,6 +111,10 @@ const LEGACY_NON_BUN_REFERENCE = new RegExp([
   "y",
 ].join(""), "u");
 
+// The exact quoted macOS resolver socket is a public OS interface. Its parent,
+// sibling paths, suffixes and every temporary directory remain private paths.
+export const PRIVATE_TEMPORARY_PATH = /\/private\/(?:tmp\/|var\/(?!run\/mDNSResponder(?:["'`]|$)))/u;
+
 const OPACITY_RULES = [
   { label: "private package name", pattern: /@jungle\//u },
   { label: "private source-repository name", pattern: /\bjungle\b/iu },
@@ -118,7 +122,7 @@ const OPACITY_RULES = [
   { label: "private repository identity", pattern: /0thernet\/jungle/iu },
   { label: "private workspace dependency protocol", pattern: /(?:workspace|catalog):/u },
   { label: "developer home path", pattern: /\/(?:Users|home)\/[A-Za-z0-9._-]+\//u },
-  { label: "private temporary path", pattern: /\/private\/(?:tmp|var)\//u },
+  { label: "private temporary path", pattern: PRIVATE_TEMPORARY_PATH },
   { label: "publication implementation detail", pattern: /OPEN_SOURCE_SYNC_/u },
 ] as const;
 
