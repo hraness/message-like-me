@@ -34,6 +34,8 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
   const request: AgentTaskExecutionRequest = {
     route: { id: "managed-test-subscription", provider: "codex", authentication: "subscription" },
     accountId: "account-one", workspaceId: "workspace-one", runId: "run-one", profile: { id: profile.id, version: profile.version, digest: profile.digest },
+    // Template metadata only; withTaskLease/runAgentTask supplies real admission.
+    accountLease: { provider: "codex", accountId: "account-one", owner: "run-one", generation: 1, expiresAt: now + 2_200 },
     model: settings.model, purpose: "research", prompt: "Synthetic task only.",
     limits: { maxRunMs: 2_000, maxCleanupMs: 200, maxOutputBytes: 4096 }, signal: controller.signal,
     runtime: { runtimeVersion: "synthetic-only", runtimeDigest: "a".repeat(64), evidenceDigest: "b".repeat(64), qualificationExpiresAt: now + 3_600_000 },
@@ -115,10 +117,12 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
     }
     complete();
   } });
-  const launcher: CodexManagedProcessLauncher = { async launch() {
+  const launchInputs: Parameters<CodexManagedProcessLauncher["launch"]>[0][] = [];
+  const launcher: CodexManagedProcessLauncher = { async launch(input) {
+    launchInputs.push(input);
     launches++;
     return { cwd: "/synthetic/work", stdin, stdout, ready: Promise.resolve(), exited, receipt,
       async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); return receipt(); } };
   } };
-  return { request, settings, broker, launcher, controller, methods, answers, emit, counts: () => ({ invocations, launches, stopped }) };
+  return { request, settings, broker, launcher, launchInputs, controller, methods, answers, emit, counts: () => ({ invocations, launches, stopped }) };
 }

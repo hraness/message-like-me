@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { SqliteAccountLeases } from "../src/accounts.ts";
 import { createCapabilityBroker, createCapabilityProfile, type CapabilityTool } from "../src/capabilities.ts";
 import { AgentStoppedError } from "../src/runtime.ts";
-import { runAgentTask, type AgentTaskAdapter, type AgentTaskBinding, type AgentTaskCompletion, type AgentTaskExecutionRequest,
+import { assertAgentTaskAccountLease, runAgentTask, type AgentTaskAdapter, type AgentTaskBinding, type AgentTaskCompletion, type AgentTaskExecutionRequest,
   type AgentTaskRequest, type AgentTaskStopEvidence, type TaskRuntimeQualification } from "../src/task-runtime.ts";
 
 const hash = (char: string) => char.repeat(64);
@@ -26,7 +26,7 @@ function setup(tools: readonly CapabilityTool[] = []) {
     controls: { noCommandTools: true, exactToolInventory: true, workspaceReadIsolation: true, workspaceWriteIsolation: true,
       isolatedConfiguration: true, authOutsideWorkspace: true, hostBrokerOnly: true } };
   const binding = (r: AgentTaskExecutionRequest): AgentTaskBinding => ({ route: r.route, accountId: r.accountId, workspaceId: r.workspaceId,
-    runId: r.runId, profile: r.profile, model: r.model, runtime: r.runtime });
+    runId: r.runId, profile: r.profile, model: r.model, runtime: r.runtime, accountLease: r.accountLease });
   const complete = (r: AgentTaskExecutionRequest): AgentTaskCompletion => ({ ...binding(r), output: "synthetic answer",
     outcome: { status: "completed", code: null }, usage: { inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null } });
   const stopped = (r: AgentTaskExecutionRequest): AgentTaskStopEvidence => ({ ...binding(r), processStopped: true, controllersStopped: true,
@@ -39,6 +39,25 @@ function setup(tools: readonly CapabilityTool[] = []) {
 }
 
 describe("generic task admission", () => {
+  test("passes the one acquired account lease unchanged through execution and stop", async () => {
+    const f = setup();
+    try {
+      const old = f.leases.acquire({ provider: "codex", accountId: f.request.accountId, owner: "previous-run", now: 0, ttlMs: 1_000 });
+      expect(f.leases.release(old)).toBe(true);
+      let acquisitions = 0, stopLease: unknown;
+      let seen!: AgentTaskExecutionRequest["accountLease"];
+      const acquire = f.leases.acquire.bind(f.leases);
+      f.leases.acquire = input => { acquisitions++; return acquire(input); };
+      f.adapter.run = async r => { seen = r.accountLease;
+        expect(f.leases.inspect("codex", f.request.accountId)).toEqual(seen); return f.complete(r); };
+      f.adapter.stop = async r => { stopLease = r.accountLease; return f.stopped(r); };
+      const result = await runAgentTask(f.options, f.request, f.broker);
+      expect(acquisitions).toBe(1); expect(stopLease).toBe(seen); expect(Object.isFrozen(seen)).toBe(true);
+      expect(seen).toMatchObject({ generation: 2, owner: f.request.runId, expiresAt: 12_000 });
+      expect(result.stop.accountLease).toEqual(seen);
+      expect(f.leases.inspect("codex", f.request.accountId)).toBeNull();
+    } finally { f.db.close(); }
+  });
   test("routes explicitly, snapshots exact settings, preserves unknown usage and releases only after joined stop", async () => {
     const f = setup();
     try {
@@ -102,6 +121,70 @@ describe("generic task admission", () => {
       await expect(runAgentTask(g.options, g.request, g.broker)).rejects.toThrow("ADMISSION_DEADLINE");
       expect(g.counts().runs).toBe(0); expect(g.leases.inspect("codex", "account-one")).toBeNull();
     } finally { g.db.close(); }
+  });
+});
+
+describe("runtime-created lease authority", () => {
+  test("authority requires the original lease object and immutable request, then retires after settlement", async () => {
+    const f = setup(); let retained!: AgentTaskExecutionRequest, getterCalls = 0;
+    try {
+      f.adapter.run = async request => {
+        retained = request;
+        expect(assertAgentTaskAccountLease(request)).toBe(request.accountLease);
+        expect(assertAgentTaskAccountLease({ ...request })).toBe(request.accountLease);
+        expect(() => assertAgentTaskAccountLease({ ...request, accountLease: { ...request.accountLease } })).toThrow("UNTRUSTED");
+        for (const changed of [{ accountId: "other-account" }, { runId: "other-run" }, { workspaceId: "other-workspace" },
+          { prompt: "other-prompt" }, { signal: new AbortController().signal }, { cleanupDeadlineUnixMs: request.cleanupDeadlineUnixMs + 1 }])
+          expect(() => assertAgentTaskAccountLease({ ...request, ...changed })).toThrow("BINDING_MISMATCH");
+        const accessor = { ...request };
+        Object.defineProperty(accessor, "accountLease", { enumerable: true, get() { getterCalls++; return request.accountLease; } });
+        expect(() => assertAgentTaskAccountLease(accessor)).toThrow("RECORD_INVALID");
+        return f.complete(request);
+      };
+      f.adapter.stop = async request => {
+        expect(assertAgentTaskAccountLease(request, "stop")).toBe(retained.accountLease);
+        expect(() => assertAgentTaskAccountLease(retained)).toThrow("BINDING_MISMATCH");
+        return f.stopped(request);
+      };
+      await runAgentTask(f.options, f.request, f.broker);
+      expect(getterCalls).toBe(0);
+      expect(() => assertAgentTaskAccountLease(retained, "stop")).toThrow("UNTRUSTED");
+    } finally { f.db.close(); }
+  });
+  test("mutating a lease-store alias cannot relabel execution or its eventual release", async () => {
+    const f = setup(), gate = deferred<void>();
+    let alias!: { provider: "codex" | "claude"; accountId: string; owner: string; generation: number; expiresAt: number };
+    const acquire = f.leases.acquire.bind(f.leases);
+    f.leases.acquire = input => { alias = { ...acquire(input) }; return alias; };
+    try {
+      f.adapter.run = async request => { await gate.promise;
+        expect(request.accountLease).toMatchObject({ owner: "run-one", generation: 1, expiresAt: 12_000 });
+        expect(assertAgentTaskAccountLease(request)).toBe(request.accountLease); return f.complete(request); };
+      const running = runAgentTask(f.options, f.request, f.broker);
+      alias.owner = "forged-owner"; alias.generation = 2; alias.expiresAt = 999_999;
+      gate.resolve(); expect((await running).custody).toBe("released");
+      expect(f.leases.inspect("codex", f.request.accountId)).toBeNull();
+    } finally { gate.resolve(); f.db.close(); }
+  });
+  test("a prior generation's stop receipt cannot release the same account and run after reacquisition", async () => {
+    const f = setup();
+    try {
+      const first = await runAgentTask(f.options, f.request, f.broker);
+      const secondBroker = createCapabilityBroker({ profile: f.broker.profile, workspaceId: f.request.workspaceId, runId: f.request.runId, isActive: () => true });
+      f.adapter.stop = async () => first.stop;
+      await expect(runAgentTask(f.options, f.request, secondBroker)).rejects.toThrow("RECEIPT_BINDING_MISMATCH");
+      expect(f.leases.inspect("codex", f.request.accountId)?.generation).toBe(first.accountLease.generation + 1);
+    } finally { f.db.close(); }
+  });
+  test("uncertain cleanup retires execution authority while retaining the acquired lease", async () => {
+    const f = setup(); let retained!: AgentTaskExecutionRequest;
+    try {
+      f.adapter.run = async request => { retained = request; return f.complete(request); };
+      f.adapter.stop = async () => { throw Error("synthetic uncertain stop"); };
+      await expect(runAgentTask(f.options, f.request, f.broker)).rejects.toThrow("CUSTODY_UNPROVEN");
+      expect(() => assertAgentTaskAccountLease(retained, "stop")).toThrow("UNTRUSTED");
+      expect(f.leases.inspect("codex", f.request.accountId)).toEqual(retained.accountLease);
+    } finally { f.db.close(); }
   });
 });
 

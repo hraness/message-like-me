@@ -1,6 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { CODEX_DISABLED_FEATURES, codexTaskSettings, type CodexTaskSettings } from "./codex-config.ts";
 import type { CodexProcessHandle } from "./codex-process.ts";
+import type { AgentTaskAccountLease } from "./task-runtime.ts";
 import { boundedText, identifier } from "./validation.ts";
 
 export const CODEX_MANAGED_PROVIDER = "openai";
@@ -13,7 +14,7 @@ export const CODEX_MANAGED_PROVIDER = "openai";
  */
 export interface CodexManagedProcessLauncher {
   launch(input: { runId: string; accountId: string; workspaceId: string; configuration: string;
-    signal: AbortSignal }): Promise<CodexProcessHandle>;
+    accountLease: AgentTaskAccountLease; signal: AbortSignal }): Promise<CodexProcessHandle>;
 }
 
 type Expected = Readonly<{ settings: CodexTaskSettings; cwd: string }>;

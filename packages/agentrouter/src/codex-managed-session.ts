@@ -5,7 +5,7 @@ import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, as
 import { CodexManagedCallLedger } from "./codex-managed-ledger.ts";
 import type { CodexProcessHandle, CodexProcessReceipt } from "./codex-process.ts";
 import { codexBounded, codexTaskLimits, type CodexLimits } from "./codex-relay.ts";
-import type { AgentTaskExecutionRequest } from "./task-runtime.ts";
+import { assertAgentTaskAccountLease, type AgentTaskExecutionRequest } from "./task-runtime.ts";
 import { boundedText, identifier, object, safeInteger } from "./validation.ts";
 
 /** Only native protocol limits observable by this transport. Provider request
@@ -37,14 +37,18 @@ const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
 export async function runCodexManagedSession(options: {
   request: AgentTaskExecutionRequest; broker: CapabilityBroker; launcher: CodexManagedProcessLauncher;
   settings: CodexTaskSettings; limits?: Partial<CodexManagedSessionLimits>; now?: () => number;
+  /** Host cancellation is separate from the runtime request's identity. */
+  cancellationSignal?: AbortSignal;
 }): Promise<{ output: string; receipt: CodexManagedSessionReceipt }> {
+  assertAgentTaskAccountLease(options.request);
   const request = Object.freeze({ ...options.request, route: Object.freeze({ ...options.request.route }),
     profile: Object.freeze({ ...options.request.profile }), model: Object.freeze({ ...options.request.model }),
     runtime: Object.freeze({ ...options.request.runtime }), limits: Object.freeze({ ...options.request.limits }) });
   const broker = options.broker, mapping = createCodexCapabilityMapping(broker.profile);
   const now = options.now ?? Date.now;
   const ledger = new CodexManagedCallLedger(mapping, 1024);
-  const controller = new AbortController(), signal = AbortSignal.any([request.signal, controller.signal]);
+  const cancellation = AbortSignal.any([request.signal, ...(options.cancellationSignal ? [options.cancellationSignal] : [])]);
+  const controller = new AbortController(), signal = AbortSignal.any([cancellation, controller.signal]);
   let limits = codexTaskLimits(), settings = options.settings;
   const failures: string[] = [];
   let resolveFatal!: () => void, resolveDone!: () => void;
@@ -263,7 +267,7 @@ export async function runCodexManagedSession(options: {
   const onEnd = () => { if (!closing) try { line += decoder.decode(); assert(line.length === 0, "CODEX_MANAGED_TRUNCATED_FRAME"); }
     catch (error) { fail(failureCode(error)); } };
   const onError = () => fail("CODEX_MANAGED_STDIO_ERROR"), onAbort = () => fail("CODEX_MANAGED_CANCELLED");
-  request.signal.addEventListener("abort", onAbort, { once: true });
+  cancellation.addEventListener("abort", onAbort, { once: true });
   try {
     assertCapabilityProfile(broker.profile, request.profile);
     assert(request.route.provider === "codex" && request.route.authentication === "subscription"
@@ -283,9 +287,10 @@ export async function runCodexManagedSession(options: {
       && selected.cleanupMs <= request.limits.maxCleanupMs, "CODEX_MANAGED_LIMITS_EXCEED_TASK");
     limits = Object.freeze({ ...selected, deadlineMs: Math.min(selected.deadlineMs, remaining) });
     timer = setTimeout(() => fail("CODEX_MANAGED_EXECUTION_DEADLINE"), limits.deadlineMs);
+    assertAgentTaskAccountLease(request);
     launchAttempted = true;
-    process = await options.launcher.launch({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
-      configuration: codexManagedTaskConfiguration(settings), signal });
+    process = await options.launcher.launch(Object.freeze({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
+      accountLease: request.accountLease, configuration: codexManagedTaskConfiguration(settings), signal }));
     process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
     workflow = (async () => {
       await process!.ready; active();
@@ -328,7 +333,7 @@ export async function runCodexManagedSession(options: {
     for (const result of cleanups) if (result.status === "rejected") fail(failureCode(result.reason));
     if (process && processReceipt === null) try { processReceipt = process.receipt(); } catch { fail("CODEX_MANAGED_PROCESS_RECEIPT_FAILED"); }
     process?.stdout.off("data", onData); process?.stdout.off("end", onEnd); process?.stdout.off("error", onError); process?.stdin.off("error", onError);
-    request.signal.removeEventListener("abort", onAbort);
+    cancellation.removeEventListener("abort", onAbort);
   }
   const processStopped = (!launchAttempted || processJoined && processReceipt !== null && processReceipt.rootExited && processReceipt.groupAbsent
     && processReceipt.stdioJoined && processReceipt.cleanupErrors.length === 0) && handlersJoined && brokerJoined;
