@@ -78,7 +78,7 @@ test('shows synthetic contact context and disclosure without claiming transport 
   expect(html).toContain('under its own data policies');
 });
 
-test('binds Design Kit v0.6.3 to the portable Paper palette', async () => {
+test('binds Design Kit v0.8.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -90,7 +90,7 @@ test('binds Design Kit v0.6.3 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.6.3');
+    .toBe('github:hraness/design-kit#v0.8.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.13');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
@@ -110,8 +110,8 @@ test('binds Design Kit v0.6.3 to the portable Paper palette', async () => {
 
 test('admits the released finite marketing snapshot and scopes it to the landing', async () => {
   const snapshot = await checkMarketingSnapshot();
-  expect(snapshot.source.commit).toBe('898d80364085a41c858350f1b492ac28b5a0384b');
-  expect(snapshot.files['product-marketing-preset.css'].sha256).toBe('e1474dbfa5dcb17e840ecd48e2b767e88e808a1f6124cd9bb8fe720e1076a4a7');
+  expect(snapshot.source.commit).toBe('0e089bc18f9a0409f0e74b1fb7192f468956e386');
+  expect(snapshot.files['product-marketing-preset.css'].sha256).toBe('221fd555f9c9c15e26fc8d7d8ad3a536e3dfb138df699b449adb9c45919e66cb');
   const html = renderToStaticMarkup(<Home />);
   expect(html).toStartWith('<div class="textbutler-marketing" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">');
   expect(html).toContain('<div class="hraness-material-wall">');

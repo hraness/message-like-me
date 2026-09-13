@@ -11,6 +11,30 @@ import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, br
 
 // This gate serves only the built informational website. It never runs the CLI,
 // Mac application, messaging providers, account checks, or personal-data readers.
+
+// Immutable design-kit v0.8.0 assets, checked independently of the current build.
+async function assertWallAssets(context, background, origin) {
+  const expected = [
+    ['grain', 152319, 'b40c33a0e382c8e9d0518b4720321b5c262a929c28d40a190a902d07acd06553'],
+    ['cells', 17102, 'be9b12eefeae91772f024ed24ccda5be6173fb626921374b7e5270c298611b01'],
+  ];
+  const urls = [...background.matchAll(/url\("([^"]+)"\)/gu)].map(match => new URL(match[1], origin));
+  assert.equal(urls.length, expected.length);
+  const result = [];
+  for (const [index, url] of urls.entries()) {
+    const [name, size, sha256] = expected[index];
+    assert.equal(url.origin, origin); assert.equal(url.search, ''); assert.equal(url.hash, '');
+    assert.match(url.pathname, new RegExp(`^/_next/static/media/${name}\\.[a-f0-9]+\\.svg$`, 'u'));
+    const response = await context.request.get(url.href, { timeout: 5000, maxRedirects: 0 });
+    assert.equal(response.status(), 200);
+    const bytes = await response.body();
+    assert.equal(bytes.length, size);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), sha256);
+    result.push({ name, path: url.pathname, bytes: size, sha256 });
+  }
+  return result;
+}
+
 const root = fileURLToPath(new URL('../', import.meta.url));
 const executablePath = process.env.TEXTBUTLER_BROWSER_EXECUTABLE;
 const node = process.env.TEXTBUTLER_NODE_EXECUTABLE;
@@ -256,6 +280,7 @@ try {
               leading: Number.parseFloat(style.lineHeight), tracking: Number.parseFloat(style.letterSpacing) };
           }),
           fieldBackground: field && getComputedStyle(field).backgroundImage,
+          fieldBackgroundSize: field && getComputedStyle(field).backgroundSize,
           material: document.querySelector('[data-hraness-material]')?.getAttribute('data-hraness-material') ?? null,
           headerBackdrop: headerInner && getComputedStyle(headerInner.closest('header')).backdropFilter,
           actionHeights: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => action.getBoundingClientRect().height),
@@ -274,6 +299,7 @@ try {
       item.assets = [...assets].sort();
       assertPresentation(metrics, sample);
       if (sample.path === '/') {
+        item.textures = await assertWallAssets(context, metrics.fieldBackground, origin);
         const summary = page.locator('details summary').first();
         await summary.focus();
         await summary.press('Enter');
