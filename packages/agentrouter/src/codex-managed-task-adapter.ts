@@ -102,7 +102,7 @@ export function createCodexManagedTaskAdapter(options: CodexManagedTaskAdapterOp
           const signal = AbortSignal.any([request.signal, controller.signal]);
           signal.throwIfAborted(); slot.sessionStarted = true;
           const result = await runCodexManagedSession({
-            request, cancellationSignal: signal,
+            request: input, cancellationSignal: signal,
             broker, launcher, settings, now, limits: { deadlineMs: remaining, cleanupMs, ioMs: Math.min(10_000, remaining) },
           });
           slot.receipt = result.receipt;

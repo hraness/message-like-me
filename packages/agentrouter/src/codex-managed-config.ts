@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { CODEX_DISABLED_FEATURES, codexTaskSettings, type CodexTaskSettings } from "./codex-config.ts";
 import type { CodexProcessHandle } from "./codex-process.ts";
-import type { AgentTaskAccountLease } from "./task-runtime.ts";
+import type { AgentTaskAccountLease, AgentTaskExecutionRequest } from "./task-runtime.ts";
 import { boundedText, identifier } from "./validation.ts";
 
 export const CODEX_MANAGED_PROVIDER = "openai";
@@ -13,8 +13,12 @@ export const CODEX_MANAGED_PROVIDER = "openai";
  * Preserve the existing native process-custody receipt and stop/join contract.
  */
 export interface CodexManagedProcessLauncher {
-  launch(input: { runId: string; accountId: string; workspaceId: string; configuration: string;
-    accountLease: AgentTaskAccountLease; signal: AbortSignal }): Promise<CodexProcessHandle>;
+  /** Revalidate request with assertAgentTaskAccountLease before preparation and
+   * native launch. Its original signal and lease bind runtime provenance;
+   * cancellationSignal revokes work without replacing that identity. The
+   * convenience IDs and lease mirror request and grant no separate authority. */
+  launch(input: Readonly<{ request: AgentTaskExecutionRequest; runId: string; accountId: string; workspaceId: string;
+    configuration: string; accountLease: AgentTaskAccountLease; cancellationSignal: AbortSignal }>): Promise<CodexProcessHandle>;
 }
 
 type Expected = Readonly<{ settings: CodexTaskSettings; cwd: string }>;
