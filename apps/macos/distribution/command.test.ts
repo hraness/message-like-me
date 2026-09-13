@@ -3,6 +3,11 @@ import * as childProcess from "node:child_process";
 import { inspect } from "node:util";
 import { command, DistributionCommandError, type CommandStage } from "./common.ts";
 
+test("paths and metacharacters remain literal arguments without a shell", () => {
+  const argument = "a path with spaces/'quotes'/$HOME;$(echo expanded)|&<>`echo expanded`";
+  expect(command(process.execPath, ["-e", "process.stdout.write(process.argv.at(-1))", argument]).toString("utf8")).toBe(argument);
+});
+
 function failureOf(run: () => unknown): DistributionCommandError {
   let failure: unknown;
   try { run(); } catch (error) { failure = error; }

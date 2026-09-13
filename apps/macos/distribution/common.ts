@@ -43,7 +43,7 @@ export function command(program: string, args: readonly string[], options: { sta
   requireValue(COMMAND_STAGES.some(allowed => allowed === stage), "Invalid distribution command stage");
   let result: SpawnSyncReturns<Buffer>;
   try {
-    result = spawnSync(program, args, { cwd: options.cwd, env: options.environment ?? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, input: options.input, stdio: ["pipe", "pipe", "pipe"], timeout: options.timeout ?? 30_000, killSignal: "SIGKILL", maxBuffer: options.maximum ?? 1024 * 1024 });
+    result = spawnSync(program, args, { shell: false, cwd: options.cwd, env: options.environment ?? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, input: options.input, stdio: ["pipe", "pipe", "pipe"], timeout: options.timeout ?? 30_000, killSignal: "SIGKILL", maxBuffer: options.maximum ?? 1024 * 1024 });
   } catch (error) { throw new DistributionCommandError(stage, null, null, error); }
   // Signing commands can contain passwords. Only fixed labels and numeric status escape.
   if (result.error !== undefined || result.status !== 0 || result.signal !== null) throw new DistributionCommandError(stage, result.status, result.signal, result.error, result.stderr);
