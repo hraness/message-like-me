@@ -101,9 +101,16 @@ validates credentials during the release. Keep main fixed until the check settle
 
 Command failures report a fixed operation stage, exit status, signal and
 allowlisted process error code. Arguments, credentials and child output remain
-private. The fixed `notary-http-401` diagnostic reports a recognized Apple
-HTTP401 response without copying its text or guessing its cause, including when
-the headless password prompt and error share a line.
+private. Fixed `notary-http-401`, `notary-http-403`, `notary-http-404`,
+`notary-http-429`, `notary-http-500`, `notary-http-502` and `notary-http-503`
+diagnostics report recognized HTTP statuses from either bounded output stream,
+including when the headless password prompt and error share a line. Conflicting
+statuses or oversized output remain unclassified. These labels identify the
+observed status without copying Apple's text or guessing its cause.
+When no HTTP status is present, fixed labels can also identify Apple's known
+agreement, team-access, keychain, credential-validation and incomplete-error
+messages. Unrecognized messages remain unclassified. A credential-validation
+label alone does not establish which credential or account setting needs repair.
 A failure at `notary-store-credentials` precedes artifact submission;
 an exit status alone does not prove the password is wrong. Check whether the
 synthetic prompt test passed, then distinguish a timeout or process failure from
