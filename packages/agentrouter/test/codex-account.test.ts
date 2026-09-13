@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { AccountLease, AccountLeaseStore } from "../src/accounts.ts";
 import { createManagedCodexAccountController, type CodexAccountBinding, type CodexAccountCloseReceipt, type CodexAccountEvent, type CodexAccountRequest, type CodexAccountResponse, type CodexAccountTransport } from "../src/codex-account.ts";
 
+const credentialAddress = new URL("https://auth.openai.com/");
+credentialAddress.username = "synthetic";
+credentialAddress.password = "synthetic";
+
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 class Leases implements AccountLeaseStore {
   current: AccountLease | undefined; releases = 0; acquires = 0; generation = 0;
@@ -94,7 +98,7 @@ describe("managed Codex account controller", () => {
     await expect(f.controller.cancelLogin("different-login")).rejects.toThrow("CODEX_LOGIN_STALE"); expect(f.calls.some(call => call.startsWith("cancel"))).toBe(false);
     expect(await f.controller.cancelLogin("login-one")).toEqual({ status: "canceled" }); expect(f.controller.snapshot().state).toBe("unchecked"); await f.controller.close();
   });
-  test.each(["http://auth.openai.com/authorize", "https://evil.invalid/authorize", "https://auth.openai.com.evil.invalid/", "https://user:password@auth.openai.com/", "javascript:alert(1)"])("unsafe login URL %s is not exported", async authUrl => {
+  test.each(["http://auth.openai.com/authorize", "https://evil.invalid/authorize", "https://auth.openai.com.evil.invalid/", credentialAddress.href, "javascript:alert(1)"])("unsafe login URL %s is not exported", async authUrl => {
     const f = fixture(); f.challenge({ type: "chatgpt", loginId: "login-one", authUrl }); await expect(f.controller.startLogin("chatgpt")).rejects.toThrow("CODEX_ACCOUNT_OPERATION_FAILED"); expect(f.controller.snapshot().state).toBe("unavailable"); await f.controller.close();
   });
   test("external-token or API login is refused before account custody", async () => {

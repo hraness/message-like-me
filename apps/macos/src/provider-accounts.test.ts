@@ -4,6 +4,9 @@ import { renderProviderAccounts } from "./provider-accounts.ts";
 
 const account: ProviderAccountDiagnostic = { id: "native-codex", label: "Codex", route: "codex", provider: "codex", status: "unavailable", detail: "Synthetic account only", defaultReplyModel: null, classifierModel: null, managedAccount: { state: "signing-in", generation: 2, modelCount: 0, pendingLoginId: "synthetic-login" } };
 const challenge = { type: "chatgptDeviceCode" as const, loginId: "synthetic-login", verificationUrl: "https://auth.openai.com/codex/device", userCode: "TEST-ONLY" };
+const credentialAddress = new URL(challenge.verificationUrl);
+credentialAddress.username = "synthetic";
+credentialAddress.password = "synthetic";
 
 test("login challenge is accepted only for the selected managed Codex account", () => {
   const snapshot = { ...disconnectedSnapshot(), providerAccounts: [account] };
@@ -16,7 +19,7 @@ test("login challenge is accepted only for the selected managed Codex account", 
   expect(() => parseProviderLoginChallenge({ ...challenge, accessToken: "synthetic-secret" })).toThrow();
 });
 
-test.each(["javascript:alert(1)", "http://auth.openai.com/codex/device", "https://auth.openai.com.evil.invalid/codex/device", "https://user:password@auth.openai.com/codex/device", "https://auth.openai.com:444/codex/device", "https://auth.openai.com/codex/device?redirect=other", "https://auth.openai.com/codex/device#fragment", "https://auth.openai.com/other", "https://auth.openai.com\n/codex/device"])("rejects unsafe device sign-in address %s", verificationUrl => {
+test.each(["javascript:alert(1)", "http://auth.openai.com/codex/device", "https://auth.openai.com.evil.invalid/codex/device", credentialAddress.href, "https://auth.openai.com:444/codex/device", "https://auth.openai.com/codex/device?redirect=other", "https://auth.openai.com/codex/device#fragment", "https://auth.openai.com/other", "https://auth.openai.com\n/codex/device"])("rejects unsafe device sign-in address %s", verificationUrl => {
   expect(() => parseProviderLoginChallenge({ ...challenge, verificationUrl })).toThrow();
 });
 
