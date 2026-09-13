@@ -17,12 +17,13 @@ function options(): ManagedCodexFactoryOptions {
     deviceCodeAdmission: { profile: "codex-account-device-code-tcp443-dns-v1", nativeSha256: "a".repeat(64), schemaSha256: "b".repeat(64), parentSha256: "c".repeat(64) } };
 }
 type Message = { id?: number; method: string; params?: Record<string, unknown> };
-async function fixture(input: { ready?: Promise<void>; badBinding?: boolean; throwProcess?: boolean; joined?: boolean } = {}) {
+async function fixture(input: { ready?: Promise<void>; badBinding?: boolean; throwProcess?: boolean; joined?: boolean; profile?: ManagedCodexFactoryOptions["deviceCodeAdmission"]["profile"] } = {}) {
   const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-managed-factory-")); await chmod(dataDir, 0o700);
   const database = new Database(":memory:"), leases = new SqliteAccountLeases(database), controllers: ManagedCodexAccountController[] = [];
   const calls: CodexAccountProcessOptions[] = [], messages: Message[] = [], exits: (() => void)[] = [], outputs: PassThrough[] = [];
   let stops = 0, signedIn = false, joined = input.joined ?? true;
-  const admitted = options(), factory = createManagedCodexAccountFactory(admitted, processOptions => {
+  const baseline = options(), admitted = { ...baseline, deviceCodeAdmission: { ...baseline.deviceCodeAdmission, profile: input.profile ?? baseline.deviceCodeAdmission.profile } };
+  const factory = createManagedCodexAccountFactory(admitted, processOptions => {
     calls.push(processOptions); if (input.throwProcess) throw new Error("synthetic uncertain construction");
     const stdout = new PassThrough(), stderr = new PassThrough(), exit = deferred<void>(); outputs.push(stdout);
     const send = (value: unknown) => stdout.write(JSON.stringify(value) + "\n");
@@ -73,6 +74,35 @@ test("pins are copied before future controller creation and cannot drift through
   (f.admitted.runtime as any).executablePath = "/mutated"; (f.admitted.runtime as any).sha256 = "d".repeat(64);
   (f.admitted.runtime.parentRuntime as any).expectedSha256 = "e".repeat(64); (f.admitted.deviceCodeAdmission as any).nativeSha256 = "f".repeat(64);
   const controller = f.create(); await controller.check(); expect(f.calls[0]!.runtime).toEqual(original.runtime); expect(f.calls[0]!.deviceCodeAdmission).toEqual(original.deviceCodeAdmission);
+});
+
+test("explicit v2 factory admission stays lazy and forwards the exact immutable selection without execution authority", async () => {
+  const f = await fixture({ profile: "codex-account-device-code-tcp443-dns-v2" }), original = structuredClone(f.admitted.deviceCodeAdmission);
+  expect(f.calls).toEqual([]); expect(await readdir(f.dataDir)).toEqual([]);
+  (f.admitted.deviceCodeAdmission as any).profile = "codex-account-device-code-tcp443-dns-v1";
+  const controller = f.create(); expect(f.calls).toEqual([]);
+  await controller.check(); expect(f.calls).toHaveLength(1);
+  expect(f.calls[0]!.deviceCodeAdmission).toEqual(original); expect(Object.isFrozen(f.calls[0]!.deviceCodeAdmission)).toBe(true);
+  expect(f.calls[0]!.mode).toBe("device-code");
+  expect(f.messages.map(message => message.method)).toEqual(["initialize", "initialized", "account/read"]);
+  expect(controller.snapshot().state).toBe("signed-out");
+  expect(await controller.close()).toEqual({ released: true, state: "closed" });
+});
+
+test("both factory profile variants require exact pins and reject missing or accessor-based selection", () => {
+  for (const profile of ["codex-account-device-code-tcp443-dns-v1", "codex-account-device-code-tcp443-dns-v2"] as const) {
+    for (const key of ["nativeSha256", "schemaSha256", "parentSha256"] as const) {
+      const baseline = options(), value = { ...baseline, deviceCodeAdmission: { ...baseline.deviceCodeAdmission, profile, [key]: "d".repeat(64) } };
+      expect(() => createManagedCodexAccountFactory(value)).toThrow("ADMISSION_INVALID");
+    }
+  }
+  for (const profile of [undefined, "codex-account-device-code-tcp443-dns-v3", "offline"]) {
+    const value = options(); (value.deviceCodeAdmission as any).profile = profile;
+    expect(() => createManagedCodexAccountFactory(value)).toThrow("ADMISSION_INVALID");
+  }
+  let accessed = false; const value = options();
+  Object.defineProperty(value.deviceCodeAdmission, "profile", { get() { accessed = true; return "codex-account-device-code-tcp443-dns-v2"; } });
+  expect(() => createManagedCodexAccountFactory(value)).toThrow("ADMISSION_INVALID"); expect(accessed).toBe(false);
 });
 
 test("fresh controllers receive monotonic process generations and independent bounded owner identities", async () => {

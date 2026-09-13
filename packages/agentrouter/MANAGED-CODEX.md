@@ -75,9 +75,25 @@ listener, browser helper, process forks, Keychain access or filesystem roots.
 This is general TCP 443 access; it does not enforce TLS or a hostname allowlist.
 The native client remains responsible for TLS authentication.
 
+The separately selected `codex-account-device-code-tcp443-dns-v2` candidate
+preserves every v1 byte and appends only
+`(allow file-read-metadata (literal "/var"))`. This permits metadata access to
+the system resolver's `/var` symlink; it adds no file-content access, socket
+destination, Mach service or executable. V1 admission never upgrades to v2.
+Receipts retain the v1 schema and existing v1 network label; v2 records
+`tcp443-system-resolver-var-metadata-candidate` with its exact profile digest.
+The fixed persistent configuration and offline task profile remain unchanged.
+
+A bounded libc DNS-only diagnostic with this exact delta resolved the fixed
+authentication hostname on the tested Mac and proved process cleanup. That
+result may use the resolver cache. It establishes neither native Codex TLS
+compatibility nor device-code sign-in, authentication or model execution.
+Both profile variants remain candidates with `productionQualified: false`.
+
 `createManagedCodexAccountFactory()` in Textbutler's `managed-codex.ts` composes
 the controller, stdio transport and process helper. Its admission inputs come
-from trusted host code, never owner JSON or contact files. It accepts device-code
+from trusted host code, never owner JSON or contact files, and preserve the
+explicitly selected v1 or v2 profile. It accepts device-code
 sign-in only and creates a fresh process generation for each controller.
 Account storage remains under the private host state directory. Importing or
 constructing the factory does not launch Codex or inspect existing credentials.

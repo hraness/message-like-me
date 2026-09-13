@@ -61,8 +61,9 @@ export function createManagedCodexAccountFactory(options: ManagedCodexFactoryOpt
   const parent = record(raw.parentRuntime, ["expectedSha256"]), network = record(supplied.deviceCodeAdmission, ["profile", "nativeSha256", "schemaSha256", "parentSha256"]);
   const runtime: CodexAccountRuntimeAdmission = Object.freeze({ executablePath: path(raw.executablePath), version: identifier(raw.version), sha256: digest(raw.sha256), schemaSha256: digest(raw.schemaSha256),
     parentRuntime: Object.freeze({ expectedSha256: digest(parent.expectedSha256) }) });
-  const deviceCodeAdmission: CodexAccountDeviceCodeAdmission = Object.freeze({ profile: "codex-account-device-code-tcp443-dns-v1", nativeSha256: digest(network.nativeSha256), schemaSha256: digest(network.schemaSha256), parentSha256: digest(network.parentSha256) });
-  if (network.profile !== deviceCodeAdmission.profile || deviceCodeAdmission.nativeSha256 !== runtime.sha256 || deviceCodeAdmission.schemaSha256 !== runtime.schemaSha256 || deviceCodeAdmission.parentSha256 !== runtime.parentRuntime.expectedSha256 || typeof processFactory !== "function") return invalid();
+  if (network.profile !== "codex-account-device-code-tcp443-dns-v1" && network.profile !== "codex-account-device-code-tcp443-dns-v2") return invalid();
+  const deviceCodeAdmission: CodexAccountDeviceCodeAdmission = Object.freeze({ profile: network.profile, nativeSha256: digest(network.nativeSha256), schemaSha256: digest(network.schemaSha256), parentSha256: digest(network.parentSha256) });
+  if (deviceCodeAdmission.nativeSha256 !== runtime.sha256 || deviceCodeAdmission.schemaSha256 !== runtime.schemaSha256 || deviceCodeAdmission.parentSha256 !== runtime.parentRuntime.expectedSha256 || typeof processFactory !== "function") return invalid();
   let generation = 0;
   return input => {
     const supplied = record(input, ["accountId", "dataDir", "leases"]), accountId = identifier(supplied.accountId), dataDir = path(supplied.dataDir);
