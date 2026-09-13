@@ -112,6 +112,7 @@ function fixture(options: { holdResponse?: boolean; invalidInstructions?: boolea
     const began = Date.now();
     const execution: AgentTaskExecutionRequest = { ...request, runtime: { runtimeVersion: runtime.version, runtimeDigest: runtime.digest,
       evidenceDigest: "b".repeat(64), qualificationExpiresAt: qualification.expiresAt }, admittedAtUnixMs: began,
+      accountLease: { provider: "codex", accountId, owner: request.runId, generation: 1, expiresAt: began + maxRunMs + maxCleanupMs },
       executionDeadlineUnixMs: began + maxRunMs, cleanupDeadlineUnixMs: began + maxRunMs + maxCleanupMs };
     return { request, execution, broker, controller, run: () => runAgentTask({ adapters: [adapter], leases, now: Date.now }, request, broker) };
   }

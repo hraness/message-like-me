@@ -1,10 +1,17 @@
 import { expect, test } from "bun:test";
 import { CodexManagedSessionError, runCodexManagedSession } from "../src/codex-managed-session.ts";
 import { managedPeer } from "./codex-managed-test-peer.ts";
+import { withTaskLease } from "./task-lease-test-fixture.ts";
+import type { AgentTaskExecutionRequest } from "../src/task-runtime.ts";
 
-const run = (peer: ReturnType<typeof managedPeer>) => runCodexManagedSession(peer);
-async function failed(peer: ReturnType<typeof managedPeer>) {
-  try { await run(peer); throw Error("Expected failed session"); }
+const run = (peer: ReturnType<typeof managedPeer>, options: Pick<Parameters<typeof runCodexManagedSession>[0], "now" | "limits"> = {},
+  change: (request: AgentTaskExecutionRequest) => AgentTaskExecutionRequest = request => request) =>
+  withTaskLease(peer.request, peer.broker.profile, request => {
+    peer.request = request;
+    return runCodexManagedSession({ ...peer, ...options, request: change(request) });
+  }, options.now ?? Date.now);
+async function failed(peer: ReturnType<typeof managedPeer>, change?: (request: AgentTaskExecutionRequest) => AgentTaskExecutionRequest) {
+  try { await run(peer, {}, change); throw Error("Expected failed session"); }
   catch (error) { expect(error).toBeInstanceOf(CodexManagedSessionError); return (error as CodexManagedSessionError).receipt; }
 }
 
@@ -155,7 +162,7 @@ test("the supplied clock closes a turn at the original deadline before broker ef
   let now = 0, peer!: ReturnType<typeof managedPeer>;
   peer = managedPeer({ onTurn() { now = peer.request.executionDeadlineUnixMs; } });
   now = peer.request.admittedAtUnixMs;
-  const receipt = await runCodexManagedSession({ ...peer, now: () => now }).then(
+  const receipt = await run(peer, { now: () => now }).then(
     () => { throw Error("Expected deadline failure"); },
     error => { expect(error).toBeInstanceOf(CodexManagedSessionError); return (error as CodexManagedSessionError).receipt; },
   );
@@ -167,13 +174,12 @@ test("the supplied clock closes a turn at the original deadline before broker ef
 test("low-level invalid output or cleanup allocation cannot launch", async () => {
   for (const kind of ["output", "cleanup"]) {
     const peer = managedPeer();
-    if (kind === "output") (peer.request.limits as { maxOutputBytes: number }).maxOutputBytes = 0;
-    else (peer.request.limits as { maxCleanupMs: number }).maxCleanupMs = 10;
-    const receipt = await failed(peer);
-    expect(receipt.launchAttempted).toBe(false); expect(receipt.processStopped).toBe(true);
+    await expect(run(peer, {}, request => ({ ...request,
+      limits: { ...request.limits, ...(kind === "output" ? { maxOutputBytes: 0 } : { maxCleanupMs: 10 }) } }))).rejects.toThrow();
+    expect(peer.counts().launches).toBe(0);
   }
   const peer = managedPeer();
-  await expect(runCodexManagedSession({ ...peer, limits: { maxRequests: 1 } as never })).rejects.toBeInstanceOf(CodexManagedSessionError);
+  await expect(run(peer, { limits: { maxRequests: 1 } as never })).rejects.toBeInstanceOf(CodexManagedSessionError);
   expect(peer.counts().launches).toBe(0);
 });
 
@@ -194,9 +200,8 @@ test("native lifecycle timestamps are inert and bounded to their own phase", asy
   expect((await failed(peer)).processStopped).toBe(true); expect(peer.counts().invocations).toBe(0);
 });
 
-test("expired admission never launches and reports joined empty custody", async () => {
+test("altering an admitted execution deadline never launches", async () => {
   const peer = managedPeer();
-  (peer.request as { executionDeadlineUnixMs: number }).executionDeadlineUnixMs = Date.now() - 1;
-  const receipt = await failed(peer);
-  expect(receipt.launchAttempted).toBe(false); expect(receipt.processStopped).toBe(true); expect(peer.counts().launches).toBe(0);
+  await expect(run(peer, {}, request => ({ ...request, executionDeadlineUnixMs: Date.now() - 1 }))).rejects.toThrow("TASK_ACCOUNT_LEASE_BINDING_MISMATCH");
+  expect(peer.counts().launches).toBe(0);
 });

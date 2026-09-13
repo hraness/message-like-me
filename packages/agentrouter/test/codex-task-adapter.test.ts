@@ -27,6 +27,7 @@ async function taskFixture(settings: { reasoningEffort: string | null; serviceTi
   const request: AgentTaskExecutionRequest = {
     route: { id: "synthetic-subscription", provider: "codex", authentication: "subscription" },
     accountId: "account-one", workspaceId: "workspace-one", runId: "run-one",
+    accountLease: { provider: "codex", accountId: "account-one", owner: "run-one", generation: 1, expiresAt: now + maxRunMs + 90_000 },
     profile: { id: profile.id, version: profile.version, digest: profile.digest },
     model: { id: "synthetic-model", ...settings }, purpose: "research", prompt: "Use the retained evidence.",
     limits: { maxRunMs, maxCleanupMs: 90_000, maxOutputBytes: 4096 }, signal: new AbortController().signal,
