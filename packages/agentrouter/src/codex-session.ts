@@ -3,7 +3,7 @@ import type { CapabilityBroker } from "./capabilities.ts";
 import { assertCapabilityProfile } from "./capabilities.ts";
 import { CODEX_BASE_INSTRUCTIONS, CODEX_DEVELOPER_INSTRUCTIONS, CODEX_PROVIDER, codexConfiguration, codexTaskConfiguration, codexTools } from "./codex-config.ts";
 import type { CodexProcessHandle, CodexProcessLauncher, CodexProcessReceipt } from "./codex-process.ts";
-import { codexAssert, codexBounded, codexLimits, codexRecord, startCodexRelay,
+import { codexAssert, codexBounded, codexLimits, codexTaskLimits, codexRecord, startCodexRelay,
   type CodexLimits, type CodexRelay, type CodexRelayReceipt, type CodexResponsesUpstream, type CodexTaskRelayOptions } from "./codex-relay.ts";
 import type { AgentRunRequest } from "./runtime.ts";
 import { boundedText, identifier, object } from "./validation.ts";
@@ -34,7 +34,7 @@ export async function runCodexSession(options: {
   const request = Object.freeze({ ...options.request }), broker = options.broker, launcher = options.launcher, upstream = options.upstream;
   const task = options.task;
   if (task) assertCapabilityProfile((broker as CapabilityBroker).profile, task.mapping.profile);
-  const limits = codexLimits(options.limits), controller = new AbortController();
+  const limits = task ? codexTaskLimits(options.limits) : codexLimits(options.limits), controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, request.signal]);
   const failures: string[] = []; let resolveFatal!: () => void;
   const fatal = new Promise<void>(resolve => { resolveFatal = resolve; });

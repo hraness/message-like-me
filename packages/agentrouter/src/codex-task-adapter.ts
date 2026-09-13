@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { CapabilityBroker } from "./capabilities.ts";
 import { canonicalJson, createCodexCapabilityMapping, codexTaskSettings } from "./codex-config.ts";
 import type { CodexProcessLauncher } from "./codex-process.ts";
-import { codexLimits, type CodexResponsesUpstream } from "./codex-relay.ts";
+import { codexTaskLimits, type CodexResponsesUpstream } from "./codex-relay.ts";
 import { CodexSessionError, runCodexSession, type CodexSessionReceipt } from "./codex-session.ts";
 import type {
   AgentTaskAdapter, AgentTaskBinding, AgentTaskCompletion, AgentTaskExecutionRequest, AgentTaskRoute,
@@ -72,10 +72,10 @@ export function createCodexTaskAdapter(options: CodexTaskAdapterOptions): AgentT
           const signal = AbortSignal.any([request.signal, controller.signal]);
           signal.throwIfAborted();
           const remaining = request.executionDeadlineUnixMs - options.now();
-          // Execution time is not cleanup time. Reject unsupported execution
-          // budgets before starting a session; cleanup keeps the pinned 10s cap.
-          const limits = codexLimits({ deadlineMs: remaining, ioMs: Math.min(10_000, remaining),
-            cleanupMs: Math.min(10_000, request.limits.maxCleanupMs, request.cleanupDeadlineUnixMs - request.executionDeadlineUnixMs) });
+          // Execution time is not cleanup time. Validate the separate allowances
+          // against the task's one-hour total before starting a session.
+          const limits = codexTaskLimits({ deadlineMs: remaining, ioMs: Math.min(10_000, remaining),
+            cleanupMs: Math.min(request.limits.maxCleanupMs, request.cleanupDeadlineUnixMs - request.executionDeadlineUnixMs) });
           slot.sessionStarted = true;
           const result = await runCodexSession({
             request: Object.freeze({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,

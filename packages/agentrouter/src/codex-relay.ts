@@ -18,6 +18,17 @@ export function codexLimits(input: Partial<CodexLimits> = {}): CodexLimits {
   return Object.freeze(Object.fromEntries(Object.entries(defaults).map(([key, max]) => [key,
     safeInteger(input[key as keyof CodexLimits] ?? max, 1, max)])) as CodexLimits);
 }
+/** Application tasks have an explicit run/cleanup allocation. Keep the legacy
+ * contact limits and every IO/request/byte limit unchanged, and retain the
+ * task runtime's one-hour combined ceiling. */
+export function codexTaskLimits(input: Partial<CodexLimits> = {}): CodexLimits {
+  const { deadlineMs = 120_000, cleanupMs = 10_000, ...bounded } = input;
+  const limits = codexLimits(bounded);
+  safeInteger(deadlineMs, 1, 3_599_999);
+  safeInteger(cleanupMs, 1, 3_599_999);
+  safeInteger(deadlineMs + cleanupMs, 1, 3_600_000);
+  return Object.freeze({ ...limits, deadlineMs, cleanupMs });
+}
 export function codexAssert(value: unknown, code: string): asserts value { if (!value) throw new Error(code); }
 export function codexRecord(value: unknown): Record<string, unknown> {
   codexAssert(value !== null && typeof value === "object" && !Array.isArray(value), "CODEX_EXPECTED_OBJECT");

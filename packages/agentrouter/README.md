@@ -354,8 +354,9 @@ must match the original execution; the same or a shorter cleanup deadline is acc
 Failures before session startup carry explicit no-session evidence. Once startup
 begins, an uncertain launch or missing process-stop receipt retains account custody.
 
-The pinned session accepts at most 120 seconds of remaining execution time and
-uses a separate cleanup allowance capped at 10 seconds. Unsupported execution
+Task run and cleanup allowances share the task runtime's one-hour ceiling;
+the legacy contact session keeps its 120-second run and 10-second cleanup limits.
+IO, request-count and byte limits remain bounded separately. Unsupported task
 budgets fail before session startup. Cleanup is still joined even when late;
 `runTask()` reports a missed cleanup deadline instead of claiming timely closure.
 
