@@ -363,6 +363,17 @@ must match the original execution; the same or a shorter cleanup deadline is acc
 Failures before session startup carry explicit no-session evidence. Once startup
 begins, an uncertain launch or missing process-stop receipt retains account custody.
 
+The task runtime acquires one account lease and includes its immutable
+`accountLease` snapshot in the execution request. Completion and stop evidence
+must match its provider, account, owner, generation and expiry. Managed adapters
+and sessions also require runtime provenance through `assertAgentTaskAccountLease()`:
+copying a request must preserve the original lease object and `signal`, with all
+other request values unchanged. Only stop may narrow the cleanup deadline.
+Reconstructing the lease from its values does not grant admission. The runtime
+retires this authority when the run settles, even if uncertain cleanup retains
+the account lease. A managed launcher receives that same lease and must preserve
+the separate native account-lock and process-generation checks.
+
 Task run and cleanup allowances share the task runtime's one-hour ceiling;
 the legacy contact session keeps its 120-second run and 10-second cleanup limits.
 IO, request-count and byte limits remain bounded separately. Unsupported task
@@ -385,7 +396,7 @@ and no native managed launcher is bundled.
 The adapter defaults to unqualified. `AgentRouter.runTask()` refuses it before
 account acquisition or process launch unless the trusted host supplies current
 qualification for the exact route, runtime and capability profile. Direct
-adapter calls also refuse missing qualification. Synthetic fixtures are not
+adapter calls also require qualification and a runtime-admitted request. Synthetic fixtures are not
 qualification evidence and do not enable the route in Textbutler or another app.
 
 The managed session checks ChatGPT account type and native thread settings before

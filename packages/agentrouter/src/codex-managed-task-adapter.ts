@@ -5,6 +5,7 @@ import type { CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 import { CodexManagedSessionError, runCodexManagedSession, type CodexManagedSessionReceipt } from "./codex-managed-session.ts";
 import type { AgentTaskAdapter, AgentTaskBinding, AgentTaskCompletion, AgentTaskExecutionRequest,
   AgentTaskRoute, AgentTaskStopEvidence, TaskRuntimeQualification } from "./task-runtime.ts";
+import { assertAgentTaskAccountLease } from "./task-runtime.ts";
 import { boundedText, identifier, safeInteger } from "./validation.ts";
 
 export type CodexManagedTaskAdapterOptions = Readonly<{
@@ -27,8 +28,8 @@ function freezeCopy<T>(value: T): T {
   freeze(copy); return copy;
 }
 function binding(request: AgentTaskExecutionRequest): AgentTaskBinding {
-  return freezeCopy({ route: request.route, accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
-    profile: request.profile, model: request.model, runtime: request.runtime });
+  return Object.freeze({ ...freezeCopy({ route: request.route, accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
+    profile: request.profile, model: request.model, runtime: request.runtime }), accountLease: request.accountLease });
 }
 // The router preserves the execution's original signal and may only narrow its
 // cleanup deadline for stop. Hash content instead of retaining another prompt.
@@ -70,6 +71,7 @@ export function createCodexManagedTaskAdapter(options: CodexManagedTaskAdapterOp
       // execution enters, even a busy/preflight refusal owns its own stop proof.
       if (qualification.status !== "qualified") throw Error("CODEX_MANAGED_ADAPTER_UNQUALIFIED");
       const qualified = qualification;
+      assertAgentTaskAccountLease(input);
       if (slots.has(input.signal)) throw Error("CODEX_MANAGED_REQUEST_ALREADY_ADMITTED");
       const request: AgentTaskExecutionRequest = Object.freeze({ ...input, ...binding(input), limits: freezeCopy(input.limits) });
       const busy = active !== null, controller = new AbortController();
@@ -100,7 +102,7 @@ export function createCodexManagedTaskAdapter(options: CodexManagedTaskAdapterOp
           const signal = AbortSignal.any([request.signal, controller.signal]);
           signal.throwIfAborted(); slot.sessionStarted = true;
           const result = await runCodexManagedSession({
-            request: Object.freeze({ ...request, signal }),
+            request, cancellationSignal: signal,
             broker, launcher, settings, now, limits: { deadlineMs: remaining, cleanupMs, ioMs: Math.min(10_000, remaining) },
           });
           slot.receipt = result.receipt;
@@ -119,8 +121,12 @@ export function createCodexManagedTaskAdapter(options: CodexManagedTaskAdapterOp
       return slot.promise;
     },
     async stop(request): Promise<AgentTaskStopEvidence> {
-      const slot = slots.get(request.signal);
+      const originalSignal = Object.getOwnPropertyDescriptor(request, "signal");
+      if (!originalSignal || !("value" in originalSignal)) throw Error("CODEX_MANAGED_STOP_BINDING_MISMATCH");
+      const slot = slots.get(originalSignal.value);
       if (!slot) throw Error("CODEX_MANAGED_TASK_NOT_RUNNING");
+      try { assertAgentTaskAccountLease(request, "stop"); }
+      catch { throw Error("CODEX_MANAGED_STOP_BINDING_MISMATCH"); }
       if (requestDigest(request) !== slot.requestDigest || !Number.isSafeInteger(request.cleanupDeadlineUnixMs)
         || request.cleanupDeadlineUnixMs < request.admittedAtUnixMs || request.cleanupDeadlineUnixMs > slot.cleanupDeadlineUnixMs)
         throw Error("CODEX_MANAGED_STOP_BINDING_MISMATCH");

@@ -34,6 +34,7 @@ const proof = (value: unknown) => createHash("sha256").update(canonicalJson(valu
 const binding = (request: AgentTaskExecutionRequest): AgentTaskBinding => Object.freeze({
   route: Object.freeze({ ...request.route }), accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
   profile: Object.freeze({ ...request.profile }), model: Object.freeze({ ...request.model }), runtime: Object.freeze({ ...request.runtime }),
+  accountLease: request.accountLease,
 });
 // stop receives the same admitted request, with only its cleanup deadline narrowed.
 // Hash task content so retained custody does not keep another prompt copy.

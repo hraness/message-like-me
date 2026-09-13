@@ -1,4 +1,5 @@
-import type { AccountLeaseStore } from "./accounts.ts";
+import { createHash } from "node:crypto";
+import type { AccountLease, AccountLeaseStore } from "./accounts.ts";
 import { assertCapabilityProfile, type CapabilityBroker, type CapabilityProfileIdentity } from "./capabilities.ts";
 import { AgentStoppedError } from "./runtime.ts";
 import { boundedText, identifier, provider, safeInteger, type AgentProvider } from "./validation.ts";
@@ -18,9 +19,12 @@ export type AgentTaskRequest = Readonly<{
   limits: AgentTaskLimits; signal: AbortSignal;
 }>;
 export type AgentTaskRuntimeProof = Readonly<{ runtimeVersion: string; runtimeDigest: string; evidenceDigest: string; qualificationExpiresAt: number }>;
+/** Runtime-owned snapshot of the one acquired lease. Its values may be retained
+ * as evidence; a reconstructed object never grants execution authority. */
+export type AgentTaskAccountLease = AccountLease;
 export type AgentTaskBinding = Readonly<{ route: AgentTaskRoute; accountId: string; workspaceId: string; runId: string;
-  profile: CapabilityProfileIdentity; model: AgentTaskModel; runtime: AgentTaskRuntimeProof }>;
-export type AgentTaskExecutionRequest = AgentTaskRequest & Readonly<{ runtime: AgentTaskRuntimeProof;
+  profile: CapabilityProfileIdentity; model: AgentTaskModel; runtime: AgentTaskRuntimeProof; accountLease: AgentTaskAccountLease }>;
+export type AgentTaskExecutionRequest = AgentTaskRequest & Readonly<{ runtime: AgentTaskRuntimeProof; accountLease: AgentTaskAccountLease;
   admittedAtUnixMs: number; executionDeadlineUnixMs: number; cleanupDeadlineUnixMs: number }>;
 export type AgentTaskUsage = Readonly<{ inputTokens: number | null; outputTokens: number | null; totalTokens: number | null; costUsd: number | null }>;
 export type AgentTaskOutcome = Readonly<{ status: "completed" | "failed" | "cancelled" | "deadline-exceeded"; code: string | null }>;
@@ -43,7 +47,10 @@ export interface AgentTaskAdapter {
 }
 export type AgentTaskOptions = Readonly<{ adapters: readonly AgentTaskAdapter[]; leases: AccountLeaseStore; now(): number }>;
 const HASH = /^[a-f0-9]{64}$/u;
-const BINDING_KEYS = ["route", "accountId", "workspaceId", "runId", "profile", "model", "runtime"];
+const BINDING_KEYS = ["route", "accountId", "workspaceId", "runId", "profile", "model", "runtime", "accountLease"];
+const EXECUTION_KEYS = [...BINDING_KEYS, "purpose", "prompt", "limits", "signal", "admittedAtUnixMs", "executionDeadlineUnixMs", "cleanupDeadlineUnixMs"];
+const leaseAdmissions = new WeakMap<AgentTaskAccountLease, { fingerprint: string; signal: AbortSignal;
+  cleanupDeadlineUnixMs: number; stopping: boolean }>();
 const CONTROLS = ["noCommandTools", "exactToolInventory", "workspaceReadIsolation", "workspaceWriteIsolation",
   "isolatedConfiguration", "authOutsideWorkspace", "hostBrokerOnly"] as const;
 const UNKNOWN_USAGE: AgentTaskUsage = Object.freeze({ inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null });
@@ -81,9 +88,37 @@ function runtime(value: unknown): AgentTaskRuntimeProof {
   return Object.freeze({ runtimeVersion: boundedText(r.runtimeVersion, 160), runtimeDigest: digest(r.runtimeDigest), evidenceDigest: digest(r.evidenceDigest),
     qualificationExpiresAt: safeInteger(r.qualificationExpiresAt, 0, Number.MAX_SAFE_INTEGER) });
 }
+function leaseSnapshot(value: unknown): AgentTaskAccountLease {
+  const lease = record(value, ["provider", "accountId", "owner", "generation", "expiresAt"]);
+  return Object.freeze({ provider: provider(lease.provider), accountId: identifier(lease.accountId), owner: identifier(lease.owner),
+    generation: safeInteger(lease.generation, 1, Number.MAX_SAFE_INTEGER), expiresAt: safeInteger(lease.expiresAt, 0, Number.MAX_SAFE_INTEGER) });
+}
 function binding(value: Record<string, unknown>): AgentTaskBinding {
   return Object.freeze({ route: route(value.route), accountId: identifier(value.accountId), workspaceId: identifier(value.workspaceId),
-    runId: identifier(value.runId), profile: profile(value.profile), model: model(value.model), runtime: runtime(value.runtime) });
+    runId: identifier(value.runId), profile: profile(value.profile), model: model(value.model), runtime: runtime(value.runtime), accountLease: leaseSnapshot(value.accountLease) });
+}
+function executionFingerprint(value: Record<string, unknown>): string {
+  const limits = record(value.limits, ["maxRunMs", "maxCleanupMs", "maxOutputBytes"]);
+  return createHash("sha256").update(JSON.stringify({ ...binding(value), purpose: boundedText(value.purpose, 160), prompt: boundedText(value.prompt, 512 * 1024),
+    limits: { maxRunMs: safeInteger(limits.maxRunMs, 1, 3_599_999), maxCleanupMs: safeInteger(limits.maxCleanupMs, 1, 3_599_999),
+      maxOutputBytes: safeInteger(limits.maxOutputBytes, 1, 64 * 1024 * 1024) },
+    admittedAtUnixMs: safeInteger(value.admittedAtUnixMs, 0, Number.MAX_SAFE_INTEGER),
+    executionDeadlineUnixMs: safeInteger(value.executionDeadlineUnixMs, 0, Number.MAX_SAFE_INTEGER) })).digest("hex");
+}
+/** Check runtime provenance without minting authority. Adapters must retain the
+ * original lease reference and signal when copying a request. Cancellation can
+ * narrow stop's cleanup deadline; it cannot authorize another run or lease. */
+export function assertAgentTaskAccountLease(request: AgentTaskExecutionRequest, phase: "run" | "stop" = "run"): AgentTaskAccountLease {
+  const value = record(request, EXECUTION_KEYS);
+  const lease = value.accountLease as AgentTaskAccountLease, admission = leaseAdmissions.get(lease);
+  if (!admission) throw Error("TASK_ACCOUNT_LEASE_UNTRUSTED");
+  if (phase !== "run" && phase !== "stop") throw Error("TASK_ACCOUNT_LEASE_PHASE_INVALID");
+  if (value.signal !== admission.signal || executionFingerprint(value) !== admission.fingerprint
+    || !Number.isSafeInteger(value.cleanupDeadlineUnixMs)
+    || Number(value.cleanupDeadlineUnixMs) < Number(value.admittedAtUnixMs)
+    || (phase === "run" ? admission.stopping || value.cleanupDeadlineUnixMs !== admission.cleanupDeadlineUnixMs
+      : Number(value.cleanupDeadlineUnixMs) > admission.cleanupDeadlineUnixMs)) throw Error("TASK_ACCOUNT_LEASE_BINDING_MISMATCH");
+  return lease;
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function matchingBinding(value: Record<string, unknown>, expected: AgentTaskBinding): AgentTaskBinding {
@@ -133,6 +168,7 @@ function stopEvidence(value: unknown, expected: AgentTaskBinding, began: number,
  */
 export async function runAgentTask(options: AgentTaskOptions, input: AgentTaskRequest, broker: CapabilityBroker): Promise<AgentTaskResult> {
   let invoked = false;
+  let admittedLease: AgentTaskAccountLease | undefined;
   const now = options.now, leases = options.leases;
   const acquire = leases.acquire.bind(leases), release = leases.release.bind(leases);
   try {
@@ -159,15 +195,20 @@ export async function runAgentTask(options: AgentTaskOptions, input: AgentTaskRe
     const executionDeadlineUnixMs = began + limits.maxRunMs, cleanupDeadlineUnixMs = began + total;
     const proof = qualified(adapter, request, cleanupDeadlineUnixMs);
     const controller = new AbortController();
-    const execution: AgentTaskExecutionRequest = Object.freeze({ ...request, signal: controller.signal, runtime: proof,
-      admittedAtUnixMs: began, executionDeadlineUnixMs, cleanupDeadlineUnixMs });
-    const expected = binding(execution as unknown as Record<string, unknown>);
     const run = adapter.run.bind(adapter), stop = adapter.stop.bind(adapter);
     // Preflight consumes the same finite budget; no model time is silently reset.
     const admittedNow = safeInteger(now(), began, Number.MAX_SAFE_INTEGER);
     if (admittedNow >= executionDeadlineUnixMs) throw Error("TASK_ADMISSION_DEADLINE");
-    const lease = acquire({ provider: request.route.provider, accountId: request.accountId,
-      owner: request.runId, now: began, ttlMs: total });
+    const lease = leaseSnapshot(acquire({ provider: request.route.provider, accountId: request.accountId,
+      owner: request.runId, now: began, ttlMs: total }));
+    if (lease.provider !== request.route.provider || lease.accountId !== request.accountId || lease.owner !== request.runId
+      || lease.expiresAt < cleanupDeadlineUnixMs) throw Error("TASK_ACQUIRED_LEASE_MISMATCH");
+    const execution: AgentTaskExecutionRequest = Object.freeze({ ...request, signal: controller.signal, runtime: proof, accountLease: lease,
+      admittedAtUnixMs: began, executionDeadlineUnixMs, cleanupDeadlineUnixMs });
+    const expected = binding(execution as unknown as Record<string, unknown>);
+    const admission = { fingerprint: executionFingerprint(execution as unknown as Record<string, unknown>), signal: controller.signal,
+      cleanupDeadlineUnixMs, stopping: false };
+    leaseAdmissions.set(lease, admission); admittedLease = lease;
     let effectiveCleanupDeadline = cleanupDeadlineUnixMs;
     let cancelled: "cancelled" | "deadline-exceeded" | null = null;
     const currentCancellation = (): "cancelled" | "deadline-exceeded" | null => cancelled;
@@ -177,6 +218,7 @@ export async function runAgentTask(options: AgentTaskOptions, input: AgentTaskRe
       value => ({ status: "fulfilled" as const, value }), reason => ({ status: "rejected" as const, reason }));
     const stopOnce = (reason: AgentTaskStopReason) => {
       if (stopping) return stopping;
+      admission.stopping = true;
       effectiveCleanupDeadline = Math.min(cleanupDeadlineUnixMs, safeInteger(now(), began, Number.MAX_SAFE_INTEGER - limits.maxCleanupMs) + limits.maxCleanupMs);
       const stoppingRequest = Object.freeze({ ...execution, cleanupDeadlineUnixMs: effectiveCleanupDeadline });
       // Publish ownership before synchronous abort listeners can reenter stop.
@@ -239,6 +281,6 @@ export async function runAgentTask(options: AgentTaskOptions, input: AgentTaskRe
   } finally {
     // Preflight failures also revoke; after admission this cannot replace adapter
     // stop evidence and never releases uncertain account custody.
-    await broker.close();
+    try { await broker.close(); } finally { if (admittedLease) leaseAdmissions.delete(admittedLease); }
   }
 }
