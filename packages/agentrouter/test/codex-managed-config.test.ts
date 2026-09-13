@@ -114,6 +114,13 @@ test("baseline projection rejects unsafe controls without treating defaults as t
   ]) expect(() => assertCodexManagedConfigResponse({ ...configResponse(), config: { ...configResponse().config, ...changes } }, expected)).toThrow();
 });
 
+test.each([
+  ["apps", { apps: null }, "CODEX_MANAGED_CONFIG_APPS_MISSING"],
+  ["default app", { apps: { _default: null } }, "CODEX_MANAGED_CONFIG_APPS_DEFAULT_MISSING"],
+] as const)("nullable %s config shape fails with a named admission error", (_label, changes, error) => {
+  expect(() => assertCodexManagedConfigResponse({ ...configResponse(), config: { ...configResponse().config, ...changes } }, expected)).toThrow(error);
+});
+
 test("thread admission binds exact model, settings, scratch and read-only controls", () => {
   expect(assertCodexManagedThreadResponse(threadResponse(), expected)).toEqual({ model: settings.model.id, reasoningEffort: "medium", serviceTier: "default" });
   for (const changes of [
