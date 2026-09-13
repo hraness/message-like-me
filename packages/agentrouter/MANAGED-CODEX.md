@@ -34,6 +34,29 @@ account state outside every contact folder and do not inherit the owner's
 normal CLI configuration or executable plugins. An injected port is trusted
 code, not an owner-JSON setting or an agent tool.
 
+## Offline native process helper
+
+`createCodexAccountProcess()` in `src/codex-account-process.ts` supplies a macOS
+process port for offline account-protocol checks. The caller provides an admitted
+executable, its expected hash and version, a schema digest, a parent-runtime hash,
+and an owner-private state directory. The helper verifies executable and parent
+runtime hashes and records the caller-admitted version and schema digest. These
+inputs do not establish provenance or execution qualification.
+
+The helper copies the checked executable into an immutable run snapshot and uses
+fixed app-server arguments, configuration and environment. Network access, process
+forks and remote control are disabled. This mode cannot complete OAuth sign-in.
+An exclusive account lock precedes account-home writes. The persistent account
+home stays outside the run's temporary HOME and working directory and survives
+shutdown; the helper does not inspect or export credentials.
+
+A private journal records launch intent before spawning and retains process and
+stream cleanup evidence. Failed cleanup keeps the account lock and recovery state.
+An expired lease or stale lock does not authorize a replacement process. The
+helper is not registered with Textbutler's default host and does not enable replies.
+Filesystem cleanup can finish after the requested wait deadline. The transport
+retains and joins that work before releasing account custody.
+
 ## Drive owner controls
 
 - `snapshot()` returns account state, generations and discovered model metadata.
