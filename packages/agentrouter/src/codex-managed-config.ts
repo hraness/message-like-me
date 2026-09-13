@@ -126,7 +126,13 @@ export function assertCodexManagedConfigResponse(raw: unknown, expected: Readonl
     const features = record(config.features);
     for (const name of CODEX_MANAGED_ACCOUNT_FEATURES) if (features[name] !== false) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
   }
-  const apps = record(config.apps), defaults = record(apps._default);
+  // The native schema permits `apps` and `_default` to be null. The managed
+  // account baseline requires both objects, so turn that shape drift into a
+  // named admission failure instead of leaking a generic record error.
+  if (config.apps === null || config.apps === undefined) return fail("CODEX_MANAGED_CONFIG_APPS_MISSING");
+  const apps = record(config.apps);
+  if (apps._default === null || apps._default === undefined) return fail("CODEX_MANAGED_CONFIG_APPS_DEFAULT_MISSING");
+  const defaults = record(apps._default);
   if (defaults.enabled !== false || defaults.destructive_enabled !== false || defaults.open_world_enabled !== false
     || Object.keys(apps).some(name => name !== "_default")) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
 }

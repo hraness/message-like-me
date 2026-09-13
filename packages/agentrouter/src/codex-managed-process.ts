@@ -18,10 +18,11 @@ import { identifier, safeInteger } from "./validation.ts";
 /** Trusted distribution inputs, never owner settings. The explicit mapping
  * binds an adapter runtime identity to independently admitted native artifacts;
  * matching these strings does not create qualification or schema evidence. */
+type ManagedSandboxProfile = "managed-task-offline-candidate-v1" | "managed-task-provider-tcp443-dns-candidate-v1";
 export type CodexManagedProcessOptions = Readonly<{
   stateRoot: string;
   runtime: Readonly<{ executablePath: string; version: string; sha256: string; schemaSha256: string; parentRuntime: CodexParentRuntimeBinding }>;
-  admission: Readonly<{ profile: "managed-task-offline-candidate-v1"; taskRuntimeVersion: string; taskRuntimeDigest: string;
+  admission: Readonly<{ profile: ManagedSandboxProfile; taskRuntimeVersion: string; taskRuntimeDigest: string;
     nativeSha256: string; schemaSha256: string; parentSha256: string }>;
   startupTimeoutMs?: number;
 }>;
@@ -38,7 +39,7 @@ export interface CodexManagedProcessSystem {
 }
 type CoreReceipt<B, S extends string> = CodexProcessReceipt & Readonly<{
   schema: S; binding: B; processGeneration: number;
-  productionQualified: false; network: "denied"; profile: "managed-task-offline-candidate-v1"; schemaSha256: string;
+  productionQualified: false; network: "denied" | "general-tcp443-system-resolver-var-metadata-candidate"; profile: ManagedSandboxProfile; schemaSha256: string;
   launchAttempted: boolean; lockReleased: boolean; phase: "preparing" | "launch-pending" | "running" | "release-pending" | "recovery-required" | "closed";
 }>;
 export type CodexManagedProcessReceipt = CoreReceipt<AgentTaskBinding, "agentrouter.codex-managed-process.v1">;
@@ -144,6 +145,16 @@ export function codexManagedOfflineSandbox(input: { executable: string; scratch:
 (allow sysctl-read)\n(allow process-info* (target self))\n(allow signal (target self))\n`;
 }
 
+/** Explicit task-only candidate for the native OpenAI provider transport.
+ * General TCP 443 and the system resolver do not enforce TLS or hostnames.
+ * Model-requested web access still belongs to the separate host broker. No
+ * extra file contents, Mach services, listeners, forks or tools are admitted. */
+export function codexManagedProviderSandbox(input: { executable: string; scratch: string; accountHome: string }): string {
+  return codexManagedOfflineSandbox(input)
+    + '(allow network-outbound (literal "/private/var/run/mDNSResponder") (remote tcp "*:443"))\n'
+    + '(allow file-read-metadata (literal "/var"))\n';
+}
+
 /** Internal, nondefault launcher. Owns no account acquisition or release and
  * cannot qualify an adapter. Account controls must join before runAgentTask
  * acquires its lease. Filesystem fsync/removal can outlast a deadline; the raw
@@ -153,7 +164,9 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
   const r = record(raw.runtime, ["executablePath", "version", "sha256", "schemaSha256", "parentRuntime"]), p = record(r.parentRuntime, ["expectedSha256"]);
   const runtime = Object.freeze({ executablePath: path(r.executablePath), version: identifier(r.version), sha256: digest(r.sha256), schemaSha256: digest(r.schemaSha256), parentRuntime: Object.freeze({ expectedSha256: digest(p.expectedSha256) }) });
   const a = record(raw.admission, ["profile", "taskRuntimeVersion", "taskRuntimeDigest", "nativeSha256", "schemaSha256", "parentSha256"]);
-  check(a.profile === "managed-task-offline-candidate-v1" && digest(a.nativeSha256) === runtime.sha256 && digest(a.schemaSha256) === runtime.schemaSha256 && digest(a.parentSha256) === runtime.parentRuntime.expectedSha256, "CODEX_MANAGED_PROCESS_ADMISSION_MISMATCH");
+  const sandboxProfile = a.profile;
+  check(sandboxProfile === "managed-task-offline-candidate-v1" || sandboxProfile === "managed-task-provider-tcp443-dns-candidate-v1", "CODEX_MANAGED_PROCESS_ADMISSION_MISMATCH");
+  check(digest(a.nativeSha256) === runtime.sha256 && digest(a.schemaSha256) === runtime.schemaSha256 && digest(a.parentSha256) === runtime.parentRuntime.expectedSha256, "CODEX_MANAGED_PROCESS_ADMISSION_MISMATCH");
   const taskRuntime = Object.freeze({ version: identifier(a.taskRuntimeVersion), digest: digest(a.taskRuntimeDigest) }), startupMs = safeInteger(raw.startupTimeoutMs ?? 10_000, 1, 120_000);
   const host = Object.freeze({ inspectParent: trustedSystem.inspectParent.bind(trustedSystem), spawn: trustedSystem.spawn.bind(trustedSystem), processGroup: trustedSystem.processGroup.bind(trustedSystem), signalGroup: trustedSystem.signalGroup.bind(trustedSystem), syncDirectory: trustedSystem.syncDirectory?.bind(trustedSystem) ?? syncDirectory });
   const seen = new WeakSet<AgentTaskAccountLease>(); let generation = 0;
@@ -169,7 +182,7 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
     const binding: AgentTaskBinding = Object.freeze({ route: Object.freeze({ ...request.route }), accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
       profile: Object.freeze({ ...request.profile }), model: Object.freeze({ ...request.model }), runtime: Object.freeze({ ...request.runtime }), accountLease: lease });
     return Promise.resolve(createOwnedCore({ stateRoot, runtime, host, binding, lease, processGeneration, configuration, runId: request.runId,
-      originalSignal, cancellationSignal, startupMs, executionDeadline: request.executionDeadlineUnixMs,
+      originalSignal, cancellationSignal, startupMs, sandboxProfile, executionDeadline: request.executionDeadlineUnixMs,
       outerDeadline: request.cleanupDeadlineUnixMs, maxCleanupMs: request.limits.maxCleanupMs, schema: "agentrouter.codex-managed-process.v1",
       authority() { assertAgentTaskAccountLease(request); check(request.accountLease === lease && request.signal === originalSignal, "CODEX_MANAGED_PROCESS_BINDING_MISMATCH"); } }));
   } });
@@ -181,10 +194,13 @@ interface OwnedCore<B, S extends string> extends CodexProcessHandle { receipt():
 type ProcessHost = Required<CodexManagedProcessSystem>;
 function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: string; runtime: CodexManagedProcessOptions["runtime"]; host: ProcessHost;
   binding: B; lease: AccountLease; processGeneration: number; configuration: string; runId: string; schema: S;
+  sandboxProfile?: ManagedSandboxProfile;
   originalSignal: AbortSignal; cancellationSignal: AbortSignal; startupMs: number; executionDeadline: number; outerDeadline: number; maxCleanupMs: number; authority(): void;
 }>): OwnedCore<B, S> {
   const { stateRoot, runtime, host, binding, lease, processGeneration, configuration, runId, schema, originalSignal, cancellationSignal,
     startupMs, executionDeadline, outerDeadline, maxCleanupMs, authority } = input;
+  const sandboxProfile = input.sandboxProfile ?? "managed-task-offline-candidate-v1";
+  const network = sandboxProfile === "managed-task-provider-tcp443-dns-candidate-v1" ? "general-tcp443-system-resolver-var-metadata-candidate" : "denied";
     const owned = Object.freeze({ accountId: lease.accountId, owner: lease.owner, leaseGeneration: lease.generation, processGeneration });
     const accountRoot = join(stateRoot, "accounts", lease.accountId), accountHome = join(accountRoot, "codex-home"), runs = join(stateRoot, "runs");
     const root = join(runs, `task-${runId}-${processGeneration}-${randomBytes(12).toString("hex")}`), scratch = join(root, "scratch"), runtimeRoot = join(root, "runtime"), executable = join(runtimeRoot, "codex"), cwd = join(scratch, "work"), custodyPath = join(root, "custody.jsonl"), lockPath = join(accountRoot, "active.json");
@@ -207,7 +223,7 @@ function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: strin
       try { child.stdin.write(chunk, settle); } catch { settle(new Error("CODEX_MANAGED_PROCESS_STDIN_FAILED")); }
     } }); stdin.on("error", () => {});
     const inputClosure = new Promise<void>(done => stdin.once("close", () => { inputClosed = true; done(); }));
-    const receipt = (): CoreReceipt<B, S> => Object.freeze({ schema, binding, processGeneration, productionQualified: false, network: "denied", profile: "managed-task-offline-candidate-v1",
+    const receipt = (): CoreReceipt<B, S> => Object.freeze({ schema, binding, processGeneration, productionQualified: false, network, profile: sandboxProfile,
       nativeVersion: runtime.version, executableSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentRuntimeSha256: runtime.parentRuntime.expectedSha256, configSha256: hash(configuration), custodyPath, ...state, runtimeErrors: Object.freeze([...runtimeErrors]), cleanupErrors: Object.freeze([...cleanupErrors]) });
     const error = (code: string) => { if (runtimeErrors.size < 24) runtimeErrors.add(code); };
     function persist() {
@@ -237,7 +253,7 @@ function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: strin
       await mkdir(runtimeRoot, { mode: 0o700 }); runtimeIdentity = await directory(runtimeRoot);
       for (const name of ["home", "tmp", "work"]) await mkdir(join(scratch, name), { mode: 0o700 });
       await copyExecutable(runtime.executablePath, executable, runtime.sha256); state.runtimeSnapshotSha256 = runtime.sha256;
-      const profile = codexManagedOfflineSandbox({ executable, scratch, accountHome }), profilePath = join(root, "sandbox.sb"); state.profileSha256 = hash(profile);
+      const profile = (sandboxProfile === "managed-task-provider-tcp443-dns-candidate-v1" ? codexManagedProviderSandbox : codexManagedOfflineSandbox)({ executable, scratch, accountHome }), profilePath = join(root, "sandbox.sb"); state.profileSha256 = hash(profile);
       await durableFile(profilePath, profile); await syncDirectory(runtimeRoot);
       const inspected = await inspectScratch(scratch); state.scratchContentSha256 = inspected.content; state.scratchIdentitySha256 = inspected.identity;
       await fixedFile(join(accountHome, "config.toml"), configuration); await fixedFile(lockPath, lockContents); await directory(accountHome); admitted();

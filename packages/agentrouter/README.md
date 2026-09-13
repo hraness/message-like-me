@@ -397,13 +397,30 @@ runtime request, including its original signal and account lease, plus a separat
 native launch; the mirrored IDs and lease grant no separate authority.
 
 `createCodexManagedProcessLauncher()` in `src/codex-managed-process.ts` supplies
-an internal offline process candidate. It requires trusted
-`managed-task-offline-candidate-v1` admission with an explicit mapping from the
-adapter runtime identity to native executable, schema and parent-runtime hashes.
-It checks those declared pins without creating qualification evidence. It is
-absent from the public barrel and default host, and its network-denied policy
-cannot perform provider turns. The separate account device-code network
-admission does not authorize this process.
+internal process candidates. Its trusted admission maps the adapter runtime
+identity to native executable, schema and parent-runtime hashes. The existing
+`managed-task-offline-candidate-v1` profile remains byte-for-byte unchanged and
+cannot perform provider turns. Missing profile selection is refused.
+
+The separate `managed-task-provider-tcp443-dns-candidate-v1` selection appends
+only outbound access to the system resolver socket and TCP port 443, plus
+metadata access to `/var` for resolver path traversal. It grants general TCP
+443 access, including local or private destinations; it enforces neither TLS
+nor a hostname allowlist. Native Codex remains responsible for authenticating
+its provider connection. Model-requested public web access still uses the
+separate bounded host broker. No additional file contents, Mach services,
+listeners, forks or model tools are admitted by this profile.
+
+Profile selection is copied before asynchronous work, and custody receipts
+retain its exact tag and generated policy digest. The provider candidate records
+`general-tcp443-system-resolver-var-metadata-candidate`; both candidates retain
+`productionQualified: false`. Account device-code admission does not authorize
+task networking. These candidates remain absent from the public barrel and
+default host, and neither matching pins nor successful sign-in creates task
+qualification. Native provider transport is still unproven, including the
+unresolved account login request-send failure. Activation requires separate
+evidence for authenticated turns, effective tool inventory, filesystem isolation
+and cleanup using the exact selected task profile.
 
 The host must first close and join account controls, then let `runAgentTask`
 acquire its account lease. The process owner uses that exact lease and the
