@@ -50,7 +50,7 @@ test("timeouts expose the fixed timeout code and termination signal", () => {
 });
 
 test("signal termination remains distinct from numeric exit failure", () => {
-  const failure = failureOf(() => command("/bin/sh", ["-c", "kill -TERM $$"], { stage: "notary-submit" }));
+  const failure = failureOf(() => command(process.execPath, ["-e", 'process.kill(process.pid, "SIGTERM")'], { stage: "notary-submit" }));
   expect(failure.details).toEqual({ stage: "notary-submit", status: null, signal: "SIGTERM", code: null, diagnostic: null });
 });
 
