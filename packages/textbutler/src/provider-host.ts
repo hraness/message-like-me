@@ -6,16 +6,20 @@ import { createFileClaudeApiKeyResolver } from "../../agentrouter/src/claude-cre
 import { discoverClaudeModels, type ClaudeModelDiscoveryOptions } from "../../agentrouter/src/claude-api-models.ts";
 import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
 import type { AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
+import type { ManagedCodexAccountController } from "../../agentrouter/src/codex-account.ts";
 import type { ProviderAccountConfig, HostConfig } from "./host-config.ts";
 import type { ContactSettings } from "./config.ts";
 import type { ProviderSelection } from "./routed-agent.ts";
-import type { ProviderAccountDiagnostic } from "../../control/src/index.ts";
+import { parseProviderLoginChallenge, type ProviderLoginChallenge, type ProviderAccountDiagnostic } from "../../control/src/index.ts";
 
 export type { ProviderAccountDiagnostic } from "../../control/src/index.ts";
 export interface ProviderHost {
   readonly router: AgentRouter;
   accounts(): readonly ProviderAccountDiagnostic[];
   check(accountId: string, signal: AbortSignal): Promise<void>;
+  startLogin(accountId: string, method: "chatgpt" | "chatgptDeviceCode", signal: AbortSignal): Promise<ProviderLoginChallenge>;
+  cancelLogin(accountId: string, loginId: string, signal: AbortSignal): Promise<void>;
+  logout(accountId: string, signal: AbortSignal): Promise<void>;
   selection(contact: ContactSettings): Promise<ProviderSelection>;
   validateAccountChange(previous: ContactSettings, next: { provider: "claude" | "codex"; accountId?: string }): void;
   close(): Promise<void>;
@@ -24,6 +28,8 @@ type Dependencies = {
   createAdapter: (options: ClaudeApiAdapterOptions) => Promise<AgentAdapter>;
   discover: (options: ClaudeModelDiscoveryOptions) => Promise<ModelCatalog>;
 };
+/** Trusted host port. Owner JSON and model-writable files cannot install a transport. */
+export type ManagedCodexAccountFactory = (input: { accountId: string; dataDir: string; leases: AccountLeaseStore }) => ManagedCodexAccountController;
 
 /** Owner account wiring. Configuration contains references; it never grants tool authority. */
 export function createProviderHost(options: {
@@ -31,6 +37,7 @@ export function createProviderHost(options: {
   config: HostConfig;
   leases: AccountLeaseStore;
   runtimeArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"];
+  managedCodex?: ManagedCodexAccountFactory;
   now?: () => number;
 }, dependencies: Dependencies = { createAdapter: createClaudeApiAdapter, discover: discoverClaudeModels }): ProviderHost {
   const accounts: readonly ProviderAccountConfig[] = [
@@ -39,6 +46,28 @@ export function createProviderHost(options: {
     ...(options.config.providerAccounts ?? []),
   ], now = options.now ?? Date.now;
   const shutdown = new AbortController(), pending = new Set<Promise<unknown>>();
+  const managed = new Map<string, ManagedCodexAccountController>();
+  const managedFailures = new Set<string>();
+  const managedAccount = (id: string): ManagedCodexAccountController => {
+    if (shutdown.signal.aborted || !options.managedCodex || managedFailures.has(id)
+      || !accounts.some(account => account.id === id && account.route === "codex")) throw new Error("Managed Codex account controls are unavailable.");
+    const existing = managed.get(id); if (existing) return existing;
+    try {
+      const controller = options.managedCodex({ accountId: id, dataDir: options.dataDir, leases: options.leases });
+      // Retain custody even if a buggy trusted factory returns the wrong binding.
+      managed.set(id, controller);
+      if (controller.snapshot().accountId !== id) throw new Error("Managed Codex account binding mismatch.");
+      return controller;
+    } catch { managedFailures.add(id); throw new Error("Managed Codex account setup needs recovery."); }
+  };
+  async function managedOperation<T>(id: string, external: AbortSignal, work: (controller: ManagedCodexAccountController, signal: AbortSignal) => Promise<T>): Promise<T> {
+    const signal = AbortSignal.any([external, shutdown.signal]); signal.throwIfAborted();
+    const controller = managedAccount(id);
+    const task = Promise.resolve().then(() => { signal.throwIfAborted(); return work(controller, signal); });
+    pending.add(task);
+    try { const result = await task; signal.throwIfAborted(); return result; }
+    finally { pending.delete(task); }
+  }
   const credentials = createFileClaudeApiKeyResolver({ directory: join(options.dataDir, "state", "provider-credentials"),
     bindings: Object.fromEntries(accounts.filter((account): account is ProviderAccountConfig & { route: "claude-api" } => account.route === "claude-api").map(account => [account.id, account.credentialFile])) });
   const adapters = new Map<string, AgentAdapter>(), catalogs = new Map<string, ModelCatalog>();
@@ -100,6 +129,9 @@ export function createProviderHost(options: {
   }
   const check = async (accountId: string, signal: AbortSignal, allowCredentialChange = true) => {
     signal.throwIfAborted();
+    if (accounts.some(account => account.id === accountId && account.route === "codex")) {
+      await managedOperation(accountId, signal, async (controller, scoped) => { await controller.check(scoped); }); return;
+    }
     const existing = checking.get(accountId); if (existing) { await existing; signal.throwIfAborted(); return; }
     const account = accounts.find(account => account.id === accountId);
     if (!account) throw new Error("Unknown provider account");
@@ -112,6 +144,23 @@ export function createProviderHost(options: {
     router: new AgentRouter({ adapters: [route, unqualifiedAdapter("codex")], leases: options.leases, now }),
     accounts() { return accounts.map(account => {
       const provider = account.route === "codex" ? "codex" as const : "claude" as const;
+      if (account.route === "codex" && options.managedCodex) {
+        const snapshot = managed.get(account.id)?.snapshot();
+        const state = shutdown.signal.aborted ? "closed" as const : managedFailures.has(account.id) ? "recovery-required" as const : snapshot?.state ?? "unchecked" as const;
+        const details = {
+          unchecked: "Check or sign in to this Codex subscription account. Automatic replies still require an admitted response engine.",
+          "signed-out": "Sign in with ChatGPT to connect your Codex subscription.",
+          "signing-in": "Complete sign-in in your browser, then check the account. Automatic replies remain unavailable.",
+          "signed-in": "Codex subscription signed in. The response engine still needs isolation qualification before this account can reply.",
+          unavailable: "The Codex account could not be verified. Check the account again after resolving its setup.",
+          "recovery-required": "The previous Codex account operation needs process recovery. New operations remain blocked.",
+          closed: "The Codex account controller is closed.",
+        };
+        return { id: account.id, label: account.label, provider, route: account.route, status: "unavailable" as const,
+          detail: details[state], defaultReplyModel: null, classifierModel: null,
+          managedAccount: { state, generation: snapshot?.accountGeneration ?? 0, modelCount: state === "signed-in" ? snapshot?.models.length ?? 0 : 0,
+            pendingLoginId: state === "closed" || state === "recovery-required" ? null : snapshot?.pendingLoginId ?? null } };
+      }
       const modelCatalog = catalogs.get(account.id), adapter = adapters.get(account.id);
       const ready = !shutdown.signal.aborted && currentModels(account, modelCatalog)
         && adapter?.qualification.status === "qualified" && adapter.qualification.expiresAt > now();
@@ -126,6 +175,9 @@ export function createProviderHost(options: {
         classifierModel: ready ? selectClassifierModel(modelCatalog!, now()).id : null };
     }); },
     check,
+    startLogin: (id, method, signal) => managedOperation(id, signal, async (controller, scoped) => parseProviderLoginChallenge(await controller.startLogin(method, scoped))),
+    cancelLogin: (id, loginId, signal) => managedOperation(id, signal, async (controller, scoped) => { await controller.cancelLogin(loginId, scoped); }),
+    logout: (id, signal) => managedOperation(id, signal, async (controller, scoped) => { await controller.logout(scoped); }),
     async selection(contact) {
       const account = accounts.find(account => account.id === contact.accountId);
       if (!account || account.route !== "claude-api" || contact.provider !== "claude" || shutdown.signal.aborted) throw new Error("The selected coding-agent account is unavailable; no API substitution is permitted.");
@@ -140,6 +192,10 @@ export function createProviderHost(options: {
       if (next.accountId !== undefined && ((!account && id !== previous.accountId) || account && (account.route === "codex" ? "codex" : "claude") !== next.provider)) throw new Error("Choose a configured account for this provider.");
       if (account?.route === "claude-api" && next.accountId === undefined && previous.provider !== next.provider) throw new Error("Choose the Claude API account explicitly; changing provider alone does not authorize API billing.");
     },
-    async close() { shutdown.abort(); await Promise.allSettled([...pending]); },
+    async close() {
+      shutdown.abort(); await Promise.allSettled([...pending]);
+      const receipts = await Promise.allSettled([...managed.values()].map(controller => controller.close()));
+      if (receipts.some(result => result.status === "rejected" || !result.value.released)) throw new Error("Managed Codex account process recovery is required.");
+    },
   };
 }

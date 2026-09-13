@@ -1,4 +1,5 @@
-import { CONTROL_PROTOCOL, disconnectedSnapshot, disclosurePreview, validateContactSettings, type ConversationCandidate, type Contact, type ContactSettings, type ControlRequest, type DesktopControlPort, type DesktopSnapshot } from "./control.ts";
+import { CONTROL_PROTOCOL, disconnectedSnapshot, disclosurePreview, validateContactSettings, type ProviderLoginChallenge, type ConversationCandidate, type Contact, type ContactSettings, type ControlRequest, type DesktopControlPort, type DesktopSnapshot } from "./control.ts";
+import { renderProviderAccounts } from "./provider-accounts.ts";
 
 import { newerSnapshot, requestPause, requestWithJobs } from "./jobs.ts";
 import type { DesktopLifecyclePort, LifecycleCommand, LifecycleResult } from "./lifecycle.ts";
@@ -24,6 +25,22 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
   let globalDraft = { ...snapshot.settings };
   let busy = true; let ownerJobPending = false; let pauseBusy = false; let feedback = ""; let feedbackError = false;
   let lifecycleBusy = false; let service: LifecycleResult | null = null;
+  const loginChallenges = new Map<string, ProviderLoginChallenge>();
+  function clearFinishedLogins() {
+    for (const [id, challenge] of loginChallenges) {
+      const account = snapshot.providerAccounts?.find(account => account.id === id)?.managedAccount;
+      if (account?.state !== "signing-in" || account.pendingLoginId !== challenge.loginId) loginChallenges.delete(id);
+    }
+  }
+  async function refreshAccountFailure(request: ControlRequest): Promise<void> {
+    if (!request.command.startsWith("provider.accounts.") || !("accountId" in request)) return;
+    // An uncertain mutation cannot keep advertising its old sign-in ceremony.
+    loginChallenges.delete(request.accountId);
+    try {
+      const fresh = await port.request({ protocol: CONTROL_PROTOCOL, command: "snapshot" });
+      if (fresh.ok && fresh.kind === "snapshot") { snapshot = newerSnapshot(snapshot, fresh.snapshot); clearFinishedLogins(); }
+    } catch { /* Keep the challenge cleared if authoritative readback is unavailable. */ }
+  }
   const current = () => snapshot.contacts.find(contact => contact.id === selected);
   const dirty = () => (draft !== null && JSON.stringify(draft) !== JSON.stringify(current()?.settings)) || memory !== savedMemory || JSON.stringify(globalDraft) !== JSON.stringify(snapshot.settings);
   const editable = () => snapshot.connection !== "disconnected" && !busy && !pauseBusy && !lifecycleBusy;
@@ -37,8 +54,11 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
     busy = true; render();
     try {
       const response = await requestWithJobs(port, request, undefined, () => { ownerJobPending = true; render(); });
-      if (!response.ok) { announce(response.message, true); return; }
-      if (response.kind === "conversations") {
+      if (!response.ok) { await refreshAccountFailure(request); announce(response.message, true); return; }
+      if (response.kind === "provider-login") {
+        if (request.command !== "provider.accounts.login.start" || response.accountId !== request.accountId) throw new Error("Sign-in response does not match the selected account.");
+        snapshot = newerSnapshot(snapshot, response.snapshot); loginChallenges.set(response.accountId, response.challenge); clearFinishedLogins();
+      } else if (response.kind === "conversations") {
         candidates = response.candidates; candidateId = ""; conversationDetail = response.detail;
       } else if (response.kind === "enrolled") {
         snapshot = newerSnapshot(snapshot, response.snapshot); selected = response.contactId; adding = false; tab = "behavior"; resetDraft();
@@ -46,6 +66,8 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
       } else if (response.kind === "snapshot") {
         const stale = response.snapshot.revision < snapshot.revision;
         snapshot = newerSnapshot(snapshot, response.snapshot);
+        clearFinishedLogins();
+        if (request.command === "provider.accounts.login.cancel" || request.command === "provider.accounts.logout") loginChallenges.delete(request.accountId);
         if (selected && !snapshot.contacts.some(contact => contact.id === selected)) selected = null;
         if (request.command === "snapshot" && !selected && snapshot.contacts[0]) selected = snapshot.contacts[0].id;
         if (preserveDrafts) globalDraft.paused = snapshot.settings.paused;
@@ -59,7 +81,7 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
         memory = response.content; savedMemory = memory; memoryLoaded = true; memoryRevision = response.revision;
       }
       if (success) announce(success);
-    } catch (error) { announce(error instanceof Error ? error.message : "The daemon could not complete the request.", true); }
+    } catch (error) { await refreshAccountFailure(request); announce(error instanceof Error ? error.message : "The daemon could not complete the request.", true); }
     finally { busy = false; ownerJobPending = false; render(); }
   }
   async function togglePause(): Promise<void> {
@@ -85,7 +107,7 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
   function setup(): string {
     const messaging = snapshot.messagingProviders?.length ? `<section class="section"><h2>Messaging connections</h2><p class="section-description">Connect the configured account before choosing conversations. WhatsApp sync runs in the background after you start it.</p><p class="quiet-note">${escape(snapshot.automation?.detail ?? "Messaging setup is required.")}</p><div class="form-actions">${snapshot.messagingProviders.map(provider => `<button class="button" data-messaging-start="${provider}" ${!editable() ? "disabled" : ""}>${provider === "whatsapp" ? "Start WhatsApp sync" : "Connect iMessage"}</button>`).join("")}</div></section>` : "";
     const native = lifecycle ? `<section class="section"><h2>Background service</h2><p class="section-description">Keep Textbutler running while its window is closed. Your Mac must remain awake and signed in.</p><p role="status">${escape(lifecycleBusy ? "Updating the background service…" : service?.detail ?? "Check the service before installing it. New installations start paused.")}</p><div class="form-actions"><button class="button" data-lifecycle="status" ${lifecycleBusy || busy ? "disabled" : ""}>Check service</button><button class="button" data-lifecycle="uninstall" ${lifecycleBusy || busy || service?.status !== "completed" || service.installation !== "installed" ? "disabled" : ""}>Uninstall service</button><button class="button primary" data-lifecycle="install" ${lifecycleBusy || busy || service?.status !== "completed" || service.installation !== "absent" ? "disabled" : ""}>Install service</button></div><p class="quiet-note">Uninstalling preserves your contacts, settings, and memory.</p></section>` : "";
-    const providers = `<section class="section"><h2>Agent accounts</h2><p class="section-description">Choose an account for each contact in Behavior. Claude API uses separate API billing; it does not use a Claude Code subscription.</p><div class="capability-list">${snapshot.providerAccounts?.length ? snapshot.providerAccounts.map(account => `<div class="capability-row"><div><strong>${escape(account.label)} · ${routeNames[account.route]}</strong><p>${escape(account.detail)}</p>${account.status === "ready" ? `<p>Replies: ${escape(account.defaultReplyModel ?? "Unavailable")}<br>Classifier: ${escape(account.classifierModel ?? "Unavailable")}</p>` : ""}${account.route === "claude-api" ? `<button class="button" data-provider-check="${escape(account.id)}" ${!editable() ? "disabled" : ""}>Check account</button>` : ""}</div><span class="capability-state ${account.status === "ready" ? "available" : account.status === "unavailable" ? "unsupported" : "setup-required"}">${account.status === "ready" ? "Ready" : account.status === "unavailable" ? "Unavailable" : "Setup required"}</span></div>`).join("") : `<p class="quiet-note">Configured accounts appear here when the daemon is connected.</p>`}</div><p class="quiet-note">An account check verifies model access without sending a message or paid prompt. Credentials are managed in the private host configuration and never displayed here.</p></section>`;
+    const providers = renderProviderAccounts(snapshot.providerAccounts, editable(), loginChallenges);
     return `${native}${messaging}${providers}<section class="section"><h2>Connection & capabilities</h2><p class="section-description">Textbutler uses Ghostget for messaging and contacts. Each feature becomes available after the connected provider confirms it.</p><div class="capability-list">${snapshot.capabilities.map(capability => `<div class="capability-row"><div><strong>${capabilityNames[capability.id]}</strong><p>${escape(capability.detail)}</p></div><span class="capability-state ${capability.status}">${statusNames[capability.status]}</span></div>`).join("")}</div></section>`;
   }
   async function manageService(command: LifecycleCommand): Promise<void> {
@@ -156,7 +178,17 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
     if (button.dataset.lifecycle && ["status", "install", "uninstall"].includes(button.dataset.lifecycle)) { void manageService(button.dataset.lifecycle as LifecycleCommand); return; }
     if (button.dataset.providerCheck) {
       if (dirty()) { announce("Save or discard your edits before checking an account.", true); return; }
-      void request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.check", accountId: button.dataset.providerCheck }, "Account model access verified."); return;
+      void request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.check", accountId: button.dataset.providerCheck }, "Account status updated."); return;
+    }
+    if (button.dataset.providerLogin || button.dataset.providerCancel || button.dataset.providerLogout) {
+      if (dirty()) { announce("Save or discard your edits before changing an account.", true); return; }
+      if (button.dataset.providerLogin) void request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.login.start", accountId: button.dataset.providerLogin, method: "chatgptDeviceCode" }, "Complete sign-in in your browser, then check the account.");
+      else if (button.dataset.providerLogout) void request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.logout", accountId: button.dataset.providerLogout }, "Account signed out. Replies remain unavailable.");
+      else if (button.dataset.providerCancel) {
+        const loginId = snapshot.providerAccounts?.find(account => account.id === button.dataset.providerCancel)?.managedAccount?.pendingLoginId;
+        if (loginId) void request({ protocol: CONTROL_PROTOCOL, command: "provider.accounts.login.cancel", accountId: button.dataset.providerCancel, loginId }, "Sign-in status updated.");
+      }
+      return;
     }
     if (button.dataset.messagingStart === "imessage" || button.dataset.messagingStart === "whatsapp") {
       if (dirty()) { announce("Save or discard your edits before connecting messaging.", true); return; }

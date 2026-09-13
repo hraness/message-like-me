@@ -154,6 +154,14 @@ provider response bodies and credentials.
 
 ## Native coding-agent execution status
 
+Managed Codex account controls are separate from agent execution.
+`createManagedCodexAccountController()` provides subscription sign-in, cancellation,
+sign-out, account checks and bounded model discovery through a host-supplied
+account-only transport. `createCodexAccountStdioTransport()` implements the
+supported app-server account protocol over an explicitly supplied process port.
+Neither function launches a production process or qualifies a response adapter.
+See [managed Codex account integration](MANAGED-CODEX.md) for the host contract.
+
 `createClaudeSdkAdapter()` implements the pinned Claude Agent SDK subprocess
 protocol with API-key authentication. Its execution gate requires a trusted host
 qualification for the exact native executable and SDK digest. No production
