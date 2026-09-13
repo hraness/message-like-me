@@ -135,10 +135,10 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     sections: Array.from({ length: 7 }, () => ({ font: '"Instrument Serif", serif', weight: '400', size: 52, leading: 56.16, tracking: -1.04 })),
     summarySize: 17, summaryLeading: 27.2, workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', frameBackground: 'rgb(255, 253, 249)',
-    actionHeights: [42, 42, 42, 42, 42], actionRadii: ['4px'], fieldBackground: 'repeating-linear-gradient(red, blue), repeating-linear-gradient(red, blue), radial-gradient(red, blue), linear-gradient(red, blue)' };
+    actionHeights: [42, 42, 42, 42, 42], actionRadii: ['4px'], fieldBackground: 'url("/grain.svg"), url("/cells.svg"), radial-gradient(red, blue), linear-gradient(red, blue)', fieldBackgroundSize: '64px 64px, 768px 768px, 100% 100%, 100% 100%' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
   for (const change of [{ layers: [] }, { renderedFonts: [] }, { fontWeights: [] }, { forms: 1 },
-    { material: null }, { headerBackdrop: 'none' }, { fieldBackground: 'linear-gradient(red, blue)' },
+    { material: null }, { headerBackdrop: 'none' }, { fieldBackgroundSize: 'auto' }, { fieldBackground: 'linear-gradient(red, blue)' },
     { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] },
     { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { summaryLeading: 24.65 },
     { heroPadding: ['112px', '72px'] }, { gutter: '20px' }, { headerWidth: 1120 }]) {

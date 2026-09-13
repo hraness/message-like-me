@@ -156,7 +156,10 @@ export function assertPresentation(value, sample) {
     assert.ok(value.actionHeights.every((height) => height >= (sample.width < 500 ? 44 : 42)));
     assert.ok(value.actionRadii.every((radius) => radius === '4px'));
     assert.equal(value.headerBackdrop, 'blur(20px) saturate(1.1)');
-    assert.equal((value.fieldBackground.match(/gradient\(/gu) ?? []).length, 4);
-    assert.ok(!value.fieldBackground.includes('url('), 'Lantern is native CSS; no texture over content.');
+    assert.equal((value.fieldBackground.match(/gradient\(/gu) ?? []).length, 2);
+    assert.equal((value.fieldBackground.match(/url\(/gu) ?? []).length, 2);
+    assert.ok(!value.fieldBackground.includes('repeating-linear-gradient('), 'Wall seams come from the shaded cells.');
+    const tile = sample.width < 761 ? 576 : 768;
+    assert.equal(value.fieldBackgroundSize, `64px 64px, ${tile}px ${tile}px, 100% 100%, 100% 100%`);
   }
 }
