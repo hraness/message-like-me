@@ -15,6 +15,25 @@ desktop coordinate is `desktop-v0.1.5-macos-arm64`, with assets
 GitHub artifact provenance. A source build or ad hoc signature is not a signed
 release. Do not advertise a download until its verified publication exists.
 
+## Short-lived signed previews
+
+When notarization is unavailable, the owner can run the manually dispatched
+[Desktop Preview workflow](../../../.github/workflows/desktop-preview.yml) from
+current `main`. It requires the exact current-main commit and its successful
+push-main CI attempt. The workflow uses only the Developer ID certificate and
+private key, signs the app with a hardened runtime, and uploads a 14-day
+GitHub Actions artifact. It never calls `notarytool`, creates a tag or release,
+uses notarization credentials, or changes the stable desktop publication path.
+
+The downloaded `Textbutler-*-preview.zip` is for local testing only. It is
+Developer ID signed but **not notarized**, so macOS may quarantine or block it.
+Keep quarantine enabled; after opening the app once, use **System Settings →
+Privacy & Security → Open Anyway** if macOS offers that control. Verify the
+included `SHA256SUMS` and `preview-manifest.json`, and do not use a preview as
+a stable download or on machines where Gatekeeper qualification is required.
+The normal desktop release remains the only path that produces a stapled,
+notarized, provenance-attested artifact.
+
 ## Build and inspect without Apple credentials
 
 Use the repository's host scheduler mac-native lane for these commands, with
