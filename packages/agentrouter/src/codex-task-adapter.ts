@@ -49,7 +49,8 @@ export function createCodexTaskAdapter(options: CodexTaskAdapterOptions): AgentT
         request: Object.freeze({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
           prompt: request.prompt, model: request.model.id, purpose: "respond", provider: "codex", signal }),
         broker, upstream: options.upstream, launcher: options.launcher,
-        limits: { deadlineMs: remaining, ioMs: Math.min(10_000, remaining), cleanupMs: Math.max(1, request.cleanupDeadlineUnixMs - options.now()) },
+        limits: { deadlineMs: remaining, ioMs: Math.min(10_000, remaining),
+          cleanupMs: Math.max(1, request.cleanupDeadlineUnixMs - request.executionDeadlineUnixMs) },
         task: { mapping, settings, executionDeadlineUnixMs: request.executionDeadlineUnixMs, maxOutputBytes: request.limits.maxOutputBytes,
           now: options.now },
       });

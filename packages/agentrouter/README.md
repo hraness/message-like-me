@@ -347,3 +347,8 @@ retains the process receipt until `AgentRouter.runTask()` has joined the adapter
 stop and broker close. Constructing the adapter does not discover credentials,
 select an account, or qualify the installed native runtime; those remain explicit
 host and qualification inputs.
+
+Task sessions pass explicit reasoning effort and service tier at native turn
+startup. Their run and cleanup allowances share the task runtime's one-hour
+ceiling; the legacy contact session keeps its 120-second run and 10-second
+cleanup limits. IO, request-count and byte limits remain bounded separately.
