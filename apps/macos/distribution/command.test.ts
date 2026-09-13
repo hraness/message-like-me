@@ -131,8 +131,14 @@ test("notary classification requires the exact bounded diagnostic and failure st
     ["notary-store-credentials", 0, null, undefined, known],
     ["notary-store-credentials", null, "SIGKILL", { code: "ETIMEDOUT" }, known],
     ["notary-store-credentials", 1, null, undefined, Buffer.from("Error: HTTP status code: 403. private suffix")],
-    ["notary-store-credentials", 1, null, undefined, Buffer.from("quoted Error: HTTP status code: 401. private suffix")],
     ["notary-store-credentials", 1, null, undefined, Buffer.from("Error: HTTP status code: 401.private suffix")],
     ["notary-store-credentials", 1, null, undefined, Buffer.concat([Buffer.alloc(65_536, 10), known])],
   ] as const) expect(new DistributionCommandError(stage, status, signal, error, stderr).details.diagnostic).toBeNull();
+});
+
+test("notary secure prompt may prefix the fixed HTTP diagnostic on the same line", () => {
+  const secret = "synthetic-prompt-secret";
+  const failure = new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.from(`App-specific password for ${secret}: Error: HTTP status code: 401. Invalid credentials.`));
+  expect(failure.details.diagnostic).toBe("notary-http-401");
+  remainsPrivate(failure, [secret, "App-specific password", "Invalid credentials"]);
 });
