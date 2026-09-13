@@ -87,10 +87,30 @@ keychain and dummy values with validation disabled to check the secure prompt's
 stdin behavior on that runner. It does not establish that real credentials are
 valid. The production signer always retains Apple's credential validation.
 
+After setting or replacing the Apple Account secrets, run the
+[Desktop Notary Preflight workflow](../../../.github/workflows/desktop-notary-preflight.yml)
+from current `main`, supplying its successful push-main `ci_run_id` and
+`ci_run_attempt`. It revalidates the owner, source, workflow and complete CI before
+entering `desktop-signing`, and again before credential use. The credential step
+receives only the Apple Account email, app-specific password and team ID. It uses
+the same credential-storage function as the signer, validates with Apple, then
+deletes its disposable keychain. It never imports the signing certificate,
+builds or runs the app, submits an artifact, creates a tag, or publishes a release.
+A successful preflight proves credential validity at that time; the signer still
+validates credentials during the release. Keep main fixed until the check settles.
+
 Command failures report a fixed operation stage, exit status, signal and
 allowlisted process error code. Arguments, credentials and child output remain
-private. The fixed `notary-http-401` diagnostic reports a recognized Apple
-HTTP401 response without copying its text or guessing its cause.
+private. Fixed `notary-http-401`, `notary-http-403`, `notary-http-404`,
+`notary-http-429`, `notary-http-500`, `notary-http-502` and `notary-http-503`
+diagnostics report recognized HTTP statuses from either bounded output stream,
+including when the headless password prompt and error share a line. Conflicting
+statuses or oversized output remain unclassified. These labels identify the
+observed status without copying Apple's text or guessing its cause.
+When no HTTP status is present, fixed labels can also identify Apple's known
+agreement, team-access, keychain, credential-validation and incomplete-error
+messages. Unrecognized messages remain unclassified. A credential-validation
+label alone does not establish which credential or account setting needs repair.
 A failure at `notary-store-credentials` precedes artifact submission;
 an exit status alone does not prove the password is wrong. Check whether the
 synthetic prompt test passed, then distinguish a timeout or process failure from

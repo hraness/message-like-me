@@ -49,6 +49,16 @@ async function finish(service: TextbutlerControlService, initial: ControlRespons
   for (let count = 0; response.ok && response.kind === "job" && count < 200; count++) { await Bun.sleep(2); response = await service.request({ protocol, command: "owner.job.read", jobId: response.jobId }); }
   if (response.ok && response.kind === "job") throw new Error("Synthetic job did not finish"); return response;
 }
+async function waitForMessagingState(service: TextbutlerControlService, contactId: string, expected: "recovery-required" | "missing") {
+  const deadline = performance.now() + 2000;
+  let state;
+  do {
+    state = (await service.snapshot()).contacts.find(contact => contact.id === contactId)?.messaging?.state;
+    if (state === expected) return;
+    await Bun.sleep(5);
+  } while (performance.now() < deadline);
+  expect(state).toBe(expected);
+}
 async function serviceFixture(f: ReturnType<typeof fixture>) {
   const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-automation-")); roots.push(dataDir);
   const config = parseHostConfig({ schemaVersion: 1, providerAccounts: [{ id: "synthetic-api", label: "Synthetic API", route: "claude-api", credentialFile: "synthetic-key", replyModel: "synthetic-model",
@@ -100,13 +110,14 @@ test("v2 control enrollment stores identity and grants outside contact memory an
   expect(await service.delegatedGrant(selected)).toBe(f.grants[0]!.id);
   f.failRevoke();
   expect(await service.request({ protocol, command: "contact.settings.update", contactId, expectedRevision: 4, settings: { ...initial, enabled: false, provider: "claude", accountId: "synthetic-api" } })).toMatchObject({ ok: true });
-  await Bun.sleep(5);
   expect(await service.delegatedGrant(selected)).toBeNull(); expect(notifications).toContain(false);
+  await waitForMessagingState(service, contactId, "recovery-required");
   expect((await service.runtimeState()).grants[contactId]?.id).toBe(f.grants[0]!.id);
   expect((await service.snapshot()).contacts[0]?.messaging?.state).toBe("recovery-required");
   f.recoverRevoke();
-  const fresh = await service.snapshot(); await service.request({ protocol, command: "contact.settings.update", contactId, expectedRevision: fresh.revision, settings: fresh.contacts[0]!.settings });
-  await Bun.sleep(10);
+  const fresh = await service.snapshot();
+  expect(await service.request({ protocol, command: "contact.settings.update", contactId, expectedRevision: fresh.revision, settings: fresh.contacts[0]!.settings })).toMatchObject({ ok: true });
+  await waitForMessagingState(service, contactId, "missing");
   expect((await service.runtimeState()).grants).toEqual({}); expect(f.revoked).toContain(f.grants[0]!.id);
 });
 

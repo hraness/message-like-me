@@ -130,9 +130,112 @@ test("notary classification requires the exact bounded diagnostic and failure st
     ["command", 1, null, undefined, known],
     ["notary-store-credentials", 0, null, undefined, known],
     ["notary-store-credentials", null, "SIGKILL", { code: "ETIMEDOUT" }, known],
-    ["notary-store-credentials", 1, null, undefined, Buffer.from("Error: HTTP status code: 403. private suffix")],
-    ["notary-store-credentials", 1, null, undefined, Buffer.from("quoted Error: HTTP status code: 401. private suffix")],
+    ["notary-store-credentials", 1, null, undefined, Buffer.from("Error: HTTP status code: 418. private suffix")],
     ["notary-store-credentials", 1, null, undefined, Buffer.from("Error: HTTP status code: 401.private suffix")],
     ["notary-store-credentials", 1, null, undefined, Buffer.concat([Buffer.alloc(65_536, 10), known])],
   ] as const) expect(new DistributionCommandError(stage, status, signal, error, stderr).details.diagnostic).toBeNull();
+});
+
+test("notary secure prompt may prefix the fixed HTTP diagnostic on the same line", () => {
+  const secret = "synthetic-prompt-secret";
+  const failure = new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.from(`App-specific password for ${secret}: Error: HTTP status code: 401. Invalid credentials.`));
+  expect(failure.details.diagnostic).toBe("notary-http-401");
+  remainsPrivate(failure, [secret, "App-specific password", "Invalid credentials"]);
+});
+
+test("notary HTTP status diagnostics classify stdout without retaining the surrounding output", () => {
+  const secret = "synthetic-private-stdout-secret";
+  const failure = failureOf(() => command(process.execPath, ["-e", 'process.stdout.write("App-specific password: Error: HTTP status code: 403. " + process.argv.at(-1)); process.exit(1)', secret], { stage: "notary-store-credentials" }));
+  expect(failure.details.diagnostic).toBe("notary-http-403");
+  remainsPrivate(failure, [secret, "App-specific password", "HTTP status code"]);
+});
+
+test("each fixed HTTP status token is recognized in either stream with prompt prefixes", () => {
+  for (const status of [401, 403, 404, 429, 500, 502, 503] as const) {
+    const token = Buffer.from(`synthetic-private-prompt: HTTP status code: ${status}. synthetic-private-suffix`);
+    for (const [stderr, stdout] of [[token, Buffer.alloc(0)], [Buffer.alloc(0), token], [token, token]]) {
+      const failure = new DistributionCommandError("notary-store-credentials", 1, null, undefined, stderr, stdout);
+      expect(failure.details.diagnostic).toBe(`notary-http-${status}`);
+      remainsPrivate(failure, ["synthetic-private-prompt", "synthetic-private-suffix", "HTTP status code"]);
+    }
+  }
+});
+
+test("different recognized statuses conflict within one stream or across streams", () => {
+  const first = Buffer.from("Error: HTTP status code: 401. synthetic-first-secret\n"), second = Buffer.from("Error: HTTP status code: 503. synthetic-second-secret");
+  for (const [stderr, stdout] of [[first, second], [second, first], [Buffer.concat([first, second]), Buffer.alloc(0)], [Buffer.alloc(0), Buffer.concat([second, first])]]) {
+    const failure = new DistributionCommandError("notary-store-credentials", 1, null, undefined, stderr, stdout);
+    expect(failure.details.diagnostic).toBeNull();
+    remainsPrivate(failure, ["synthetic-first-secret", "synthetic-second-secret", "HTTP status code"]);
+  }
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.concat([first, first])).details.diagnostic).toBe("notary-http-401");
+  const unknown = Buffer.from("HTTP status code: 402.\n");
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, first, unknown).details.diagnostic).toBeNull();
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, unknown, first).details.diagnostic).toBeNull();
+});
+
+test("both output streams must fit their independent bound before any status is classified", () => {
+  const token = Buffer.from("Error: HTTP status code: 429.\n"), exact = Buffer.concat([Buffer.alloc(65_536 - token.length, 10), token]);
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, exact, exact).details.diagnostic).toBe("notary-http-429");
+  const oversized = Buffer.concat([exact, Buffer.from("x")]);
+  for (const [stderr, stdout] of [[token, oversized], [oversized, token], [Buffer.alloc(0), oversized], [oversized, Buffer.alloc(0)]]) {
+    expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, stderr, stdout).details.diagnostic).toBeNull();
+  }
+});
+
+test("stdout classification retains the failure gates and rejects malformed tokens and output values", () => {
+  const token = Buffer.from("Error: HTTP status code: 500.\n");
+  for (const [stage, status, signal, error] of [
+    ["command", 1, null, undefined], ["notary-submit", 1, null, undefined], ["notary-store-credentials", 0, null, undefined],
+    ["notary-store-credentials", 2, null, undefined], ["notary-store-credentials", 1, "SIGKILL", undefined],
+    ["notary-store-credentials", 1, null, { code: "ENOBUFS" }],
+  ] as const) expect(new DistributionCommandError(stage, status, signal, error, Buffer.alloc(0), token).details.diagnostic).toBeNull();
+  for (const output of ["HTTP status code: 500.", "HTTP status code: 5000.\n", "HTTP status code: 500.private", "HTTP status code: 418.\n", "HTTP status code: 500\n"]) {
+    // Raw strings are not child-process buffers, even when their text matches.
+    expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.alloc(0), output).details.diagnostic).toBeNull();
+    if (output !== "HTTP status code: 500.") expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.alloc(0), Buffer.from(output)).details.diagnostic).toBeNull();
+  }
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, null, token).details.diagnostic).toBeNull();
+});
+
+test("observed fixed Apple diagnostics classify either bounded stream without exposing adjacent secrets", () => {
+  const cases = [
+    ["FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED", "notary-agreements-required"],
+    ["Invalid or inaccessible developer team ID for the provided Apple ID.", "notary-team-inaccessible"],
+    ["An error occurred while accessing the keychain.", "notary-keychain-error"],
+    ['Could not open keychain "synthetic-private-keychain-path"', "notary-keychain-error"],
+    ["Credential validation failed. Please verify your inputs.", "notary-credential-validation-failed"],
+    ["HTTP Error response was missing error details.", "notary-http-error-without-details"],
+  ] as const;
+  for (const [literal, diagnostic] of cases) {
+    const output = Buffer.from(`synthetic-private-prefix: ${literal} synthetic-private-suffix`);
+    for (const [stderr, stdout] of [[output, Buffer.alloc(0)], [Buffer.alloc(0), output]]) {
+      const failure = new DistributionCommandError("notary-store-credentials", 1, null, undefined, stderr, stdout);
+      expect(failure.details.diagnostic).toBe(diagnostic);
+      remainsPrivate(failure, ["synthetic-private-prefix", "synthetic-private-suffix", "synthetic-private-keychain-path", literal]);
+    }
+  }
+});
+
+test("HTTP observations take priority while conflicting or unallowlisted HTTP never falls back", () => {
+  const literal = Buffer.from("Credential validation failed. Please verify your inputs.\nFORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED");
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, literal).details.diagnostic).toBe("notary-agreements-required");
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, literal, Buffer.from("HTTP status code: 403.\n")).details.diagnostic).toBe("notary-http-403");
+  for (const output of ["HTTP status code: 402.\n", "HTTP status code: 401.\nHTTP status code: 403.\n"]) {
+    expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, literal, Buffer.from(output)).details.diagnostic).toBeNull();
+  }
+});
+
+test("fixed Apple diagnostics require exact literals and all normal failure and stream bounds", () => {
+  const literal = Buffer.from("Credential validation failed. Please verify your inputs.");
+  for (const [stage, status, signal, error] of [
+    ["command", 1, null, undefined], ["notary-store-credentials", 0, null, undefined],
+    ["notary-store-credentials", 1, "SIGKILL", undefined], ["notary-store-credentials", 1, null, { code: "ENOBUFS" }],
+  ] as const) expect(new DistributionCommandError(stage, status, signal, error, literal).details.diagnostic).toBeNull();
+  for (const output of ["Credential validation failed", "The keychain is unavailable.", "Invalid credentials.", "FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRE"]) {
+    expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, Buffer.from(output)).details.diagnostic).toBeNull();
+  }
+  const oversized = Buffer.concat([literal, Buffer.alloc(65_536)]);
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, oversized, literal).details.diagnostic).toBeNull();
+  expect(new DistributionCommandError("notary-store-credentials", 1, null, undefined, literal, oversized).details.diagnostic).toBeNull();
 });
