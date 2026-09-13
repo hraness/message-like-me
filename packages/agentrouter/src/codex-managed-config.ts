@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 import { CODEX_DISABLED_FEATURES, codexTaskSettings, type CodexTaskSettings } from "./codex-config.ts";
+import { CODEX_MANAGED_ACCOUNT_FEATURES, codexManagedAccountConfiguration } from "./codex-managed-baseline.ts";
 import type { CodexProcessHandle } from "./codex-process.ts";
 import type { AgentTaskAccountLease, AgentTaskExecutionRequest } from "./task-runtime.ts";
 import { boundedText, identifier } from "./validation.ts";
@@ -16,7 +17,8 @@ export interface CodexManagedProcessLauncher {
   /** Revalidate request with assertAgentTaskAccountLease before preparation and
    * native launch. Its original signal and lease bind runtime provenance;
    * cancellationSignal revokes work without replacing that identity. The
-   * convenience IDs and lease mirror request and grant no separate authority. */
+   * convenience IDs and lease mirror request and grant no separate authority.
+   * Configuration is the fixed account baseline, never task-specific file text. */
   launch(input: Readonly<{ request: AgentTaskExecutionRequest; runId: string; accountId: string; workspaceId: string;
     configuration: string; accountLease: AgentTaskAccountLease; cancellationSignal: AbortSignal }>): Promise<CodexProcessHandle>;
 }
@@ -33,7 +35,7 @@ function record(value: unknown, keys?: readonly string[]): Record<string, unknow
     || !("value" in Object.getOwnPropertyDescriptor(value, key)!))) return fail("CODEX_MANAGED_RECORD_INVALID");
   return value as Record<string, unknown>;
 }
-function settingsSnapshot(settings: CodexTaskSettings): CodexTaskSettings {
+export function codexManagedTaskSettings(settings: CodexTaskSettings): CodexTaskSettings {
   record(settings, ["model", "instructions", "instructionDigest"]);
   record(settings.model, ["id", "reasoningEffort", "serviceTier"]);
   record(settings.instructions, ["base", "developer"]);
@@ -54,25 +56,29 @@ function observedSetting(raw: unknown, expected: string | null): string | null {
 }
 function emptyArray(value: unknown): boolean { return Array.isArray(value) && value.length === 0; }
 
-/** Native OpenAI transport only: no custom endpoint, upstream or credential
- * field. The host must load this as an isolated configuration. Disabled flags
- * are requested controls, not an effective model-tool inventory attestation.
- */
+/** Native OpenAI transport only. Validate task settings without embedding them
+ * in the persistent account file. Existing account homes keep their exact bytes. */
 export function codexManagedTaskConfiguration(settings: CodexTaskSettings): string {
-  const admitted = settingsSnapshot(settings);
-  return [
-    `model_provider = "${CODEX_MANAGED_PROVIDER}"`, `model = ${JSON.stringify(admitted.model.id)}`,
-    ...(admitted.model.reasoningEffort === null ? [] : [`model_reasoning_effort = ${JSON.stringify(admitted.model.reasoningEffort)}`]),
-    ...(admitted.model.serviceTier === null ? [] : [`service_tier = ${JSON.stringify(admitted.model.serviceTier)}`]),
-    'forced_login_method = "chatgpt"', 'approval_policy = "never"', 'sandbox_mode = "read-only"',
-    'web_search = "disabled"', 'project_doc_max_bytes = 0', 'mcp_servers = {}',
-    '[shell_environment_policy]', 'inherit = "none"', '[analytics]', 'enabled = false', '[feedback]', 'enabled = false',
-    '[features]', ...CODEX_DISABLED_FEATURES.map(name => `${name} = false`),
-    '[apps._default]', 'enabled = false', 'destructive_enabled = false', 'open_world_enabled = false',
-    '[orchestrator.skills]', 'enabled = false', '[skills]', 'include_instructions = false',
-    '[skills.bundled]', 'enabled = false', '[tools.experimental_request_user_input]', 'enabled = false',
-    '[tools.update_plan]', 'enabled = false', '',
-  ].join("\n");
+  codexManagedTaskSettings(settings);
+  return codexManagedAccountConfiguration();
+}
+
+const threadControls = Object.freeze({
+  features: Object.freeze(Object.fromEntries([...new Set([...CODEX_MANAGED_ACCOUNT_FEATURES, ...CODEX_DISABLED_FEATURES])]
+    .map(name => [name, false as const]))),
+  tools: Object.freeze({ experimental_request_user_input: Object.freeze({ enabled: false as const }),
+    update_plan: Object.freeze({ enabled: false as const }) }),
+});
+
+/** Host-owned thread/start overrides, never a caller-supplied config map. Keep
+ * all task denials, including flags absent from the fixed account baseline.
+ * The pinned protocol has no dedicated thread effort field; model, tier and
+ * instructions use their dedicated fields. Requested flags do not prove the
+ * effective tool inventory or native confinement. */
+export function codexManagedThreadConfiguration(settings: CodexTaskSettings): Readonly<typeof threadControls & { model_reasoning_effort?: string }> {
+  const admitted = codexManagedTaskSettings(settings);
+  return Object.freeze({ ...threadControls,
+    ...(admitted.model.reasoningEffort === null ? {} : { model_reasoning_effort: admitted.model.reasoningEffort }) });
 }
 
 /** account/read identifies ChatGPT, but its pinned Account union cannot
@@ -88,25 +94,37 @@ export function assertCodexManagedAccountResponse(raw: unknown): void {
   boundedText(account.planType, 160);
 }
 
-/** Checks the public effective-config projection before a turn. Fields omitted
- * by that projection cannot establish complete configuration isolation, tool
- * inventory or OS confinement; those remain separate host qualification gates.
- */
-export function assertCodexManagedConfigResponse(raw: unknown, expected: Expected): void {
-  const settings = settingsSnapshot(expected.settings); expectedPath(expected.cwd);
+/** Checks only the persistent baseline's public config/read projection before
+ * thread creation. Task overlays are not applied yet. Omitted projection fields
+ * cannot prove isolation or inventory; selected settings are checked against
+ * thread/start separately before any turn. */
+export function assertCodexManagedConfigResponse(raw: unknown, expected: Readonly<{ cwd: string }>): void {
+  expectedPath(expected.cwd);
   const response = record(raw, ["config", "layers", "origins"]), config = record(response.config);
-  if (config.model !== settings.model.id || config.model_provider !== CODEX_MANAGED_PROVIDER
+  if (config.model_provider !== CODEX_MANAGED_PROVIDER
     || config.approval_policy !== "never" || config.sandbox_mode !== "read-only" || config.web_search !== "disabled"
     || config.forced_login_method !== "chatgpt") return fail("CODEX_MANAGED_CONFIG_MISMATCH");
-  observedSetting(config.model_reasoning_effort ?? null, settings.model.reasoningEffort);
-  observedSetting(config.service_tier ?? null, settings.model.serviceTier);
+  // Native defaults may be projected even though these keys are absent from
+  // the account file. These observations are not the requested task settings.
+  for (const field of ["model", "model_reasoning_effort", "service_tier"]) observedSetting(config[field] ?? null, null);
   for (const field of ["instructions", "developer_instructions"]) {
     if (config[field] != null && config[field] !== "") return fail("CODEX_MANAGED_INHERITED_INSTRUCTIONS");
   }
-  if (config.mcp_servers !== undefined && Object.keys(record(config.mcp_servers)).length !== 0) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+  for (const field of ["mcp_servers", "plugins"]) {
+    if (config[field] !== undefined && Object.keys(record(config[field])).length !== 0) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+  }
+  for (const [field, value] of Object.entries({ cli_auth_credentials_store: "file", mcp_oauth_credentials_store: "file",
+    project_doc_max_bytes: 0, check_for_update_on_startup: false, allow_login_shell: false })) {
+    if (config[field] !== undefined && config[field] !== value) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+  }
+  if (config.notify !== undefined && !emptyArray(config.notify)) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+  for (const [section, field, value] of [["shell_environment_policy", "inherit", "none"], ["analytics", "enabled", false],
+    ["feedback", "enabled", false], ["history", "persistence", "none"]] as const) {
+    if (config[section] !== undefined && record(config[section])[field] !== value) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+  }
   if (config.features !== undefined) {
     const features = record(config.features);
-    for (const name of CODEX_DISABLED_FEATURES) if (features[name] !== false) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
+    for (const name of CODEX_MANAGED_ACCOUNT_FEATURES) if (features[name] !== false) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
   }
   const apps = record(config.apps), defaults = record(apps._default);
   if (defaults.enabled !== false || defaults.destructive_enabled !== false || defaults.open_world_enabled !== false
@@ -118,7 +136,7 @@ export function assertCodexManagedConfigResponse(raw: unknown, expected: Expecte
  * observations separately so callers do not mislabel defaults as user intent.
  */
 export function assertCodexManagedThreadResponse(raw: unknown, expected: Expected): CodexManagedObservedSettings {
-  const settings = settingsSnapshot(expected.settings), cwd = expectedPath(expected.cwd);
+  const settings = codexManagedTaskSettings(expected.settings), cwd = expectedPath(expected.cwd);
   const response = record(raw, ["activePermissionProfile", "approvalPolicy", "approvalsReviewer", "cwd", "instructionSources",
     "model", "modelProvider", "multiAgentMode", "reasoningEffort", "runtimeWorkspaceRoots", "sandbox", "serviceTier", "thread"]);
   const sandbox = record(response.sandbox, ["type", "networkAccess"]);

@@ -1,7 +1,7 @@
 import { assertCapabilityProfile, type CapabilityBroker } from "./capabilities.ts";
-import { canonicalJson, createCodexCapabilityMapping, codexTaskSettings, type CodexTaskSettings } from "./codex-config.ts";
+import { canonicalJson, createCodexCapabilityMapping, type CodexTaskSettings } from "./codex-config.ts";
 import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedThreadResponse,
-  codexManagedTaskConfiguration, type CodexManagedProcessLauncher } from "./codex-managed-config.ts";
+  codexManagedTaskConfiguration, codexManagedTaskSettings, codexManagedThreadConfiguration, type CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 import { CodexManagedCallLedger } from "./codex-managed-ledger.ts";
 import type { CodexProcessHandle, CodexProcessReceipt } from "./codex-process.ts";
 import { codexBounded, codexTaskLimits, type CodexLimits } from "./codex-relay.ts";
@@ -13,7 +13,9 @@ import { boundedText, identifier, object, safeInteger } from "./validation.ts";
 export type CodexManagedSessionLimits = Pick<CodexLimits, "deadlineMs" | "cleanupMs" | "ioMs" | "maxFrames" | "maxFrameBytes">;
 export type CodexManagedSessionReceipt = Readonly<{
   status: "completed" | "failed"; productionQualified: false; exactToolInventoryObserved: false;
-  initialized: boolean; chatgptAccountObserved: boolean; configurationObserved: boolean; threadObserved: boolean; turnCompleted: boolean;
+  initialized: boolean; chatgptAccountObserved: boolean;
+  /** Public config/read baseline projection; excludes the subsequent thread overlay. */
+  configurationObserved: boolean; threadObserved: boolean; turnCompleted: boolean;
   observedSettings: Readonly<{ model: string; reasoningEffort: string | null; serviceTier: string | null }> | null;
   usage: Readonly<{ inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }>;
   calls: ReturnType<CodexManagedCallLedger["receipt"]>; process: CodexProcessReceipt | null;
@@ -52,7 +54,8 @@ export async function runCodexManagedSession(options: {
   const ledger = new CodexManagedCallLedger(mapping, 1024);
   const cancellation = AbortSignal.any([request.signal, ...(options.cancellationSignal ? [options.cancellationSignal] : [])]);
   const controller = new AbortController(), signal = AbortSignal.any([cancellation, controller.signal]);
-  let limits = codexTaskLimits(), settings = options.settings;
+  let limits = codexTaskLimits();
+  let settings: CodexTaskSettings;
   const failures: string[] = [];
   let resolveFatal!: () => void, resolveDone!: () => void;
   const fatal = new Promise<void>(resolve => { resolveFatal = resolve; }), done = new Promise<void>(resolve => { resolveDone = resolve; });
@@ -278,8 +281,11 @@ export async function runCodexManagedSession(options: {
     for (const value of [request.runId, request.accountId, request.workspaceId]) identifier(value);
     boundedText(request.prompt, 512 * 1024);
     safeInteger(request.limits.maxOutputBytes, 1, 64 * 1024 * 1024);
-    settings = codexTaskSettings({ model: options.settings.model, instructions: options.settings.instructions });
-    assert(same(settings.model, request.model) && settings.instructionDigest === options.settings.instructionDigest, "CODEX_MANAGED_SETTINGS_CHANGED");
+    const settingsProperty = Object.getOwnPropertyDescriptor(options, "settings");
+    assert(settingsProperty && "value" in settingsProperty, "CODEX_MANAGED_RECORD_INVALID");
+    settings = codexManagedTaskSettings(settingsProperty.value);
+    assert(same(settings.model, request.model), "CODEX_MANAGED_SETTINGS_CHANGED");
+    const threadConfiguration = codexManagedThreadConfiguration(settings);
     active();
     const remaining = safeInteger(request.executionDeadlineUnixMs - now(), 1, 3_599_999);
     const cleanup = safeInteger(request.cleanupDeadlineUnixMs - request.executionDeadlineUnixMs, 1, 3_599_999);
@@ -301,9 +307,9 @@ export async function runCodexManagedSession(options: {
       await rpc("initialize", { clientInfo: { name: "agentrouter", version: "0.1.0" }, capabilities: { experimentalApi: true } });
       initialized = true; await write({ method: "initialized" });
       assertCodexManagedAccountResponse(await rpc("account/read", { refreshToken: false })); chatgptAccountObserved = true;
-      assertCodexManagedConfigResponse(await rpc("config/read", { cwd: process!.cwd, includeLayers: false }), { settings, cwd: process!.cwd });
+      assertCodexManagedConfigResponse(await rpc("config/read", { cwd: process!.cwd, includeLayers: false }), { cwd: process!.cwd });
       configurationObserved = true;
-      await rpc("thread/start", { model: settings.model.id, modelProvider: "openai", cwd: process!.cwd, approvalPolicy: "never",
+      await rpc("thread/start", { model: settings.model.id, modelProvider: "openai", config: threadConfiguration, cwd: process!.cwd, approvalPolicy: "never",
         sandbox: "read-only", ephemeral: true, environments: [], runtimeWorkspaceRoots: [], selectedCapabilityRoots: [],
         dynamicTools: mapping.tools, baseInstructions: settings.instructions.base, developerInstructions: settings.instructions.developer,
         allowProviderModelFallback: false, ...(settings.model.serviceTier === null ? {} : { serviceTier: settings.model.serviceTier }) });

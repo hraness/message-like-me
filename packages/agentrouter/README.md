@@ -390,11 +390,48 @@ task effort names follow the pinned protocol's bounded string contract, includin
 official Codex app-server's managed ChatGPT authentication. The host must supply
 a `CodexManagedProcessLauncher` that owns the native process and keeps its
 authentication state outside application workspaces. Codex owns sign-in, token
-refresh and provider traffic. This adapter has no API upstream or token input,
-and no native managed launcher is bundled. The launcher receives the original
+refresh and provider traffic. This adapter has no API upstream or token input.
+The launcher receives the original
 runtime request, including its original signal and account lease, plus a separate
 `cancellationSignal`. It must revalidate request authority before preparation and
 native launch; the mirrored IDs and lease grant no separate authority.
+
+`createCodexManagedProcessLauncher()` in `src/codex-managed-process.ts` supplies
+an internal offline process candidate. It requires trusted
+`managed-task-offline-candidate-v1` admission with an explicit mapping from the
+adapter runtime identity to native executable, schema and parent-runtime hashes.
+It checks those declared pins without creating qualification evidence. It is
+absent from the public barrel and default host, and its network-denied policy
+cannot perform provider turns. The separate account device-code network
+admission does not authorize this process.
+
+The host must first close and join account controls, then let `runAgentTask`
+acquire its account lease. The process owner uses that exact lease and the
+existing account marker, fixed configuration and `active.json` lock under the
+same private account state root. It neither creates an account nor acquires a
+second lease. Each run gets a verified immutable executable snapshot, empty
+scratch HOME and cwd, closed environment and durable custody journal. Persistent
+Codex state survives cleanup; contact files remain available only through the
+host broker. Missing or changed configuration is preserved and refused.
+
+Cancellation and the original execution deadline initiate joined cleanup.
+An uncertain launch, process group or descriptor close retains custody. Cleanup
+never signals a numeric process group after its root has been observed exiting.
+The first cleanup deadline is retained across retries; later observed closure
+may complete cleanup without granting another native wait budget. Filesystem
+sync and removal can outlast that deadline, so the retained cleanup promise
+must still join before any lease release. Receipt hash fields remain empty
+until the corresponding snapshots are completed. These synthetic
+custody checks do not prove native tool inventory or auth-home confinement.
+
+Account helpers and managed tasks share one fixed persistent configuration from
+`codex-managed-baseline.ts`. Its version-one bytes remain unchanged across tasks;
+the native owner must refuse a different existing file instead of overwriting it.
+The task session sends its selected model, service tier and instructions through
+dedicated `thread/start` fields. A closed, host-generated `config` overlay keeps
+all task capability denials and supplies a non-null reasoning effort. It accepts
+no caller configuration map. Non-null effort and tier also use explicit turn
+overrides; null values leave native defaults in place.
 
 The adapter defaults to unqualified. `AgentRouter.runTask()` refuses it before
 account acquisition or process launch unless the trusted host supplies current
@@ -402,8 +439,12 @@ qualification for the exact route, runtime and capability profile. Direct
 adapter calls also require qualification and a runtime-admitted request. Synthetic fixtures are not
 qualification evidence and do not enable the route in Textbutler or another app.
 
-The managed session checks ChatGPT account type and native thread settings before
-sending the task. Its bounded callback ledger binds tool starts, broker calls,
+The managed session checks ChatGPT account type, the public baseline configuration
+projection and native thread settings before sending the task. `config/read`
+precedes the thread overlay and does not prove the requested task selections.
+Those selections must match `ThreadStartResponse` before `turn/start`; a mismatch
+stops the session. The requested capability flags still require separate effective
+tool-inventory evidence. Its bounded callback ledger binds tool starts, broker calls,
 results and completions to one thread and turn, rejects duplicates and unsupported
 native operations, and records native token usage with unknown monetary cost.
 Cancellation revokes the broker and joins the process and admitted handlers;
@@ -426,3 +467,5 @@ passed, and root exit, process-group absence and stdio closure were verified.
 The diagnostics made no account, login or turn requests. They establish
 configuration and thread-response compatibility for that binary, not
 authenticated execution or tool confinement.
+Those diagnostics predate the shared-baseline task overlay. The combined path
+still requires native validation against the exact admitted runtime.
