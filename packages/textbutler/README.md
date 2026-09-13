@@ -30,13 +30,20 @@ tests do not attest a signed Mac release or live delivery on a particular accoun
 - `routed-agent.ts`: the concrete Agentrouter consumer, with separate tool-free
   classification and contact-bound composition. Provider qualification still
   applies at the router's execution boundary.
+- `contact-capabilities.ts`: separate managed classifier and reply profiles that
+  reuse the contact file, public web and message-proposal handlers. Closing a
+  profile revokes and joins its admitted handlers. Memory writes recheck contact
+  activity immediately before atomic publication.
 - `enrollment.ts` and `ghostget-owner-read.ts`: explicit owner conversation
   selection, account/participant binding, and bounded context-only history.
 - `host-config.ts`: private owner configuration of the installed Ghostget CLI;
   no account or message reads occur just by loading configuration.
 - `provider-host.ts`: explicit account selection, current model availability,
   credential generation fencing, shared account leases, and optional trusted
-  [managed Codex account controls](../agentrouter/MANAGED-CODEX.md).
+  [managed Codex account controls](../agentrouter/MANAGED-CODEX.md). Its managed
+  task entry joins the exact account controller before the runtime acquires one
+  task lease; owner operations remain busy through task cleanup. Pending sign-in
+  cannot be canceled by a reply, and uncertain cleanup retains recovery state.
 - `automation-owner.ts`: owner-only network setup, exact enrollment identity,
   scoped grants and current provider capabilities.
 - `reply-loop.ts`: incoming-event polling, debounce, takeover cancellation and
@@ -45,6 +52,12 @@ tests do not attest a signed Mac release or live delivery on a particular accoun
   control and foreground daemon service, including bounded asynchronous read jobs.
 - `launch-agent.ts`: explicit per-user background-service install, status and
   uninstall, with exact artifact and loaded-service identity checks.
+
+Managed task wiring is an internal integration seam. It supplies no default
+adapter or qualification and does not make native accounts ready. Activation
+requires a current model catalog and separately qualified classifier and reply
+profiles; the host checks both before granting automation for smart mode. Native
+subscription routing never substitutes a separately billed API account.
 
 ## Run from source
 

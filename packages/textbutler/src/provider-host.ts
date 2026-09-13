@@ -5,7 +5,9 @@ import { createClaudeApiAdapter, type ClaudeApiAdapterOptions } from "../../agen
 import { createFileClaudeApiKeyResolver } from "../../agentrouter/src/claude-credentials.ts";
 import { discoverClaudeModels, type ClaudeModelDiscoveryOptions } from "../../agentrouter/src/claude-api-models.ts";
 import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
-import type { AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
+import type { AccountLease, AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
+import type { CapabilityBroker } from "../../agentrouter/src/capabilities.ts";
+import type { AgentTaskAdapter, AgentTaskRequest, AgentTaskResult } from "../../agentrouter/src/task-runtime.ts";
 import type { ManagedCodexAccountController } from "../../agentrouter/src/codex-account.ts";
 import type { ProviderAccountConfig, HostConfig } from "./host-config.ts";
 import type { ContactSettings } from "./config.ts";
@@ -20,7 +22,9 @@ export interface ProviderHost {
   startLogin(accountId: string, method: "chatgpt" | "chatgptDeviceCode", signal: AbortSignal): Promise<ProviderLoginChallenge>;
   cancelLogin(accountId: string, loginId: string, signal: AbortSignal): Promise<void>;
   logout(accountId: string, signal: AbortSignal): Promise<void>;
-  selection(contact: ContactSettings): Promise<ProviderSelection>;
+  /** Trusted managed execution only; the runtime owns its sole account lease. */
+  runManagedTask(request: AgentTaskRequest, broker: CapabilityBroker): Promise<AgentTaskResult>;
+  selection(contact: ContactSettings, purpose?: "classify" | "respond"): Promise<ProviderSelection>;
   validateAccountChange(previous: ContactSettings, next: { provider: "claude" | "codex"; accountId?: string }): void;
   close(): Promise<void>;
 }
@@ -38,6 +42,8 @@ export function createProviderHost(options: {
   leases: AccountLeaseStore;
   runtimeArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"];
   managedCodex?: ManagedCodexAccountFactory;
+  /** Explicit qualified host adapters, never owner settings or default activation. */
+  taskAdapters?: readonly AgentTaskAdapter[];
   now?: () => number;
 }, dependencies: Dependencies = { createAdapter: createClaudeApiAdapter, discover: discoverClaudeModels }): ProviderHost {
   const accounts: readonly ProviderAccountConfig[] = [
@@ -48,6 +54,29 @@ export function createProviderHost(options: {
   const shutdown = new AbortController(), pending = new Set<Promise<unknown>>();
   const managed = new Map<string, ManagedCodexAccountController>();
   const managedFailures = new Set<string>();
+  const managedSlots = new Map<string, object>(), taskLeases = new Map<string, AccountLease>();
+  let closing: Promise<void> | undefined;
+  // Observe the real runtime acquisition/release, without acquiring another
+  // lease or inferring stopped custody from an exception or expired TTL.
+  const taskRouter = new AgentRouter({ adapters: [], taskAdapters: options.taskAdapters ?? [], now, leases: {
+    acquire(input) { const lease = options.leases.acquire(input); taskLeases.set(input.accountId, lease); return lease; },
+    renew: (lease, at, ttl) => options.leases.renew(lease, at, ttl),
+    release(lease) {
+      const released = options.leases.release(lease), owned = taskLeases.get(lease.accountId);
+      if (released && owned?.provider === lease.provider && owned.owner === lease.owner && owned.generation === lease.generation
+        && owned.expiresAt === lease.expiresAt) taskLeases.delete(lease.accountId);
+      return released;
+    },
+  } });
+  function managedExclusive<T>(id: string, external: AbortSignal, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const signal = AbortSignal.any([external, shutdown.signal]); signal.throwIfAborted();
+    if (managedSlots.has(id)) throw new Error("Managed Codex account is busy.");
+    const slot = Object.freeze({}); managedSlots.set(id, slot);
+    // Publish exclusion before any controller, abort listener or task can reenter.
+    const task = Promise.resolve().then(() => { signal.throwIfAborted(); return work(signal); });
+    pending.add(task);
+    return task.finally(() => { pending.delete(task); if (managedSlots.get(id) === slot) managedSlots.delete(id); });
+  }
   const managedAccount = (id: string): ManagedCodexAccountController => {
     if (shutdown.signal.aborted || !options.managedCodex || managedFailures.has(id)
       || !accounts.some(account => account.id === id && account.route === "codex")) throw new Error("Managed Codex account controls are unavailable.");
@@ -61,9 +90,10 @@ export function createProviderHost(options: {
     } catch { managedFailures.add(id); throw new Error("Managed Codex account setup needs recovery."); }
   };
   async function managedOperation<T>(id: string, external: AbortSignal, work: (controller: ManagedCodexAccountController, signal: AbortSignal) => Promise<T>): Promise<T> {
-    const signal = AbortSignal.any([external, shutdown.signal]); signal.throwIfAborted();
-    const controller = managedAccount(id);
-    const task = Promise.resolve().then(() => { signal.throwIfAborted(); return work(controller, signal); }).catch(async error => {
+    return managedExclusive(id, external, async signal => {
+      const controller = managedAccount(id);
+      try { const result = await work(controller, signal); signal.throwIfAborted(); return result; }
+      catch (error) {
       // An interrupted login may still be polling natively. Retire this exact
       // controller only after joined cleanup; never retry the owner's operation.
       if (controller.snapshot().state === "recovery-required") {
@@ -73,11 +103,9 @@ export function createProviderHost(options: {
             && managed.get(id) === controller) managed.delete(id);
         } catch { /* Keep custody and its visible recovery state for host close. */ }
       }
-      throw error;
+        throw error;
+      }
     });
-    pending.add(task);
-    try { const result = await task; signal.throwIfAborted(); return result; }
-    finally { pending.delete(task); }
   }
   const credentials = createFileClaudeApiKeyResolver({ directory: join(options.dataDir, "state", "provider-credentials"),
     bindings: Object.fromEntries(accounts.filter((account): account is ProviderAccountConfig & { route: "claude-api" } => account.route === "claude-api").map(account => [account.id, account.credentialFile])) });
@@ -157,7 +185,7 @@ export function createProviderHost(options: {
       const provider = account.route === "codex" ? "codex" as const : "claude" as const;
       if (account.route === "codex" && options.managedCodex) {
         const snapshot = managed.get(account.id)?.snapshot();
-        const state = shutdown.signal.aborted ? "closed" as const : managedFailures.has(account.id) ? "recovery-required" as const : snapshot?.state ?? "unchecked" as const;
+        const state = managedFailures.has(account.id) ? "recovery-required" as const : shutdown.signal.aborted ? "closed" as const : snapshot?.state ?? "unchecked" as const;
         const details = {
           unchecked: "Check or sign in to this Codex subscription account. Automatic replies still require an admitted response engine.",
           "signed-out": "Sign in with ChatGPT to connect your Codex subscription.",
@@ -189,6 +217,40 @@ export function createProviderHost(options: {
     startLogin: (id, method, signal) => managedOperation(id, signal, async (controller, scoped) => parseProviderLoginChallenge(await controller.startLogin(method, scoped))),
     cancelLogin: (id, loginId, signal) => managedOperation(id, signal, async (controller, scoped) => { await controller.cancelLogin(loginId, scoped); }),
     logout: (id, signal) => managedOperation(id, signal, async (controller, scoped) => { await controller.logout(scoped); }),
+    async runManagedTask(input, broker) {
+      let delegated = false;
+      try {
+        const request = snapshotTaskRequest(input), id = request.accountId;
+        if (request.route.provider !== "codex" || request.route.authentication !== "subscription"
+          || !options.managedCodex || managedFailures.has(id) || !accounts.some(account => account.id === id && account.route === "codex"))
+          throw new Error("Managed Codex task route is unavailable.");
+        return await managedExclusive(id, request.signal, async signal => {
+          delegated = true;
+          try {
+            const controller = managed.get(id);
+            if (controller) {
+              const snapshot = controller.snapshot();
+              if (snapshot.pendingLoginId !== null || snapshot.state === "signing-in") throw new Error("Managed Codex sign-in is pending.");
+              if (snapshot.state === "recovery-required") throw new Error("Managed Codex account needs recovery.");
+              try {
+                const receipt = await controller.close();
+                if (receipt.released !== true || receipt.state !== "closed" || controller.snapshot().state !== "closed" || managed.get(id) !== controller)
+                  throw new Error("Managed Codex account handoff needs recovery.");
+              } catch {
+                managedFailures.add(id);
+                throw new Error("Managed Codex account handoff needs recovery.");
+              }
+              managed.delete(id);
+            }
+            signal.throwIfAborted();
+            return await taskRouter.runTask(Object.freeze({ ...request, signal }), broker);
+          } finally {
+            if (taskLeases.has(id)) managedFailures.add(id);
+            await broker.close();
+          }
+        });
+      } finally { if (!delegated) await broker.close(); }
+    },
     async selection(contact) {
       const account = accounts.find(account => account.id === contact.accountId);
       if (!account || account.route !== "claude-api" || contact.provider !== "claude" || shutdown.signal.aborted) throw new Error("The selected coding-agent account is unavailable; no API substitution is permitted.");
@@ -203,10 +265,41 @@ export function createProviderHost(options: {
       if (next.accountId !== undefined && ((!account && id !== previous.accountId) || account && (account.route === "codex" ? "codex" : "claude") !== next.provider)) throw new Error("Choose a configured account for this provider.");
       if (account?.route === "claude-api" && next.accountId === undefined && previous.provider !== next.provider) throw new Error("Choose the Claude API account explicitly; changing provider alone does not authorize API billing.");
     },
-    async close() {
-      shutdown.abort(); await Promise.allSettled([...pending]);
-      const receipts = await Promise.allSettled([...managed.values()].map(controller => controller.close()));
-      if (receipts.some(result => result.status === "rejected" || !result.value.released)) throw new Error("Managed Codex account process recovery is required.");
+    close() {
+      if (closing) return closing;
+      const task = Promise.resolve().then(async () => {
+        await Promise.allSettled([...pending]);
+        const controllers = [...managed.values()];
+        const receipts = await Promise.allSettled(controllers.map(async controller => {
+          const receipt = await controller.close();
+          return receipt.released === true && receipt.state === "closed" && controller.snapshot().state === "closed";
+        }));
+        if (taskLeases.size || receipts.some(result => result.status === "rejected" || result.value !== true))
+          throw new Error("Managed Codex account process recovery is required.");
+      });
+      closing = task;
+      void task.catch(() => { if (closing === task) closing = undefined; });
+      // Publish before synchronous cancellation callbacks can call close again.
+      shutdown.abort(); return closing;
     },
   };
+}
+
+/** Keep queued handoff identity fixed while the old controller joins. Runtime
+ * still performs complete task validation before its single lease acquisition. */
+function snapshotTaskRequest(input: AgentTaskRequest): AgentTaskRequest {
+  function copy<T extends object>(value: T, keys: readonly string[]): T {
+    if (!value || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw Error("MANAGED_TASK_REQUEST_INVALID");
+    const own = Reflect.ownKeys(value);
+    if (own.length !== keys.length || own.some(key => typeof key !== "string" || !keys.includes(key))) throw Error("MANAGED_TASK_REQUEST_INVALID");
+    const result: Record<string, unknown> = {};
+    for (const key of keys) { const field = Object.getOwnPropertyDescriptor(value, key);
+      if (!field || !field.enumerable || !("value" in field)) throw Error("MANAGED_TASK_REQUEST_INVALID"); result[key] = field.value;
+    }
+    return Object.freeze(result) as T;
+  }
+  const value = copy(input, ["route", "accountId", "workspaceId", "runId", "profile", "model", "purpose", "prompt", "limits", "signal"]);
+  if (!(value.signal instanceof AbortSignal)) throw Error("MANAGED_TASK_SIGNAL_INVALID");
+  return Object.freeze({ ...value, route: copy(value.route, ["id", "provider", "authentication"]), profile: copy(value.profile, ["id", "version", "digest"]),
+    model: copy(value.model, ["id", "reasoningEffort", "serviceTier"]), limits: copy(value.limits, ["maxRunMs", "maxCleanupMs", "maxOutputBytes"]) });
 }

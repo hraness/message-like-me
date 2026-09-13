@@ -39,7 +39,10 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
   const contacts = new Map<string, ContactLoop>(), work = new Set<Promise<unknown>>();
   const workspace = (id: string) => ContactWorkspace.create(join(service.dataDir, "contacts", id));
   const active = (id: string, revision: number) => !closed && !settings.paused && settings.contacts.some(contact => contact.id === id && contact.enabled && contact.revision === revision && contact.pausedUntil <= now());
-  const agent = options.agent ?? (service.providers ? createRoutedButlerAgent({ router: service.providers.router, selection: contact => service.providers!.selection(contact), getWorkspace: workspace, hooks, isActive: active, now }) : {
+  const agent = options.agent ?? (service.providers ? createRoutedButlerAgent({ router: service.providers.router,
+    selection: (contact, purpose) => service.providers!.selection(contact, purpose),
+    runManagedTask: (request, broker) => service.providers!.runManagedTask(request, broker),
+    getWorkspace: workspace, hooks, isActive: active, now }) : {
     async qualified() { return false; }, async classify() { throw new Error("Agent setup required"); }, async compose() { throw new Error("Agent setup required"); },
   });
   const changed = (next: Settings) => {
