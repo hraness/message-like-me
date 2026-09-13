@@ -16,8 +16,32 @@ export function digest(value: unknown, length = 64): string { requireValue(typeo
 const COMMAND_STAGES = ["command", "unsigned-archive-extract", "keychain-create", "keychain-configure", "keychain-unlock", "certificate-import", "keychain-partition", "notary-store-credentials", "signing-identity", "runtime-sign", "app-sign", "signature-verify", "notary-archive", "notary-submit", "notary-wait", "staple", "staple-validate", "signed-archive", "keychain-delete"] as const;
 const COMMAND_SIGNALS = ["SIGABRT", "SIGALRM", "SIGBUS", "SIGFPE", "SIGHUP", "SIGILL", "SIGINT", "SIGKILL", "SIGPIPE", "SIGQUIT", "SIGSEGV", "SIGSYS", "SIGTERM", "SIGTRAP", "SIGXCPU", "SIGXFSZ"] as const;
 const COMMAND_ERROR_CODES = ["E2BIG", "EACCES", "EAGAIN", "EINVAL", "EISDIR", "ELOOP", "EMFILE", "ENAMETOOLONG", "ENFILE", "ENOBUFS", "ENOENT", "ENOEXEC", "ENOMEM", "ENOTDIR", "EPERM", "ETIMEDOUT", "ERR_INVALID_ARG_TYPE", "ERR_INVALID_ARG_VALUE", "ERR_OUT_OF_RANGE"] as const;
+const NOTARY_HTTP_STATUSES = Object.freeze(["401", "403", "404", "429", "500", "502", "503"] as const);
+// Exact literals observed in Apple's notarytool 1.1.2 (41), in priority order.
+const NOTARY_ERROR_DIAGNOSTICS = Object.freeze([
+  ["notary-agreements-required", ["FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED"]],
+  ["notary-team-inaccessible", ["Invalid or inaccessible developer team ID for the provided Apple ID."]],
+  ["notary-keychain-error", ["An error occurred while accessing the keychain.", 'Could not open keychain "']],
+  ["notary-credential-validation-failed", ["Credential validation failed. Please verify your inputs."]],
+  ["notary-http-error-without-details", ["HTTP Error response was missing error details."]],
+] as const);
 export type CommandStage = typeof COMMAND_STAGES[number];
-type CommandFailureDetails = Readonly<{ stage: CommandStage; status: number | null; signal: typeof COMMAND_SIGNALS[number] | null; code: typeof COMMAND_ERROR_CODES[number] | null; diagnostic: "notary-http-401" | null }>;
+type CommandFailureDetails = Readonly<{ stage: CommandStage; status: number | null; signal: typeof COMMAND_SIGNALS[number] | null; code: typeof COMMAND_ERROR_CODES[number] | null; diagnostic: `notary-http-${typeof NOTARY_HTTP_STATUSES[number]}` | typeof NOTARY_ERROR_DIAGNOSTICS[number][0] | null }>;
+function notaryDiagnostic(stderr: unknown, stdout: unknown): CommandFailureDetails["diagnostic"] {
+  const streams: string[] = [];
+  for (const output of [stderr, stdout]) {
+    if (output === undefined) continue;
+    // An oversized or unavailable stream could hide a contradictory status.
+    if (!Buffer.isBuffer(output) || output.length > 65_536) return null;
+    streams.push(output.toString("utf8"));
+  }
+  const statuses = [...new Set(streams.flatMap(output => [...output.matchAll(/HTTP status code: ([0-9]{3})\.(?:[ \t\r\n]|$)/gu)].map(match => match[1]!)))];
+  if (statuses.length > 0) {
+    const status = statuses.length === 1 ? NOTARY_HTTP_STATUSES.find(allowed => allowed === statuses[0]) : undefined;
+    return status === undefined ? null : `notary-http-${status}`;
+  }
+  return NOTARY_ERROR_DIAGNOSTICS.find(([, literals]) => streams.some(output => literals.some(literal => output.includes(literal))))?.[0] ?? null;
+}
 function commandErrorCode(error: unknown): CommandFailureDetails["code"] {
   // Spawn exceptions can be arbitrary values. Never coerce them or retain a cause.
   try {
@@ -27,11 +51,10 @@ function commandErrorCode(error: unknown): CommandFailureDetails["code"] {
 }
 export class DistributionCommandError extends Error {
   readonly details: CommandFailureDetails;
-  constructor(stage: CommandStage, status: unknown, signal: unknown, error: unknown, stderr?: unknown) {
+  constructor(stage: CommandStage, status: unknown, signal: unknown, error: unknown, stderr?: unknown, stdout?: unknown) {
     // Literal documented at https://github.com/electron/notarize#validating-credentials.
-    // This reports an observed HTTP code, not a guessed reason or a retry decision.
-    const diagnostic = stage === "notary-store-credentials" && status === 1 && signal === null && error === undefined && Buffer.isBuffer(stderr) && stderr.length <= 65_536
-      && /Error: HTTP status code: 401\.(?:[ \t\r\n]|$)/u.test(stderr.toString("utf8")) ? "notary-http-401" : null;
+    // Labels report observed tool diagnostics, never inferred causes or retry decisions.
+    const diagnostic = stage === "notary-store-credentials" && status === 1 && signal === null && error === undefined ? notaryDiagnostic(stderr, stdout) : null;
     const details = Object.freeze({ stage: COMMAND_STAGES.find(allowed => allowed === stage) ?? "command", status: typeof status === "number" && Number.isSafeInteger(status) && status >= 0 ? status : null, signal: COMMAND_SIGNALS.find(allowed => allowed === signal) ?? null, code: commandErrorCode(error), diagnostic });
     super(`Distribution command failed: ${JSON.stringify(details)}`);
     this.name = "DistributionCommandError";
@@ -46,7 +69,7 @@ export function command(program: string, args: readonly string[], options: { sta
     result = spawnSync(program, args, { shell: false, cwd: options.cwd, env: options.environment ?? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, input: options.input, stdio: ["pipe", "pipe", "pipe"], timeout: options.timeout ?? 30_000, killSignal: "SIGKILL", maxBuffer: options.maximum ?? 1024 * 1024 });
   } catch (error) { throw new DistributionCommandError(stage, null, null, error); }
   // Signing commands can contain passwords. Only fixed labels and numeric status escape.
-  if (result.error !== undefined || result.status !== 0 || result.signal !== null) throw new DistributionCommandError(stage, result.status, result.signal, result.error, result.stderr);
+  if (result.error !== undefined || result.status !== 0 || result.signal !== null) throw new DistributionCommandError(stage, result.status, result.signal, result.error, result.stderr, result.stdout);
   return result.stdout;
 }
 export function readPhysical(path: string, maximum = 512 * 1024 * 1024): Buffer {
