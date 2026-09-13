@@ -21,7 +21,7 @@ export type CodexAccountRuntimeAdmission = Readonly<{
  * these distribution pins. JSON shape/pin matching is not provenance, a native
  * network proof, or permission for model execution. Never load from owner JSON. */
 export type CodexAccountDeviceCodeAdmission = Readonly<{
-  profile: "codex-account-device-code-tcp443-dns-v1";
+  profile: "codex-account-device-code-tcp443-dns-v1" | "codex-account-device-code-tcp443-dns-v2";
   nativeSha256: string; schemaSha256: string; parentSha256: string;
 }>;
 export type CodexAccountProcessOptions = Readonly<{
@@ -43,7 +43,7 @@ export interface CodexAccountProcessSystem {
 }
 export type CodexAccountProcessReceipt = Readonly<{
   schema: "agentrouter.codex-account-process.v1"; binding: CodexAccountBinding;
-  productionQualified: false; network: "denied" | "tcp443-system-resolver-candidate"; nativeVersion: string;
+  productionQualified: false; network: "denied" | "tcp443-system-resolver-candidate" | "tcp443-system-resolver-var-metadata-candidate"; nativeVersion: string;
   nativeSha256: string; schemaSha256: string; parentSha256: string;
   configurationSha256: string; profileSha256: string | null;
   journalPath: string | null; launchAttempted: boolean; pid: number | null; pgid: number | null;
@@ -112,6 +112,12 @@ export function codexAccountDeviceCodeSandbox(input: { executable: string; scrat
   return codexAccountOfflineSandbox(input)
     + '(allow network-outbound (literal "/private/var/run/mDNSResponder") (remote tcp "*:443"))\n';
 }
+/** Separate candidate admission: preserve v1 and add metadata for the /var
+ * symlink used by the system resolver. This grants no file contents, additional
+ * network destinations or services. DNS evidence does not qualify sign-in. */
+export function codexAccountDeviceCodeV2Sandbox(input: { executable: string; scratch: string; accountHome: string }): string {
+  return codexAccountDeviceCodeSandbox(input) + '(allow file-read-metadata (literal "/var"))\n';
+}
 async function directory(value: string): Promise<BigIntStats> {
   const metadata = await lstat(value, { bigint: true });
   assert(await realpath(value) === value && metadata.isDirectory() && metadata.uid === BigInt(process.getuid!()) && (metadata.mode & 0o7777n) === 0o700n, "CODEX_ACCOUNT_PROCESS_PRIVATE_DIRECTORY_REQUIRED");
@@ -158,11 +164,19 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
   const parentRaw = object(admission.parentRuntime, ["expectedSha256"]), parentRuntime = Object.freeze({ expectedSha256: digest(parentRaw.expectedSha256) });
   const runtime = Object.freeze({ executablePath: path(admission.executablePath), version: identifier(admission.version), sha256: digest(admission.sha256), schemaSha256: digest(admission.schemaSha256), parentRuntime });
   const deviceCode = raw.mode === "device-code";
+  let networkProfile: CodexAccountDeviceCodeAdmission["profile"] | undefined;
   if (deviceCode) {
     const network = object(raw.deviceCodeAdmission, ["profile", "nativeSha256", "schemaSha256", "parentSha256"]);
-    assert(network.profile === "codex-account-device-code-tcp443-dns-v1" && digest(network.nativeSha256) === runtime.sha256
+    const profile = network.profile;
+    if (profile !== "codex-account-device-code-tcp443-dns-v1" && profile !== "codex-account-device-code-tcp443-dns-v2") throw new Error("CODEX_ACCOUNT_PROCESS_NETWORK_ADMISSION_MISMATCH");
+    assert(digest(network.nativeSha256) === runtime.sha256
       && digest(network.schemaSha256) === runtime.schemaSha256 && digest(network.parentSha256) === runtime.parentRuntime.expectedSha256, "CODEX_ACCOUNT_PROCESS_NETWORK_ADMISSION_MISMATCH");
+    networkProfile = profile;
   } else assert(!Object.hasOwn(raw, "deviceCodeAdmission"), "CODEX_ACCOUNT_PROCESS_NETWORK_ADMISSION_UNEXPECTED");
+  const selectedProfile = networkProfile === "codex-account-device-code-tcp443-dns-v2" ? codexAccountDeviceCodeV2Sandbox
+    : networkProfile === "codex-account-device-code-tcp443-dns-v1" ? codexAccountDeviceCodeSandbox : codexAccountOfflineSandbox;
+  const network: CodexAccountProcessReceipt["network"] = networkProfile === "codex-account-device-code-tcp443-dns-v2" ? "tcp443-system-resolver-var-metadata-candidate"
+    : networkProfile === "codex-account-device-code-tcp443-dns-v1" ? "tcp443-system-resolver-candidate" : "denied";
   const startupMs = safeInteger(raw.startupTimeoutMs ?? 10_000, 1, 120_000), startupDeadline = Date.now() + startupMs;
   const host = Object.freeze({ inspectParent: trustedSystem.inspectParent.bind(trustedSystem), spawn: trustedSystem.spawn.bind(trustedSystem), processGroup: trustedSystem.processGroup.bind(trustedSystem), signalGroup: trustedSystem.signalGroup.bind(trustedSystem) });
   const configuration = codexAccountOfflineConfiguration();
@@ -179,7 +193,7 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
     if (!child || closing || state.phase !== "running") { done(new Error("CODEX_ACCOUNT_PROCESS_STDIN_UNAVAILABLE")); return; }
     try { child.stdin.write(chunk, done); } catch { done(new Error("CODEX_ACCOUNT_PROCESS_STDIN_FAILED")); }
   } }); stdin.on("error", () => {});
-  const receipt = (): CodexAccountProcessReceipt => Object.freeze({ schema: "agentrouter.codex-account-process.v1", binding: owned, productionQualified: false, network: deviceCode ? "tcp443-system-resolver-candidate" : "denied", nativeVersion: runtime.version,
+  const receipt = (): CodexAccountProcessReceipt => Object.freeze({ schema: "agentrouter.codex-account-process.v1", binding: owned, productionQualified: false, network, nativeVersion: runtime.version,
     nativeSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentSha256: runtime.parentRuntime.expectedSha256, configurationSha256: hash(configuration), ...state, failures: Object.freeze([...failures]) });
   function recordFailure(code: string) { if (failures.size < 24) failures.add(code); }
   function persist() {
@@ -237,7 +251,7 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
       } finally { await target.close(); }
     } finally { await source.close(); }
     await inspectCodexHostExecutable(executable, runtime.sha256);
-    const profile = (deviceCode ? codexAccountDeviceCodeSandbox : codexAccountOfflineSandbox)({ executable, scratch, accountHome }); state.profileSha256 = hash(profile);
+    const profile = selectedProfile({ executable, scratch, accountHome }); state.profileSha256 = hash(profile);
     const profilePath = join(root, "sandbox.sb"); await durableFile(profilePath, profile); await syncDirectory(runtimeRoot);
     await fixedFile(join(accountHome, "config.toml"), configuration, false); await directory(accountHome); await directory(scratch); alivePreparation();
     alivePreparation(); state.phase = "launch-pending"; state.launchAttempted = true; persist();

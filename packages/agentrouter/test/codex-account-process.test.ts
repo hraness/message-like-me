@@ -9,7 +9,7 @@ import { PassThrough, Writable } from "node:stream";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { CodexAccountBinding } from "../src/codex-account.ts";
 import type { CodexHostRuntime } from "../src/codex-host.ts";
-import { codexAccountDeviceCodeSandbox, codexAccountOfflineConfiguration, codexAccountOfflineSandbox, createCodexAccountProcess, type CodexAccountOwnedProcessPort, type CodexAccountProcessOptions, type CodexAccountProcessSystem, type CodexAccountSpawn } from "../src/codex-account-process.ts";
+import { codexAccountDeviceCodeSandbox, codexAccountDeviceCodeV2Sandbox, codexAccountOfflineConfiguration, codexAccountOfflineSandbox, createCodexAccountProcess, type CodexAccountDeviceCodeAdmission, type CodexAccountOwnedProcessPort, type CodexAccountProcessOptions, type CodexAccountProcessSystem, type CodexAccountSpawn } from "../src/codex-account-process.ts";
 
 const sha = (input: string) => createHash("sha256").update(input).digest("hex");
 const binding: CodexAccountBinding = { accountId: "synthetic-account", owner: "synthetic-owner", leaseGeneration: 2, processGeneration: 3 };
@@ -64,8 +64,8 @@ async function fixture(input: {
 function expectJoined(result: Awaited<ReturnType<CodexAccountOwnedProcessPort["stopAndJoin"]>>, expected = binding) {
   expect(result).toEqual({ binding: expected, processExited: true, processGroupStopped: true, stdoutEnded: true, stderrEnded: true });
 }
-function deviceCodeOptions(f: Awaited<ReturnType<typeof fixture>>) {
-  return { mode: "device-code" as const, deviceCodeAdmission: { profile: "codex-account-device-code-tcp443-dns-v1" as const,
+function deviceCodeOptions(f: Awaited<ReturnType<typeof fixture>>, profile: CodexAccountDeviceCodeAdmission["profile"] = "codex-account-device-code-tcp443-dns-v1") {
+  return { mode: "device-code" as const, deviceCodeAdmission: { profile,
     nativeSha256: f.options.runtime.sha256, schemaSha256: schemaSha, parentSha256: parentSha } };
 }
 
@@ -276,6 +276,56 @@ test("explicit device-code admission adds exactly TCP443 and resolver access whi
   expect(snapshots.find(value => value.phase === "launch-pending")).toMatchObject({ pid: null, launchAttempted: true, profileSha256: sha(profile) });
 });
 
+test("explicit v2 device-code admission adds only the reviewed var metadata rule", async () => {
+  const f = await fixture(), port = f.create(deviceCodeOptions(f, "codex-account-device-code-tcp443-dns-v2"));
+  await port.ready;
+  const request = f.spawns[0]!, profile = await readFile(request.args[1]!, "utf8");
+  const v1 = codexAccountDeviceCodeSandbox({ executable: request.args[2]!, scratch: dirname(request.cwd), accountHome: request.env.CODEX_HOME! });
+  expect(profile).toBe(v1 + '(allow file-read-metadata (literal "/var"))\n');
+  expect(port.receipt()).toMatchObject({ network: "tcp443-system-resolver-var-metadata-candidate", productionQualified: false,
+    profileSha256: sha(profile) });
+  expect(request.args.slice(3)).toEqual(["app-server", "--strict-config", "--listen", "stdio://"]);
+  expect(Object.keys(request.env).sort()).toEqual(["CODEX_HOME", "CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED", "HOME", "NO_COLOR", "PATH", "TMPDIR"]);
+  expect(await readFile(join(request.env.CODEX_HOME!, "config.toml"), "utf8")).toBe(codexAccountOfflineConfiguration());
+  expect(f.writes).toEqual([]);
+  expectJoined(await f.stop(port));
+  const snapshots = (await readFile(port.receipt().journalPath!, "utf8")).trim().split("\n").map(line => JSON.parse(line).snapshot);
+  expect(snapshots.every(value => value.schema === "agentrouter.codex-account-process.v1" && value.productionQualified === false
+    && value.network === "tcp443-system-resolver-var-metadata-candidate")).toBe(true);
+});
+
+test("v1 policy and baseline bytes stay pinned while v2 matches the reviewed DNS-only delta", () => {
+  const paths = { executable: "/DNS_PROBE_EXECUTABLE", scratch: "/DNS_PROBE_SCRATCH", accountHome: "/DNS_PROBE_ACCOUNT_HOME" };
+  const v1 = codexAccountDeviceCodeSandbox(paths), v2 = codexAccountDeviceCodeV2Sandbox(paths);
+  expect(sha(v1)).toBe("15d755e84c3dd59457355d7e14cb0d32eff68c1a9b14f2f8bbcf14538f8b2126");
+  expect(sha(v2)).toBe("8d89f5860de208f9e95a04d513cf840f600ad3f24d0381d6cdd4bf3a3bfd3e2d");
+  expect(sha(codexAccountOfflineConfiguration())).toBe("9833be747176d26b0915621439e2cbea1bff12aeca6f7854e45265777bb98ae8");
+  expect(v1).toBe(codexAccountOfflineSandbox(paths) + '(allow network-outbound (literal "/private/var/run/mDNSResponder") (remote tcp "*:443"))\n');
+  expect(v2).toBe(v1 + '(allow file-read-metadata (literal "/var"))\n');
+  expect(codexAccountOfflineSandbox(paths)).not.toContain('(literal "/var")');
+});
+
+test("v2 admission remains closed and is captured before asynchronous preparation", async () => {
+  const parent = deferred<CodexHostRuntime>(), f = await fixture({ parent: parent.promise });
+  const selected = deviceCodeOptions(f, "codex-account-device-code-tcp443-dns-v2");
+  let accessed = false;
+  const accessor = { ...selected.deviceCodeAdmission };
+  Object.defineProperty(accessor, "profile", { get() { accessed = true; return selected.deviceCodeAdmission.profile; } });
+  expect(() => f.create({ ...selected, deviceCodeAdmission: accessor })).toThrow("ACCESSOR_DENIED"); expect(accessed).toBe(false);
+  for (const key of ["nativeSha256", "schemaSha256", "parentSha256"] as const) {
+    expect(() => f.create({ ...selected, deviceCodeAdmission: { ...selected.deviceCodeAdmission, [key]: sha("stale") } })).toThrow("NETWORK_ADMISSION_MISMATCH");
+  }
+  expect(() => f.create({ mode: "offline", deviceCodeAdmission: selected.deviceCodeAdmission } as any)).toThrow("NETWORK_ADMISSION_UNEXPECTED");
+  expect(() => f.create({ ...selected, deviceCodeAdmission: { ...selected.deviceCodeAdmission, fallback: "v1" } } as any)).toThrow("UNKNOWN_FIELD");
+  expect(f.spawns).toEqual([]); expect(await readdir(f.stateRoot)).toEqual([]);
+  const port = f.create(selected);
+  selected.deviceCodeAdmission.profile = "codex-account-device-code-tcp443-dns-v1";
+  parent.resolve(f.parent); await port.ready;
+  const request = f.spawns[0]!;
+  expect(await readFile(request.args[1]!, "utf8")).toBe(codexAccountDeviceCodeV2Sandbox({ executable: request.args[2]!, scratch: dirname(request.cwd), accountHome: request.env.CODEX_HOME! }));
+  expect(port.receipt().network).toBe("tcp443-system-resolver-var-metadata-candidate"); expectJoined(await f.stop(port));
+});
+
 test("device-code mode requires separate admission and offline mode never accepts a network activation input", async () => {
   const f = await fixture(), device = deviceCodeOptions(f);
   expect(() => f.create({ mode: "device-code" } as any)).toThrow();
@@ -326,6 +376,8 @@ test("an uncertain device-code launcher cannot release or relabel its admitted c
 });
 
 test("device-code policy generation preserves the offline path-confinement validation", () => {
-  for (const executable of ["/private/account/codex", "/private/scratch/codex"]) expect(() => codexAccountDeviceCodeSandbox({ executable, scratch: "/private/scratch", accountHome: "/private/account" })).toThrow("LAYOUT_INVALID");
-  expect(() => codexAccountDeviceCodeSandbox({ executable: "/private/runtime/codex", scratch: "/private/scratch", accountHome: '/private/account"' })).toThrow("PATH_INVALID");
+  for (const generate of [codexAccountDeviceCodeSandbox, codexAccountDeviceCodeV2Sandbox]) {
+    for (const executable of ["/private/account/codex", "/private/scratch/codex"]) expect(() => generate({ executable, scratch: "/private/scratch", accountHome: "/private/account" })).toThrow("LAYOUT_INVALID");
+    expect(() => generate({ executable: "/private/runtime/codex", scratch: "/private/scratch", accountHome: '/private/account"' })).toThrow("PATH_INVALID");
+  }
 });
