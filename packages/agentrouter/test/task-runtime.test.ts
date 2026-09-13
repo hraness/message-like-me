@@ -44,7 +44,8 @@ describe("generic task admission", () => {
     try {
       const old = f.leases.acquire({ provider: "codex", accountId: f.request.accountId, owner: "previous-run", now: 0, ttlMs: 1_000 });
       expect(f.leases.release(old)).toBe(true);
-      let acquisitions = 0, seen: unknown, stopLease: unknown;
+      let acquisitions = 0, stopLease: unknown;
+      let seen!: AgentTaskExecutionRequest["accountLease"];
       const acquire = f.leases.acquire.bind(f.leases);
       f.leases.acquire = input => { acquisitions++; return acquire(input); };
       f.adapter.run = async r => { seen = r.accountLease;
