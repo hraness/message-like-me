@@ -116,6 +116,75 @@ test("native notifications expose only bounded account events and never email, t
   } finally { expect((await f.close()).notificationsSettled).toBe(true); }
 });
 
+const disabledRemoteControl = { status: "disabled", installationId: "00000000-0000-4000-8000-000000000001", serverName: "synthetic-host" };
+test.each([{}, { environmentId: null }, { environmentId: "synthetic-environment" }])(
+  "disabled remote-control notice preserves pending account read without exposing identity %#", async optional => {
+    const held = deferred<Message>(), f = fixture({ handle(message) { held.resolve(message); } });
+    try {
+      const call = f.transport.accountRead({ ...f.request(), refreshToken: false }), message = await held.promise;
+      f.emit({ method: "remoteControl/status/changed", params: { ...disabledRemoteControl, ...optional } });
+      expect(f.events).toEqual([]); expect(f.stops()).toBe(0);
+      f.emit({ id: message.id, result: { requiresOpenaiAuth: true, account: null } });
+      const response = await call;
+      expect(response).toEqual({ binding, accountGeneration: 7, value: { requiresOpenaiAuth: true, account: null } });
+      expect(f.messages.map(message => message.method)).toEqual(["initialize", "initialized", "account/read"]);
+      expect(f.events).toEqual([]);
+      expect(JSON.stringify({ response, events: f.events, messages: f.messages })).not.toContain(disabledRemoteControl.installationId);
+      expect(JSON.stringify({ response, events: f.events, messages: f.messages })).not.toContain(disabledRemoteControl.serverName);
+      expect(JSON.stringify({ response, events: f.events, messages: f.messages })).not.toContain("synthetic-environment");
+    } finally { expect((await f.close()).notificationsSettled).toBe(true); }
+  });
+
+test.each([
+  ["connecting", { ...disabledRemoteControl, status: "connecting" }],
+  ["connected", { ...disabledRemoteControl, status: "connected" }],
+  ["errored", { ...disabledRemoteControl, status: "errored" }],
+  ["unknown status", { ...disabledRemoteControl, status: "unknown" }],
+  ["missing status", { installationId: "synthetic", serverName: "synthetic" }],
+  ["nonstring status", { ...disabledRemoteControl, status: null }],
+  ["missing installation", { status: "disabled", serverName: "synthetic" }],
+  ["missing server", { status: "disabled", installationId: "synthetic" }],
+  ["nonstring installation", { ...disabledRemoteControl, installationId: 123 }],
+  ["nonstring server", { ...disabledRemoteControl, serverName: false }],
+  ["nonstring environment", { ...disabledRemoteControl, environmentId: {} }],
+  ["empty installation", { ...disabledRemoteControl, installationId: "" }],
+  ["empty server", { ...disabledRemoteControl, serverName: " " }],
+  ["empty environment", { ...disabledRemoteControl, environmentId: "" }],
+  ["control character", { ...disabledRemoteControl, serverName: "synthetic\nname" }],
+  ["oversized installation", { ...disabledRemoteControl, installationId: "i".repeat(161) }],
+  ["oversized server bytes", { ...disabledRemoteControl, serverName: "🤖".repeat(257) }],
+  ["oversized environment", { ...disabledRemoteControl, environmentId: "e".repeat(161) }],
+  ["unknown field", { ...disabledRemoteControl, enabled: false }],
+  ["nonobject params", null],
+])("rejects remote-control notice with %s and joins pending account work", async (_name, params) => {
+  const held = deferred<Message>(), f = fixture({ handle(message) { held.resolve(message); } });
+  const call = f.transport.accountRead({ ...f.request(), refreshToken: false });
+  const rejected = call.catch(error => error);
+  await held.promise;
+  f.emit({ method: "remoteControl/status/changed", params });
+  await f.stopStarted; expect(await rejected).toBeInstanceOf(Error);
+  expect(f.events).toEqual([{ binding, type: "disconnected" }]);
+  expect(await f.close()).toMatchObject({ processGroupStopped: true, requestsSettled: true, notificationsSettled: true });
+});
+
+test("disabled remote-control frames cannot carry a native request ID", async () => {
+  const f = fixture(); await f.initialized;
+  f.emit({ id: 2, method: "remoteControl/status/changed", params: disabledRemoteControl });
+  await f.stopStarted;
+  expect(f.events).toEqual([{ binding, type: "disconnected" }]);
+  expect(f.messages.map(message => message.method)).toEqual(["initialize", "initialized"]);
+  expect((await f.close()).processGroupStopped).toBe(true);
+});
+
+test("discarded disabled remote-control notices still consume the notification budget", async () => {
+  const f = fixture(); await f.initialized;
+  for (let count = 0; count < 1024; count++) f.emit({ method: "remoteControl/status/changed", params: disabledRemoteControl });
+  expect(f.events).toEqual([]); expect(f.stops()).toBe(0);
+  f.emit({ method: "remoteControl/status/changed", params: disabledRemoteControl });
+  await f.stopStarted; expect(f.events).toEqual([{ binding, type: "disconnected" }]);
+  expect((await f.close()).processGroupStopped).toBe(true);
+});
+
 test.each(["item/tool/call", "account/chatgptAuthTokens/refresh", "attestation/generate", "currentTime/read", "execCommandApproval"])(
   "denies native request %s and stops through its custody port", async method => {
     const f = fixture(); await f.initialized;
