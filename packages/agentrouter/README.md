@@ -391,7 +391,10 @@ official Codex app-server's managed ChatGPT authentication. The host must supply
 a `CodexManagedProcessLauncher` that owns the native process and keeps its
 authentication state outside application workspaces. Codex owns sign-in, token
 refresh and provider traffic. This adapter has no API upstream or token input,
-and no native managed launcher is bundled.
+and no native managed launcher is bundled. The launcher receives the original
+runtime request, including its original signal and account lease, plus a separate
+`cancellationSignal`. It must revalidate request authority before preparation and
+native launch; the mirrored IDs and lease grant no separate authority.
 
 The adapter defaults to unqualified. `AgentRouter.runTask()` refuses it before
 account acquisition or process launch unless the trusted host supplies current

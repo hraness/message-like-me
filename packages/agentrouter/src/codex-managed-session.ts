@@ -40,10 +40,13 @@ export async function runCodexManagedSession(options: {
   /** Host cancellation is separate from the runtime request's identity. */
   cancellationSignal?: AbortSignal;
 }): Promise<{ output: string; receipt: CodexManagedSessionReceipt }> {
-  assertAgentTaskAccountLease(options.request);
-  const request = Object.freeze({ ...options.request, route: Object.freeze({ ...options.request.route }),
-    profile: Object.freeze({ ...options.request.profile }), model: Object.freeze({ ...options.request.model }),
-    runtime: Object.freeze({ ...options.request.runtime }), limits: Object.freeze({ ...options.request.limits }) });
+  const admittedRequest = options.request;
+  assertAgentTaskAccountLease(admittedRequest);
+  // Keep protocol values defensive while preserving the caller's original
+  // runtime request for the native owner's independent provenance checks.
+  const request = Object.freeze({ ...admittedRequest, route: Object.freeze({ ...admittedRequest.route }),
+    profile: Object.freeze({ ...admittedRequest.profile }), model: Object.freeze({ ...admittedRequest.model }),
+    runtime: Object.freeze({ ...admittedRequest.runtime }), limits: Object.freeze({ ...admittedRequest.limits }) });
   const broker = options.broker, mapping = createCodexCapabilityMapping(broker.profile);
   const now = options.now ?? Date.now;
   const ledger = new CodexManagedCallLedger(mapping, 1024);
@@ -287,10 +290,11 @@ export async function runCodexManagedSession(options: {
       && selected.cleanupMs <= request.limits.maxCleanupMs, "CODEX_MANAGED_LIMITS_EXCEED_TASK");
     limits = Object.freeze({ ...selected, deadlineMs: Math.min(selected.deadlineMs, remaining) });
     timer = setTimeout(() => fail("CODEX_MANAGED_EXECUTION_DEADLINE"), limits.deadlineMs);
+    assertAgentTaskAccountLease(admittedRequest);
     assertAgentTaskAccountLease(request);
     launchAttempted = true;
-    process = await options.launcher.launch(Object.freeze({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
-      accountLease: request.accountLease, configuration: codexManagedTaskConfiguration(settings), signal }));
+    process = await options.launcher.launch(Object.freeze({ request: admittedRequest, runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
+      accountLease: request.accountLease, configuration: codexManagedTaskConfiguration(settings), cancellationSignal: signal }));
     process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
     workflow = (async () => {
       await process!.ready; active();
