@@ -1,10 +1,14 @@
+import { Database } from "bun:sqlite";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { constants, closeSync, fsyncSync, openSync, writeSync, type BigIntStats } from "node:fs";
-import { lstat, mkdir, open, opendir, realpath, rm, unlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, opendir, realpath, rm, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { codexManagedAccountConfiguration } from "./codex-managed-baseline.ts";
+import { SqliteAccountLeases, type AccountLease } from "./accounts.ts";
+import { createCodexAccountProcess, type CodexAccountOwnedProcessPort } from "./codex-account-process.ts";
+import { createManagedOfflineProtocol, type OfflineProtocolReceipt } from "./codex-managed-offline-protocol.ts";
 import type { CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 import type { CodexProcessHandle, CodexProcessReceipt } from "./codex-process.ts";
 import { assertCodexHostFileStable, inspectCodexHostExecutable, inspectCodexHostRuntime, type CodexHostRuntime, type CodexParentRuntimeBinding } from "./codex-host.ts";
@@ -32,11 +36,12 @@ export interface CodexManagedProcessSystem {
   /** Host-derived release directory only; defaults to the physical fsync helper. */
   syncDirectory?(path: string): Promise<void>;
 }
-export type CodexManagedProcessReceipt = CodexProcessReceipt & Readonly<{
-  schema: "agentrouter.codex-managed-process.v1"; binding: AgentTaskBinding; processGeneration: number;
+type CoreReceipt<B, S extends string> = CodexProcessReceipt & Readonly<{
+  schema: S; binding: B; processGeneration: number;
   productionQualified: false; network: "denied"; profile: "managed-task-offline-candidate-v1"; schemaSha256: string;
   launchAttempted: boolean; lockReleased: boolean; phase: "preparing" | "launch-pending" | "running" | "release-pending" | "recovery-required" | "closed";
 }>;
+export type CodexManagedProcessReceipt = CoreReceipt<AgentTaskBinding, "agentrouter.codex-managed-process.v1">;
 export interface CodexManagedOwnedProcess extends CodexProcessHandle { receipt(): CodexManagedProcessReceipt; stopAndJoin(): Promise<CodexManagedProcessReceipt> }
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const fail = (code: string): never => { throw new Error(code); };
@@ -163,16 +168,33 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
     const processGeneration = safeInteger(++generation, 1, Number.MAX_SAFE_INTEGER), configuration = codexManagedAccountConfiguration();
     const binding: AgentTaskBinding = Object.freeze({ route: Object.freeze({ ...request.route }), accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
       profile: Object.freeze({ ...request.profile }), model: Object.freeze({ ...request.model }), runtime: Object.freeze({ ...request.runtime }), accountLease: lease });
+    return Promise.resolve(createOwnedCore({ stateRoot, runtime, host, binding, lease, processGeneration, configuration, runId: request.runId,
+      originalSignal, cancellationSignal, startupMs, executionDeadline: request.executionDeadlineUnixMs,
+      outerDeadline: request.cleanupDeadlineUnixMs, maxCleanupMs: request.limits.maxCleanupMs, schema: "agentrouter.codex-managed-process.v1",
+      authority() { assertAgentTaskAccountLease(request); check(request.accountLease === lease && request.signal === originalSignal, "CODEX_MANAGED_PROCESS_BINDING_MISMATCH"); } }));
+  } });
+}
+
+// This ownership core is deliberately not exported. A task can enter only via
+// the original runtime authority checks; diagnostics have a separate fixed entry.
+interface OwnedCore<B, S extends string> extends CodexProcessHandle { receipt(): CoreReceipt<B, S>; stopAndJoin(): Promise<CoreReceipt<B, S>> }
+type ProcessHost = Required<CodexManagedProcessSystem>;
+function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: string; runtime: CodexManagedProcessOptions["runtime"]; host: ProcessHost;
+  binding: B; lease: AccountLease; processGeneration: number; configuration: string; runId: string; schema: S;
+  originalSignal: AbortSignal; cancellationSignal: AbortSignal; startupMs: number; executionDeadline: number; outerDeadline: number; maxCleanupMs: number; authority(): void;
+}>): OwnedCore<B, S> {
+  const { stateRoot, runtime, host, binding, lease, processGeneration, configuration, runId, schema, originalSignal, cancellationSignal,
+    startupMs, executionDeadline, outerDeadline, maxCleanupMs, authority } = input;
     const owned = Object.freeze({ accountId: lease.accountId, owner: lease.owner, leaseGeneration: lease.generation, processGeneration });
     const accountRoot = join(stateRoot, "accounts", lease.accountId), accountHome = join(accountRoot, "codex-home"), runs = join(stateRoot, "runs");
-    const root = join(runs, `task-${request.runId}-${processGeneration}-${randomBytes(12).toString("hex")}`), scratch = join(root, "scratch"), runtimeRoot = join(root, "runtime"), executable = join(runtimeRoot, "codex"), cwd = join(scratch, "work"), custodyPath = join(root, "custody.jsonl"), lockPath = join(accountRoot, "active.json");
+    const root = join(runs, `task-${runId}-${processGeneration}-${randomBytes(12).toString("hex")}`), scratch = join(root, "scratch"), runtimeRoot = join(root, "runtime"), executable = join(runtimeRoot, "codex"), cwd = join(scratch, "work"), custodyPath = join(root, "custody.jsonl"), lockPath = join(accountRoot, "active.json");
     const lockContents = JSON.stringify({ schema: "agentrouter.codex-account-lock.v1", binding: owned, journalPath: custodyPath }) + "\n";
-    const executionDeadline = request.executionDeadlineUnixMs, outerDeadline = request.cleanupDeadlineUnixMs, maxCleanupMs = request.limits.maxCleanupMs, startupDeadline = Math.min(executionDeadline, Date.now() + startupMs);
+    const startupDeadline = Math.min(executionDeadline, Date.now() + startupMs);
     const state = { phase: "preparing" as CodexManagedProcessReceipt["phase"], launchAttempted: false, pid: null as number | null, pgid: null as number | null, rootExited: false, groupAbsent: false, stdioJoined: false, lockReleased: false, scratchRetained: false,
       nativeExitCode: null as number | null, nativeExitSignal: null as string | null, runtimeSnapshotSha256: "", profileSha256: "", scratchContentSha256: "", scratchIdentitySha256: "" };
     let child: ChildProcessWithoutNullStreams | undefined, lockOwned = false, pendingReleaseSync = false, journalFd: number | undefined, journalFailed = false, sequence = 0, previous: string | null = null;
     let scratchIdentity: BigIntStats | undefined, runtimeIdentity: BigIntStats | undefined, preparationSettled = false, nativeClosed = false, spawnEvent = false, spawnError = false, closing = false, pendingWrites = 0;
-    let stopTask: Promise<CodexManagedProcessReceipt> | undefined, cleanupDeadline: number | undefined, cleanupErrors: readonly string[] = [], executionTimer: ReturnType<typeof setTimeout> | undefined;
+    let stopTask: Promise<CoreReceipt<B, S>> | undefined, cleanupDeadline: number | undefined, cleanupErrors: readonly string[] = [], executionTimer: ReturnType<typeof setTimeout> | undefined;
     const runtimeErrors = new Set<string>(), nativeStreams = { stdin: false, stdout: false, stderr: false };
     let resolveExit!: () => void, resolveClose!: () => void;
     const exited = new Promise<void>(done => { resolveExit = done; }), closed = new Promise<void>(done => { resolveClose = done; });
@@ -185,7 +207,7 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
       try { child.stdin.write(chunk, settle); } catch { settle(new Error("CODEX_MANAGED_PROCESS_STDIN_FAILED")); }
     } }); stdin.on("error", () => {});
     const inputClosure = new Promise<void>(done => stdin.once("close", () => { inputClosed = true; done(); }));
-    const receipt = (): CodexManagedProcessReceipt => Object.freeze({ schema: "agentrouter.codex-managed-process.v1", binding, processGeneration, productionQualified: false, network: "denied", profile: "managed-task-offline-candidate-v1",
+    const receipt = (): CoreReceipt<B, S> => Object.freeze({ schema, binding, processGeneration, productionQualified: false, network: "denied", profile: "managed-task-offline-candidate-v1",
       nativeVersion: runtime.version, executableSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentRuntimeSha256: runtime.parentRuntime.expectedSha256, configSha256: hash(configuration), custodyPath, ...state, runtimeErrors: Object.freeze([...runtimeErrors]), cleanupErrors: Object.freeze([...cleanupErrors]) });
     const error = (code: string) => { if (runtimeErrors.size < 24) runtimeErrors.add(code); };
     function persist() {
@@ -197,8 +219,8 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
       } catch { journalFailed = true; fail("CODEX_MANAGED_PROCESS_JOURNAL_FAILED"); }
     }
     function admitted() {
-      assertAgentTaskAccountLease(request);
-      check(request.accountLease === lease && request.signal === originalSignal && !originalSignal.aborted && !cancellationSignal.aborted && !closing && Date.now() < startupDeadline, "CODEX_MANAGED_PROCESS_START_CANCELLED");
+      authority();
+      check(!originalSignal.aborted && !cancellationSignal.aborted && !closing && Date.now() < startupDeadline, "CODEX_MANAGED_PROCESS_START_CANCELLED");
     }
     const preparation = Promise.resolve().then(async () => {
       admitted(); await directory(stateRoot); await directory(join(stateRoot, "accounts")); await directory(accountRoot);
@@ -250,7 +272,7 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
     executionTimer = setTimeout(cancel, Math.max(0, executionDeadline - Date.now()));
     if (originalSignal.aborted || cancellationSignal.aborted) cancel();
     const ready = bounded(preparation, startupDeadline).catch(() => { error("startup-failed"); cancel(); throw new Error("CODEX_MANAGED_PROCESS_UNAVAILABLE"); }); void ready.catch(() => {});
-    function stopAndJoin(): Promise<CodexManagedProcessReceipt> {
+    function stopAndJoin(): Promise<CoreReceipt<B, S>> {
       if (stopTask !== undefined) return stopTask;
       closing = true; cleanupDeadline ??= Math.min(outerDeadline, Date.now() + maxCleanupMs); const deadline = cleanupDeadline;
       clearTimeout(executionTimer); originalSignal.removeEventListener("abort", cancel); cancellationSignal.removeEventListener("abort", cancel);
@@ -291,7 +313,139 @@ export function createCodexManagedProcessLauncher(options: CodexManagedProcessOp
       });
       stopTask = task; void task.then(result => { if (result.phase !== "closed" && stopTask === task) stopTask = undefined; }); return task;
     }
-    const handle: CodexManagedOwnedProcess = Object.freeze({ cwd, stdin, stdout, exited, ready, receipt, stopAndJoin });
-    return Promise.resolve(handle);
-  } });
+    const handle: OwnedCore<B, S> = Object.freeze({ cwd, stdin, stdout, exited, ready, receipt, stopAndJoin });
+    return handle;
+}
+
+export type CodexManagedOfflineDiagnosticOptions = Readonly<{
+  /** Existing private directory. Every account is created inside a fresh child. */
+  directory: string; runtime: CodexManagedProcessOptions["runtime"]; signal: AbortSignal;
+  admission: Readonly<{ kind: "managed-offline-lifecycle-diagnostic-v1"; nativeSha256: string; schemaSha256: string; parentSha256: string }>;
+}>;
+export type CodexManagedOfflineDiagnosticReceipt = Readonly<{
+  schema: "agentrouter.codex-managed-offline-diagnostic.v1"; passed: boolean; productionQualified: false; network: "denied";
+  root: string; receiptPath: string; configurationSha256: string; nativeSha256: string; schemaSha256: string; parentSha256: string;
+  bootstrapJoined: boolean; processJoined: boolean; leaseReleased: boolean; protocol: OfflineProtocolReceipt | null; failures: readonly string[];
+}>;
+type DiagnosticBinding = Readonly<{ kind: "offline-diagnostic"; diagnosticId: string; accountId: string; accountLease: AccountLease }>;
+type DiagnosticCustody = { database: Database; journal: FileHandle; bootstrap?: CodexAccountOwnedProcessPort;
+  core?: OwnedCore<DiagnosticBinding, "agentrouter.codex-managed-offline-process.v1">; protocol?: ReturnType<typeof createManagedOfflineProtocol>; joins: Set<Promise<unknown>> };
+// Failed diagnostics keep the actual open store, native owners and pending joins.
+// There is no TTL takeover, implicit retry, or exported process handle.
+const retainedOfflineDiagnostics = new Map<string, DiagnosticCustody>();
+async function assertNoDiagnosticAuth(accountHome: string): Promise<void> {
+  try { await lstat(join(accountHome, "auth.json")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  fail("OFFLINE_DIAGNOSTIC_AUTH_STATE_UNEXPECTED");
+}
+
+/** Fixed offline lifecycle diagnostic, never a task adapter or qualification.
+ * Owns fresh synthetic state and real account leases. There is no caller account,
+ * model, prompt, config/RPC map, raw handle, callback, or task-admission escape.
+ * A failed cleanup retains the private database and native journals for recovery.
+ */
+export function runCodexManagedOfflineDiagnostic(options: CodexManagedOfflineDiagnosticOptions, trustedSystem: CodexManagedProcessSystem = system): Promise<CodexManagedOfflineDiagnosticReceipt> {
+  const raw = record(options, ["directory", "runtime", "signal", "admission"]), parentDirectory = path(raw.directory), signal = raw.signal as AbortSignal;
+  check(signal instanceof AbortSignal, "OFFLINE_DIAGNOSTIC_SIGNAL_INVALID");
+  const r = record(raw.runtime, ["executablePath", "version", "sha256", "schemaSha256", "parentRuntime"]), p = record(r.parentRuntime, ["expectedSha256"]);
+  const runtime = Object.freeze({ executablePath: path(r.executablePath), version: identifier(r.version), sha256: digest(r.sha256), schemaSha256: digest(r.schemaSha256), parentRuntime: Object.freeze({ expectedSha256: digest(p.expectedSha256) }) });
+  const admission = record(raw.admission, ["kind", "nativeSha256", "schemaSha256", "parentSha256"]);
+  check(admission.kind === "managed-offline-lifecycle-diagnostic-v1" && digest(admission.nativeSha256) === runtime.sha256 && digest(admission.schemaSha256) === runtime.schemaSha256 && digest(admission.parentSha256) === runtime.parentRuntime.expectedSha256, "OFFLINE_DIAGNOSTIC_ADMISSION_MISMATCH");
+  const host: ProcessHost = Object.freeze({ inspectParent: trustedSystem.inspectParent.bind(trustedSystem), spawn: trustedSystem.spawn.bind(trustedSystem), processGroup: trustedSystem.processGroup.bind(trustedSystem), signalGroup: trustedSystem.signalGroup.bind(trustedSystem), syncDirectory: trustedSystem.syncDirectory?.bind(trustedSystem) ?? syncDirectory });
+  const outerDeadline = Date.now() + 60_000, executionDeadline = outerDeadline - 15_000;
+  return Promise.resolve().then(async () => {
+    signal.throwIfAborted(); await directory(parentDirectory); signal.throwIfAborted();
+    const root = await mkdtemp(join(parentDirectory, "managed-offline-diagnostic-")); await directory(root); await syncDirectory(parentDirectory);
+    const stateRoot = join(root, "state"); await mkdir(stateRoot, { mode: 0o700 }); await syncDirectory(root);
+    const databasePath = join(root, "account-leases.sqlite"), journalPath = join(root, "diagnostic.jsonl"), receiptPath = join(root, "receipt.json");
+    await durableFile(databasePath, ""); await durableFile(journalPath, "");
+    let acquiredJournal: FileHandle | undefined, acquiredDatabase: Database | undefined, leases: SqliteAccountLeases;
+    try {
+      acquiredJournal = await open(journalPath, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
+      acquiredDatabase = new Database(databasePath); leases = new SqliteAccountLeases(acquiredDatabase);
+    } catch (error) {
+      try { acquiredDatabase?.close(); } finally { await acquiredJournal?.close(); }
+      throw error;
+    }
+    const journal = acquiredJournal, database = acquiredDatabase;
+    const custody: DiagnosticCustody = { database, journal, joins: new Set() }; retainedOfflineDiagnostics.set(root, custody);
+    function retain<T>(work: Promise<T>): Promise<T> { custody.joins.add(work); void work.then(() => custody.joins.delete(work), () => custody.joins.delete(work)); return work; }
+    const diagnosticId = randomBytes(12).toString("hex"), accountId = `diagnostic-${diagnosticId}`, accountHome = join(stateRoot, "accounts", accountId, "codex-home"), configuration = codexManagedAccountConfiguration();
+    const controller = new AbortController(), interrupt = () => controller.abort(); signal.addEventListener("abort", interrupt, { once: true });
+    if (signal.aborted) controller.abort();
+    const timer = setTimeout(interrupt, Math.max(0, executionDeadline - Date.now()));
+    let lease: AccountLease | undefined, bootstrap: CodexAccountOwnedProcessPort | undefined, core: OwnedCore<DiagnosticBinding, "agentrouter.codex-managed-offline-process.v1"> | undefined;
+    let protocol: ReturnType<typeof createManagedOfflineProtocol> | undefined, bootstrapJoined = false, processJoined = false, protocolReceipt: OfflineProtocolReceipt | null = null, sequence = 0, journalFailed = false;
+    const failures = new Set<string>(), error = (code: string) => { if (failures.size < 16) failures.add(code); };
+    async function persist(event: string, detail: unknown) {
+      try { check(++sequence <= 12, "OFFLINE_DIAGNOSTIC_JOURNAL_BOUND"); const line = JSON.stringify({ sequence, event, detail }) + "\n";
+        check(Buffer.byteLength(line) <= 16 * 1024, "OFFLINE_DIAGNOSTIC_JOURNAL_BOUND"); await journal.writeFile(line); await journal.sync();
+      } catch { journalFailed = true; throw Error("OFFLINE_DIAGNOSTIC_JOURNAL_FAILED"); }
+    }
+    const cleanupDeadline = () => Math.min(outerDeadline, Date.now() + 10_000);
+    function active() { controller.signal.throwIfAborted(); check(Date.now() < executionDeadline, "OFFLINE_DIAGNOSTIC_DEADLINE"); }
+    let bootstrapCleanupDeadline: number | undefined;
+    async function joinBootstrap() {
+      if (!bootstrap) return;
+      bootstrapCleanupDeadline ??= cleanupDeadline();
+      const stopped = await retain(bootstrap.stopAndJoin({ binding: bootstrap.binding, deadlineMs: bootstrapCleanupDeadline })), receipt = bootstrap.receipt();
+      bootstrapJoined = stopped.processExited && stopped.processGroupStopped && stopped.stdoutEnded && stopped.stderrEnded
+        && JSON.stringify(stopped.binding) === JSON.stringify(bootstrap.binding) && receipt.phase === "closed" && receipt.lockReleased && !receipt.scratchRetained;
+      check(bootstrapJoined, "OFFLINE_DIAGNOSTIC_BOOTSTRAP_UNJOINED");
+      if (receipt.failures.length !== 0) error("OFFLINE_DIAGNOSTIC_BOOTSTRAP_RUNTIME_FAILED");
+    }
+    try {
+      await persist("prepared", { nativeSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentSha256: runtime.parentRuntime.expectedSha256, configurationSha256: hash(configuration), productionQualified: false, network: "denied" });
+      active(); const bootstrapBegan = Date.now(); lease = leases.acquire({ provider: "codex", accountId, owner: `bootstrap-${diagnosticId}`, now: bootstrapBegan, ttlMs: outerDeadline - bootstrapBegan });
+      bootstrap = createCodexAccountProcess({ stateRoot, mode: "offline", runtime, binding: { accountId, owner: lease.owner, leaseGeneration: lease.generation, processGeneration: 1 }, startupTimeoutMs: 10_000 }, host);
+      custody.bootstrap = bootstrap;
+      await bounded(bootstrap.ready, Math.min(executionDeadline, Date.now() + 10_000)); controller.signal.throwIfAborted(); await joinBootstrap();
+      check(failures.size === 0, "OFFLINE_DIAGNOSTIC_BOOTSTRAP_RUNTIME_FAILED");
+      await persist("bootstrap-joined", { process: bootstrap.receipt(), leaseGeneration: lease.generation });
+      check(!journalFailed && leases.release(lease), "OFFLINE_DIAGNOSTIC_BOOTSTRAP_RELEASE_FAILED"); lease = undefined;
+      active(); await fixedFile(join(accountHome, "config.toml"), configuration);
+      await assertNoDiagnosticAuth(accountHome);
+      active(); const taskBegan = Date.now(); lease = leases.acquire({ provider: "codex", accountId, owner: `diagnostic-${diagnosticId}`, now: taskBegan, ttlMs: outerDeadline - taskBegan });
+      const admittedLease = lease, binding: DiagnosticBinding = Object.freeze({ kind: "offline-diagnostic", diagnosticId, accountId, accountLease: admittedLease });
+      await persist("diagnostic-admitted", { kind: binding.kind, accountId, leaseGeneration: lease.generation });
+      core = createOwnedCore({ stateRoot, runtime, host, binding, lease: admittedLease, processGeneration: 2, configuration, runId: `diagnostic-${diagnosticId}`,
+        schema: "agentrouter.codex-managed-offline-process.v1", originalSignal: controller.signal, cancellationSignal: controller.signal,
+        startupMs: 10_000, executionDeadline, outerDeadline, maxCleanupMs: 10_000,
+        authority() { check(lease === admittedLease && JSON.stringify(leases.inspect("codex", accountId)) === JSON.stringify(admittedLease), "OFFLINE_DIAGNOSTIC_LEASE_CHANGED"); } });
+      custody.core = core;
+      protocol = createManagedOfflineProtocol(core, accountHome, controller.signal, executionDeadline);
+      custody.protocol = protocol;
+      await protocol.result; controller.signal.throwIfAborted();
+      await fixedFile(join(accountHome, "config.toml"), configuration); await assertNoDiagnosticAuth(accountHome);
+    } catch (caught) { error(caught instanceof Error && /^(?:OFFLINE_DIAGNOSTIC|CODEX_MANAGED_PROCESS|CODEX_ACCOUNT_PROCESS)_[A-Z_]+$/u.test(caught.message) ? caught.message : controller.signal.aborted ? "OFFLINE_DIAGNOSTIC_CANCELLED" : "OFFLINE_DIAGNOSTIC_FAILED"); }
+    finally {
+      protocol?.stop(); controller.abort(); clearTimeout(timer); signal.removeEventListener("abort", interrupt);
+      try { if (core) {
+        const stopped = await retain(core.stopAndJoin()); processJoined = stopped.phase === "closed" && stopped.rootExited && stopped.groupAbsent && stopped.stdioJoined && stopped.lockReleased && stopped.cleanupErrors.length === 0;
+        if (stopped.runtimeErrors.length !== 0) error("OFFLINE_DIAGNOSTIC_PROCESS_RUNTIME_FAILED");
+        check(processJoined, "OFFLINE_DIAGNOSTIC_PROCESS_UNJOINED"); await persist("diagnostic-process-joined", { process: stopped });
+      } else await joinBootstrap(); } catch { error("OFFLINE_DIAGNOSTIC_PROCESS_UNJOINED"); }
+      try { if (protocol) { protocolReceipt = await bounded(retain(protocol.join()), cleanupDeadline()); check(protocolReceipt.joined, "OFFLINE_DIAGNOSTIC_PROTOCOL_UNJOINED"); if (protocolReceipt.failure) error(protocolReceipt.failure); } }
+      catch { error("OFFLINE_DIAGNOSTIC_PROTOCOL_UNJOINED"); protocolReceipt = protocol?.receipt() ?? null; }
+      try {
+        if (lease && !journalFailed && (core ? processJoined && protocolReceipt?.joined === true : bootstrapJoined)) {
+          await persist("lease-release", { owner: core ? "diagnostic" : "bootstrap", generation: lease.generation }); check(leases.release(lease), "OFFLINE_DIAGNOSTIC_RELEASE_FAILED"); lease = undefined;
+        }
+      } catch { error("OFFLINE_DIAGNOSTIC_RELEASE_FAILED"); }
+    }
+    const leaseReleased = lease === undefined && leases.inspect("codex", accountId) === null;
+    const receipt: CodexManagedOfflineDiagnosticReceipt = Object.freeze({ schema: "agentrouter.codex-managed-offline-diagnostic.v1", passed: failures.size === 0 && bootstrapJoined && processJoined && leaseReleased && protocolReceipt?.configurationObserved === true,
+      productionQualified: false, network: "denied", root, receiptPath, configurationSha256: hash(configuration), nativeSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentSha256: runtime.parentRuntime.expectedSha256,
+      bootstrapJoined, processJoined, leaseReleased, protocol: protocolReceipt, failures: Object.freeze([...failures]) });
+    try { await persist("finished", receipt); }
+    finally {
+      if (leaseReleased && (!bootstrap || bootstrapJoined) && (!core || processJoined) && (!protocol || protocolReceipt?.joined === true) && custody.joins.size === 0) {
+        await journal.close(); database.close(); retainedOfflineDiagnostics.delete(root);
+      }
+    }
+    // A successful on-disk or returned receipt requires successful descriptor
+    // closure as well. Failed cleanup keeps its actual custody owners above.
+    await durableFile(receiptPath, JSON.stringify(receipt) + "\n");
+    return receipt;
+  });
 }

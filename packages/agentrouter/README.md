@@ -424,6 +424,31 @@ must still join before any lease release. Receipt hash fields remain empty
 until the corresponding snapshots are completed. These synthetic
 custody checks do not prove native tool inventory or auth-home confinement.
 
+`runCodexManagedOfflineDiagnostic()` in the same internal module exercises the
+shared process owner without fabricating task qualification. Its separate
+`managed-offline-lifecycle-diagnostic-v1` admission binds declared native, schema
+and parent-runtime hashes. Each call creates a fresh synthetic account in a
+private child directory and acquires real SQLite leases. The offline account
+helper initializes that empty home, sends no RPC, and joins before releasing its
+lease. A second lease then owns the same managed process core used by tasks.
+The diagnostic sends only `initialize`, `initialized` and `config/read`, checks
+the fixed baseline projection and disabled remote-control notice, and closes.
+It accepts no account, model, prompt, configuration map or RPC selection and
+returns no process, stream, credential or task-admission authority.
+
+One captured 60-second deadline bounds admission and native waits across both
+processes; the last 15 seconds are reserved for cleanup. Filesystem cleanup may
+outlast that deadline, with its raw promise still owned. Timeouts never prove closure.
+Unjoined cleanup retains the actual process owners, open lease database and
+journal in memory, with durable custody evidence in the returned private root.
+The diagnostic does not automatically retry, release expired custody or remove
+that state. Both native processes, their streams and protocol writes must join
+before lease release. Journal and database closure precede a successful returned
+or on-disk receipt. Its separate receipt always reports
+`productionQualified: false` and `network: "denied"`; it supplies lifecycle and
+configuration observations, not task execution, model-tool or auth-home isolation
+qualification. It is absent from default wiring and the public barrel.
+
 Account helpers and managed tasks share one fixed persistent configuration from
 `codex-managed-baseline.ts`. Its version-one bytes remain unchanged across tasks;
 the native owner must refuse a different existing file instead of overwriting it.
