@@ -396,14 +396,27 @@ runtime request, including its original signal and account lease, plus a separat
 `cancellationSignal`. It must revalidate request authority before preparation and
 native launch; the mirrored IDs and lease grant no separate authority.
 
+Account helpers and managed tasks share one fixed persistent configuration from
+`codex-managed-baseline.ts`. Its version-one bytes remain unchanged across tasks;
+the native owner must refuse a different existing file instead of overwriting it.
+The task session sends its selected model, service tier and instructions through
+dedicated `thread/start` fields. A closed, host-generated `config` overlay keeps
+all task capability denials and supplies a non-null reasoning effort. It accepts
+no caller configuration map. Non-null effort and tier also use explicit turn
+overrides; null values leave native defaults in place.
+
 The adapter defaults to unqualified. `AgentRouter.runTask()` refuses it before
 account acquisition or process launch unless the trusted host supplies current
 qualification for the exact route, runtime and capability profile. Direct
 adapter calls also require qualification and a runtime-admitted request. Synthetic fixtures are not
 qualification evidence and do not enable the route in Textbutler or another app.
 
-The managed session checks ChatGPT account type and native thread settings before
-sending the task. Its bounded callback ledger binds tool starts, broker calls,
+The managed session checks ChatGPT account type, the public baseline configuration
+projection and native thread settings before sending the task. `config/read`
+precedes the thread overlay and does not prove the requested task selections.
+Those selections must match `ThreadStartResponse` before `turn/start`; a mismatch
+stops the session. The requested capability flags still require separate effective
+tool-inventory evidence. Its bounded callback ledger binds tool starts, broker calls,
 results and completions to one thread and turn, rejects duplicates and unsupported
 native operations, and records native token usage with unknown monetary cost.
 Cancellation revokes the broker and joins the process and admitted handlers;
@@ -426,3 +439,5 @@ passed, and root exit, process-group absence and stdio closure were verified.
 The diagnostics made no account, login or turn requests. They establish
 configuration and thread-response compatibility for that binary, not
 authenticated execution or tool confinement.
+Those diagnostics predate the shared-baseline task overlay. The combined path
+still requires native validation against the exact admitted runtime.

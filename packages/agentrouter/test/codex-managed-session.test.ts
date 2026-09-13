@@ -1,4 +1,9 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { codexTaskSettings } from "../src/codex-config.ts";
+import { codexManagedAccountConfiguration } from "../src/codex-managed-baseline.ts";
 import { CodexManagedSessionError, runCodexManagedSession } from "../src/codex-managed-session.ts";
 import { managedPeer } from "./codex-managed-test-peer.ts";
 import { withTaskLease } from "./task-lease-test-fixture.ts";
@@ -34,12 +39,90 @@ test("managed session binds native account/config/thread, tool lifecycle, final 
   expect(JSON.stringify(result.receipt)).not.toContain("Synthetic reasoning");
 });
 
+test("distinct tasks reuse unchanged persistent bytes and select their own thread and turn settings", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "agentrouter-baseline-fixture-")), file = join(directory, "config.toml");
+  const baseline = codexManagedAccountConfiguration();
+  await writeFile(file, baseline, { flag: "wx", mode: 0o600 });
+  const before = await stat(file, { bigint: true });
+  const peers = [managedPeer({ noTools: true }), managedPeer({ noTools: true, settings: codexTaskSettings({
+    model: { id: "second-synthetic-model", reasoningEffort: "high", serviceTier: "priority" },
+    instructions: { base: "A separate synthetic task.", developer: "Use a different retained source." },
+  }) })];
+  try {
+    for (const peer of peers) {
+      const launch = peer.launcher.launch.bind(peer.launcher);
+      peer.launcher.launch = async input => {
+        // Synthetic persistent-home contract: a mismatch refuses the launch;
+        // the task driver has no file-writing or account-credential port.
+        expect(input.configuration).toBe(await readFile(file, "utf8"));
+        return launch(input);
+      };
+      const result = await run(peer);
+      expect(result.receipt.observedSettings).toEqual(peer.settings.model.id === "synthetic-model"
+        ? { model: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" }
+        : { model: "second-synthetic-model", reasoningEffort: "high", serviceTier: "priority" });
+      expect(peer.methods.find(value => value.method === "thread/start")?.params).toMatchObject({
+        model: peer.settings.model.id, serviceTier: peer.settings.model.serviceTier,
+        config: { model_reasoning_effort: peer.settings.model.reasoningEffort,
+          features: { remote_control: false, browser_use_external: false, goals: false, sleep_tool: false },
+          tools: { update_plan: { enabled: false }, experimental_request_user_input: { enabled: false } } },
+        baseInstructions: peer.settings.instructions.base, developerInstructions: peer.settings.instructions.developer,
+      });
+      expect(peer.methods.find(value => value.method === "turn/start")?.params).toMatchObject({
+        model: peer.settings.model.id, effort: peer.settings.model.reasoningEffort, serviceTier: peer.settings.model.serviceTier,
+      });
+      expect(peer.methods.find(value => value.method === "thread/start")?.params.config.model).toBeUndefined();
+      expect(peer.methods.find(value => value.method === "thread/start")?.params.config.service_tier).toBeUndefined();
+      expect(peer.methods.find(value => value.method === "thread/start")?.params.config.instructions).toBeUndefined();
+    }
+    expect(peers[0]!.launchInputs[0]!.configuration).toBe(peers[1]!.launchInputs[0]!.configuration);
+    expect(await readFile(file, "utf8")).toBe(baseline);
+    const after = await stat(file, { bigint: true });
+    expect([after.dev, after.ino, after.size, after.mtimeNs, after.ctimeNs]).toEqual([before.dev, before.ino, before.size, before.mtimeNs, before.ctimeNs]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("unset task effort and tier use native thread observations without adding overrides", async () => {
+  const peer = managedPeer({ noTools: true, settings: codexTaskSettings({
+    model: { id: "synthetic-default-model", reasoningEffort: null, serviceTier: null },
+    instructions: { base: "Use synthetic defaults.", developer: "Use only the retained evidence." },
+  }) });
+  const result = await run(peer), thread = peer.methods.find(value => value.method === "thread/start")!.params;
+  const turn = peer.methods.find(value => value.method === "turn/start")!.params;
+  expect(result.receipt.observedSettings).toEqual({ model: "synthetic-default-model", reasoningEffort: "medium", serviceTier: "default" });
+  expect(thread.config.model_reasoning_effort).toBeUndefined(); expect(thread.serviceTier).toBeUndefined();
+  expect(turn.effort).toBeUndefined(); expect(turn.serviceTier).toBeUndefined();
+});
+
+test.each(["settings", "model", "effort", "instructions", "digest"])("a %s accessor is refused without reading it or launching", async kind => {
+  const peer = managedPeer(); let reads = 0;
+  await withTaskLease(peer.request, peer.broker.profile, async request => {
+    const settings = { ...peer.settings, model: { ...peer.settings.model }, instructions: { ...peer.settings.instructions } };
+    const options = { ...peer, request, settings };
+    const [target, key] = kind === "settings" ? [options, "settings"] : kind === "effort" ? [settings.model, "reasoningEffort"]
+      : kind === "model" ? [settings, "model"] : kind === "instructions" ? [settings.instructions, "base"] : [settings, "instructionDigest"];
+    Object.defineProperty(target, key, { enumerable: true, get() { reads++; throw Error("Synthetic accessor executed"); } });
+    await expect(runCodexManagedSession(options)).rejects.toBeInstanceOf(CodexManagedSessionError);
+  });
+  expect(reads).toBe(0); expect(peer.counts()).toEqual({ invocations: 0, launches: 0, stopped: false });
+  expect(peer.methods).toEqual([]);
+});
+
 test.each(["account", "config", "thread"])("changed %s admission fails before a model turn or broker effect", async which => {
   const peer = managedPeer(which === "account" ? { mutateAccount(value) { value.account.type = "apiKey"; } }
     : which === "config" ? { mutateConfig(value) { value.config.model_provider = "foreign"; } }
     : { mutateThread(value) { value.serviceTier = "priority"; } });
   const receipt = await failed(peer);
   expect(receipt.processStopped).toBe(true); expect(peer.methods.some(value => value.method === "turn/start")).toBe(false);
+  expect(peer.counts().invocations).toBe(0);
+});
+
+test.each(["model", "reasoningEffort", "serviceTier"])("wrong selected thread %s fails before a turn despite valid baseline defaults", async field => {
+  const peer = managedPeer({ mutateThread(value) { value[field] = "different-from-selected"; } });
+  const receipt = await failed(peer);
+  expect(receipt).toMatchObject({ configurationObserved: true, threadObserved: false, turnCompleted: false, processStopped: true });
+  expect(peer.methods.some(value => value.method === "thread/start")).toBe(true);
+  expect(peer.methods.some(value => value.method === "turn/start")).toBe(false);
   expect(peer.counts().invocations).toBe(0);
 });
 

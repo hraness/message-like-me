@@ -8,6 +8,8 @@ import type { CodexAccountBinding } from "./codex-account.ts";
 import type { CodexAccountProcessCloseReceipt, CodexAccountProcessPort } from "./codex-account-transport.ts";
 import { inspectCodexHostExecutable, inspectCodexHostRuntime, type CodexHostRuntime, type CodexParentRuntimeBinding } from "./codex-host.ts";
 import { identifier, safeInteger } from "./validation.ts";
+import { codexManagedAccountConfiguration as codexAccountOfflineConfiguration } from "./codex-managed-baseline.ts";
+export { codexManagedAccountConfiguration as codexAccountOfflineConfiguration } from "./codex-managed-baseline.ts";
 
 /** Trusted distribution inputs. A supplied hash is checked, never self-admitted
  * as provenance, configuration/schema compatibility, or OAuth qualification. */
@@ -83,15 +85,6 @@ const system: CodexAccountProcessSystem = {
   signalGroup(pgid, signal) { try { process.kill(-pgid, signal); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; } },
 };
 
-/** Fixed account-only configuration candidate. Native strict-load and effective
- * startup behavior still require independent proof for the admitted runtime. */
-export function codexAccountOfflineConfiguration(): string {
-  return ['model_provider = "openai"', 'forced_login_method = "chatgpt"', 'cli_auth_credentials_store = "file"', 'mcp_oauth_credentials_store = "file"',
-    'approval_policy = "never"', 'sandbox_mode = "read-only"', 'web_search = "disabled"', 'project_doc_max_bytes = 0', 'check_for_update_on_startup = false', 'allow_login_shell = false', 'notify = []', 'mcp_servers = {}', 'plugins = {}',
-    '[shell_environment_policy]', 'inherit = "none"', '[analytics]', 'enabled = false', '[feedback]', 'enabled = false', '[history]', 'persistence = "none"',
-    '[features]', ...["apps", "auth_elicitation", "browser_use", "code_mode", "computer_use", "hooks", "image_generation", "in_app_browser", "memories", "multi_agent", "multi_agent_v2", "plugins", "plugin_sharing", "remote_plugin", "remote_control", "shell_snapshot", "shell_tool", "skill_mcp_dependency_install", "skill_search", "unified_exec", "workspace_dependencies"].map(name => `${name} = false`),
-    '[apps._default]', 'enabled = false', 'destructive_enabled = false', 'open_world_enabled = false', '[orchestrator.skills]', 'enabled = false', '[skills]', 'include_instructions = false', '[skills.bundled]', 'enabled = false', ''].join("\n");
-}
 /** No network, Mach exceptions, fork, helper commands, or contact paths. This
  * candidate profile is deliberately insufficient for a real OAuth flow. */
 export function codexAccountOfflineSandbox(input: { executable: string; scratch: string; accountHome: string }): string {

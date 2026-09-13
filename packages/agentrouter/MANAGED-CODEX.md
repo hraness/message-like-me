@@ -50,6 +50,14 @@ An exclusive account lock precedes account-home writes. The persistent account
 home stays outside the run's temporary HOME and working directory and survives
 shutdown; the helper does not inspect or export credentials.
 
+The version-one `config.toml` baseline is shared by account helpers and managed
+tasks. Its SHA-256 is
+`9833be747176d26b0915621439e2cbea1bff12aeca6f7854e45265777bb98ae8`.
+`codexManagedAccountConfiguration()` is the pure source of those bytes;
+`codexAccountOfflineConfiguration()` remains a compatibility alias. No migration
+or per-task file rewrite is required. An existing file with different bytes is
+refused and preserved for explicit recovery.
+
 A private journal records launch intent before spawning and retains process and
 stream cleanup evidence. Failed cleanup keeps the account lock and recovery state.
 An expired lease or stale lock does not authorize a replacement process. The
@@ -129,3 +137,22 @@ The credential-free Codex task process uses a loopback model relay. The separate
 the built-in provider, but still requires a host launcher and current execution
 qualification. Neither task adapter is enabled by account sign-in. The account
 protocol supplies no inference proxy or token-export bridge between them.
+
+Managed task settings are applied in memory to a fresh ephemeral thread. The
+selected model, service tier, base instructions and developer instructions use
+dedicated `thread/start` fields. The pinned protocol has no dedicated thread
+effort field, so `codexManagedThreadConfiguration()` supplies a non-null effort
+as `config.model_reasoning_effort`. This closed host-generated overlay also
+disables the union of account and task feature flags, including remote control,
+and disables the plan and user-input tools. It accepts no arbitrary configuration
+from callers. Explicit effort and tier selections are repeated in `turn/start`;
+null selections leave native defaults intact and the receipt records what the
+thread actually reported.
+
+The earlier `config/read` check covers only the public baseline projection. It
+can report defaults that differ from the task, and cannot attest to a thread
+overlay that has not yet been applied. Exact model and non-null effort/tier
+selections are checked against `ThreadStartResponse` before any task turn.
+Configuration and thread readback do not establish the effective tool inventory,
+authenticated execution or OS confinement. This correction keeps the managed
+task route unqualified and requires no native or provider calls.

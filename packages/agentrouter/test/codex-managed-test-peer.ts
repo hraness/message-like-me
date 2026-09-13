@@ -1,11 +1,12 @@
 import { PassThrough, Writable } from "node:stream";
 import { createCapabilityBroker, createCapabilityProfile } from "../src/capabilities.ts";
-import { createCodexCapabilityMapping, codexTaskSettings } from "../src/codex-config.ts";
+import { createCodexCapabilityMapping, codexTaskSettings, type CodexTaskSettings } from "../src/codex-config.ts";
 import type { CodexManagedProcessLauncher } from "../src/codex-managed-config.ts";
 import type { CodexProcessReceipt } from "../src/codex-process.ts";
 import type { AgentTaskExecutionRequest } from "../src/task-runtime.ts";
 
 export type ManagedPeerOptions = {
+  settings?: CodexTaskSettings;
   invoke?(): Promise<unknown>; groupAbsent?: boolean; stalledTurn?: boolean; noTools?: boolean;
   mutateAccount?(value: Record<string, any>): void; mutateConfig?(value: Record<string, any>): void;
   mutateThread?(value: Record<string, any>): void;
@@ -29,7 +30,7 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
       return options.invoke ? options.invoke() : { finding: "retained synthetic finding" }; },
   }] });
   const mapping = createCodexCapabilityMapping(profile), tools = mapping.tools;
-  const settings = codexTaskSettings({ model: { id: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" },
+  const settings = options.settings ?? codexTaskSettings({ model: { id: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" },
     instructions: { base: "Use only retained evidence.", developer: "Do not invent sources." } });
   const request: AgentTaskExecutionRequest = {
     route: { id: "managed-test-subscription", provider: "codex", authentication: "subscription" },
@@ -92,13 +93,14 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
       options.mutateAccount?.(result); emit({ id: message.id, result });
     }
     if (message.method === "config/read") {
-      const result = { config: { model: settings.model.id, model_provider: "openai", model_reasoning_effort: "medium", service_tier: "default",
+      const result = { config: { model: null, model_provider: "openai", model_reasoning_effort: null, service_tier: null,
         forced_login_method: "chatgpt", approval_policy: "never", sandbox_mode: "read-only", web_search: "disabled",
         apps: { _default: { enabled: false, destructive_enabled: false, open_world_enabled: false } } }, origins: {}, layers: null };
       options.mutateConfig?.(result); emit({ id: message.id, result });
     }
     if (message.method === "thread/start") {
-      const result = { model: settings.model.id, modelProvider: "openai", reasoningEffort: "medium", serviceTier: "default",
+      const result = { model: message.params.model, modelProvider: "openai",
+        reasoningEffort: message.params.config?.model_reasoning_effort ?? "medium", serviceTier: message.params.serviceTier ?? "default",
         cwd: "/synthetic/work", approvalPolicy: "never", approvalsReviewer: "user", sandbox: { type: "readOnly", networkAccess: false },
         runtimeWorkspaceRoots: [], instructionSources: [],
         thread: { id: "thread-one", cwd: "/synthetic/work", modelProvider: "openai", ephemeral: true, turns: [], environments: [] } };
