@@ -31,7 +31,7 @@ export class DistributionCommandError extends Error {
     // Literal documented at https://github.com/electron/notarize#validating-credentials.
     // This reports an observed HTTP code, not a guessed reason or a retry decision.
     const diagnostic = stage === "notary-store-credentials" && status === 1 && signal === null && error === undefined && Buffer.isBuffer(stderr) && stderr.length <= 65_536
-      && /(?:^|[\r\n])Error: HTTP status code: 401\.(?:[ \t\r\n]|$)/u.test(stderr.toString("utf8")) ? "notary-http-401" : null;
+      && /Error: HTTP status code: 401\.(?:[ \t\r\n]|$)/u.test(stderr.toString("utf8")) ? "notary-http-401" : null;
     const details = Object.freeze({ stage: COMMAND_STAGES.find(allowed => allowed === stage) ?? "command", status: typeof status === "number" && Number.isSafeInteger(status) && status >= 0 ? status : null, signal: COMMAND_SIGNALS.find(allowed => allowed === signal) ?? null, code: commandErrorCode(error), diagnostic });
     super(`Distribution command failed: ${JSON.stringify(details)}`);
     this.name = "DistributionCommandError";

@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { ARCHIVE, BUN_VERSION, command, digest, IDENTIFIER, inventory, loadUnsigned, object, readPhysical, requireValue, sha256, type CommandStage } from "./common.ts";
 import { assertSignature, entitlements, nativePaths, plist } from "./native.ts";
+import { NOTARY_PROFILE, notaryAppCredentials, storeNotaryCredentials } from "./notary-preflight.ts";
 
 // Dependency-free Apple-secret consumer. Run on a clean signing host after
 // reviewed source/artifact admission; no package install, build hook or app run.
@@ -28,8 +29,9 @@ if (import.meta.main) {
     const apiMode = keyId.length > 0 || issuer.length > 0 || privateKey.length > 0;
     const appMode = appleId.length > 0 || appPassword.length > 0;
     requireValue(!(apiMode && appMode), "Choose one notarization credential mode");
+    const appCredentials = appMode ? notaryAppCredentials(appleId, appPassword, team) : undefined;
     requireValue((apiMode && /^[A-Z0-9]{10}$/u.test(keyId) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(issuer))
-      || (appMode && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(appleId) && appPassword.length > 0 && appPassword.length <= 1024), "Complete notarization credentials are required");
+      || appCredentials !== undefined, "Complete notarization credentials are required");
     requireValue(/^[A-Z0-9]{10}$/u.test(team), "A Developer ID team is required"); digest(identity, 40);
     const certificate = (process.env.APPLE_CERTIFICATE_BASE64 ?? "").replace(/[\r\n\t ]/gu, ""), password = (process.env.APPLE_CERTIFICATE_PASSWORD ?? "").replace(/[\r\n]+$/u, "");
     const certificateBytes = Buffer.from(certificate, "base64");
@@ -42,7 +44,7 @@ if (import.meta.main) {
     apple("keychain-unlock", "/usr/bin/security", ["unlock-keychain", "-p", keychainPassword, keychain]);
     apple("certificate-import", "/usr/bin/security", ["import", join(scratch, "certificate.p12"), "-k", keychain, "-P", password, "-T", "/usr/bin/codesign"]);
     apple("keychain-partition", "/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:,codesign:", "-s", "-k", keychainPassword, keychain]);
-    if (appMode) apple("notary-store-credentials", "/usr/bin/xcrun", ["notarytool", "store-credentials", "textbutler-notary", "--apple-id", appleId, "--team-id", team, "--keychain", keychain], 120_000, `${appPassword}\n`);
+    if (appCredentials) storeNotaryCredentials(appCredentials, keychain, environment);
     const identities = apple("signing-identity", "/usr/bin/security", ["find-identity", "-v", "-p", "codesigning", keychain]).toString("utf8");
     requireValue(identities.split("\n").some(line => line.includes(identity.toUpperCase()) && line.includes('"Developer ID Application:') && line.includes(`(${team})`)), "Certificate is not the exact selected Developer ID Application identity");
     const runtimePath = paths.find(path => path.endsWith("/textbutler-bun"))!;
@@ -56,7 +58,7 @@ if (import.meta.main) {
     const submission = join(scratch, "submission.zip"); apple("notary-archive", "/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, submission], 180_000);
     writeFileSync(join(out, "notary-attempt.json"), `${JSON.stringify({ schema: "textbutler.notary-attempt.v1", sourceSha: source, unsignedReceiptSha256: receiptDigest, submissionSha256: sha256(readPhysical(submission)), startedAt: new Date().toISOString(), status: "submission-outcome-pending" })}\n`, { flag: "wx", mode: 0o600 });
     const auth = apiMode ? ["--key", join(scratch, "notary.p8"), "--key-id", keyId, "--issuer", issuer]
-      : ["--keychain-profile", "textbutler-notary", "--keychain", keychain];
+      : ["--keychain-profile", NOTARY_PROFILE, "--keychain", keychain];
     const submitted = object(JSON.parse(apple("notary-submit", "/usr/bin/xcrun", ["notarytool", "submit", submission, ...auth, "--output-format", "json"], 180_000).toString("utf8")));
     requireValue(typeof submitted.id === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(submitted.id), "Notary submission identity is missing");
     writeFileSync(join(out, "notary-submission.json"), `${JSON.stringify({ sourceSha: source, unsignedReceiptSha256: receiptDigest, id: submitted.id })}\n`, { flag: "wx", mode: 0o600 });
