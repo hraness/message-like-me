@@ -340,7 +340,7 @@ port. Account sign-in and product-provider terms need separate qualification;
 [Anthropic's SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) directs
 third-party product integrations to supported API authentication unless approved.
 
-`createCodexTaskAdapter()` is the native subscription adapter seam for application
+`createCodexTaskAdapter()` is the low-level native adapter seam for application
 capability profiles. It maps the exact `CapabilityBroker` inventory into one
 Codex session, passes only host-supplied instructions and task settings, and
 retains the process receipt until `AgentRouter.runTask()` has joined the adapter
@@ -348,7 +348,20 @@ stop and broker close. Constructing the adapter does not discover credentials,
 select an account, or qualify the installed native runtime; those remain explicit
 host and qualification inputs.
 
-Task sessions pass explicit reasoning effort and service tier at native turn
-startup. Their run and cleanup allowances share the task runtime's one-hour
-ceiling; the legacy contact session keeps its 120-second run and 10-second
-cleanup limits. IO, request-count and byte limits remain bounded separately.
+Each admitted execution owns its stop receipt. A busy adapter returns a failed
+completion for the new request without stopping the active account. Stop requests
+must match the original execution; the same or a shorter cleanup deadline is accepted.
+Failures before session startup carry explicit no-session evidence. Once startup
+begins, an uncertain launch or missing process-stop receipt retains account custody.
+
+Task run and cleanup allowances share the task runtime's one-hour ceiling;
+the legacy contact session keeps its 120-second run and 10-second cleanup limits.
+IO, request-count and byte limits remain bounded separately. Unsupported task
+budgets fail before session startup. Cleanup is still joined even when late;
+`runTask()` reports a missed cleanup deadline instead of claiming timely closure.
+
+Non-null reasoning effort and service tier are sent as explicit turn overrides.
+The relay requires those exact selections in the model request, including when
+reasoning is absent. Null settings leave the native defaults in place. Generic
+task effort names follow the pinned protocol's bounded string contract, including
+`ultra`; the older six-tool driver keeps its existing effort inventory.

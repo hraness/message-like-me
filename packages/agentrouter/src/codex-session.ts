@@ -243,8 +243,7 @@ export async function runCodexSession(options: {
       stage = "turn/start";
       await rpc("turn/start", { threadId, input: [{ type: "text", text: request.prompt }],
         ...(task?.settings.model.reasoningEffort != null ? { effort: task.settings.model.reasoningEffort } : {}),
-        ...(task?.settings.model.serviceTier != null ? { serviceTier: task.settings.model.serviceTier } : {}),
-      });
+        ...(task?.settings.model.serviceTier != null ? { serviceTierForTurn: task.settings.model.serviceTier } : {}) });
       stage = "turn";
       await Promise.race([done, fatal.then(() => { throw new Error("CODEX_FATAL"); })]);
     })();

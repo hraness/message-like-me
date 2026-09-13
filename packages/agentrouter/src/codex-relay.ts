@@ -183,17 +183,21 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
       }
     }
     equal(body.tools ?? [], tools, "CODEX_TOOL_MANIFEST_MISMATCH");
-    if (task && task.settings.model.reasoningEffort !== null) {
-      codexAssert(body.reasoning != null, "CODEX_TASK_REASONING_MISMATCH");
-    }
     // Native model catalog defaults are data, not executable tools. No arbitrary extension/context.
+    let observedEffort: unknown;
     if (body.reasoning != null) {
       const reasoning = requestObject(body.reasoning, ["effort", "summary", "context"], "REASONING");
-      codexAssert(reasoning.effort === undefined || ["none", "minimal", "low", "medium", "high", "xhigh"].includes(String(reasoning.effort)), "CODEX_REASONING_EFFORT_INVALID");
-      if (task && task.settings.model.reasoningEffort !== null) codexAssert(reasoning.effort === task.settings.model.reasoningEffort, "CODEX_TASK_REASONING_MISMATCH");
+      // The pinned task protocol uses a nonempty catalog-advertised string,
+      // including ultra. Preserve the older non-task driver's closed inventory.
+      if (task && reasoning.effort !== undefined) {
+        try { boundedText(reasoning.effort, 160); } catch { throw new Error("CODEX_REASONING_EFFORT_INVALID"); }
+      } else codexAssert(reasoning.effort === undefined || ["none", "minimal", "low", "medium", "high", "xhigh"].includes(String(reasoning.effort)), "CODEX_REASONING_EFFORT_INVALID");
+      observedEffort = reasoning.effort;
       codexAssert(reasoning.summary === undefined || ["auto", "concise", "detailed", "none"].includes(String(reasoning.summary)), "CODEX_REASONING_SUMMARY_INVALID");
       codexAssert(reasoning.context === undefined || ["auto", "current_turn", "all_turns"].includes(String(reasoning.context)), "CODEX_REASONING_CONTEXT_INVALID");
     }
+    if (task && task.settings.model.reasoningEffort !== null)
+      codexAssert(observedEffort === task.settings.model.reasoningEffort, "CODEX_TASK_REASONING_MISMATCH");
     if (body.text !== undefined) {
       const text = requestObject(body.text, ["verbosity"], "TEXT_CONTROL");
       codexAssert(text.verbosity === undefined || ["low", "medium", "high"].includes(String(text.verbosity)), "CODEX_TEXT_CONTROL_INVALID");

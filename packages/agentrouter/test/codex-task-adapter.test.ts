@@ -52,7 +52,7 @@ async function taskFixture(settings: { reasoningEffort: string | null; serviceTi
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: request.prompt }] }],
       tools: [], tool_choice: "auto", parallel_tool_calls: false, store: false, stream: true, include: [],
       ...(params.effort === undefined ? {} : { reasoning: { effort: params.effort } }),
-      ...(params.serviceTier === undefined ? {} : { service_tier: params.serviceTier }),
+      ...(params.serviceTierForTurn === undefined ? {} : { service_tier: params.serviceTierForTurn }),
     };
     const response = await fetch(`${endpoint}/responses`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const wire = await response.text();
@@ -114,10 +114,10 @@ async function taskFixture(settings: { reasoningEffort: string | null; serviceTi
 
 test("task adapter preserves a twenty-minute run, separate cleanup, effort and service tier", async () => {
   const turn = await taskFixture({ reasoningEffort: "medium", serviceTier: "default" }, 1_200_000);
-  expect(turn.effort).toBe("medium"); expect(turn.serviceTier).toBe("default");
+  expect(turn.effort).toBe("medium"); expect(turn.serviceTierForTurn).toBe("default");
 });
 
 test("task adapter fits the one-hour total and leaves null native settings unset", async () => {
   const turn = await taskFixture({ reasoningEffort: null, serviceTier: null }, 3_510_000);
-  expect(Object.hasOwn(turn, "effort")).toBe(false); expect(Object.hasOwn(turn, "serviceTier")).toBe(false);
+  expect(Object.hasOwn(turn, "effort")).toBe(false); expect(Object.hasOwn(turn, "serviceTierForTurn")).toBe(false);
 });
