@@ -44,7 +44,14 @@ test("task relay binds generic profile, instructions, effort and service tier an
   }
 });
 
-test("task relay refuses a changed effort or service tier without an upstream call", async () => {
+for (const { label, ...controls } of [
+  { label: "changed effort", reasoning: { effort: "low" }, service_tier: "default" },
+  { label: "omitted reasoning", service_tier: "default" },
+  { label: "null reasoning", reasoning: null, service_tier: "default" },
+  { label: "omitted effort", reasoning: {}, service_tier: "default" },
+  { label: "changed tier", reasoning: { effort: "high" }, service_tier: "priority" },
+  { label: "omitted tier", reasoning: { effort: "high" } },
+]) test(`task relay refuses ${label} without an upstream call`, async () => {
   let calls = 0;
   const relay = startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
     limits: codexLimits({ ioMs: 1000, cleanupMs: 1000 }), task: { mapping, settings, executionDeadlineUnixMs: Date.now() + 120_000, maxOutputBytes: 4096 },
@@ -54,7 +61,8 @@ test("task relay refuses a changed effort or service tier without an upstream ca
     const response = await fetch(`${relay.baseUrl}/responses`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ model, instructions: settings.instructions.base,
         input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }], tools: [], tool_choice: "auto",
-        parallel_tool_calls: false, reasoning: { effort: "low", summary: "auto" }, service_tier: "default", store: false, stream: true, include: [] }) });
+        parallel_tool_calls: false, ...controls,
+        store: false, stream: true, include: [] }) });
     expect(response.status).toBe(400); expect(calls).toBe(0);
   } finally { expect((await relay.close()).joined).toBe(true); }
 });
