@@ -24,6 +24,9 @@ supplies this process port; importing Agentrouter does not discover or launch
 an installed Codex binary. The protocol exposes only `account/read`, managed
 `account/login/start`, `account/login/cancel`, `account/logout` and `model/list`.
 Unexpected server requests are refused; the transport cannot start a model turn.
+The startup remote-control notification is accepted only when its status is
+`disabled`. Remote identity fields are validated and discarded; another status
+stops the account transport.
 
 The host still owns runtime admission, the native launcher, private account
 storage, configuration isolation, process journaling and crash recovery. Keep

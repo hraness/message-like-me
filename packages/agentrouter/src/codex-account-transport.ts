@@ -163,6 +163,15 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
       assert(value.id === undefined && value.result === undefined && value.error === undefined, "CODEX_ACCOUNT_NATIVE_REQUEST_DENIED");
       if (value.emittedAtMs !== undefined) safeInteger(value.emittedAtMs, 0, Number.MAX_SAFE_INTEGER);
       assert(++notifications <= LIMITS.notifications, "CODEX_ACCOUNT_NOTIFICATION_LIMIT");
+      if (value.method === "remoteControl/status/changed") {
+        const params = object(value.params, ["installationId", "serverName", "environmentId", "status"]);
+        assert(params.status === "disabled", "CODEX_ACCOUNT_REMOTE_CONTROL_DENIED");
+        text(params.installationId, 160); text(params.serverName, 1024);
+        if (params.environmentId !== undefined && params.environmentId !== null) text(params.environmentId, 160);
+        // Native initialization reports its disabled remote-control state. The
+        // account surface discards this notice and all of its identity fields.
+        return;
+      }
       if (value.method === "account/updated") {
         const params = object(value.params, ["authMode", "planType"]);
         for (const item of [params.authMode, params.planType]) if (item !== undefined && item !== null) text(item, 128);
