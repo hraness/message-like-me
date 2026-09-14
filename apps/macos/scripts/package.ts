@@ -68,6 +68,6 @@ if (import.meta.main) {
     requireValue(sha256(JSON.stringify(inventory(resource))) === sha256(JSON.stringify(inventory(staged))), "Local sealing changed nested runtime bytes");
     command("/usr/bin/codesign", ["--verify", "--deep", "--strict", bundlePath]);
     requireValue(!source.clean || JSON.stringify(sourceCoordinate()) === JSON.stringify(source), "Admitted source changed during package build");
-    console.log("Built an unsigned local Textbutler app. Developer ID signing and notarization remain required for distribution.");
+    console.log("Built the optional legacy Textbutler inspector app for local validation. The supported CLI/menu-bar release does not use this bundle.");
   }
 }
