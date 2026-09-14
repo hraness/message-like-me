@@ -13,9 +13,9 @@ the three symbols, a keyword, and smart or keyword-only response mode.
 **Development status:** the source includes the macOS daemon lifecycle,
 owner-selected Ghostget conversation enrollment, optional history
 initialization, private memory, executable hooks, reply policy and send journal.
-The supported desktop surface is the unbundled `textbutler` CLI plus its native
-menu-bar companion; it runs from a prebuilt binary and does not require an app
-bundle, signing, notarization, or a download manager. Agentrouter includes a
+The supported local surface is the `textbutler` CLI plus its native menu-bar
+companion. It runs from a prebuilt binary and does not require an app bundle,
+signing, notarization, or a download manager. Agentrouter includes a
 restricted Claude Agent SDK adapter and shared account custody. Live automated
 replies remain unavailable until Ghostget's durable events and scoped
 automation grants, and the provider's contact-only execution, are qualified.
@@ -25,7 +25,7 @@ informational; it has no connection to private messages or contact folders.
 From a source checkout, build the companion explicitly with
 `bun run --cwd apps/macos menubar:build`, then run the prebuilt binary with
 `bun run --cwd apps/macos menubar`. Installed CLI packages should ship that
-companion so `textbutler menubar` can launch it directly; the command never compiles Swift or starts a desktop app.
+companion so `textbutler menubar` can launch it directly; the command never compiles Swift or starts a windowed application.
 
 Start with the [architecture and capability status](docs/textbutler/architecture.md),
 [Textbutler runtime](packages/textbutler/README.md),
@@ -39,9 +39,33 @@ bun run check:textbutler
 ```
 
 The source is MIT licensed. New packages remain unpublished while their
-contracts are developed. Message Like Me's published history readers and
-message-bundle contracts are retained below for existing consumers; they are
-not the new live messaging runtime.
+contracts are developed. The menu-bar CLI and daemon are the only supported
+Textbutler runtime surfaces. Message Like Me history readers and message-bundle
+contracts are retained below only as compatibility documentation for existing
+consumers; they are not Textbutler runtime components.
+
+## Run the Textbutler menu companion
+
+Install a release that includes the prebuilt macOS companion, then launch it in
+the foreground:
+
+```sh
+textbutler menubar
+```
+
+The command is a singleton and stays running until you choose **Quit** from the
+menu. It never compiles source. To start it automatically when you sign in,
+install the per-user LaunchAgent:
+
+```sh
+textbutler menubar install
+textbutler menubar status
+textbutler menubar uninstall
+```
+
+The companion opens the local daemon controls and the Textbutler web dashboard
+when requested. It has no windowed desktop application, installer, or notarized
+release requirement.
 
 ## Legacy Message Like Me history tools
 

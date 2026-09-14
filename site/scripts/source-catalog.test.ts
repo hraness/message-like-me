@@ -391,7 +391,7 @@ describe('supported source presentation', () => {
       'Global pause and active contact limits',
     ]);
     expect(renderedRootLayout).not.toContain('downloadUrl');
-    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; no signed Mac download');
+    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; CLI and menu companion');
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);

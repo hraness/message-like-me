@@ -31,7 +31,7 @@ const HERO_FOOTNOTE = 'In development · macOS · iMessage + WhatsApp';
 const HOME_QUESTIONS = [
   {
     question: 'Can I use Textbutler today?',
-    answer: 'You can build the menu companion from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. Desktop app downloads are not provided.',
+    answer: 'You can build the menu companion from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. No windowed app download is provided.',
   },
   {
     question: 'Will it interrupt my conversations?',
@@ -55,7 +55,7 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'Which rich message features will work?',
-    answer: 'The app shows text, files, reactions, stickers, links, and polls according to the connection’s current capabilities and permissions. iMessage rich actions require a separately configured Messages bridge that needs System Integrity Protection disabled; Textbutler never changes that setting. App Clips and mini apps remain unavailable. No Linq integration is included.',
+    answer: 'The menu companion and daemon expose text, files, reactions, stickers, links, and polls according to the connection’s current capabilities and permissions. iMessage rich actions require a separately configured Messages bridge that needs System Integrity Protection disabled; Textbutler never changes that setting. App Clips and mini apps remain unavailable. No Linq integration is included.',
   },
   {
     question: 'What happened to Message Like Me?',
@@ -144,7 +144,7 @@ export default function Home() {
             { label: 'Capabilities, not promises', detail: 'Rich actions depend on the selected connection and its permissions. Unsupported features, including mini apps, stay visible as unavailable.' },
           ]} />
 
-          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The CLI, menu companion, and daemon are implemented in source. Setup is explicit, and a desktop app downloads are not provided.">
+          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The CLI, menu companion, and daemon are implemented in source. Setup is explicit, and no windowed app download is provided.">
             <div className="development-status"><div><h3>Ready to inspect and build</h3><p>Mac controls, background service, iMessage and WhatsApp enrollment, optional history import, editable memory, hooks, and a guarded reply loop. New installations start paused.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the menu companion source</a></div><div><h3>Setup before replies</h3><p>Configure Ghostget and its permissions, check an explicit Claude API account, then enable a contact and resume. Native Claude Code and Codex remain unavailable. Live delivery and rich actions still need verification on your account.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
             <p className="legacy-note">Looking for the original history tools? <a href={RELEASE_URL}>Message Like Me v{SOFTWARE_VERSION}</a> remains available as a legacy release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>
           </MarketingSection>

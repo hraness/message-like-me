@@ -12,7 +12,7 @@ Claude Code and Codex remain unavailable until their native execution boundaries
 are qualified. Source-mode startup does not supply an API runtime attestation.
 See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
 tests do not attest live delivery on a particular account. CLI and menu-bar use
-do not require a signed Mac release; desktop app packaging has been removed.
+do not require a signed Mac release; windowed desktop app packaging has been removed.
 
 ## Modules
 
@@ -57,7 +57,22 @@ bun run textbutler doctor
 
 Use `bun run textbutler --help` for the current command syntax. For foreground
 development, run `bun run textbutler daemon run`; closing that terminal stops
-the process. For an explicitly installed background service:
+the process. To launch the prebuilt menu companion in the foreground, use:
+
+```sh
+bun run textbutler menubar
+```
+
+The menu command never compiles source and enforces one running companion per
+user. Install its per-user LaunchAgent only when login startup is wanted:
+
+```sh
+bun run textbutler menubar install
+bun run textbutler menubar status
+bun run textbutler menubar uninstall
+```
+
+For an explicitly installed background service:
 
 ```sh
 bun run textbutler daemon install
@@ -114,7 +129,7 @@ forced termination. Each invocation first claims the private
 outcomes preserve it; restarting the daemon does not clear the fence. Recovery
 requires owner inspection of the exact configuration digest and operation record,
 plus reconciliation of Ghostget's corresponding cleanup state. Do not delete the
-marker or run broad provider recovery merely to unblock a retry. The application
+marker or run broad provider recovery merely to unblock a retry. The daemon
 does not automatically invoke Ghostget recovery or infer descendant cleanup from
 the immediate parent process exiting.
 The configuration above selects the legacy read-only conversation path. For
@@ -135,7 +150,7 @@ Enabling revalidates the messaging identity and grants only currently available
 actions, for at most 30 days and 100,000 actions. While the contact remains enabled,
 the daemon can renew that bounded grant after checking current provider state,
 recipient identity, settings revision and remaining capacity. Textbutler also
-enforces its per-contact reply rate limit. The app shows grant expiry, recovery
+enforces its per-contact reply rate limit. Textbutler shows grant expiry, recovery
 requirements and last-confirmed rich-message capabilities. Pausing stops new
 dispatches; disabling also revokes the grant. An uncertain revocation retains
 private recovery state and blocks dispatch until reconciliation succeeds.

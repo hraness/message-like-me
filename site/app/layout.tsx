@@ -109,7 +109,7 @@ const structuredData = {
       name: SITE_NAME,
       description: SITE_DESCRIPTION,
       codeRepository: GITHUB_URL,
-      creativeWorkStatus: 'In development; explicit messaging and agent setup required; no signed Mac download',
+      creativeWorkStatus: 'In development; explicit messaging and agent setup required; CLI and menu companion',
       programmingLanguage: 'TypeScript',
       runtimePlatform: 'Bun 1.3.14 or newer on macOS',
       license: 'https://opensource.org/license/mit',

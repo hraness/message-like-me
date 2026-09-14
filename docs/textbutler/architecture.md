@@ -62,7 +62,7 @@ Directory names use opaque identifiers, not contact names or phone numbers. File
 
 The owner chooses one verified direct conversation from a bounded Ghostget list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
 
-The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated. There is no need to carry every previous archive/source feature into the new UI.
+The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated. There is no need to carry every previous archive/source feature into the menu companion.
 
 ## Reply admission
 
@@ -134,9 +134,9 @@ Ghostget currently imports published Message Like Me bundle contracts. Keep that
 
 ## macOS menu companion
 
-The supported desktop surface is an unbundled status-item companion launched by the CLI. It exposes daemon state, getting-started guidance, active-contact and account counts, pause/resume, account setup, status refresh, and the textbutler.app entry point. The web dashboard is the settings surface; the menu companion opens it in a browser. Neither surface is required to run the daemon. A separate synthetic demo is clearly labeled and is not included in the live data graph.
+The supported local surface is an unbundled status-item companion launched by the CLI. It exposes daemon state, getting-started guidance, active-contact and account counts, pause/resume, account setup, status refresh, and the textbutler.app entry point. The web dashboard is the settings surface; the menu companion opens it in a browser. Neither surface is required to run the daemon. A separate synthetic demo is clearly labeled and is not included in the live data graph.
 
-One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The webview has no generic shell, filesystem, opener, or network plugin. The app does not inherit access to arbitrary Ghostget operations.
+One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The companion has no generic shell, filesystem, opener, or network plugin and does not inherit access to arbitrary Ghostget operations.
 
 ## Admission still required
 
