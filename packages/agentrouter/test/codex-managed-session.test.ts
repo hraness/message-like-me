@@ -108,6 +108,79 @@ test.each(["settings", "model", "effort", "instructions", "digest"])("a %s acces
   expect(peer.methods).toEqual([]);
 });
 
+test("native settings before the turn reply preserve requested defaults and record resolved settings", async () => {
+  const order: string[] = [];
+  const peer = managedPeer({ nativeSettings: true, serviceTier: null, mutateFrame(frame) {
+    if (frame.result?.thread) order.push("thread reply");
+    if (frame.method === "thread/started") order.push("thread started");
+    if (frame.method === "thread/settings/updated") order.push("settings updated");
+    if (frame.result?.turn) order.push("turn reply");
+  } });
+  const result = await run(peer);
+  expect(order).toEqual(["thread reply", "thread started", "settings updated", "turn reply"]);
+  expect(result.receipt.observedSettings).toEqual({ model: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" });
+  expect(peer.settings.model.serviceTier).toBeNull(); expect(peer.request.model.serviceTier).toBeNull();
+  expect(peer.methods.find(value => value.method === "turn/start")?.params).not.toHaveProperty("serviceTier");
+  expect(result.receipt.processStopped).toBe(true); expect(peer.counts().invocations).toBe(1);
+});
+
+test.each(["model", "effort", "tier", "cwd", "sandbox", "thread"])("native settings %s drift fails before broker effects", async which => {
+  const peer = managedPeer({ nativeSettings: true, mutateFrame(frame) {
+    if (frame.method !== "thread/settings/updated") return;
+    const value = frame.params.threadSettings;
+    if (which === "model") value.model = "changed-model";
+    if (which === "effort") value.effort = "high";
+    if (which === "tier") value.serviceTier = "priority";
+    if (which === "cwd") value.cwd = "/foreign";
+    if (which === "sandbox") value.sandboxPolicy.networkAccess = true;
+    if (which === "thread") frame.params.threadId = "foreign-thread";
+  } });
+  const receipt = await failed(peer);
+  expect(receipt.turnCompleted).toBe(false); expect(receipt.processStopped).toBe(true); expect(peer.counts().invocations).toBe(0);
+});
+
+test("pending settings repeats are bounded and cannot change a newly observed default", async () => {
+  expect((await run(managedPeer({ nativeSettings: true, settingsCopies: 8 }))).receipt.turnCompleted).toBe(true);
+  const excess = managedPeer({ nativeSettings: true, settingsCopies: 9 });
+  expect((await failed(excess)).failures).toContain("CODEX_MANAGED_SETTINGS_UPDATE_CHANGED");
+  expect(excess.counts().invocations).toBe(0);
+  let seen = 0;
+  const changed = managedPeer({ nativeSettings: true, settingsCopies: 2, serviceTier: null, mutateFrame(frame) {
+    if (frame.method === "thread/settings/updated" && ++seen === 2) frame.params.threadSettings.personality = "friendly";
+  } });
+  const receipt = await failed(changed);
+  expect(receipt.failures).toContain("CODEX_MANAGED_SETTINGS_UPDATE_CHANGED");
+  expect(receipt.observedSettings?.serviceTier).toBe("default"); expect(changed.counts().invocations).toBe(0);
+});
+
+test("matching settings outside the pending turn RPC are rejected", async () => {
+  let beforeThread!: ReturnType<typeof managedPeer>;
+  beforeThread = managedPeer({ mutateConfig() { beforeThread.emit(beforeThread.settingsUpdate()); } });
+  expect((await failed(beforeThread)).failures).toContain("CODEX_MANAGED_SETTINGS_UPDATE_SCOPE");
+  expect(beforeThread.methods.some(value => value.method === "turn/start")).toBe(false);
+  let afterReply!: ReturnType<typeof managedPeer>;
+  afterReply = managedPeer({ onTurn({ emit }) { emit(afterReply.settingsUpdate()); } });
+  expect((await failed(afterReply)).failures).toContain("CODEX_MANAGED_SETTINGS_UPDATE_SCOPE");
+  expect(afterReply.counts().invocations).toBe(0);
+  const afterFinal: Record<string, any>[] = [], terminal = managedPeer({ afterFinal });
+  afterFinal.push(terminal.settingsUpdate());
+  const receipt = await failed(terminal);
+  expect(receipt.turnCompleted).toBe(true); expect(receipt.failures).toContain("CODEX_MANAGED_SETTINGS_UPDATE_SCOPE");
+});
+
+test("pending settings cannot authorize a callback or survive a mismatched turn reply", async () => {
+  const callback = managedPeer({ nativeSettings: true, serviceTier: null, earlyCallback: true });
+  const callbackReceipt = await failed(callback);
+  expect(callback.counts().invocations).toBe(0); expect(callback.answers).toHaveLength(0);
+  expect(callbackReceipt.observedSettings?.serviceTier).toBe("default");
+  const wrongReply = managedPeer({ nativeSettings: true, serviceTier: null, mutateFrame(frame) {
+    if (frame.result?.turn) frame.id = 999;
+  } });
+  const replyReceipt = await failed(wrongReply);
+  expect(replyReceipt.failures).toContain("CODEX_MANAGED_UNEXPECTED_RPC_ID");
+  expect(replyReceipt.observedSettings?.serviceTier).toBe("default"); expect(wrongReply.counts().invocations).toBe(0);
+});
+
 test.each(["account", "config", "thread"])("changed %s admission fails before a model turn or broker effect", async which => {
   const peer = managedPeer(which === "account" ? { mutateAccount(value) { value.account.type = "apiKey"; } }
     : which === "config" ? { mutateConfig(value) { value.config.model_provider = "foreign"; } }

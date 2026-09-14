@@ -489,6 +489,10 @@ stops the session. The requested capability flags still require separate effecti
 tool-inventory evidence. Its bounded callback ledger binds tool starts, broker calls,
 results and completions to one thread and turn, rejects duplicates and unsupported
 native operations, and records native token usage with unknown monetary cost.
+A turn-start settings notification is accepted only while that start request is
+pending and must match the admitted thread controls. Repeated notifications must
+be identical and remain bounded; resolved defaults are recorded only after the
+matching reply, without changing the requested settings.
 Cancellation revokes the broker and joins the process and admitted handlers;
 uncertain stop evidence retains account custody.
 
@@ -502,7 +506,7 @@ therefore report `productionQualified: false` and
 the effective tool inventory and host read/write confinement. The existing
 relay-only process launcher's network policy is unchanged.
 
-On 2026-09-13, Codex **0.154.0-alpha.6.2** accepted the managed configuration
+On 2026-09-13, Codex **0.154.0-alpha.6.2** accepted the initial managed configuration
 and an empty ephemeral thread in separate native diagnostics with fresh private
 state and network access denied. Configuration and thread-setting readback
 passed, and root exit, process-group absence and stdio closure were verified.
@@ -511,3 +515,29 @@ configuration and thread-response compatibility for that binary, not
 authenticated execution or tool confinement.
 Those diagnostics predate the shared-baseline task overlay. The combined path
 still requires native validation against the exact admitted runtime.
+
+`codexManagedStaticCatalog({ model, catalog })` prepares a single-model static
+catalog for a trusted native host. Supply public `ModelsResponse` metadata for
+the exact runtime and select an exact model slug. The helper refuses duplicate
+slugs, missing models and non-JSON values, then returns a deeply immutable
+snapshot, canonical JSON and its SHA-256. It preserves the selected model's
+protocol and capability metadata while selecting direct tools and disabling
+shell, patch, experimental tools, search, experimental context, subagents and
+Node REPL. It performs no discovery, authentication or file I/O.
+
+The host owns the catalog file outside model-writable workspaces and binds its
+digest to the selected executable, configuration and exact model. The catalog
+alone does not establish the effective tool inventory: native extensions can
+register additional handlers. Managed configuration separately disables context,
+token-budget/history, time, deferred-execution and permission-request tools, and
+both subagent switches. These declarative controls remain subject to exact-build
+native validation and do not activate the managed subscription route.
+
+With a fixed `gpt-6-astra` catalog, local scripted-provider diagnostics on the
+same binary verified empty and one-tool manifests in every request's Responses
+Lite `additional_tools` input prefix. One permitted callback returned its exact
+text result; nine forged built-in function calls each returned the exact
+unsupported-call response. Native process, stdio and listener joins passed, and
+an independent audit matched the retained binary, catalog, configuration and
+wire evidence. These no-authentication diagnostics leave managed sign-in,
+provider egress and production profile qualification outstanding.

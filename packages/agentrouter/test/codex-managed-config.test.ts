@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { CODEX_MANAGED_ACCOUNT_FEATURES, codexManagedAccountConfiguration } from "../src/codex-managed-baseline.ts";
-import { CODEX_DISABLED_FEATURES, codexTaskSettings } from "../src/codex-config.ts";
-import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedThreadResponse,
-  codexManagedTaskConfiguration, codexManagedThreadConfiguration } from "../src/codex-managed-config.ts";
+import { codexTaskSettings } from "../src/codex-config.ts";
+import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedSettingsUpdate,
+  assertCodexManagedThreadResponse, CODEX_MANAGED_DISABLED_FEATURES, codexManagedTaskConfiguration,
+  codexManagedThreadConfiguration } from "../src/codex-managed-config.ts";
 
 const settings = codexTaskSettings({ model: { id: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" },
   instructions: { base: "Read the retained corpus.", developer: "Use only the supplied tools." } });
@@ -65,15 +66,18 @@ test("task text never enters persistent TOML and unset selections preserve nativ
 test("the trusted thread overlay retains every task denial and cannot forward arbitrary config", () => {
   const overlay = codexManagedThreadConfiguration(settings);
   expect(overlay).toEqual({
-    features: Object.fromEntries([...new Set([...CODEX_MANAGED_ACCOUNT_FEATURES, ...CODEX_DISABLED_FEATURES])].map(name => [name, false])),
+    features: Object.fromEntries([...new Set([...CODEX_MANAGED_ACCOUNT_FEATURES, ...CODEX_MANAGED_DISABLED_FEATURES])].map(name => [name, false])),
     tools: { experimental_request_user_input: { enabled: false }, update_plan: { enabled: false } },
+    agents: { enabled: false },
     model_reasoning_effort: "medium",
   });
-  for (const name of ["remote_control", "browser_use_external", "goals", "sleep_tool", "code_mode_host", "view_image"]) {
+  for (const name of ["remote_control", "browser_use_external", "goals", "sleep_tool", "code_mode_host", "view_image",
+    "context_management", "token_budget", "current_time_reminder", "deferred_executor", "request_permissions_tool"]) {
     expect(overlay.features[name]).toBe(false);
   }
   expect(Object.isFrozen(overlay)).toBe(true); expect(Object.isFrozen(overlay.features)).toBe(true);
   expect(Object.isFrozen(overlay.tools)).toBe(true); expect(Object.isFrozen(overlay.tools.update_plan)).toBe(true);
+  expect(Object.isFrozen(overlay.agents)).toBe(true);
   expect(Object.isFrozen(overlay.tools.experimental_request_user_input)).toBe(true);
   expect(() => codexManagedThreadConfiguration({ ...settings, config: { features: { shell_tool: true } } } as never))
     .toThrow("CODEX_MANAGED_RECORD_INVALID");
@@ -121,6 +125,18 @@ test.each([
   expect(() => assertCodexManagedConfigResponse({ ...configResponse(), config: { ...configResponse().config, ...changes } }, expected)).toThrow(error);
 });
 
+test("managed preflight denies projected tool defaults and keeps the subagent disable", () => {
+  for (const name of ["context_management", "token_budget", "current_time_reminder", "deferred_executor", "request_permissions_tool"])
+    expect(codexManagedThreadConfiguration(settings).features[name]).toBe(false);
+  const response = configResponse();
+  // The native projection may omit agents; when present it must retain the disable.
+  expect(assertCodexManagedConfigResponse(response, expected)).toBeUndefined();
+  expect(assertCodexManagedConfigResponse({ ...response, config: { ...response.config, agents: { enabled: false } } }, expected)).toBeUndefined();
+  for (const agents of [{ enabled: true }, {}, null]) {
+    expect(() => assertCodexManagedConfigResponse({ ...response, config: { ...response.config, agents } }, expected)).toThrow();
+  }
+});
+
 test("thread admission binds exact model, settings, scratch and read-only controls", () => {
   expect(assertCodexManagedThreadResponse(threadResponse(), expected)).toEqual({ model: settings.model.id, reasoningEffort: "medium", serviceTier: "default" });
   for (const changes of [
@@ -143,4 +159,83 @@ test("native reply validators do not execute accessors", () => {
   Object.defineProperty(response, "model", { enumerable: true, get() { reads++; return "synthetic-model"; } });
   expect(() => assertCodexManagedThreadResponse(response, expected)).toThrow("CODEX_MANAGED_RECORD_INVALID");
   expect(reads).toBe(0);
+});
+
+// Public synthetic counterpart of the pinned native thread/settings/updated
+// shape. Provider=openai tests the protocol guard, not native authentication.
+const settingsUpdate = () => ({ threadId: "thread-one", threadSettings: {
+  activePermissionProfile: null, approvalPolicy: "never", approvalsReviewer: "user", cwd: expected.cwd,
+  model: settings.model.id, modelProvider: "openai", serviceTier: "default", effort: "medium", summary: null,
+  collaborationMode: { mode: "default", settings: { model: settings.model.id, reasoning_effort: "medium", developer_instructions: null } },
+  multiAgentMode: "explicitRequestOnly", personality: "pragmatic", sandboxPolicy: { type: "readOnly", networkAccess: false },
+} });
+const settingsUpdateExpected = () => ({ ...expected, threadId: "thread-one", threadResponse: {
+  ...threadResponse(), activePermissionProfile: null, multiAgentMode: "explicitRequestOnly",
+} });
+
+test("native settings updates bind the admitted thread controls and return immutable observations", () => {
+  const admitted = settingsUpdateExpected(), update = settingsUpdate();
+  const result = assertCodexManagedSettingsUpdate(update, admitted);
+  expect(result).toEqual({ model: settings.model.id, reasoningEffort: "medium", serviceTier: "default" });
+  expect(Object.isFrozen(result)).toBe(true); expect(update.threadSettings.modelProvider).toBe("openai");
+  for (const reviewer of ["auto_review", "guardian_subagent"]) {
+    expect(assertCodexManagedSettingsUpdate({ ...update, threadSettings: { ...update.threadSettings, approvalsReviewer: reviewer } },
+      { ...admitted, threadResponse: { ...admitted.threadResponse, approvalsReviewer: reviewer } })).toEqual(result);
+  }
+});
+
+test("null requests may resolve native defaults but existing observed selections cannot drift", () => {
+  const admitted = settingsUpdateExpected(), update = settingsUpdate();
+  const unset = codexTaskSettings({ model: { id: settings.model.id, reasoningEffort: null, serviceTier: null }, instructions: settings.instructions });
+  const nativeDefaults = { ...admitted, settings: unset, threadResponse: { ...admitted.threadResponse, reasoningEffort: null, serviceTier: null } };
+  expect(assertCodexManagedSettingsUpdate(update, nativeDefaults)).toEqual({ model: settings.model.id, reasoningEffort: "medium", serviceTier: "default" });
+  const unresolved = { ...update, threadSettings: { ...update.threadSettings, effort: null, serviceTier: null,
+    collaborationMode: { mode: "default", settings: { model: settings.model.id, reasoning_effort: null, developer_instructions: null } } } };
+  expect(assertCodexManagedSettingsUpdate(unresolved, nativeDefaults)).toEqual({ model: settings.model.id, reasoningEffort: null, serviceTier: null });
+  for (const changes of [{ effort: "high" }, { effort: null }, { serviceTier: "priority" }, { serviceTier: null }]) {
+    expect(() => assertCodexManagedSettingsUpdate({ ...update, threadSettings: { ...update.threadSettings, ...changes } }, admitted)).toThrow();
+    expect(() => assertCodexManagedSettingsUpdate({ ...update, threadSettings: { ...update.threadSettings, ...changes } }, { ...admitted, settings: unset })).toThrow();
+  }
+  expect(() => assertCodexManagedSettingsUpdate(update, { ...nativeDefaults, settings })).toThrow();
+});
+
+test("settings updates reject scope, authority, instructions, collaboration and path changes", () => {
+  const update = settingsUpdate(), admitted = settingsUpdateExpected();
+  for (const changes of [{ model: "foreign" }, { modelProvider: "fixture" }, { cwd: "/foreign" }, { cwd: `${expected.cwd}/../work` },
+    { approvalPolicy: "on-request" }, { approvalsReviewer: "auto_review" }, { activePermissionProfile: { id: "foreign" } },
+    { multiAgentMode: "proactive" }, { multiAgentMode: { custom: "foreign instructions" } },
+    { sandboxPolicy: { type: "readOnly", networkAccess: true } }, { sandboxPolicy: { type: "readOnly" } },
+    { sandboxPolicy: { type: "workspaceWrite", networkAccess: false } },
+    { sandboxPolicy: { type: "readOnly", networkAccess: false, writableRoots: ["/foreign"] } },
+    { developerInstructions: "new instructions" }, { runtimeWorkspaceRoots: [] }, { instructionSources: [] },
+    { collaborationMode: { ...update.threadSettings.collaborationMode, mode: "plan" } },
+    { collaborationMode: { mode: "default", settings: { model: "foreign", reasoning_effort: "medium", developer_instructions: null } } },
+    { collaborationMode: { mode: "default", settings: { model: settings.model.id, reasoning_effort: "high", developer_instructions: null } } },
+    { collaborationMode: { mode: "default", settings: { model: settings.model.id, reasoning_effort: "medium", developer_instructions: "" } } }])
+    expect(() => assertCodexManagedSettingsUpdate({ ...update, threadSettings: { ...update.threadSettings, ...changes } }, admitted)).toThrow();
+  expect(() => assertCodexManagedSettingsUpdate({ ...update, threadId: "other-thread" }, admitted)).toThrow();
+  expect(() => assertCodexManagedSettingsUpdate({ ...update, turnId: "unbound-turn" }, admitted)).toThrow();
+  for (const changes of [{ activePermissionProfile: undefined }, { activePermissionProfile: { id: "foreign" } },
+    { multiAgentMode: undefined }, { multiAgentMode: "proactive" }, { approvalsReviewer: ["user"] }, { thread: { ...threadResponse().thread, id: "foreign" } }])
+    expect(() => assertCodexManagedSettingsUpdate(update, { ...admitted, threadResponse: { ...admitted.threadResponse, ...changes } })).toThrow();
+});
+
+test("settings update metadata is closed and bounded without evaluating accessors", () => {
+  const admitted = settingsUpdateExpected(), update = settingsUpdate();
+  for (const changes of [{ personality: "unknown" }, { personality: {} }, { summary: "unknown" }, { summary: [] },
+    { effort: "a".repeat(161) }, { effort: undefined }, { serviceTier: "a".repeat(161) }, { serviceTier: undefined }])
+    expect(() => assertCodexManagedSettingsUpdate({ ...update, threadSettings: { ...update.threadSettings, ...changes } }, admitted)).toThrow();
+  for (const key of Object.keys(update.threadSettings)) {
+    const incomplete: Record<string, unknown> = { ...update.threadSettings }; delete incomplete[key];
+    expect(() => assertCodexManagedSettingsUpdate({ ...update, threadSettings: incomplete }, admitted)).toThrow();
+  }
+  let accessed = 0;
+  for (const path of ["threadId", "threadSettings", "effort", "developer_instructions"]) {
+    const poisoned = settingsUpdate();
+    const target = path === "threadId" || path === "threadSettings" ? poisoned : path === "effort" ? poisoned.threadSettings
+      : poisoned.threadSettings.collaborationMode.settings;
+    Object.defineProperty(target, path, { enumerable: true, get() { accessed++; return null; } });
+    expect(() => assertCodexManagedSettingsUpdate(poisoned, admitted)).toThrow("CODEX_MANAGED_RECORD_INVALID");
+  }
+  expect(accessed).toBe(0);
 });
