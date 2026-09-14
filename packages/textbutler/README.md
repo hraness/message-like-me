@@ -11,7 +11,9 @@ run replies. Claude API is an explicit, separately billed account choice;
 Claude Code and Codex remain unavailable until their native execution boundaries
 are qualified. Source-mode startup does not supply an API runtime attestation.
 See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
-tests do not attest a signed Mac release or live delivery on a particular account.
+tests do not attest live delivery on a particular account. CLI and menu-bar use
+do not require a signed Mac release; optional Tauri packaging has its own
+separate checks.
 
 ## Modules
 
