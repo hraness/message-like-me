@@ -6,7 +6,11 @@
 
 web
 
-The product is a macOS-only desktop application with a Tauri webview and a separate user-session daemon. This platform marker describes the renderer; it does not imply Windows, Linux, iOS, or browser-hosted messaging support. The public website is informational.
+The product is a macOS-only CLI with a separate user-session daemon and an
+optional native menu-bar companion. A Tauri webview inspector remains a local
+development surface, not a release prerequisite. This platform marker does not
+imply Windows, Linux, iOS, or browser-hosted messaging support. The public
+website is informational.
 
 ## Users
 
@@ -35,7 +39,9 @@ The Mac must be awake and signed in for local messaging. Closing the settings wi
 
 ## Brand Commitments
 
-Name: Textbutler. Domain: textbutler.app. The owner explicitly permits redesigning the previous product. Ghostget is the reference for a Mac application with a webview and a clean native boundary.
+Name: Textbutler. Domain: textbutler.app. The owner explicitly permits
+redesigning the previous product. Ghostget is the reference for the native
+provider seam; Textbutler's supported surface is the CLI and status item.
 
 ## Product Principles
 
@@ -47,7 +53,12 @@ Name: Textbutler. Domain: textbutler.app. The owner explicitly permits redesigni
 
 ## Evidence on Hand
 
-The existing repository contains bounded history ingestion, provenance-aware profiles, and frozen shared message contracts. New source packages contain the Textbutler runtime, provider-independent transport, and Agentrouter foundations. Automated fixtures are synthetic. They are not evidence of live provider qualification, actual message delivery, or a signed/notarized Mac release.
+The existing repository contains bounded history ingestion, provenance-aware
+profiles, and frozen shared message contracts. New source packages contain the
+Textbutler runtime, provider-independent transport, and Agentrouter foundations.
+Automated fixtures are synthetic. They are not evidence of live provider
+qualification or actual message delivery. The optional Tauri packaging flow is
+legacy and does not gate CLI or menu-bar use.
 
 ## Open Decisions and Working Defaults
 

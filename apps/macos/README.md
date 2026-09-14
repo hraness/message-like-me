@@ -1,6 +1,14 @@
 # Textbutler for macOS
 
-A bundled Tauri 2 webview for contact settings, scoped memory, activity, connection setup, agent accounts and global pause. The installed app can explicitly manage its bundled background service; the daemon owns agent and messaging operations.
+Textbutler is distributed and operated as a CLI with an unbundled macOS
+menu-bar companion. The CLI owns the daemon, contact settings, scoped memory,
+activity, connection setup, agent accounts and global pause. The companion is a
+small status item that opens the web dashboard and reports daemon state; it does
+not require an app bundle, download, signing, or notarization.
+
+The Tauri 2 settings inspector remains in this repository as an optional local
+surface for development and owners who want a larger settings window. It is not
+part of the supported release or installation path.
 
 Textbutler is menu-bar first: the compact utility header keeps daemon state,
 getting-started guidance, active-contact and account counts, pause/resume,
@@ -10,8 +18,10 @@ configuration, but it is not required for day-to-day operation. Shared utility
 marks use short two-letter labels (`AI`, `Sl`, `Pe`, `Oo`, and `Tb`) so they stay
 legible at menu-bar scale.
 
-For a native status item without an app bundle, run `bun run menubar:build` and
-launch `out/textbutler-menubar`. It is an unbundled accessory binary with the
+For a native status item without an app bundle, run `bun run menubar:build` once
+and then `bun run menubar`. The run command only launches the existing
+`out/textbutler-menubar`; it never invokes Swift, Bun bundling, or a package
+manager. It is an unbundled accessory binary with the
 short serif `Tb` mark; it reads only the private daemon-socket presence and
 opens the fixed `https://textbutler.app/` dashboard. It does not package,
 sign, notarize, start, or control the daemon. The Tauri inspector remains the
@@ -35,7 +45,12 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo run --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-Route native Cargo checks/builds through the installed host scheduler. The frontend must be built before Cargo embeds it. `bun run native:package` builds the complete unsigned app with pinned Bun and compiled CLI; `bun run native:smoke` checks the relocated runtime against synthetic state. The [distribution procedure](distribution/README.md) defines the separate signed, notarized, provenance-verified desktop release. Source builds and synthetic tests do not establish live provider qualification.
+The CLI and menu companion do not need a native package build. Route native
+Cargo checks through the installed host scheduler when working on the optional
+Tauri inspector. `bun run menubar:build` is the only command that compiles the
+menu companion; `bun run menubar` requires that prebuilt file and runs it in the
+foreground. `native:package` and `native:smoke` remain developer fixtures for
+the optional inspector and are not release prerequisites.
 
 ## Synthetic interface preview
 
