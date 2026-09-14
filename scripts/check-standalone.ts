@@ -120,7 +120,7 @@ const OPACITY_RULES = [
   { label: "private source-repository name", pattern: /\bjungle\b/iu },
   { label: "private source path", pattern: /(?:projects|packages)\/message-like-me/u },
   { label: "private repository identity", pattern: /0thernet\/jungle/iu },
-  { label: "private workspace dependency protocol", pattern: /(?:workspace|catalog):/u },
+  { label: "private workspace dependency protocol", pattern: /["'`](?:workspace|catalog):[^"'`\s]*["'`]/u },
   { label: "developer home path", pattern: /\/(?:Users|home)\/[A-Za-z0-9._-]+\//u },
   { label: "private temporary path", pattern: PRIVATE_TEMPORARY_PATH },
   { label: "publication implementation detail", pattern: /OPEN_SOURCE_SYNC_/u },
@@ -417,6 +417,24 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   return problems;
 }
 
+/** Apply the opacity, credential, address, and phone text rules to one scanned
+ * source. Dependency protocols match only a complete quoted specifier such as
+ * "workspace:*" or "catalog:react18"; ordinary catalog/workspace properties and
+ * quoted keys are not specifiers. Unquoted occurrences are indistinguishable
+ * from ordinary properties and remain outside this rule. */
+export function standaloneSourceProblems(path: string, source: string): string[] {
+  const problems: string[] = [];
+  if (LEGACY_NON_BUN_REFERENCE.test(source)) {
+    problems.push(`${path} contains a legacy non-Bun Ensoul script reference`);
+  }
+  for (const rule of [...OPACITY_RULES, ...CREDENTIAL_RULES]) {
+    if (rule.pattern.test(source)) problems.push(`${path} contains ${rule.label}`);
+  }
+  problems.push(...checkEmailAddresses(path, source));
+  problems.push(...checkPhoneNumbers(path, source));
+  return problems;
+}
+
 export async function standaloneProblems(): Promise<string[]> {
   const roots = [
     ...SCANNED_DIRECTORIES.map((path) => join(PACKAGE_ROOT, path)),
@@ -462,16 +480,7 @@ export async function standaloneProblems(): Promise<string[]> {
     }
     if (!TEXT_EXTENSIONS.has(extension) && basename(file) !== "LICENSE") continue;
     const source = await readFile(file, "utf8");
-    if (!SELF_SCANNERS.has(path)) {
-      if (LEGACY_NON_BUN_REFERENCE.test(source)) {
-        problems.push(`${path} contains a legacy non-Bun Ensoul script reference`);
-      }
-      for (const rule of [...OPACITY_RULES, ...CREDENTIAL_RULES]) {
-        if (rule.pattern.test(source)) problems.push(`${path} contains ${rule.label}`);
-      }
-      problems.push(...checkEmailAddresses(path, source));
-      problems.push(...checkPhoneNumbers(path, source));
-    }
+    if (!SELF_SCANNERS.has(path)) problems.push(...standaloneSourceProblems(path, source));
     if (path.startsWith("src/") || path.startsWith("dist/")) {
       problems.push(...checkRuntimeSource(path, source));
     }
