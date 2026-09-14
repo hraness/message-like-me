@@ -20,4 +20,12 @@ describe("Codex protocol manifest", () => {
     expect(() => assertCodexProtocolManifest({ ...valid, extra: true }, runtime)).toThrow("CODEX_PROTOCOL_MANIFEST_INVALID");
     expect(() => assertCodexProtocolManifest({ ...valid, manifestSha256: "short" }, runtime)).toThrow("CODEX_PROTOCOL_MANIFEST_DIGEST_INVALID");
   });
+  test("rejects getters and prototype-backed records without invoking them", () => {
+    let invoked = false;
+    const getter = Object.create(null) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(valid)) Object.defineProperty(getter, key, { enumerable: true, get() { invoked = true; return value; } });
+    expect(() => assertCodexProtocolManifest(getter, runtime)).toThrow("CODEX_PROTOCOL_MANIFEST_INVALID");
+    expect(invoked).toBe(false);
+    expect(() => assertCodexProtocolManifest(Object.assign(Object.create({ protocol: valid.protocol }), { ...valid }), runtime)).toThrow("CODEX_PROTOCOL_MANIFEST_INVALID");
+  });
 });
