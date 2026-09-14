@@ -2,6 +2,21 @@
 
 A bundled Tauri 2 webview for contact settings, scoped memory, activity, connection setup, agent accounts and global pause. The installed app can explicitly manage its bundled background service; the daemon owns agent and messaging operations.
 
+Textbutler is menu-bar first: the compact utility header keeps daemon state,
+getting-started guidance, active-contact and account counts, pause/resume,
+account setup, status refresh, and the textbutler.app entry point one click
+away. The larger inspector remains available for contact memory and detailed
+configuration, but it is not required for day-to-day operation. Shared utility
+marks use short two-letter labels (`AI`, `Sl`, `Pe`, `Oo`, and `Tb`) so they stay
+legible at menu-bar scale.
+
+For a native status item without an app bundle, run `bun run menubar:build` and
+launch `out/textbutler-menubar`. It is an unbundled accessory binary with the
+short serif `Tb` mark; it reads only the private daemon-socket presence and
+opens the fixed `https://textbutler.app/` dashboard. It does not package,
+sign, notarize, start, or control the daemon. The Tauri inspector remains the
+optional settings surface.
+
 The native entry communicates with the Textbutler daemon at `~/Library/Application Support/Textbutler/daemon.sock`. The control command accepts only the versioned requests in the shared control package. It checks directory/socket ownership and private modes, rejects symlink paths, checks the peer UID, bounds requests and responses to 1 MiB, caps concurrent relays at four, and enforces one absolute four-second connection/write/read deadline. Missing or refused sockets show a disconnected state; malformed responses and permission failures are visible errors. Long owner jobs return a polling receipt so global pause remains available.
 
 A separate lifecycle command supports exactly service status, install and uninstall using fixed bundled runtime paths. The owner first moves the verified app to an Applications folder, checks service ownership, then explicitly installs it. New settings start paused. Uninstalling preserves contacts and memory. An uncertain lifecycle result requires ownership reconciliation; the UI cannot supply process paths, arguments or environment values.

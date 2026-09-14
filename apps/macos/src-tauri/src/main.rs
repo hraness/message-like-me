@@ -16,6 +16,7 @@ use tauri::Manager;
 mod lifecycle;
 
 const PROTOCOL: &str = "textbutler.control.v1";
+const DASHBOARD_URL: &str = "https://textbutler.app/";
 const MAX_FRAME_BYTES: usize = 1_048_576;
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 struct RelayPermit;
@@ -207,9 +208,23 @@ async fn control_request(window: tauri::WebviewWindow, request: Value) -> Value 
         .unwrap_or_else(|_| failure("unavailable", "The native control task could not complete."))
 }
 
+/// Open the fixed public dashboard through LaunchServices. The URL is a
+/// compile-time constant so the local control panel cannot become an
+/// arbitrary process or navigation launcher.
+#[tauri::command]
+fn open_dashboard(window: tauri::WebviewWindow) -> Value {
+    if window.label() != "main" || !window.url().map(|url| local_url(&url)).unwrap_or(false) {
+        return failure("unavailable", "Only the bundled main window may open the dashboard.");
+    }
+    match std::process::Command::new("/usr/bin/open").arg(DASHBOARD_URL).status() {
+        Ok(status) if status.success() => json!({ "ok": true, "url": DASHBOARD_URL }),
+        _ => failure("unavailable", "The dashboard could not be opened.")
+    }
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![control_request, lifecycle_request])
+        .invoke_handler(tauri::generate_handler![control_request, lifecycle_request, open_dashboard])
         .setup(|app| {
             let config = app.config().app.windows.first().ok_or("Missing main window configuration")?;
             tauri::WebviewWindowBuilder::from_config(app, config)?
@@ -268,5 +283,10 @@ mod tests {
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "contact.enroll", "candidateId": "test-candidate", "expectedRevision": 1, "initializeHistory": false, "chatGuid": "arbitrary-target" })));
         for command in ["shell", "exec", "read_file", "messages.send", "daemon.start"] { assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": command }))); }
         assert!(!allowed_request(&json!({ "protocol": PROTOCOL, "command": "snapshot", "path": "/tmp" })));
+    }
+
+    #[test]
+    fn dashboard_target_is_fixed() {
+        assert_eq!(DASHBOARD_URL, "https://textbutler.app/");
     }
 }

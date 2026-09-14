@@ -12,6 +12,8 @@
     "preview": "bun scripts/serve.ts",
     "native:check": "cargo check --manifest-path src-tauri/Cargo.toml --locked",
     "native:run": "cargo run --manifest-path src-tauri/Cargo.toml --locked",
+    "menubar:build": "bun scripts/menubar.ts",
+    "menubar": "bun scripts/menubar.ts --run",
     "native:package": "bun scripts/package.ts",
     "native:smoke": "bun scripts/package-smoke.ts"
   }

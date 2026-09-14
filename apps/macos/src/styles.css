@@ -165,6 +165,25 @@ select { min-width: 155px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
 
+/* Menu-bar-first utility header. It stays useful when the larger inspector is
+   closed and keeps the shared app marks readable in a narrow tray popover. */
+.menu-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 5px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--canvas) 94%, transparent); backdrop-filter: blur(14px); }
+.menu-app-rail { display: flex; align-items: center; gap: 5px; }
+.menu-app-mark, .menu-brand-mark { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-family: Georgia, "Times New Roman", serif; font-size: 12px; font-weight: 700; letter-spacing: -0.08em; line-height: 1; }
+.menu-app-mark[data-app="textbutler"], .menu-brand-mark { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
+.menu-trigger { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 3px 8px; border: 1px solid transparent; border-radius: 7px; color: var(--ink); background: transparent; font: inherit; cursor: pointer; }
+.menu-trigger:hover, .menu-trigger:focus-visible { border-color: var(--line); background: var(--hover); outline: none; }
+.menu-trigger .menu-brand-mark { min-width: 22px; height: 22px; font-size: 11px; }
+.menu-status-label { color: var(--muted); font-size: 12px; }
+.menu-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.menu-status-dot.connected { background: var(--success); }.menu-status-dot.paused { background: var(--accent); }.menu-status-dot.preview { background: #b67921; }.menu-status-dot.setup { background: #b67921; }.menu-status-dot.offline { background: var(--error); }
+.menu-chevron { color: var(--muted); font-size: 15px; line-height: 1; }
+.menu-popover { position: absolute; top: 35px; right: 12px; width: min(330px, calc(100vw - 24px)); padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 12px 36px rgb(0 0 0 / 18%); }
+.menu-popover-heading { display: grid; gap: 2px; padding: 7px 9px 10px; }.menu-popover-heading strong { font-size: 13px; }.menu-popover-heading span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; padding: 8px 9px; border: 0; border-radius: 6px; color: var(--ink); background: transparent; font: inherit; text-align: left; cursor: pointer; }.menu-item:hover, .menu-item:focus-visible { background: var(--hover); outline: none; }.menu-item small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }.menu-item kbd { color: var(--muted); font-size: 11px; }
+.menu-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 7px 5px 4px; }.menu-stats div { display: grid; gap: 1px; min-width: 0; padding: 5px; border-radius: 5px; background: var(--sidebar); text-align: center; }.menu-stats strong { font-family: Georgia, "Times New Roman", serif; font-size: 14px; font-weight: 700; }.menu-stats span { color: var(--muted); font-size: 10px; }.menu-divider { height: 1px; margin: 5px 0; background: var(--line); }
+@media (max-width: 600px) { .menu-app-rail { gap: 3px; }.menu-app-mark { min-width: 21px; height: 21px; padding-inline: 2px; font-size: 11px; }.menu-status-label { display: none; } }
+
 .add-contact-button { margin-bottom: 12px; width: 100%; }
 .conversation-picker { margin: 20px 0 28px; padding: 0; border: 0; min-width: 0; }
 .conversation-option { display: flex; align-items: start; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); cursor: pointer; }

@@ -81,6 +81,11 @@ components:
 
 **Creative North Star: "A composed Mac utility."**
 
+The primary interaction is a compact menu-bar popover. It reports the daemon
+state and the next useful setup action without requiring a full settings
+window. The inspector is a deeper, optional surface for contact memory and
+policy changes.
+
 The owner should see which relationship is selected, whether its butler is active, and what can be changed without studying a dashboard. The contact sidebar and single inspector remain stable across Behavior, Memory, Activity, and Setup.
 
 **Key Characteristics:**
@@ -89,6 +94,10 @@ The owner should see which relationship is selected, whether its butler is activ
 - Quiet surfaces, thin separators, one blue selection color.
 - Explicit connection, pause, and capability text.
 - Editable memory with visible save and conflict states.
+- Menu-bar status with a four-number glance: active contacts, contacts,
+  accounts, and provider features.
+- Short two-letter serif marks (`AI`, `Sl`, `Pe`, `Oo`, `Tb`) that remain clear
+  in a narrow utility rail.
 
 ## Colors
 
@@ -98,7 +107,7 @@ Primary blue identifies selection and the main save action. Neutral canvas, side
 
 ## Typography
 
-Use the system proportional face for navigation, headings, settings, and feedback. Use the system monospace face only for editable memory. The selected contact is the largest heading. Supporting text remains concise and subordinate.
+Use the system proportional face for navigation, headings, settings, and feedback. Use Georgia (with a Times fallback) for the compact two-letter menu marks so `AI` keeps a readable serif capital I. Use the system monospace face only for editable memory. The selected contact is the largest heading. Supporting text remains concise and subordinate.
 
 ## Layout
 

@@ -2,6 +2,7 @@ import { CONTROL_PROTOCOL, disconnectedSnapshot, disclosurePreview, validateCont
 
 import { newerSnapshot, requestPause, requestWithJobs } from "./jobs.ts";
 import type { DesktopLifecyclePort, LifecycleCommand, LifecycleResult } from "./lifecycle.ts";
+import { buildMenuBarModel, menuBarMarkup } from "./menu-bar.ts";
 
 const escape = (value: string | number) => String(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const icon = (name: "pause" | "play" | "settings" | "search" | "check" | "arrow" | "person") => {
@@ -126,7 +127,7 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
   }
   function render() {
     const contact = current();
-    root.innerHTML = `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">${icon("person")}</span><strong>Textbutler</strong></div><div class="connection-summary"><span class="status-dot ${snapshot.connection === "connected" ? "connected" : ""}"></span><span>${snapshot.connection === "demo" ? "Synthetic preview" : snapshot.connection === "connected" ? snapshot.settings.paused ? "All contacts paused" : "Daemon connected" : "Daemon disconnected"}</span></div><button class="button pause-button" data-action="pause" ${snapshot.connection === "disconnected" || pauseBusy || busy && !ownerJobPending ? "disabled" : ""}>${icon(snapshot.settings.paused ? "play" : "pause")}${snapshot.settings.paused ? "Resume all" : "Pause all"}</button><div class="sidebar-heading"><h2>Contacts</h2><span>${snapshot.contacts.filter(contact => contact.settings.enabled).length} / ${snapshot.settings.activeContactLimit} active</span></div><button class="button add-contact-button" data-action="add-contact" ${!editable() ? "disabled" : ""}>Add contact…</button><label class="search-field">${icon("search")}<input id="contact-search" type="search" placeholder="Find a contact" value="${escape(search)}" aria-label="Find a contact"></label><nav id="contact-list" class="contact-list" aria-label="Contacts">${contactList()}</nav><div class="sidebar-footer"><button class="settings-nav ${selected === null ? "selected" : ""}" data-action="global">${icon("settings")}<span>Settings & setup</span></button></div></aside><main class="inspector">${snapshot.connection === "demo" ? `<div class="mode-banner">Synthetic preview <span>Sample contacts only. Changes reset when this page closes.</span></div>` : ""}${snapshot.connection === "disconnected" ? `<div class="connection-banner"><div><strong>${busy ? "Connecting to Textbutler…" : "Connect your local daemon"}</strong><span>${escape(snapshot.detail)} No replies are being sent.</span></div><button class="button" data-action="reconnect" ${busy ? "disabled" : ""}>Retry connection</button></div>` : ""}${adding ? enrollmentView() : contact ? `<header class="inspector-heading"><span class="avatar large">${escape(initials(contact))}</span><div><h1>${escape(contact.name)}</h1><p>${escape(contact.subtitle)}</p></div><span class="contact-label">${contact.settings.enabled ? snapshot.settings.paused ? "Paused" : "Butler enabled" : "Butler off"}</span></header><nav class="tabs" aria-label="Contact sections">${(["behavior", "memory", "activity", "setup"] as const).map(value => `<button data-tab="${value}" aria-current="${tab === value ? "page" : "false"}" class="${tab === value ? "active" : ""}">${({ behavior: "Behavior", memory: "Memory", activity: "Activity", setup: "Setup" })[value]}</button>`).join("")}</nav><div class="inspector-content">${tab === "behavior" ? behavior() : tab === "memory" ? memoryView() : tab === "activity" ? activityView() : setup()}</div>` : globalView()}<div id="feedback" class="feedback ${feedbackError ? "error" : ""}" role="status" aria-live="polite">${escape(feedback)}</div></main></div>`;
+    root.innerHTML = `${menuBarMarkup(buildMenuBarModel(snapshot))}<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">${icon("person")}</span><strong>Textbutler</strong></div><div class="connection-summary"><span class="status-dot ${snapshot.connection === "connected" ? "connected" : ""}"></span><span>${snapshot.connection === "demo" ? "Synthetic preview" : snapshot.connection === "connected" ? snapshot.settings.paused ? "All contacts paused" : "Daemon connected" : "Daemon disconnected"}</span></div><button class="button pause-button" data-action="pause" ${snapshot.connection === "disconnected" || pauseBusy || busy && !ownerJobPending ? "disabled" : ""}>${icon(snapshot.settings.paused ? "play" : "pause")}${snapshot.settings.paused ? "Resume all" : "Pause all"}</button><div class="sidebar-heading"><h2>Contacts</h2><span>${snapshot.contacts.filter(contact => contact.settings.enabled).length} / ${snapshot.settings.activeContactLimit} active</span></div><button class="button add-contact-button" data-action="add-contact" ${!editable() ? "disabled" : ""}>Add contact…</button><label class="search-field">${icon("search")}<input id="contact-search" type="search" placeholder="Find a contact" value="${escape(search)}" aria-label="Find a contact"></label><nav id="contact-list" class="contact-list" aria-label="Contacts">${contactList()}</nav><div class="sidebar-footer"><button class="settings-nav ${selected === null ? "selected" : ""}" data-action="global">${icon("settings")}<span>Settings & setup</span></button></div></aside><main class="inspector">${snapshot.connection === "demo" ? `<div class="mode-banner">Synthetic preview <span>Sample contacts only. Changes reset when this page closes.</span></div>` : ""}${snapshot.connection === "disconnected" ? `<div class="connection-banner"><div><strong>${busy ? "Connecting to Textbutler…" : "Connect your local daemon"}</strong><span>${escape(snapshot.detail)} No replies are being sent.</span></div><button class="button" data-action="reconnect" ${busy ? "disabled" : ""}>Retry connection</button></div>` : ""}${adding ? enrollmentView() : contact ? `<header class="inspector-heading"><span class="avatar large">${escape(initials(contact))}</span><div><h1>${escape(contact.name)}</h1><p>${escape(contact.subtitle)}</p></div><span class="contact-label">${contact.settings.enabled ? snapshot.settings.paused ? "Paused" : "Butler enabled" : "Butler off"}</span></header><nav class="tabs" aria-label="Contact sections">${(["behavior", "memory", "activity", "setup"] as const).map(value => `<button data-tab="${value}" aria-current="${tab === value ? "page" : "false"}" class="${tab === value ? "active" : ""}">${({ behavior: "Behavior", memory: "Memory", activity: "Activity", setup: "Setup" })[value]}</button>`).join("")}</nav><div class="inspector-content">${tab === "behavior" ? behavior() : tab === "memory" ? memoryView() : tab === "activity" ? activityView() : setup()}</div>` : globalView()}<div id="feedback" class="feedback ${feedbackError ? "error" : ""}" role="status" aria-live="polite">${escape(feedback)}</div></main></div>`;
   }
   root.addEventListener("input", event => {
     const target = event.target;
@@ -153,6 +154,37 @@ export function mountPanel(root: HTMLElement, port: DesktopControlPort, lifecycl
   root.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest<HTMLButtonElement>("button"); if (!button || button.disabled || pauseBusy || busy && !(button.dataset.action === "pause" && ownerJobPending)) return;
+    const menuAction = button.dataset.menuAction;
+    if (menuAction === "toggle") {
+      const popover = root.querySelector<HTMLElement>("[data-menu-popover]");
+      if (popover) { const expanded = !popover.hidden; popover.hidden = expanded; button.setAttribute("aria-expanded", String(!expanded)); }
+      return;
+    }
+    if (menuAction === "web") {
+      const native = window.__TAURI__;
+      if (native) {
+        void native.core.invoke("open_dashboard", {}).then(result => {
+          const response = result as { ok?: boolean };
+          announce(response.ok ? "Opened textbutler.app in your browser." : "The dashboard could not be opened.", !response.ok);
+        }, () => announce("The dashboard could not be opened.", true));
+      } else {
+        window.open("https://textbutler.app/", "_blank", "noopener,noreferrer");
+        announce("Opened textbutler.app in your browser.");
+      }
+      return;
+    }
+    if (menuAction === "refresh") { void request({ protocol: CONTROL_PROTOCOL, command: "snapshot" }); return; }
+    if (menuAction === "pause") { void togglePause(); return; }
+    if (menuAction === "settings" || menuAction === "accounts") {
+      if (dirty()) { announce("Save or discard your edits before opening settings.", true); return; }
+      adding = false; selected = null; tab = "setup"; resetDraft(); feedback = ""; render(); return;
+    }
+    if (menuAction === "getting-started") {
+      if (snapshot.connection === "disconnected") { void request({ protocol: CONTROL_PROTOCOL, command: "snapshot" }); return; }
+      if (!snapshot.contacts.length) { if (dirty()) { announce("Save or discard your edits before adding a contact.", true); return; } adding = true; candidates = []; candidateId = ""; initializeHistory = false; conversationDetail = ""; void request({ protocol: CONTROL_PROTOCOL, command: "conversations.list" }); return; }
+      if (dirty()) { announce("Save or discard your edits before opening setup.", true); return; }
+      adding = false; selected = null; tab = "setup"; resetDraft(); feedback = ""; render(); return;
+    }
     if (button.dataset.lifecycle && ["status", "install", "uninstall"].includes(button.dataset.lifecycle)) { void manageService(button.dataset.lifecycle as LifecycleCommand); return; }
     if (button.dataset.providerCheck) {
       if (dirty()) { announce("Save or discard your edits before checking an account.", true); return; }
