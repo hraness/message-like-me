@@ -1,13 +1,15 @@
 import { join } from "node:path";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { AgentRouter, AgentStoppedError, unqualifiedAdapter, type AgentAdapter, type RuntimeQualification } from "../../agentrouter/src/runtime.ts";
 import { createClaudeApiAdapter, type ClaudeApiAdapterOptions } from "../../agentrouter/src/claude-api.ts";
+import { canonicalJson } from "../../agentrouter/src/codex-config.ts";
 import { createFileClaudeApiKeyResolver } from "../../agentrouter/src/claude-credentials.ts";
 import { discoverClaudeModels, type ClaudeModelDiscoveryOptions } from "../../agentrouter/src/claude-api-models.ts";
 import { selectClassifierModel, type ModelCatalog } from "../../agentrouter/src/models.ts";
 import type { AccountLease, AccountLeaseStore } from "../../agentrouter/src/accounts.ts";
 import type { CapabilityBroker } from "../../agentrouter/src/capabilities.ts";
 import type { AgentTaskAdapter, AgentTaskRequest, AgentTaskResult } from "../../agentrouter/src/task-runtime.ts";
+import type { AgentTaskAuthority } from "../../agentrouter/src/task-runtime.ts";
 import type { ManagedCodexAccountController } from "../../agentrouter/src/codex-account.ts";
 import type { ProviderAccountConfig, HostConfig } from "./host-config.ts";
 import type { ContactSettings } from "./config.ts";
@@ -34,6 +36,10 @@ type Dependencies = {
 };
 /** Trusted host port. Owner JSON and model-writable files cannot install a transport. */
 export type ManagedCodexAccountFactory = (input: { accountId: string; dataDir: string; leases: AccountLeaseStore }) => ManagedCodexAccountController;
+
+function managedCatalogDigest(models: readonly unknown[]): string {
+  return createHash("sha256").update(canonicalJson(models)).digest("hex");
+}
 
 /** Owner account wiring. Configuration contains references; it never grants tool authority. */
 export function createProviderHost(options: {
@@ -228,6 +234,14 @@ export function createProviderHost(options: {
           delegated = true;
           try {
             const controller = managed.get(id);
+            let accountSnapshot = controller?.snapshot();
+            if (accountSnapshot?.pendingLoginId != null || accountSnapshot?.state === "signing-in") throw new Error("Managed Codex sign-in is pending.");
+            if (controller && accountSnapshot && accountSnapshot.state !== "signed-in") accountSnapshot = await controller.check(signal);
+            if (accountSnapshot && accountSnapshot.state !== "signed-in") throw new Error("Managed Codex account is not ready.");
+            if (accountSnapshot && !accountSnapshot.models.some(model => model.id === request.model.id)) throw new Error("Managed Codex model is unavailable.");
+            const authority: AgentTaskAuthority | undefined = accountSnapshot === undefined ? undefined : Object.freeze({ kind: "codex-managed",
+              accountGeneration: accountSnapshot.accountGeneration, modelCatalogDigest: managedCatalogDigest(accountSnapshot.models) });
+            const handedOff = Object.freeze({ ...request, ...(authority === undefined ? {} : { authority }) });
             if (controller) {
               const snapshot = controller.snapshot();
               if (snapshot.pendingLoginId !== null || snapshot.state === "signing-in") throw new Error("Managed Codex sign-in is pending.");
@@ -243,7 +257,7 @@ export function createProviderHost(options: {
               managed.delete(id);
             }
             signal.throwIfAborted();
-            return await taskRouter.runTask(Object.freeze({ ...request, signal }), broker);
+            return await taskRouter.runTask(Object.freeze({ ...handedOff, signal }), broker);
           } finally {
             if (taskLeases.has(id)) managedFailures.add(id);
             await broker.close();

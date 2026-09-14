@@ -172,3 +172,10 @@ selections are checked against `ThreadStartResponse` before any task turn.
 Configuration and thread readback do not establish the effective tool inventory,
 authenticated execution or OS confinement. This correction keeps the managed
 task route unqualified and requires no native or provider calls.
+
+Before a trusted host admits a native process, it must bind the executable and
+generated experimental schema to a `CodexProtocolManifest` using
+`assertCodexProtocolManifest()`. The manifest carries the protocol and source
+versions plus executable, schema and manifest digests. A caller-supplied hash
+alone is not admission evidence; mismatched runtime identity fails before
+initialization.
