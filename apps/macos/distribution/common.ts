@@ -56,7 +56,8 @@ export function inventory(root: string): FileEntry[] {
 export function assertRuntime(root: string): void {
   const manifest = object(JSON.parse(readPhysical(join(root, "runtime-manifest.json"), 1024 * 1024).toString("utf8")));
   requireValue(manifest.schema === "textbutler.runtime.v1" && manifest.bunVersion === BUN_VERSION && JSON.stringify(manifest.files) === JSON.stringify(inventory(root).filter(file => file.path !== "runtime-manifest.json")), "Runtime inventory mismatch");
-  requireValue((manifest.files as FileEntry[]).some(file => file.path === "cli.ts") && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-bun" && file.macho), "Packaged runtime is incomplete");
+  requireValue((manifest.files as FileEntry[]).some(file => file.path === "cli.ts") && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-bun" && file.macho)
+    && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-menubar" && file.macho), "Packaged runtime is incomplete");
 }
 export type UnsignedReceipt = { schema: "textbutler.desktop-unsigned.v1"; repository: "hraness/message-like-me"; sourceSha: string; sourceTree: string; version: typeof VERSION; tag: typeof TAG; architecture: "arm64"; minimumMacOS: "14.5"; archive: { name: "unsigned.zip"; sha256: string; bytes: number }; bundleSha256: string };
 export function parseUnsigned(value: unknown): UnsignedReceipt {
