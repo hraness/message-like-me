@@ -20,3 +20,4 @@ export type { CodexAccountTransportOptions, CodexAccountProcessPort, CodexAccoun
 export { createCodexManagedTaskAdapter } from "./codex-managed-task-adapter.ts";
 export type { CodexManagedTaskAdapterOptions } from "./codex-managed-task-adapter.ts";
 export type { CodexManagedProcessLauncher } from "./codex-managed-config.ts";
+export * from "./codex-protocol-manifest.ts";

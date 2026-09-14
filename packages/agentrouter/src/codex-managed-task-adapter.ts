@@ -29,7 +29,8 @@ function freezeCopy<T>(value: T): T {
 }
 function binding(request: AgentTaskExecutionRequest): AgentTaskBinding {
   return Object.freeze({ ...freezeCopy({ route: request.route, accountId: request.accountId, workspaceId: request.workspaceId, runId: request.runId,
-    profile: request.profile, model: request.model, runtime: request.runtime }), accountLease: request.accountLease });
+    profile: request.profile, model: request.model, runtime: request.runtime }), accountLease: request.accountLease,
+    ...(request.authority === undefined ? {} : { authority: request.authority }) });
 }
 // The router preserves the execution's original signal and may only narrow its
 // cleanup deadline for stop. Hash content instead of retaining another prompt.

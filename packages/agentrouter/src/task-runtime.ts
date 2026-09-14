@@ -6,6 +6,14 @@ import { boundedText, identifier, provider, safeInteger, type AgentProvider } fr
 
 export type AgentTaskRoute = Readonly<{ id: string; provider: AgentProvider; authentication: "subscription" | "api" }>;
 export type AgentTaskModel = Readonly<{ id: string; reasoningEffort: string | null; serviceTier: string | null }>;
+/** Freshness proof supplied only by a trusted managed-account handoff. It is
+ * provenance, not permission: the runtime still requires its normal lease and
+ * qualification checks. */
+export type AgentTaskAuthority = Readonly<{
+  kind: "codex-managed";
+  accountGeneration: number;
+  modelCatalogDigest: string;
+}>;
 export type AgentTaskLimits = Readonly<{ maxRunMs: number; maxCleanupMs: number; maxOutputBytes: number }>;
 export type TaskRuntimeQualification =
   | Readonly<{ status: "unqualified"; reason: string }>
@@ -16,14 +24,14 @@ export type TaskRuntimeQualification =
 export type AgentTaskRequest = Readonly<{
   route: AgentTaskRoute; accountId: string; workspaceId: string; runId: string;
   profile: CapabilityProfileIdentity; model: AgentTaskModel; purpose: string; prompt: string;
-  limits: AgentTaskLimits; signal: AbortSignal;
+  limits: AgentTaskLimits; signal: AbortSignal; authority?: AgentTaskAuthority;
 }>;
 export type AgentTaskRuntimeProof = Readonly<{ runtimeVersion: string; runtimeDigest: string; evidenceDigest: string; qualificationExpiresAt: number }>;
 /** Runtime-owned snapshot of the one acquired lease. Its values may be retained
  * as evidence; a reconstructed object never grants execution authority. */
 export type AgentTaskAccountLease = AccountLease;
 export type AgentTaskBinding = Readonly<{ route: AgentTaskRoute; accountId: string; workspaceId: string; runId: string;
-  profile: CapabilityProfileIdentity; model: AgentTaskModel; runtime: AgentTaskRuntimeProof; accountLease: AgentTaskAccountLease }>;
+  profile: CapabilityProfileIdentity; model: AgentTaskModel; runtime: AgentTaskRuntimeProof; accountLease: AgentTaskAccountLease; authority?: AgentTaskAuthority }>;
 export type AgentTaskExecutionRequest = AgentTaskRequest & Readonly<{ runtime: AgentTaskRuntimeProof; accountLease: AgentTaskAccountLease;
   admittedAtUnixMs: number; executionDeadlineUnixMs: number; cleanupDeadlineUnixMs: number }>;
 export type AgentTaskUsage = Readonly<{ inputTokens: number | null; outputTokens: number | null; totalTokens: number | null; costUsd: number | null }>;
@@ -47,7 +55,7 @@ export interface AgentTaskAdapter {
 }
 export type AgentTaskOptions = Readonly<{ adapters: readonly AgentTaskAdapter[]; leases: AccountLeaseStore; now(): number }>;
 const HASH = /^[a-f0-9]{64}$/u;
-const BINDING_KEYS = ["route", "accountId", "workspaceId", "runId", "profile", "model", "runtime", "accountLease"];
+const BINDING_KEYS = ["route", "accountId", "workspaceId", "runId", "profile", "model", "runtime", "accountLease", "authority"];
 const EXECUTION_KEYS = [...BINDING_KEYS, "purpose", "prompt", "limits", "signal", "admittedAtUnixMs", "executionDeadlineUnixMs", "cleanupDeadlineUnixMs"];
 const leaseAdmissions = new WeakMap<AgentTaskAccountLease, { fingerprint: string; signal: AbortSignal;
   cleanupDeadlineUnixMs: number; stopping: boolean }>();
@@ -60,7 +68,8 @@ function record(value: unknown, keys: readonly string[]): Record<string, unknown
   if (!value || typeof value !== "object" || Array.isArray(value)
     || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw Error("TASK_RECORD_INVALID");
   const own = Reflect.ownKeys(value);
-  if (own.length !== keys.length || own.some(key => typeof key !== "string" || !keys.includes(key)
+  const optional = keys.includes("authority") ? 1 : 0;
+  if (own.length < keys.length - optional || own.length > keys.length || own.some(key => typeof key !== "string" || !keys.includes(key)
     || !Object.getOwnPropertyDescriptor(value, key)?.enumerable || !("value" in Object.getOwnPropertyDescriptor(value, key)!)))
     throw Error("TASK_RECORD_INVALID");
   return value as Record<string, unknown>;
@@ -93,9 +102,18 @@ function leaseSnapshot(value: unknown): AgentTaskAccountLease {
   return Object.freeze({ provider: provider(lease.provider), accountId: identifier(lease.accountId), owner: identifier(lease.owner),
     generation: safeInteger(lease.generation, 1, Number.MAX_SAFE_INTEGER), expiresAt: safeInteger(lease.expiresAt, 0, Number.MAX_SAFE_INTEGER) });
 }
+function authority(value: unknown): AgentTaskAuthority | undefined {
+  if (value === undefined) return undefined;
+  const a = record(value, ["kind", "accountGeneration", "modelCatalogDigest"]);
+  if (a.kind !== "codex-managed") throw Error("TASK_AUTHORITY_INVALID");
+  return Object.freeze({ kind: "codex-managed" as const,
+    accountGeneration: safeInteger(a.accountGeneration, 1, Number.MAX_SAFE_INTEGER),
+    modelCatalogDigest: digest(a.modelCatalogDigest) });
+}
 function binding(value: Record<string, unknown>): AgentTaskBinding {
-  return Object.freeze({ route: route(value.route), accountId: identifier(value.accountId), workspaceId: identifier(value.workspaceId),
-    runId: identifier(value.runId), profile: profile(value.profile), model: model(value.model), runtime: runtime(value.runtime), accountLease: leaseSnapshot(value.accountLease) });
+  const base = { route: route(value.route), accountId: identifier(value.accountId), workspaceId: identifier(value.workspaceId),
+    runId: identifier(value.runId), profile: profile(value.profile), model: model(value.model), runtime: runtime(value.runtime), accountLease: leaseSnapshot(value.accountLease) };
+  return Object.freeze(value.authority === undefined ? base : { ...base, authority: authority(value.authority)! });
 }
 function executionFingerprint(value: Record<string, unknown>): string {
   const limits = record(value.limits, ["maxRunMs", "maxCleanupMs", "maxOutputBytes"]);
@@ -173,15 +191,17 @@ export async function runAgentTask(options: AgentTaskOptions, input: AgentTaskRe
   const acquire = leases.acquire.bind(leases), release = leases.release.bind(leases);
   try {
     const began = safeInteger(now(), 0, Number.MAX_SAFE_INTEGER - 3_600_000);
-    record(input, ["route", "accountId", "workspaceId", "runId", "profile", "model", "purpose", "prompt", "limits", "signal"]);
+    record(input, ["route", "accountId", "workspaceId", "runId", "profile", "model", "purpose", "prompt", "limits", "signal", "authority"]);
     const l = record(input.limits, ["maxRunMs", "maxCleanupMs", "maxOutputBytes"]);
     const limits = Object.freeze({ maxRunMs: safeInteger(l.maxRunMs, 1, 3_599_999), maxCleanupMs: safeInteger(l.maxCleanupMs, 1, 3_599_999),
       maxOutputBytes: safeInteger(l.maxOutputBytes, 1, 64 * 1024 * 1024) });
     const total = safeInteger(limits.maxRunMs + limits.maxCleanupMs, 1_000, 3_600_000);
     if (!(input.signal instanceof AbortSignal)) throw Error("TASK_SIGNAL_INVALID");
-    const request: AgentTaskRequest = Object.freeze({ route: route(input.route), accountId: identifier(input.accountId),
+    const requestBase = { route: route(input.route), accountId: identifier(input.accountId),
       workspaceId: identifier(input.workspaceId), runId: identifier(input.runId), profile: profile(input.profile), model: model(input.model),
-      purpose: boundedText(input.purpose, 160), prompt: boundedText(input.prompt, 512 * 1024), limits, signal: input.signal });
+      purpose: boundedText(input.purpose, 160), prompt: boundedText(input.prompt, 512 * 1024), limits, signal: input.signal };
+    const request: AgentTaskRequest = Object.freeze(input.authority === undefined ? requestBase
+      : { ...requestBase, authority: authority(input.authority)! });
     assertCapabilityProfile(broker.profile, request.profile);
     if (request.runId !== broker.runId || request.workspaceId !== broker.workspaceId) throw Error("TASK_BROKER_BINDING_MISMATCH");
     if (request.signal.aborted) throw Error("TASK_CANCELLED_BEFORE_ADAPTER");

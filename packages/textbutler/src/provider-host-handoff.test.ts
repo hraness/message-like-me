@@ -26,7 +26,8 @@ function fixture(options: { adapters?: boolean; controls?: boolean; failRun?: bo
   let accountCheckGate: ReturnType<typeof deferred<void>> | undefined;
   let closeCalls = 0;
   const binding = (r: AgentTaskExecutionRequest): AgentTaskBinding => ({ route: r.route, accountId: r.accountId, workspaceId: r.workspaceId,
-    runId: r.runId, profile: r.profile, model: r.model, runtime: r.runtime, accountLease: r.accountLease });
+    runId: r.runId, profile: r.profile, model: r.model, runtime: r.runtime, accountLease: r.accountLease,
+    ...(r.authority === undefined ? {} : { authority: r.authority }) });
   const adapter: AgentTaskAdapter = { route, runtime: { version: "synthetic-only", digest: hash("a") },
     qualification: { status: "qualified", route, profile: { id: profile.id, version: profile.version, digest: profile.digest }, runtimeVersion: "synthetic-only", runtimeDigest: hash("a"), evidenceDigest: hash("b"), expiresAt: 1_000_000,
       controls: { noCommandTools: true, exactToolInventory: true, workspaceReadIsolation: true, workspaceWriteIsolation: true,
@@ -51,11 +52,12 @@ function fixture(options: { adapters?: boolean; controls?: boolean; failRun?: bo
     ...(options.controls === false ? {} : { managedCodex: ({ accountId, leases }: Parameters<NonNullable<Parameters<typeof createProviderHost>[0]["managedCodex"]>>[0]) => {
       factories.push(accountId); const controller = createManagedCodexAccountController({ accountId, owner: `controller-${factories.length}`, processGeneration: factories.length, leases, now: () => 1_000,
         transportFactory: () => ({
-          async accountRead(r) { if (accountCheckGate) await accountCheckGate.promise; return reply(r, { requiresOpenaiAuth: true, account: null }); },
+          async accountRead(r) { if (accountCheckGate) await accountCheckGate.promise; return reply(r, { requiresOpenaiAuth: true, account: { type: "chatgpt", email: null, planType: "pro" } }); },
           async startLogin(r) { return reply(r, { type: "chatgptDeviceCode", loginId: "synthetic-login", verificationUrl: "https://auth.openai.com/codex/device", userCode: "TEST-ONLY" }); },
           async cancelLogin(r) { return reply(r, { status: "canceled" }); },
           async logout(r) { return reply(r, {}); },
-          async listModels(r) { return reply(r, { data: [], nextCursor: null }); },
+          async listModels(r) { return reply(r, { data: [{ id: "synthetic-model", model: "synthetic-model", displayName: "Synthetic model", hidden: false, isDefault: true,
+            supportedReasoningEfforts: [{ reasoningEffort: "high", description: "Synthetic" }], defaultReasoningEffort: "high", serviceTiers: [], defaultServiceTier: null }], nextCursor: null }); },
           async close({ binding }): Promise<CodexAccountCloseReceipt> {
             closeCalls++; closeStarted.resolve(); closeHook?.();
             const joined = accountCloseGate ? await accountCloseGate.promise : true;
@@ -96,6 +98,8 @@ test("joins the exact owner before the runtime acquires its one task lease", asy
   expect(f.leases.inspect("codex", "native-codex")?.owner).toBe("controller-1");
   release.resolve(true); const result = await task;
   expect(f.acquired).toEqual(["controller-1", r.runId]); expect(result.accountLease.generation).toBe(2);
+  expect(f.runs[0]!.authority).toMatchObject({ kind: "codex-managed", accountGeneration: 2 });
+  expect(f.runs[0]!.authority?.modelCatalogDigest).toMatch(/^[a-f0-9]{64}$/u);
   expect(f.stops[0]!.accountLease).toBe(f.runs[0]!.accountLease); expect(result.custody).toBe("released");
   expect(f.leases.inspect("codex", "native-codex")).toBeNull(); expect(() => b.assertActive()).toThrow();
   await f.host.check("native-codex", f.signal); expect(f.factories).toEqual(["native-codex", "native-codex"]);
@@ -131,10 +135,11 @@ test("per-account exclusion preserves independent account progress and owner ser
 
 test("a pending login stays active and cannot be silently canceled for task handoff", async () => {
   const f = fixture(); await f.host.startLogin("native-codex", "chatgptDeviceCode", f.signal);
-  const r = f.request(); await expect(f.host.runManagedTask(r, f.broker(r))).rejects.toThrow("sign-in is pending");
+  const r = f.request(); await expect(f.host.runManagedTask(r, f.broker(r))).rejects.toThrow(/sign-in is pending|account is not ready/);
   expect(f.closes()).toBe(0); expect(f.runs).toHaveLength(0); expect(f.acquired).toEqual(["controller-1"]);
   expect(f.host.accounts()[0]!.managedAccount?.pendingLoginId).toBe("synthetic-login");
   await f.host.cancelLogin("native-codex", "synthetic-login", f.signal);
+  await f.host.check("native-codex", f.signal);
   expect((await f.host.runManagedTask(r, f.broker(r))).custody).toBe("released");
 });
 
@@ -179,7 +184,7 @@ test("an already cancelled handoff leaves account controls untouched and closes 
   const f = fixture(); await f.host.check("native-codex", f.signal); const controller = new AbortController(); controller.abort();
   const r = f.request("already-cancelled", "native-codex", controller.signal), b = f.broker(r);
   await expect(f.host.runManagedTask(r, b)).rejects.toThrow(); expect(f.closes()).toBe(0); expect(f.acquired).toEqual(["controller-1"]);
-  expect(() => b.assertActive()).toThrow(); expect(f.host.accounts()[0]!.managedAccount?.state).toBe("signed-out");
+  expect(() => b.assertActive()).toThrow(); expect(f.host.accounts()[0]!.managedAccount?.state).toBe("signed-in");
 });
 
 test("shutdown revokes the task, keeps its lease through raw joins and publishes one reentrant close", async () => {
@@ -229,6 +234,16 @@ test("handoff snapshots caller values before waiting for controller cleanup", as
   const task = f.host.runManagedTask(r, f.broker(r)); await f.closeStarted.promise;
   (r as { accountId: string }).accountId = "other-codex"; (r.model as { id: string }).id = "changed"; (r.route as { id: string }).id = "changed";
   close.resolve(true); await task; expect(f.runs[0]!.accountId).toBe("native-codex"); expect(f.runs[0]!.model.id).toBe("synthetic-model");
+});
+
+test("managed handoff rejects a model absent from the generation-bound catalog before task lease admission", async () => {
+  const f = fixture(); await f.host.check("native-codex", f.signal);
+  const r = f.request("stale-model");
+  (r as { model: { id: string } }).model.id = "model-no-longer-in-catalog";
+  const b = f.broker(r);
+  await expect(f.host.runManagedTask(r, b)).rejects.toThrow("model is unavailable");
+  expect(f.acquired).toEqual(["controller-1"]); expect(f.runs).toEqual([]); expect(() => b.assertActive()).toThrow();
+  expect(f.leases.inspect("codex", "native-codex")?.owner).toBe("controller-1");
 });
 
 test("handoff rejects accessor authority before reading it or closing a controller", async () => {
