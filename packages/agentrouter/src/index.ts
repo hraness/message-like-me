@@ -21,3 +21,5 @@ export { createCodexManagedTaskAdapter } from "./codex-managed-task-adapter.ts";
 export type { CodexManagedTaskAdapterOptions } from "./codex-managed-task-adapter.ts";
 export type { CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 export * from "./codex-protocol-manifest.ts";
+export { codexManagedStaticCatalog, CODEX_MANAGED_CATALOG_LIMITS } from "./codex-managed-catalog.ts";
+export type { CodexManagedStaticCatalog, CodexManagedCatalogJson, CodexManagedCatalogObject } from "./codex-managed-catalog.ts";

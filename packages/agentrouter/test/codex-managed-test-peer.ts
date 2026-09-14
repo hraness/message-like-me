@@ -14,6 +14,7 @@ export type ManagedPeerOptions = {
   beforeCall?: readonly Record<string, any>[]; afterFinal?: readonly Record<string, any>[];
   duplicateCallback?: boolean; callbackWithoutStart?: boolean; missingCompletion?: boolean;
   failBroker?: boolean; unknownFinal?: boolean; commentaryOnly?: boolean; earlyTurn?: boolean;
+  nativeSettings?: boolean; settingsCopies?: number; earlyCallback?: boolean; serviceTier?: string | null;
   onTurn?(control: { emit(value: unknown): void; controller: AbortController }): void;
 };
 
@@ -30,7 +31,8 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
       return options.invoke ? options.invoke() : { finding: "retained synthetic finding" }; },
   }] });
   const mapping = createCodexCapabilityMapping(profile), tools = mapping.tools;
-  const settings = options.settings ?? codexTaskSettings({ model: { id: "synthetic-model", reasoningEffort: "medium", serviceTier: "default" },
+  const settings = options.settings ?? codexTaskSettings({ model: { id: "synthetic-model", reasoningEffort: "medium",
+    serviceTier: options.serviceTier === undefined ? "default" : options.serviceTier },
     instructions: { base: "Use only retained evidence.", developer: "Do not invent sources." } });
   const request: AgentTaskExecutionRequest = {
     route: { id: "managed-test-subscription", provider: "codex", authentication: "subscription" },
@@ -60,6 +62,13 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
   const started = { type: "dynamicToolCall", id: "call-one", tool: tools[0]?.name, arguments: { id: "source-one" }, namespace: null, status: "inProgress" };
   const callback = { id: "callback-one", method: "item/tool/call", params: { threadId: "thread-one", turnId: "turn-one", callId: "call-one",
     tool: tools[0]?.name, namespace: null, arguments: { id: "source-one" } } };
+  const settingsUpdate = () => ({ method: "thread/settings/updated", params: { threadId: "thread-one", threadSettings: {
+    cwd: "/synthetic/work", approvalPolicy: "never", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly", networkAccess: false },
+    activePermissionProfile: null, model: settings.model.id, modelProvider: "openai", serviceTier: settings.model.serviceTier ?? "default",
+    effort: "medium", summary: null, collaborationMode: { mode: "default", settings: {
+      model: settings.model.id, reasoning_effort: "medium", developer_instructions: null,
+    } }, multiAgentMode: "explicitRequestOnly", personality: "pragmatic",
+  } } });
   function finish() {
     if (stopped) return;
     emit({ method: "item/completed", params: scoped({ type: "agentMessage", id: "answer-one", text: "Synthetic final finding.",
@@ -102,11 +111,14 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
       const result = { model: message.params.model, modelProvider: "openai",
         reasoningEffort: message.params.config?.model_reasoning_effort ?? "medium", serviceTier: message.params.serviceTier ?? "default",
         cwd: "/synthetic/work", approvalPolicy: "never", approvalsReviewer: "user", sandbox: { type: "readOnly", networkAccess: false },
-        runtimeWorkspaceRoots: [], instructionSources: [],
+        runtimeWorkspaceRoots: [], instructionSources: [], activePermissionProfile: null, multiAgentMode: "explicitRequestOnly",
         thread: { id: "thread-one", cwd: "/synthetic/work", modelProvider: "openai", ephemeral: true, turns: [], environments: [] } };
       options.mutateThread?.(result); emit({ id: message.id, result });
+      if (options.nativeSettings) emit({ method: "thread/started", params: { thread: result.thread } });
     }
     if (message.method === "turn/start") {
+      if (options.nativeSettings) for (let i = 0; i < (options.settingsCopies ?? 1); i++) emit(settingsUpdate());
+      if (options.earlyCallback) emit(callback);
       if (options.earlyTurn) emit({ method: "turn/started", params: { threadId: "thread-one", turn: { id: "turn-one" } } });
       emit({ id: message.id, result: { turn: { id: "turn-one", status: "inProgress" } } });
       setTimeout(turn, 0);
@@ -126,5 +138,6 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
     return { cwd: "/synthetic/work", stdin, stdout, ready: Promise.resolve(), exited, receipt,
       async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); return receipt(); } };
   } };
-  return { request, settings, broker, launcher, launchInputs, controller, methods, answers, emit, counts: () => ({ invocations, launches, stopped }) };
+  return { request, settings, broker, launcher, launchInputs, controller, methods, answers, emit, settingsUpdate,
+    counts: () => ({ invocations, launches, stopped }) };
 }

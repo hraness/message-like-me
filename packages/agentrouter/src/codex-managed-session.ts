@@ -1,7 +1,8 @@
 import { assertCapabilityProfile, type CapabilityBroker } from "./capabilities.ts";
 import { canonicalJson, createCodexCapabilityMapping, type CodexTaskSettings } from "./codex-config.ts";
-import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedThreadResponse,
-  codexManagedTaskConfiguration, codexManagedTaskSettings, codexManagedThreadConfiguration, type CodexManagedProcessLauncher } from "./codex-managed-config.ts";
+import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedSettingsUpdate,
+  assertCodexManagedThreadResponse, codexManagedTaskConfiguration, codexManagedTaskSettings, codexManagedThreadConfiguration,
+  type CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 import { CodexManagedCallLedger } from "./codex-managed-ledger.ts";
 import type { CodexProcessHandle, CodexProcessReceipt } from "./codex-process.ts";
 import { codexBounded, codexTaskLimits, type CodexLimits } from "./codex-relay.ts";
@@ -71,6 +72,8 @@ export async function runCodexManagedSession(options: {
   const pending = new Map<number, { method: string; resolve(value: Record<string, unknown>): void; reject(error: Error): void }>();
   const serverIds = new Set<string>(), itemStates = new Map<string, { type: string; started: boolean; completed: boolean }>();
   let earlyTurnStarts: { rpcId: number; turnId: string; count: number } | null = null;
+  let threadResponse: Record<string, unknown> | null = null;
+  let pendingSettings: { rpcId: number; params: string; observed: NonNullable<CodexManagedSessionReceipt["observedSettings"]>; count: number } | null = null;
   const decoder = new TextDecoder("utf-8", { fatal: true });
   function fail(code: string) {
     if (failures.length < 16 && !failures.includes(code)) failures.push(code);
@@ -143,11 +146,15 @@ export async function runCodexManagedSession(options: {
       if (entry.method === "thread/start") {
         assert(threadId === null && process, "CODEX_MANAGED_DUPLICATE_THREAD");
         observedSettings = assertCodexManagedThreadResponse(result, { settings, cwd: process.cwd });
+        threadResponse = result;
         threadId = identifier(record(result.thread).id); threadObserved = true;
       } else if (entry.method === "turn/start") {
         assert(threadId !== null && turnId === null, "CODEX_MANAGED_DUPLICATE_TURN");
         const id = identifier(record(result.turn).id);
         assert(earlyTurnStarts === null || earlyTurnStarts.rpcId === value.id && earlyTurnStarts.turnId === id, "CODEX_MANAGED_EARLY_TURN_MISMATCH");
+        assert(pendingSettings === null || pendingSettings.rpcId === value.id, "CODEX_MANAGED_SETTINGS_RPC_MISMATCH");
+        observedSettings = pendingSettings?.observed ?? observedSettings;
+        pendingSettings = null;
         turnId = id; ledger.bind(threadId, id); earlyTurnStarts = null;
       }
       pending.delete(Number(value.id)); entry.resolve(result); return;
@@ -241,6 +248,20 @@ export async function runCodexManagedSession(options: {
       return;
     }
     if (value.method === "thread/started") { assert(threadId !== null && record(params.thread).id === threadId, "CODEX_MANAGED_THREAD_START_CHANGED"); return; }
+    if (value.method === "thread/settings/updated") {
+      assert(!turnCompleted && output === null && threadId !== null && turnId === null && process && threadResponse,
+        "CODEX_MANAGED_SETTINGS_UPDATE_SCOPE");
+      const starts = [...pending.entries()].filter(([, entry]) => entry.method === "turn/start");
+      assert(starts.length === 1, "CODEX_MANAGED_SETTINGS_WITHOUT_RPC");
+      const observed = assertCodexManagedSettingsUpdate(params, { settings, cwd: process.cwd, threadId, threadResponse });
+      const snapshot = canonicalJson(params);
+      pendingSettings ??= { rpcId: starts[0]![0], params: snapshot, observed, count: 0 };
+      assert(pendingSettings.rpcId === starts[0]![0] && pendingSettings.params === snapshot && ++pendingSettings.count <= 8,
+        "CODEX_MANAGED_SETTINGS_UPDATE_CHANGED");
+      // A settings notification does not bind a turn or authorize callbacks.
+      // Commit the native default observation only with its matching RPC reply.
+      return;
+    }
     if (value.method === "thread/tokenUsage/updated") { observeUsage(params); return; }
     if (value.method === "thread/status/changed") {
       object(params, ["threadId", "status"]);

@@ -6,6 +6,12 @@ import type { AgentTaskAccountLease, AgentTaskExecutionRequest } from "./task-ru
 import { boundedText, identifier } from "./validation.ts";
 
 export const CODEX_MANAGED_PROVIDER = "openai";
+/** Managed native controls are pinned separately from the legacy relay flags.
+ * Explicit budget/time entries suppress model- and effort-owned defaults. */
+export const CODEX_MANAGED_DISABLED_FEATURES = Object.freeze([
+  ...CODEX_DISABLED_FEATURES, "context_management", "token_budget", "current_time_reminder",
+  "deferred_executor", "request_permissions_tool",
+]);
 
 /** Trusted native host port, not an implementation or a qualification. The host
  * owns Codex-managed ChatGPT login/refresh in isolated state outside consumer
@@ -64,10 +70,11 @@ export function codexManagedTaskConfiguration(settings: CodexTaskSettings): stri
 }
 
 const threadControls = Object.freeze({
-  features: Object.freeze(Object.fromEntries([...new Set([...CODEX_MANAGED_ACCOUNT_FEATURES, ...CODEX_DISABLED_FEATURES])]
+  features: Object.freeze(Object.fromEntries([...new Set([...CODEX_MANAGED_ACCOUNT_FEATURES, ...CODEX_MANAGED_DISABLED_FEATURES])]
     .map(name => [name, false as const]))),
   tools: Object.freeze({ experimental_request_user_input: Object.freeze({ enabled: false as const }),
     update_plan: Object.freeze({ enabled: false as const }) }),
+  agents: Object.freeze({ enabled: false as const }),
 });
 
 /** Host-owned thread/start overrides, never a caller-supplied config map. Keep
@@ -126,6 +133,7 @@ export function assertCodexManagedConfigResponse(raw: unknown, expected: Readonl
     const features = record(config.features);
     for (const name of CODEX_MANAGED_ACCOUNT_FEATURES) if (features[name] !== false) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
   }
+  if (config.agents !== undefined && record(config.agents).enabled !== false) return fail("CODEX_MANAGED_CONFIG_MISMATCH");
   // The native schema permits `apps` and `_default` to be null. The managed
   // account baseline requires both objects, so turn that shape drift into a
   // named admission failure instead of leaking a generic record error.
@@ -157,4 +165,39 @@ export function assertCodexManagedThreadResponse(raw: unknown, expected: Expecte
   return Object.freeze({ model: settings.model.id,
     reasoningEffort: observedSetting(response.reasoningEffort, settings.model.reasoningEffort),
     serviceTier: observedSetting(response.serviceTier, settings.model.serviceTier) });
+}
+
+/** Validate the current native thread/settings/updated payload against its
+ * admitted thread/start reply. The session must admit this notification only
+ * while its explicit turn/start RPC is pending and latch the first observation;
+ * this payload has no turn ID and cannot authorize general settings changes.
+ */
+export function assertCodexManagedSettingsUpdate(raw: unknown,
+  expected: Expected & Readonly<{ threadId: string; threadResponse: unknown }>): CodexManagedObservedSettings {
+  const settings = codexManagedTaskSettings(expected.settings), cwd = expectedPath(expected.cwd), threadId = identifier(expected.threadId);
+  const initial = assertCodexManagedThreadResponse(expected.threadResponse, { settings, cwd });
+  const baseline = record(expected.threadResponse), baselineThread = record(baseline.thread);
+  if (baselineThread.id !== threadId || baseline.activePermissionProfile !== null || baseline.multiAgentMode !== "explicitRequestOnly"
+    || typeof baseline.approvalsReviewer !== "string" || !["user", "auto_review", "guardian_subagent"].includes(baseline.approvalsReviewer))
+    return fail("CODEX_MANAGED_SETTINGS_BASELINE_INVALID");
+  const response = record(raw, ["threadId", "threadSettings"]);
+  const details = record(response.threadSettings, ["activePermissionProfile", "approvalPolicy", "approvalsReviewer", "collaborationMode", "cwd",
+    "effort", "model", "modelProvider", "multiAgentMode", "personality", "sandboxPolicy", "serviceTier", "summary"]);
+  const sandbox = record(details.sandboxPolicy, ["type", "networkAccess"]);
+  if (response.threadId !== threadId || details.model !== settings.model.id || details.modelProvider !== CODEX_MANAGED_PROVIDER || details.cwd !== cwd
+    || details.approvalPolicy !== "never" || details.approvalsReviewer !== baseline.approvalsReviewer || details.activePermissionProfile !== null
+    || details.multiAgentMode !== "explicitRequestOnly" || sandbox.type !== "readOnly" || sandbox.networkAccess !== false)
+    return fail("CODEX_MANAGED_SETTINGS_UPDATE_MISMATCH");
+  // Nullable native metadata has closed enums; it cannot introduce instructions,
+  // capability profiles, paths, or unbounded opaque objects in this notification.
+  if (details.personality !== null && !["none", "friendly", "pragmatic"].some(value => details.personality === value)
+    || details.summary !== null && !["auto", "concise", "detailed", "none"].some(value => details.summary === value))
+    return fail("CODEX_MANAGED_SETTINGS_UPDATE_MISMATCH");
+  const reasoningEffort = observedSetting(details.effort, initial.reasoningEffort);
+  const serviceTier = observedSetting(details.serviceTier, initial.serviceTier);
+  const collaboration = record(details.collaborationMode, ["mode", "settings"]);
+  const modeSettings = record(collaboration.settings, ["model", "reasoning_effort", "developer_instructions"]);
+  if (collaboration.mode !== "default" || modeSettings.model !== settings.model.id || modeSettings.developer_instructions !== null
+    || observedSetting(modeSettings.reasoning_effort, null) !== reasoningEffort) return fail("CODEX_MANAGED_SETTINGS_UPDATE_MISMATCH");
+  return Object.freeze({ model: settings.model.id, reasoningEffort, serviceTier });
 }
