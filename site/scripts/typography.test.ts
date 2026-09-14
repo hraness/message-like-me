@@ -34,7 +34,7 @@ describe("site typography", () => {
     const components = await readFile(new URL(import.meta.resolve("@hraness/design-kit/components.css")), "utf8");
     const compiled = await readFile(new URL(import.meta.resolve("@hraness/design-kit/stylex.css")), "utf8");
     expect(styles).toContain('@import "./components.css";');
-    expect(styles).toContain('@import "./product-marketing-foundation.css";');
+    expect(styles).toContain('@import "./product-marketing.css";');
     expect(components).toContain('@import "../dist/stylex.css";');
     expect(compiled).toContain("@layer components.hraness-design-kit.priority");
   });
