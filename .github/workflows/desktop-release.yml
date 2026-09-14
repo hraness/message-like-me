@@ -1,4 +1,8 @@
-name: Desktop Release
+# Retired legacy workflow. Textbutler is distributed as a CLI with an
+# unbundled menu-bar companion; it does not require an app bundle, signing, or
+# notarization. Keep this file as historical evidence only so old release
+# receipts remain reproducible. Every job is disabled deliberately.
+name: Retired Desktop App Release (legacy)
 
 on:
   workflow_dispatch:
@@ -31,7 +35,7 @@ env:
 
 jobs:
   authorize:
-    if: github.repository_id == '1342143606' && github.repository == 'hraness/message-like-me' && github.ref == 'refs/heads/main' && github.actor_id == '894119'
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -52,6 +56,7 @@ jobs:
         run: bun --no-env-file --no-install apps/macos/distribution/authority.ts
 
   build:
+    if: ${{ false }}
     needs: authorize
     runs-on: macos-15
     timeout-minutes: 60
@@ -106,6 +111,7 @@ jobs:
           retention-days: 30
 
   sign:
+    if: ${{ false }}
     needs: build
     runs-on: macos-15
     timeout-minutes: 60
@@ -175,6 +181,7 @@ jobs:
           retention-days: 30
 
   verify:
+    if: ${{ false }}
     needs: sign
     runs-on: macos-15
     timeout-minutes: 25
@@ -224,6 +231,7 @@ jobs:
           retention-days: 30
 
   attest:
+    if: ${{ false }}
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -295,6 +303,7 @@ jobs:
           retention-days: 30
 
   publish:
+    if: ${{ false }}
     needs: [verify, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 30

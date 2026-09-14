@@ -2,7 +2,7 @@
 
 Textbutler is a personal message butler for macOS. An owner activates a bounded set of contacts. Each contact gets a private workspace that a coding agent can read and evolve. A separate daemon decides when to invoke that agent and controls every outward action.
 
-The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and Mac application. Synthetic tests establish their control and recovery behavior. Live provider delivery and signed distribution have separate acceptance requirements below.
+The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and macOS menu companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below; the companion is a CLI artifact and has no signing or notarization gate.
 
 ## Ownership
 
@@ -132,9 +132,9 @@ Linq's documented iMessage API includes attachments, reactions, stickers, rich l
 
 Ghostget currently imports published Message Like Me bundle contracts. Keep that immutable package a leaf. Do not repoint it at the Textbutler runtime. Extract the neutral bundle contracts before reversing a live package dependency, or consume Ghostget's installed CLI contract without a package import in the interim. Preserve historical wire-format identifiers.
 
-## Mac application
+## macOS menu companion
 
-The app has an explicit conversation picker, optional history initialization, a contact list, per-contact activation and mode settings, disclosure preview, memory editing, activity, provider status, and global pause. Long provider reads use bounded asynchronous jobs; Pause stays available and preserves unsaved choices. Unsupported capabilities show their actual setup or transport limitation. A separate synthetic demo is clearly labeled and is not included in the native app's live data graph.
+The supported desktop surface is an unbundled status-item companion launched by the CLI. It exposes daemon state, getting-started guidance, active-contact and account counts, pause/resume, account setup, status refresh, and the textbutler.app entry point. The optional Tauri inspector retains the explicit conversation picker, history initialization, contact settings, disclosure preview, memory editing, activity, provider status, and global pause for maintainers who want a larger settings surface. Neither surface is required to run the daemon. A separate synthetic demo is clearly labeled and is not included in the live data graph.
 
 One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The webview has no generic shell, filesystem, opener, or network plugin. The app does not inherit access to arbitrary Ghostget operations.
 
@@ -142,7 +142,7 @@ One narrow native command accepts the versioned control request. It connects to 
 
 1. Use the verified Ghostget 0.18.2 package, which includes the reviewed automation source and native helpers. Real account synchronization, recipient identity, rich actions and revocation still require a bounded owner-authorized live test; artifact admission and synthetic fixtures do not prove delivery.
 2. Independently qualify the native Claude SDK and Codex adapters for the requested no-shell, contact-only profile before enabling those choices. The separate Claude API path requires explicit account setup and packaged-runtime admission.
-3. Sign and notarize the exact Mac artifact with an available Apple Developer identity, then verify the final downloaded bytes and installation lifecycle. The unsigned local package and successful launchd test are not a signed release.
+3. Assemble and publish the exact CLI package with its architecture-matched prebuilt menu companion. Verify the package bytes, executable mode, singleton behavior, and LaunchAgent install/uninstall lifecycle. A source checkout or missing companion must never trigger a build at launch.
 4. Keep historical repository and published package identities as compatibility and provenance anchors. The Textbutler site is assigned to `textbutler.app`; later identity migrations must preserve immutable artifacts and existing release protections.
 
 ## Sources
