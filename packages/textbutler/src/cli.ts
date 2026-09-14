@@ -1,11 +1,12 @@
 import { initializeOwnerState, TEXTBUTLER_CONTROL_PROTOCOL } from "./control-service.ts";
 import { defaultDataDirectory, requestDaemon, startDaemon } from "./daemon.ts";
 import { createLaunchAgentLifecycle, type LaunchAgentLifecycle } from "./launch-agent.ts";
+import { createMenuBarLaunchAgentLifecycle, installMenuBarBinary, installedMenuBarBinary, menuBarBinaryCandidates, resolveMenuBarBinary, runMenuBar } from "./menubar.ts";
 import type { ClaudeApiAdapterOptions } from "../../agentrouter/src/claude-api.ts";
 
-export const CLI_USAGE = "textbutler init|doctor|providers list|providers check ACCOUNT|daemon run|daemon install|daemon uninstall|daemon status [--data-dir /physical/private/path]";
+export const CLI_USAGE = "textbutler init|doctor|providers list|providers check ACCOUNT|daemon run|daemon install|daemon uninstall|daemon status|menubar|menubar install|menubar uninstall [--data-dir /physical/private/path]";
 export async function runTextbutlerCli(argv: readonly string[], output: { write(text: string): unknown } = process.stdout, options: { launchAgent?: LaunchAgentLifecycle;
-  providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"] } = {}): Promise<number> {
+  menuBarLaunchAgent?: LaunchAgentLifecycle; menuBarBinary?: string; providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"] } = {}): Promise<number> {
   if (argv.length === 0 || argv.length === 1 && ["--help", "help", "-h"].includes(argv[0]!)) { output.write(`${CLI_USAGE}\n`); return 0; }
   const args = [...argv]; let dataDir = defaultDataDirectory();
   const option = args.indexOf("--data-dir");
@@ -15,7 +16,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
   }
   const command = args.join(" ");
   const checkAccount = args.length === 3 && args[0] === "providers" && args[1] === "check" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(args[2]!) ? args[2] : undefined;
-  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount) throw new Error(CLI_USAGE);
+  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status", "menubar", "menubar install", "menubar uninstall"].includes(command) && !checkAccount) throw new Error(CLI_USAGE);
   const print = (value: unknown): void => { output.write(`${JSON.stringify(value)}\n`); };
   if (command === "providers list" || checkAccount) {
     let response = await requestDaemon({ dataDir, request: checkAccount
@@ -48,6 +49,25 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     ]);
     print({ ok: daemon?.ok ?? false, daemon: daemon ?? { ok: false, status: "disconnected" }, launchAgent, automaticReplies: "unavailable" });
     return daemon?.ok ? 0 : 1;
+  }
+  if (command === "menubar install" || command === "menubar uninstall") {
+    const binary = command === "menubar install"
+      // Tests and embedders may provide both halves of the seam. Production
+      // always stages a verified prebuilt artifact into the stable per-user
+      // location before launchd sees it.
+      ? options.menuBarLaunchAgent !== undefined && options.menuBarBinary !== undefined
+        ? options.menuBarBinary
+        : await installMenuBarBinary(options.menuBarBinary ?? await resolveMenuBarBinary(menuBarBinaryCandidates()))
+      : installedMenuBarBinary();
+    const lifecycle = options.menuBarLaunchAgent ?? createMenuBarLaunchAgentLifecycle(binary);
+    const launchAgent = command === "menubar install" ? await lifecycle.install(dataDir) : await lifecycle.uninstall(dataDir);
+    const ok = launchAgent.installation === (command === "menubar install" ? "installed" : "absent");
+    print({ ok, binary, launchAgent, automaticReplies: "unavailable" }); return ok ? 0 : 1;
+  }
+  if (command === "menubar") {
+    const binary = options.menuBarBinary ?? await resolveMenuBarBinary();
+    print({ ok: true, status: "running", binary, detail: "Foreground Textbutler menu bar; close it from the menu-bar Quit action." });
+    return await runMenuBar(binary);
   }
   if (command === "doctor") {
     try {
