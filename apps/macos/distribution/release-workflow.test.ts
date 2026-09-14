@@ -86,6 +86,10 @@ test("uncertain upload stops and another attempt cannot adopt retained draft", a
 });
 test("workflow separates Apple secrets, credential-free checks, checkout-free OIDC and sole writer", () => {
   const source = readFileSync(join(import.meta.dir, "../../../.github/workflows/desktop-release.yml"), "utf8");
+  expect(source).toContain("name: Retired Desktop App Release (legacy)");
+  for (const job of ["authorize", "build", "sign", "verify", "attest", "publish"]) {
+    expect(source).toContain(`  ${job}:\n    if: \${{ false }}`);
+  }
   const owners = readFileSync(join(import.meta.dir, "../../../.github/CODEOWNERS"), "utf8");
   expect(owners.split("\n")).toContain("/apps/macos/distribution/** @0thernet");
   const sign = source.split("\n  sign:\n")[1]!.split("\n  verify:\n")[0]!, attest = source.split("\n  attest:\n")[1]!.split("\n  publish:\n")[0]!;
