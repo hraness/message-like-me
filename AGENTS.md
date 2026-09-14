@@ -1,11 +1,10 @@
 # Textbutler redesign scope
 
 The owner has authorized replacing the unused Message Like Me product with
-Textbutler, a macOS message-butler daemon and app at `textbutler.app`.
+Textbutler, a macOS message-butler daemon and menu companion at `textbutler.app`.
 `PRODUCT.md` and `docs/textbutler/architecture.md` define the new product.
 The historical constraints below continue to govern the legacy `src/`, `dist/`,
-published message contracts, and their existing release machinery. They do not
-prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
+published message contracts, and their existing release machinery. They do not prohibit the explicitly requested new runtime in `packages/` and the unbundled menu companion in `apps/macos/.
 
 - New agents receive only one contact's brokered files, bounded public web
   requests, and recipient-bound proposed messaging actions. Never enable shell,
@@ -21,7 +20,7 @@ prohibit the explicitly requested new runtime in `packages/` and `apps/macos/`.
 - Unqualified provider restrictions and unsupported transport operations must
   remain unavailable. Synthetic tests do not prove live delivery or sandboxing.
 - Run `bun run check:textbutler` for the new source packages as well as the
-  existing required aggregate. Native build and UI checks are additional gates.
+  existing required aggregate. The menu companion build is an explicit macOS-only gate; there is no desktop UI or app bundle.
 - Repository/package rename and website deployment must use a reviewed identity
   migration that preserves the existing release and production protections.
 - Informational site changes may use the explicit site-source promotion path in

@@ -8,7 +8,7 @@ The source includes the owner daemon, contact reply loop, versioned Ghostget aut
 
 ```mermaid
 flowchart LR
-  App[Mac settings app] --> Control[Owner-only control socket]
+  Menu[Menu companion] --> Control[Owner-only control socket]
   Control --> Butler[Textbutler daemon]
   Butler --> Router[Agentrouter]
   Router --> Provider[Admitted agent provider]
@@ -22,9 +22,9 @@ flowchart LR
   Ghostget --> Messages[iMessage and WhatsApp]
 ```
 
-Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. Agentrouter owns provider selection, shared-account leases, cancellation, model catalogs, qualification evidence, and a bounded tool interface. Textbutler owns conversation policy and the durable send transaction. The Mac app changes owner settings through a small local protocol; it never gives a model arbitrary Tauri commands.
+Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. Agentrouter owns provider selection, shared-account leases, cancellation, model catalogs, qualification evidence, and a bounded tool interface. Textbutler owns conversation policy and the durable send transaction. The menu companion changes owner settings through a small local protocol; it never gives a model arbitrary local commands.
 
-The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence is independent of the settings window. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A temporary live launchd install/start/uninstall test passed while preserving synthetic owner data. The CLI companion is the supported release path; optional Tauri packaging has separate checks and never gates runtime use.
+The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence is independent of the settings window. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A temporary live launchd install/start/uninstall test passed while preserving synthetic owner data. The CLI companion is the supported release path; desktop app packaging has been removed; the CLI companion is the only local runtime surface.
 
 The daemon serves owner controls, enrollment jobs and a reply loop through its own supervised Ghostget process. Startup, enablement and recovery establish a silent event boundary, refresh bounded history and admit only subsequent eligible inbound messages. A failed catch-up pauses the affected conversation. No provider work starts without explicit owner account configuration.
 
@@ -116,7 +116,7 @@ Oompa's existing runtime provider port and account/process-custody patterns are 
 
 WhatsApp follows the same Ghostget ownership boundary. Its private wacli-backed transport provides durable observations and recipient-bound actions; pairing, session state and synchronization stay in Ghostget. The [WhatsApp guide](whatsapp.md) describes setup and action support. Textbutler does not embed WPPConnect or invoke wacli directly.
 
-Current source inspection found Ghostget's Tauri 2 webview with a packaged Bun helper. That helper lives with the app, and its private socket handles approvals/control, not a public messaging subscription service. Textbutler must not couple to it.
+Ghostget owns its provider process and private control socket; Textbutler consumes only Ghostget's documented CLI and automation contracts.
 
 The older generic messaging APIs retain expiring route references and owner-confirmed previews. Automation uses a separate explicit owner protocol with durable enrollment, revocable grants and event observations. The iMessage provider negotiates attachments, reactions, stickers, rich links and polls separately; unsupported App Clips and arbitrary experiences remain unavailable. Native Contacts directory discovery is not implemented in this protocol.
 
@@ -134,7 +134,7 @@ Ghostget currently imports published Message Like Me bundle contracts. Keep that
 
 ## macOS menu companion
 
-The supported desktop surface is an unbundled status-item companion launched by the CLI. It exposes daemon state, getting-started guidance, active-contact and account counts, pause/resume, account setup, status refresh, and the textbutler.app entry point. The optional Tauri inspector retains the explicit conversation picker, history initialization, contact settings, disclosure preview, memory editing, activity, provider status, and global pause for maintainers who want a larger settings surface. Neither surface is required to run the daemon. A separate synthetic demo is clearly labeled and is not included in the live data graph.
+The supported desktop surface is an unbundled status-item companion launched by the CLI. It exposes daemon state, getting-started guidance, active-contact and account counts, pause/resume, account setup, status refresh, and the textbutler.app entry point. The web dashboard is the settings surface; the menu companion opens it in a browser. Neither surface is required to run the daemon. A separate synthetic demo is clearly labeled and is not included in the live data graph.
 
 One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The webview has no generic shell, filesystem, opener, or network plugin. The app does not inherit access to arbitrary Ghostget operations.
 

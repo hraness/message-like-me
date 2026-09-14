@@ -15,8 +15,7 @@ owner-selected Ghostget conversation enrollment, optional history
 initialization, private memory, executable hooks, reply policy and send journal.
 The supported desktop surface is the unbundled `textbutler` CLI plus its native
 menu-bar companion; it runs from a prebuilt binary and does not require an app
-bundle, signing, notarization, or a download manager. The larger Tauri settings
-inspector remains an optional development surface. Agentrouter includes a
+bundle, signing, notarization, or a download manager. Agentrouter includes a
 restricted Claude Agent SDK adapter and shared account custody. Live automated
 replies remain unavailable until Ghostget's durable events and scoped
 automation grants, and the provider's contact-only execution, are qualified.
@@ -26,14 +25,13 @@ informational; it has no connection to private messages or contact folders.
 From a source checkout, build the companion explicitly with
 `bun run --cwd apps/macos menubar:build`, then run the prebuilt binary with
 `bun run --cwd apps/macos menubar`. Installed CLI packages should ship that
-companion so `textbutler menubar` can launch it directly; the command never
-compiles Swift or starts a Tauri app.
+companion so `textbutler menubar` can launch it directly; the command never compiles Swift or starts a desktop app.
 
 Start with the [architecture and capability status](docs/textbutler/architecture.md),
 [Textbutler runtime](packages/textbutler/README.md),
 [Agentrouter](packages/agentrouter/README.md),
 [transport adapter](packages/transport/README.md), or
-[Mac app](apps/macos/README.md).
+[menu-bar companion](apps/macos/README.md).
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts

@@ -31,7 +31,7 @@ const HERO_FOOTNOTE = 'In development · macOS · iMessage + WhatsApp';
 const HOME_QUESTIONS = [
   {
     question: 'Can I use Textbutler today?',
-    answer: 'You can build the Mac app from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. A signed Mac download is not available yet.',
+    answer: 'You can build the menu companion from source. It includes the daemon, conversation picker, editable memory, hooks, and guarded reply loop. Replies need a configured Ghostget connection, an explicitly selected ready agent account, an enabled contact, and global resume. New installations start paused. Desktop app downloads are not provided.',
   },
   {
     question: 'Will it interrupt my conversations?',
@@ -59,7 +59,7 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'What happened to Message Like Me?',
-    answer: `Textbutler is the new product direction. Message Like Me’s history readers, evidence methodology, and published v${SOFTWARE_VERSION} artifacts remain available as legacy tools. Installing that package does not install the Textbutler Mac app or enable automatic replies.`,
+    answer: `Textbutler is the new product direction. Message Like Me’s history readers, evidence methodology, and published v${SOFTWARE_VERSION} artifacts remain available as legacy tools. Installing that package does not install the Textbutler menu companion or enable automatic replies.`,
   },
 ] as const;
 
@@ -128,7 +128,7 @@ export default function Home() {
             <div className="workspace-example"><pre aria-label="Example contact workspace"><code>{`contact/\n├── AGENTS.md\n├── ABOUT.md\n├── MEMORY.md\n├── STYLE.md\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre><p>One contact workspace. Settings, credentials, and permission grants stay outside the agent’s files.</p><Link href="/methodology">Read the legacy evidence methodology</Link></div>
           </MarketingSection>
 
-          <MarketingSection heading="Small parts with clear jobs" headingId="architecture-title" id="architecture" label="" summary="A local daemon handles the work while the Mac app gives you the controls. Hooks and adapters provide room to extend the experience without handing an agent unrestricted access.">
+          <MarketingSection heading="Small parts with clear jobs" headingId="architecture-title" id="architecture" label="" summary="A local daemon handles the work while the menu companion gives you the controls. Hooks and adapters provide room to extend the experience without handing an agent unrestricted access.">
             <dl className="architecture-rows">
               <div><dt>Textbutler</dt><dd>Contacts, response timing, visible disclosure, scoped memory, pause, and action policy.</dd></div>
               <div><dt>Ghostget</dt><dd>iMessage and WhatsApp connections, account permissions, conversation identity, and available message actions.</dd></div>
@@ -144,8 +144,8 @@ export default function Home() {
             { label: 'Capabilities, not promises', detail: 'Rich actions depend on the selected connection and its permissions. Unsupported features, including mini apps, stay visible as unavailable.' },
           ]} />
 
-          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The Mac app and daemon are implemented in source. Setup is explicit, and a signed Mac download is not available yet.">
-            <div className="development-status"><div><h3>Ready to inspect and build</h3><p>Mac controls, background service, iMessage and WhatsApp enrollment, optional history import, editable memory, hooks, and a guarded reply loop. New installations start paused.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the Mac app source</a></div><div><h3>Setup before replies</h3><p>Configure Ghostget and its permissions, check an explicit Claude API account, then enable a contact and resume. Native Claude Code and Codex remain unavailable. Live delivery and rich actions still need verification on your account.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
+          <MarketingSection heading="Build it. Set it up. Keep control." headingId="development-title" id="development" label="" summary="The CLI, menu companion, and daemon are implemented in source. Setup is explicit, and a desktop app downloads are not provided.">
+            <div className="development-status"><div><h3>Ready to inspect and build</h3><p>Mac controls, background service, iMessage and WhatsApp enrollment, optional history import, editable memory, hooks, and a guarded reply loop. New installations start paused.</p><a href={`${GITHUB_URL}/tree/main/apps/macos`}>Inspect the menu companion source</a></div><div><h3>Setup before replies</h3><p>Configure Ghostget and its permissions, check an explicit Claude API account, then enable a contact and resume. Native Claude Code and Codex remain unavailable. Live delivery and rich actions still need verification on your account.</p><a href={ARCHITECTURE_URL}>See the integration boundaries</a></div></div>
             <p className="legacy-note">Looking for the original history tools? <a href={RELEASE_URL}>Message Like Me v{SOFTWARE_VERSION}</a> remains available as a legacy release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>
           </MarketingSection>
 

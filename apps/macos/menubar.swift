@@ -25,8 +25,7 @@ private func acquireInstanceLock() -> Int32? {
 ///
 /// This intentionally does not embed a webview, hold provider credentials, or
 /// start a daemon. It only reports the private daemon socket, opens the public
-/// dashboard, and provides a clean quit path. The full Tauri inspector remains
-/// available for contact and policy editing.
+/// dashboard, and provides a clean quit path.
 final class TextbutlerMenuController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let status = NSMenuItem(title: "Checking daemon…", action: nil, keyEquivalent: "")

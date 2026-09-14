@@ -7,8 +7,7 @@
 web
 
 The product is a macOS-only CLI with a separate user-session daemon and an
-optional native menu-bar companion. A Tauri webview inspector remains a local
-development surface, not a release prerequisite. This platform marker does not
+unbundled native menu-bar companion. There is no desktop window or app bundle. This platform marker does not
 imply Windows, Linux, iOS, or browser-hosted messaging support. The public
 website is informational.
 
@@ -57,8 +56,8 @@ The existing repository contains bounded history ingestion, provenance-aware
 profiles, and frozen shared message contracts. New source packages contain the
 Textbutler runtime, provider-independent transport, and Agentrouter foundations.
 Automated fixtures are synthetic. They are not evidence of live provider
-qualification or actual message delivery. The optional Tauri packaging flow is
-legacy and does not gate CLI or menu-bar use.
+qualification or actual message delivery. Desktop app packaging has been removed. The CLI and menu-bar companion are the
+only local runtime surfaces.
 
 ## Open Decisions and Working Defaults
 

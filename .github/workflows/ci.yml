@@ -69,7 +69,5 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME"
           bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts
-      - name: Build Textbutler bundled webview
-        run: bun run --cwd apps/macos build
-      - name: Test Textbutler native control boundary
-        run: cargo test --manifest-path apps/macos/src-tauri/Cargo.toml --locked
+      - name: Build Textbutler menu-bar companion
+        run: bun run --cwd apps/macos menubar:build

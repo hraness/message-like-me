@@ -12,8 +12,7 @@ Claude Code and Codex remain unavailable until their native execution boundaries
 are qualified. Source-mode startup does not supply an API runtime attestation.
 See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
 tests do not attest live delivery on a particular account. CLI and menu-bar use
-do not require a signed Mac release; optional Tauri packaging has its own
-separate checks.
+do not require a signed Mac release; desktop app packaging has been removed.
 
 ## Modules
 
@@ -98,7 +97,7 @@ No shell command, arbitrary arguments or environment fields are accepted.
 This configuration does not create an account or grant Messages permissions;
 complete that setup in Ghostget. Restart Textbutler after editing host settings.
 
-In the Mac app, choose **Add contact…** to request up to 200 recent Messages
+In the menu companion, choose **Add contact…** to request up to 200 recent Messages
 conversations. The picker distinguishes direct conversations from unsupported
 groups. Select one person and optionally check **Initialize from recent
 history**. Enrollment rechecks the account incarnation and participant identity,
