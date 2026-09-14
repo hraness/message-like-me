@@ -29,7 +29,12 @@ optional settings surface.
 
 The native entry communicates with the Textbutler daemon at `~/Library/Application Support/Textbutler/daemon.sock`. The control command accepts only the versioned requests in the shared control package. It checks directory/socket ownership and private modes, rejects symlink paths, checks the peer UID, bounds requests and responses to 1 MiB, caps concurrent relays at four, and enforces one absolute four-second connection/write/read deadline. Missing or refused sockets show a disconnected state; malformed responses and permission failures are visible errors. Long owner jobs return a polling receipt so global pause remains available.
 
-A separate lifecycle command supports exactly service status, install and uninstall using fixed bundled runtime paths. The owner first moves the verified app to an Applications folder, checks service ownership, then explicitly installs it. New settings start paused. Uninstalling preserves contacts and memory. An uncertain lifecycle result requires ownership reconciliation; the UI cannot supply process paths, arguments or environment values.
+The supported CLI lifecycle uses `textbutler daemon status`, `daemon install`,
+and `daemon uninstall` with fixed per-user paths; it does not depend on a Tauri
+bundle. The optional inspector has a separate lifecycle bridge for local
+development only. New settings start paused. Uninstalling preserves contacts
+and memory. An uncertain lifecycle result requires ownership reconciliation;
+the UI cannot supply process paths, arguments or environment values.
 
 The native webview loads bundled assets only, denies external navigation and new windows, and has explicit control and lifecycle permissions. No shell, filesystem, HTTP, opener, or remote navigation plugin is installed. The daemon validates every request, scope, revision and capability. Memory writes use the content SHA-256 as a conditional revision; settings use the snapshot revision.
 
