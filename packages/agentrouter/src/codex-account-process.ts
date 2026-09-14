@@ -286,6 +286,7 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
   void preparation.catch(() => {});
   const ready = bounded(preparation, startupDeadline).catch(() => { recordFailure("startup-failed"); void stopAndJoin({ binding: owned, deadlineMs: Date.now() + 10_000 }).catch(() => {}); throw new Error("CODEX_ACCOUNT_PROCESS_UNAVAILABLE"); });
   const operationCompleted = ready.then(() => exited);
+  void operationCompleted.catch(() => {});
   function write(bytes: Uint8Array): Promise<ProviderProcessWriteResult> {
     if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return Promise.reject(Error("PROVIDER_PROCESS_WRITE_INVALID"));
     if (!child || closing || state.phase !== "running") return Promise.resolve({ outcome: "refused-before-write", acceptedBytes: 0 });
