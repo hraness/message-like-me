@@ -79,7 +79,9 @@ function fixture(options: { holdResponse?: boolean; invalidInstructions?: boolea
       }
       callback();
     } });
-    return { cwd: "/synthetic/scratch", stdin, stdout, ready: Promise.resolve(), exited: exited.promise, receipt,
+    return { cwd: "/synthetic/scratch", write: (bytes: Uint8Array) => new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>((resolve, reject) => {
+      stdin.write(bytes, error => error ? reject(error) : resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }));
+    }), stdout, ready: Promise.resolve(), exited: exited.promise, receipt,
       async stopAndJoin() {
         stopCalls++; stopped = true; stdin.end(); stdout.end(); exited.resolve();
         await Promise.allSettled([...networks]); input.signal.removeEventListener("abort", onAbort); return receipt();

@@ -27,7 +27,7 @@ type PeerOptions = {
   unknownRequest?: boolean; duplicateRpcId?: boolean; groupAbsent?: boolean; truncated?: boolean;
   invoke?(name: unknown, input: unknown): Promise<unknown>;
   maxRequests?: number; deadlineMs?: number;
-  ioMs?: number; runtimeError?: boolean; response?: () => Promise<Response>;
+  ioMs?: number; runtimeError?: boolean; finalizationError?: boolean; response?: () => Promise<Response>;
   mutateEnvelope?(envelope: Record<string, any>): void; malformedThreadReply?: boolean;
   earlyTurnStarts?: readonly string[]; orphanTurnStart?: boolean; earlyForbiddenRequest?: boolean; turnStartedAfterReply?: boolean;
   startupNotifications?: readonly Record<string, unknown>[];
@@ -115,8 +115,11 @@ function peer(options: PeerOptions = {}) {
   const launcher: CodexProcessLauncher = { async launch(config) {
     endpoint = JSON.parse(config.configuration.split("\n").find(line => line.startsWith("base_url = "))!.slice(11));
     expect(config.relayPort).toBe(Number(new URL(endpoint).port));
-    return { cwd: "/synthetic/scratch", stdin, stdout, ready: Promise.resolve(), exited, receipt,
-      async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); await Promise.allSettled([...network]); return receipt(); } };
+    return { cwd: "/synthetic/scratch", write: (bytes: Uint8Array) => new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>((resolve, reject) => {
+      stdin.write(bytes, error => error ? reject(error) : resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }));
+    }), stdout, ready: Promise.resolve(), exited, receipt,
+      async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); await Promise.allSettled([...network]);
+        if (options.finalizationError) throw Error("CODEX_FINALIZATION_FAILED"); return receipt(); } };
   } };
   const upstream: CodexResponsesUpstream = { async request(body, signal) {
     signal.throwIfAborted(); const index = ++upstreamRequests;
@@ -140,6 +143,12 @@ async function failure(run: () => Promise<unknown>): Promise<CodexSessionReceipt
   catch (error) { expect(error).toBeInstanceOf(CodexSessionError); return (error as CodexSessionError).receipt; }
 }
 describe("Codex closed driver", () => {
+  test("physical receipt fallback cannot replace successful product finalization", async () => {
+    const fixture = peer({ classify: true, finalizationError: true }), receipt = await failure(fixture.run);
+    expect(receipt.process).toMatchObject({ rootExited: true, groupAbsent: true, stdioJoined: true });
+    expect(receipt.handlersJoined).toBe(true); expect(receipt.processStopped).toBe(false);
+    expect(receipt.failures).toContain("CODEX_FINALIZATION_FAILED"); expect(receipt.failures).toContain("CODEX_CUSTODY_UNPROVEN");
+  });
   const terminalInert = () => Array.from({ length: 8 }, (_, index) => index % 2 === 0
     ? { method: "thread/status/changed", params: { threadId: "thread-1", status: { type: "idle" } } }
     : { method: "thread/tokenUsage/updated", params: { threadId: "thread-1", turnId: "turn-1", tokenUsage: {

@@ -334,6 +334,25 @@ hooks or other authority that cannot be disabled by application settings.
 
 ## Ownership boundaries
 
+The account and task consumers accept a structural `ProviderProcessPort` through
+`bindCodexAccountProcess()` and `bindCodexTaskProcess()`. Codex sessions serialize
+explicit write receipts: only `accepted-full` advances the protocol. Refused,
+partial, unknown or timed-out writes fail the operation without replay; cleanup
+retains any outstanding write and authority work. Task finalization requires the
+matching physical join plus settled transport and delivery. The host's finalizer
+still owns its configuration, confinement, scratch and durable custody receipt.
+Physical join alone does not prove those product facts or qualify a provider.
+
+A trusted `CodexProcessLauncher` or `CodexManagedProcessLauncher` can return that
+task bridge after preparing its exact account, task, profile and launch intent.
+The Claude SDK adapter also accepts an optional synchronous `processFactory`
+behind its existing runtime, credential and tool checks; omission preserves the
+current bounded process owner. Factories must return an owned handle even when
+readiness later fails, and may not discard a process after a launch effect. The
+factory owns artifact admission, native event persistence and complete stop/join
+semantics. These are source integration seams: no shared native artifact, native
+managed launcher or new production qualification is bundled or implicitly enabled.
+
 The application owns its daemon, contact enrollment, message classification policy,
 conversation history, memory format, prefix formatting and Ghostget/Linq access.
 Agentrouter owns the execution seam. The model cannot choose a workspace or contact

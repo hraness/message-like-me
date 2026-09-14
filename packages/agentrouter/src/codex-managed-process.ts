@@ -11,6 +11,7 @@ import { createCodexAccountProcess, type CodexAccountOwnedProcessPort } from "./
 import { createManagedOfflineProtocol, type OfflineProtocolReceipt } from "./codex-managed-offline-protocol.ts";
 import type { CodexManagedProcessLauncher } from "./codex-managed-config.ts";
 import type { CodexProcessHandle, CodexProcessReceipt } from "./codex-process.ts";
+import { providerProcessWriteResult, type ProviderProcessWriteResult } from "./process-port.ts";
 import { assertCodexHostFileStable, inspectCodexHostExecutable, inspectCodexHostRuntime, type CodexHostRuntime, type CodexParentRuntimeBinding } from "./codex-host.ts";
 import { assertAgentTaskAccountLease, type AgentTaskAccountLease, type AgentTaskBinding } from "./task-runtime.ts";
 import { identifier, safeInteger } from "./validation.ts";
@@ -43,7 +44,7 @@ type CoreReceipt<B, S extends string> = CodexProcessReceipt & Readonly<{
   launchAttempted: boolean; lockReleased: boolean; phase: "preparing" | "launch-pending" | "running" | "release-pending" | "recovery-required" | "closed";
 }>;
 export type CodexManagedProcessReceipt = CoreReceipt<AgentTaskBinding, "agentrouter.codex-managed-process.v1">;
-export interface CodexManagedOwnedProcess extends CodexProcessHandle { receipt(): CodexManagedProcessReceipt; stopAndJoin(): Promise<CodexManagedProcessReceipt> }
+export interface CodexManagedOwnedProcess extends CodexProcessHandle { readonly stdin: Writable; receipt(): CodexManagedProcessReceipt; stopAndJoin(): Promise<CodexManagedProcessReceipt> }
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const fail = (code: string): never => { throw new Error(code); };
 function check(value: unknown, code: string): asserts value { if (!value) fail(code); }
@@ -222,6 +223,17 @@ function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: strin
       const settle = (error?: Error | null) => { if (settled) return; settled = true; pendingWrites--; done(error); };
       try { child.stdin.write(chunk, settle); } catch { settle(new Error("CODEX_MANAGED_PROCESS_STDIN_FAILED")); }
     } }); stdin.on("error", () => {});
+    function write(bytes: Uint8Array): Promise<ProviderProcessWriteResult> {
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return Promise.reject(Error("CODEX_WRITE_INVALID"));
+      if (!child || closing || state.phase !== "running") return Promise.resolve({ outcome: "refused-before-write", acceptedBytes: 0 });
+      const copy = Buffer.from(bytes);
+      return new Promise(resolve => {
+        try { stdin.write(copy, error => resolve(error
+          ? { outcome: "indeterminate", acceptedBytes: 0 }
+          : providerProcessWriteResult({ outcome: "accepted-full", acceptedBytes: copy.byteLength }, copy.byteLength))); }
+        catch { resolve({ outcome: "indeterminate", acceptedBytes: 0 }); }
+      });
+    }
     const inputClosure = new Promise<void>(done => stdin.once("close", () => { inputClosed = true; done(); }));
     const receipt = (): CoreReceipt<B, S> => Object.freeze({ schema, binding, processGeneration, productionQualified: false, network, profile: sandboxProfile,
       nativeVersion: runtime.version, executableSha256: runtime.sha256, schemaSha256: runtime.schemaSha256, parentRuntimeSha256: runtime.parentRuntime.expectedSha256, configSha256: hash(configuration), custodyPath, ...state, runtimeErrors: Object.freeze([...runtimeErrors]), cleanupErrors: Object.freeze([...cleanupErrors]) });
@@ -329,7 +341,7 @@ function createOwnedCore<B, S extends string>(input: Readonly<{ stateRoot: strin
       });
       stopTask = task; void task.then(result => { if (result.phase !== "closed" && stopTask === task) stopTask = undefined; }); return task;
     }
-    const handle: OwnedCore<B, S> = Object.freeze({ cwd, stdin, stdout, exited, ready, receipt, stopAndJoin });
+    const handle: OwnedCore<B, S> = Object.freeze({ cwd, stdin, write, stdout, exited, ready, receipt, stopAndJoin });
     return handle;
 }
 

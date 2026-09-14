@@ -7,6 +7,8 @@ export type OfflineProtocolReceipt = Readonly<{ methods: readonly string[]; conf
 /** Internal fixed diagnostic protocol. It cannot create a process, accept RPC
  * choices, emit model input, or return a process/stream to its caller. */
 export function createManagedOfflineProtocol(process: CodexProcessHandle, accountHome: string, signal: AbortSignal, deadline: number) {
+  const stdin = process.stdin!;
+  if (!stdin) throw Error("OFFLINE_DIAGNOSTIC_STDIN_UNAVAILABLE");
   let closing = false, configured = false, disabledNotices = 0, frames = 0, bytes = 0, line = "", failure: string | null = null, joined = false, decoded = false;
   const methods: string[] = [], writes = new Set<Promise<void>>(), decoder = new TextDecoder("utf-8", { fatal: true });
   let revoke!: (error: Error) => void;
@@ -27,7 +29,7 @@ export function createManagedOfflineProtocol(process: CodexProcessHandle, accoun
   function write(frame: object, method: string): Promise<void> {
     active(); methods.push(method); const encoded = JSON.stringify(frame) + "\n";
     if (methods.length > 3 || Buffer.byteLength(encoded) > 8192) return Promise.reject(Error("OFFLINE_DIAGNOSTIC_REQUEST_BOUND"));
-    const work = new Promise<void>((resolve, reject) => process.stdin.write(encoded, error => error ? reject(Error("OFFLINE_DIAGNOSTIC_WRITE_FAILED")) : resolve()));
+    const work = new Promise<void>((resolve, reject) => stdin.write(encoded, error => error ? reject(Error("OFFLINE_DIAGNOSTIC_WRITE_FAILED")) : resolve()));
     writes.add(work); void work.then(() => writes.delete(work), () => writes.delete(work)); return bounded(work);
   }
   async function rpc(id: number, method: string, params: object): Promise<unknown> {
@@ -72,7 +74,7 @@ export function createManagedOfflineProtocol(process: CodexProcessHandle, accoun
   function onEnd() { finishDecoding(); if (!closing && !configured) fail("OFFLINE_DIAGNOSTIC_PREMATURE_EXIT"); }
   function onError() { fail("OFFLINE_DIAGNOSTIC_STREAM_FAILED"); }
   function onAbort() { fail("OFFLINE_DIAGNOSTIC_CANCELLED"); }
-  process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
+  process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); stdin.on("error", onError);
   signal.addEventListener("abort", onAbort, { once: true });
   const result = Promise.resolve().then(async () => {
     await bounded(process.ready); active();
@@ -89,7 +91,7 @@ export function createManagedOfflineProtocol(process: CodexProcessHandle, accoun
   void result.catch(() => {});
   function stop() {
     if (closing) return; closing = true; finishDecoding(); revoke(Error("OFFLINE_DIAGNOSTIC_PROTOCOL_STOPPED")); pending?.reject(Error("OFFLINE_DIAGNOSTIC_PROTOCOL_STOPPED")); pending = undefined;
-    process.stdout.off("data", onData); process.stdout.off("end", onEnd); process.stdout.off("error", onError); process.stdin.off("error", onError); signal.removeEventListener("abort", onAbort);
+    process.stdout.off("data", onData); process.stdout.off("end", onEnd); process.stdout.off("error", onError); stdin.off("error", onError); signal.removeEventListener("abort", onAbort);
   }
   const receipt = (): OfflineProtocolReceipt => Object.freeze({ methods: Object.freeze([...methods]), configurationObserved: configured, disabledNotices, frameCount: frames, failure, joined });
   return Object.freeze({ result, stop, async join() { stop(); await Promise.allSettled([result, ...writes]); joined = writes.size === 0; return receipt(); }, receipt });

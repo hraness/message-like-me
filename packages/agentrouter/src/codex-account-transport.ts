@@ -1,9 +1,10 @@
-import type { Readable, Writable } from "node:stream";
+import type { Readable } from "node:stream";
 import type {
   CodexAccountBinding, CodexAccountCloseReceipt, CodexAccountEvent, CodexAccountRequest,
   CodexAccountResponse, CodexAccountTransport,
 } from "./codex-account.ts";
 import { boundedText, identifier, object, safeInteger } from "./validation.ts";
+import { providerProcessWriteResult, type ProviderProcessWriteResult } from "./process-port.ts";
 
 export type CodexAccountProcessCloseReceipt = Readonly<{
   binding: CodexAccountBinding;
@@ -14,8 +15,11 @@ export type CodexAccountProcessCloseReceipt = Readonly<{
  * group. stopAndJoin must join even a failed or still-pending launch. */
 export interface CodexAccountProcessPort {
   readonly binding: CodexAccountBinding;
-  readonly stdin: Writable; readonly stdout: Readable; readonly stderr: Readable;
+  readonly stdout: Readable; readonly stderr: Readable;
   readonly ready: Promise<void>; readonly exited: Promise<void>;
+  /** Delivery/operation failure is separate from stopAndJoin's custody proof. */
+  readonly operationCompleted: Promise<void>;
+  write(bytes: Uint8Array): Promise<ProviderProcessWriteResult>;
   stopAndJoin(request: { binding: CodexAccountBinding; deadlineMs: number }): Promise<CodexAccountProcessCloseReceipt>;
 }
 export type CodexAccountTransportOptions = Readonly<{
@@ -54,7 +58,7 @@ const complete = (value: CodexAccountCloseReceipt) => value.processExited && val
 export function createCodexAccountStdioTransport(options: CodexAccountTransportOptions): CodexAccountTransport {
   const binding = bind(options.binding), process = options.process, now = options.now ?? Date.now;
   assert(same(bind(process.binding), binding), "CODEX_ACCOUNT_PROCESS_BINDING_MISMATCH");
-  assert(typeof options.onEvent === "function" && typeof process.stopAndJoin === "function", "CODEX_ACCOUNT_PROCESS_PORT_INVALID");
+  assert(typeof options.onEvent === "function" && typeof process.stopAndJoin === "function" && typeof process.write === "function", "CODEX_ACCOUNT_PROCESS_PORT_INVALID");
   const initializeTimeoutMs = safeInteger(options.initializeTimeoutMs ?? 10_000, 1, 120_000);
   const closeTimeoutMs = safeInteger(options.closeTimeoutMs ?? 10_000, 1, 120_000);
   const pending = new Map<number, Pending>(), retired = new Set<number>(), writes = new Set<Promise<void>>();
@@ -63,12 +67,11 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
   const asynchronousNotifications = new Set<Promise<void>>();
   let unknownNotificationWork = false;
   let nextId = 0, line = "", stdoutBytes = 0, stderrBytes = 0, frames = 0, notifications = 0, callbacks = 0;
-  let stdoutEnded = false, stderrEnded = false, processExited = false, closing = false, failure: string | null = null;
+  let stdoutEnded = false, stderrEnded = false, stdoutSettled = false, stderrSettled = false, closing = false, failure: string | null = null;
   let writeTail = Promise.resolve(), closeAttempt: Promise<CodexAccountCloseReceipt> | undefined;
-  let resolveStdout!: () => void, resolveStderr!: () => void, resolveExited!: () => void;
+  let resolveStdout!: () => void, resolveStderr!: () => void;
   const stdoutDone = new Promise<void>(resolve => { resolveStdout = resolve; });
   const stderrDone = new Promise<void>(resolve => { resolveStderr = resolve; });
-  const exitedDone = new Promise<void>(resolve => { resolveExited = resolve; });
   const decoder = new TextDecoder("utf-8", { fatal: true });
 
   function deadline(value: number): number {
@@ -120,14 +123,19 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
     void closeBound(now() + closeTimeoutMs).catch(() => {});
   }
   function write(message: unknown, signal?: AbortSignal, admitted?: () => boolean): Promise<void> {
-    const encoded = JSON.stringify(message) + "\n";
-    assert(Buffer.byteLength(encoded) <= LIMITS.frameBytes, "CODEX_ACCOUNT_WRITE_BOUND");
+    const encoded = Buffer.from(JSON.stringify(message) + "\n");
+    assert(encoded.byteLength <= LIMITS.frameBytes, "CODEX_ACCOUNT_WRITE_BOUND");
     const task = writeTail.then(async () => {
       assert(!closing && failure === null && !signal?.aborted && (admitted === undefined || admitted()), "CODEX_ACCOUNT_TRANSPORT_CLOSED");
-      await new Promise<void>((resolve, reject) => {
-        try { process.stdin.write(encoded, error => error ? reject(Error("CODEX_ACCOUNT_WRITE_FAILED")) : resolve()); }
-        catch { reject(Error("CODEX_ACCOUNT_WRITE_FAILED")); }
-      });
+      try {
+        const result = providerProcessWriteResult(await process.write(encoded), encoded.byteLength);
+        assert(result.outcome === "accepted-full", "CODEX_ACCOUNT_WRITE_FAILED");
+      } catch {
+        // A partially accepted or uncertain RPC cannot be retried or followed
+        // by another write. Preserve its failure while independently joining.
+        fail("CODEX_ACCOUNT_WRITE_FAILED");
+        throw Error("CODEX_ACCOUNT_WRITE_FAILED");
+      }
     });
     writes.add(task);
     writeTail = task.then(() => { writes.delete(task); }, () => { writes.delete(task); });
@@ -152,9 +160,9 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
     void sent.catch(() => {
       if (pending.has(id)) { retired.add(id); settle(id, Error("CODEX_ACCOUNT_WRITE_FAILED")); }
     });
-    // A blocked write callback must not prevent the caller's deadline/abort.
+    // A blocked byte write must not prevent the caller's deadline/abort.
     // Its actual settlement remains tracked independently for close custody.
-    return await response;
+    return await until(Promise.all([response, sent]).then(([value]) => value), end, signal);
   }
   function receive(raw: unknown): void {
     const value = object(raw, ["id", "method", "params", "result", "error", "jsonrpc", "emittedAtMs"]);
@@ -218,7 +226,7 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
     } catch (error) { fail(error instanceof Error && /^CODEX_ACCOUNT_[A-Z_]+$/u.test(error.message) ? error.message : "CODEX_ACCOUNT_FRAME_INVALID"); }
   });
   process.stdout.once("end", () => {
-    stdoutEnded = true; resolveStdout();
+    stdoutEnded = true; stdoutSettled = true; resolveStdout();
     if (!closing) {
       try { assert(decoder.decode() === "" && line === "", "CODEX_ACCOUNT_STDOUT_TRUNCATED"); }
       catch { fail("CODEX_ACCOUNT_STDOUT_TRUNCATED"); }
@@ -230,15 +238,17 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
     stderrBytes += chunk.byteLength;
     if (stderrBytes > LIMITS.stderrBytes) fail("CODEX_ACCOUNT_STDERR_LIMIT");
   });
-  process.stderr.once("end", () => { stderrEnded = true; resolveStderr(); });
+  process.stderr.once("end", () => { stderrEnded = true; stderrSettled = true; resolveStderr(); });
   process.stdout.on("error", () => fail("CODEX_ACCOUNT_STDOUT_FAILED"));
   process.stderr.on("error", () => fail("CODEX_ACCOUNT_STDERR_FAILED"));
-  process.stdin.on("error", () => fail("CODEX_ACCOUNT_STDIN_FAILED"));
-  process.stdout.once("close", () => { if (!stdoutEnded && !closing) fail("CODEX_ACCOUNT_STDOUT_TRUNCATED"); });
-  process.stderr.once("close", () => { if (!stderrEnded && !closing) fail("CODEX_ACCOUNT_STDERR_TRUNCATED"); });
+  // Close settles the consumer even on delivery failure. Only the exact host
+  // receipt below can prove actual native EOF; a destroyed JS wrapper cannot.
+  process.stdout.once("close", () => { stdoutSettled = true; resolveStdout(); if (!stdoutEnded && !closing) fail("CODEX_ACCOUNT_STDOUT_TRUNCATED"); });
+  process.stderr.once("close", () => { stderrSettled = true; resolveStderr(); if (!stderrEnded && !closing) fail("CODEX_ACCOUNT_STDERR_TRUNCATED"); });
   void process.exited.then(() => {
-    processExited = true; resolveExited(); if (!closing) fail("CODEX_ACCOUNT_DISCONNECTED");
+    if (!closing) fail("CODEX_ACCOUNT_DISCONNECTED");
   }, () => fail("CODEX_ACCOUNT_EXIT_UNPROVEN"));
+  void process.operationCompleted.catch(() => fail("CODEX_ACCOUNT_OPERATION_FAILED"));
 
   let initializationSettled = false;
   const initialized = Promise.resolve().then(async () => {
@@ -287,15 +297,15 @@ export function createCodexAccountStdioTransport(options: CodexAccountTransportO
         const receipt = await until(stop, end);
         assert(same(bind(receipt.binding), binding), "CODEX_ACCOUNT_STOP_BINDING_MISMATCH");
         native = receipt;
-        await until(Promise.all([stdoutDone, stderrDone, exitedDone, writeTail, initialized.catch(() => {}),
+        await until(Promise.all([stdoutDone, stderrDone, writeTail, initialized.catch(() => {}),
           ...[...operations].map(task => task.catch(() => {})), ...asynchronousNotifications,
           ...[...stopTasks].map(task => task.catch(() => {}))]).then(() => {}), end);
       } catch { /* Incomplete custody remains visible and retryable; never infer exit from timeout. */ }
       // A newer port receipt cannot discharge host cleanup still owned by an
       // earlier timed-out stop call, even when native exit is already observed.
-      return Object.freeze({ binding, processExited: processExited && native?.processExited === true && stopTasks.size === 0,
+      return Object.freeze({ binding, processExited: native?.processExited === true && stopTasks.size === 0,
         processGroupStopped: native?.processGroupStopped === true && stopTasks.size === 0,
-        stdoutEnded: stdoutEnded && native?.stdoutEnded === true, stderrEnded: stderrEnded && native?.stderrEnded === true,
+        stdoutEnded: stdoutSettled && native?.stdoutEnded === true, stderrEnded: stderrSettled && native?.stderrEnded === true,
         writesSettled: writes.size === 0, requestsSettled: pending.size === 0 && operations.size === 0 && initializationSettled && stopTasks.size === 0,
         notificationsSettled: callbacks === 0 && asynchronousNotifications.size === 0 && !unknownNotificationWork });
     });

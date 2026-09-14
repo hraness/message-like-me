@@ -3,11 +3,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants, closeSync, fsyncSync, openSync, writeSync, type BigIntStats } from "node:fs";
 import { lstat, mkdir, open, realpath, rm, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { PassThrough, Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import type { CodexAccountBinding } from "./codex-account.ts";
 import type { CodexAccountProcessCloseReceipt, CodexAccountProcessPort } from "./codex-account-transport.ts";
 import { inspectCodexHostExecutable, inspectCodexHostRuntime, type CodexHostRuntime, type CodexParentRuntimeBinding } from "./codex-host.ts";
 import { identifier, safeInteger } from "./validation.ts";
+import { providerProcessWriteResult, sameProviderProcessBinding, snapshotProviderProcessBinding, type ProviderProcessBinding, type ProviderProcessPort, type ProviderProcessWriteResult } from "./process-port.ts";
 import { codexManagedAccountConfiguration as codexAccountOfflineConfiguration } from "./codex-managed-baseline.ts";
 export { codexManagedAccountConfiguration as codexAccountOfflineConfiguration } from "./codex-managed-baseline.ts";
 
@@ -284,6 +285,18 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
   });
   void preparation.catch(() => {});
   const ready = bounded(preparation, startupDeadline).catch(() => { recordFailure("startup-failed"); void stopAndJoin({ binding: owned, deadlineMs: Date.now() + 10_000 }).catch(() => {}); throw new Error("CODEX_ACCOUNT_PROCESS_UNAVAILABLE"); });
+  const operationCompleted = ready.then(() => exited);
+  function write(bytes: Uint8Array): Promise<ProviderProcessWriteResult> {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return Promise.reject(Error("PROVIDER_PROCESS_WRITE_INVALID"));
+    if (!child || closing || state.phase !== "running") return Promise.resolve({ outcome: "refused-before-write", acceptedBytes: 0 });
+    const copy = Buffer.from(bytes);
+    return new Promise(resolve => {
+      try { stdin.write(copy, error => resolve(error
+        ? { outcome: "indeterminate", acceptedBytes: 0 }
+        : providerProcessWriteResult({ outcome: "accepted-full", acceptedBytes: copy.byteLength }, copy.byteLength))); }
+      catch { resolve({ outcome: "indeterminate", acceptedBytes: 0 }); }
+    });
+  }
   void ready.catch(() => {});
   function stopAndJoin(request: { binding: CodexAccountBinding; deadlineMs: number }): Promise<CodexAccountProcessCloseReceipt> {
     const input = object(request, ["binding", "deadlineMs"]), selected = binding(input.binding as CodexAccountBinding); assert(same(selected, owned), "CODEX_ACCOUNT_PROCESS_STOP_BINDING_MISMATCH");
@@ -334,5 +347,148 @@ export function createCodexAccountProcess(options: CodexAccountProcessOptions, t
     void task.then(result => { if (!result.processGroupStopped && stopTask === task) stopTask = undefined; });
     return task;
   }
-  return Object.freeze({ binding: owned, stdin, stdout, stderr, ready, exited, stopAndJoin, receipt });
+  return Object.freeze({ binding: owned, stdin, stdout, stderr, ready, exited, operationCompleted, write, stopAndJoin, receipt });
+}
+
+function bridgeObject(value: unknown, keys: readonly string[]): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw Error("CODEX_ACCOUNT_PROCESS_OBJECT_INVALID");
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(value as object)) {
+    if (typeof key !== "string" || !keys.includes(key)) throw Error("CODEX_ACCOUNT_PROCESS_UNKNOWN_FIELD");
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (!("value" in descriptor)) throw Error("CODEX_ACCOUNT_PROCESS_ACCESSOR_DENIED");
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+
+/** The trusted host binds an already admitted provider invocation to its exact
+ * account lease. This bridge neither launches a provider nor admits its tools,
+ * configuration, artifact or credentials. It cannot create join evidence. */
+export function bindCodexAccountProcess(options: Readonly<{
+  binding: CodexAccountBinding;
+  invocation: ProviderProcessBinding;
+  process: ProviderProcessPort;
+  /** The host synchronously verifies current account lease, process generation
+   * and daemon authority from its live owner/store immediately before bytes. */
+  assertWriteAuthority(binding: CodexAccountBinding, invocation: ProviderProcessBinding): undefined;
+}>): CodexAccountProcessPort {
+  const assertWriteAuthority = options.assertWriteAuthority;
+  if (typeof assertWriteAuthority !== "function") throw Error("CODEX_ACCOUNT_WRITE_AUTHORITY_REQUIRED");
+  const raw = bridgeObject(options.binding, ["accountId", "owner", "leaseGeneration", "processGeneration"]);
+  const binding = Object.freeze({ accountId: identifier(raw.accountId), owner: identifier(raw.owner),
+    leaseGeneration: safeInteger(raw.leaseGeneration, 1, Number.MAX_SAFE_INTEGER),
+    processGeneration: safeInteger(raw.processGeneration, 1, Number.MAX_SAFE_INTEGER) });
+  const invocation = snapshotProviderProcessBinding(options.invocation), process = options.process;
+  const stdout = Readable.from(process.stdout, { objectMode: false });
+  const stderr = Readable.from(process.stderr, { objectMode: false });
+  let ready = false, stopping = false, writing = false;
+  const authorityWork = new Set<Promise<void>>();
+  let unknownAuthorityWork = false;
+  let rejectOperation!: (error: Error) => void;
+  const localFailure = new Promise<never>((_, reject) => { rejectOperation = reject; });
+  const operationCompleted = Promise.race([
+    Promise.all([process.transportCompleted, delivered(stdout), delivered(stderr)]).then(() => {}), localFailure,
+  ]);
+  const readiness = process.ready.then(() => {
+    if (stopping) throw Error("CODEX_ACCOUNT_PROCESS_STOPPED");
+    ready = true;
+  });
+  const exited = process.rootExited.then(interrupt);
+  // Observation is installed before returning a handle; a launch or delivery
+  // failure can precede the account controller's listener installation.
+  void readiness.catch(interrupt); void exited.catch(interrupt);
+  void process.joined.then(() => { stopping = true; }, interrupt); void operationCompleted.catch(interrupt);
+
+  function delivered(stream: Readable): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let ended = false;
+      const failed = () => { reject(Error("CODEX_ACCOUNT_PROCESS_DELIVERY_FAILED")); interrupt(); };
+      stream.once("end", () => { ended = true; resolve(); });
+      stream.on("error", failed);
+      stream.once("close", () => { if (!ended) failed(); });
+    });
+  }
+
+  function stop(force = false): void {
+    stopping = true;
+    try { if (force) process.forceStop(); else process.requestStop(); }
+    catch { rejectOperation(Error("CODEX_ACCOUNT_PROCESS_STOP_FAILED")); }
+  }
+  function interrupt(): void {
+    // A throwing stop cannot become proof. Keep the original operation failure
+    // observable and let stopAndJoin retain custody unless the host proves join.
+    if (!stopping) stop();
+  }
+  const refused = (): ProviderProcessWriteResult => Object.freeze({ outcome: "refused-before-write", acceptedBytes: 0 });
+  function write(bytes: Uint8Array): Promise<ProviderProcessWriteResult> {
+    if (!ready || stopping || writing) return Promise.resolve(refused());
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return Promise.reject(Error("PROVIDER_PROCESS_WRITE_INVALID"));
+    const length = bytes.byteLength;
+    writing = true;
+    try {
+      const result: unknown = assertWriteAuthority(binding, invocation);
+      if (result !== undefined) {
+        if (result instanceof Promise) {
+          const joined = result.then(() => {}, () => {});
+          authorityWork.add(joined); void joined.then(() => authorityWork.delete(joined));
+        } else if (result !== null && (typeof result === "object" || typeof result === "function")) unknownAuthorityWork = true;
+        throw Error("CODEX_ACCOUNT_WRITE_AUTHORITY_ASYNC");
+      }
+    } catch {
+      writing = false; rejectOperation(Error("CODEX_ACCOUNT_WRITE_AUTHORITY_FAILED")); interrupt();
+      return Promise.resolve(refused());
+    }
+    // A synchronous host assertion may itself close this handle reentrantly.
+    if (!ready || stopping) { writing = false; return Promise.resolve(refused()); }
+    // No asynchronous step occurs between the account fence and the host write.
+    // The process port adds its own synchronous invocation/lifetime admission.
+    let task: Promise<ProviderProcessWriteResult>;
+    try { task = process.write(bytes); }
+    catch { writing = false; failedWrite(); return Promise.resolve({ outcome: "indeterminate", acceptedBytes: 0 }); }
+    return task.then(value => {
+      let result: ProviderProcessWriteResult;
+      try { result = providerProcessWriteResult(value, length); }
+      catch { failedWrite(); return { outcome: "indeterminate" as const, acceptedBytes: 0 }; }
+      if (result.outcome !== "accepted-full") failedWrite();
+      return result;
+    }, () => { failedWrite(); return { outcome: "indeterminate" as const, acceptedBytes: 0 }; }).finally(() => { writing = false; });
+  }
+  function failedWrite(): void { rejectOperation(Error("CODEX_ACCOUNT_PROCESS_WRITE_FAILED")); interrupt(); }
+
+  return Object.freeze({ binding, stdout, stderr, ready: readiness, exited,
+    operationCompleted, write,
+    async stopAndJoin(request) {
+      const candidate = bridgeObject(request.binding, ["accountId", "owner", "leaseGeneration", "processGeneration"]);
+      if (candidate.accountId !== binding.accountId || candidate.owner !== binding.owner
+        || candidate.leaseGeneration !== binding.leaseGeneration || candidate.processGeneration !== binding.processGeneration) {
+        throw Error("CODEX_ACCOUNT_STOP_BINDING_MISMATCH");
+      }
+      const remaining = safeInteger(request.deadlineMs - Date.now(), 1, 120_000);
+      stop();
+      // Drain consumer queues during shutdown, including when no RPC controller
+      // was installed. A wrapper close only settles delivery; it is not EOF proof.
+      stdout.resume(); stderr.resume();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const settlement = await Promise.race([Promise.all([process.joined, ...authorityWork]).then(([value]) => value), new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            stop(true);
+            reject(Error("CODEX_ACCOUNT_PROCESS_JOIN_TIMEOUT"));
+          }, remaining);
+        })]);
+        // A trusted assertion can reenter close before returning an invalid
+        // asynchronous result. Its work may therefore appear after the join's
+        // initial snapshot; retain custody and permit a later close retry.
+        if (unknownAuthorityWork || authorityWork.size !== 0) throw Error("CODEX_ACCOUNT_WRITE_AUTHORITY_UNJOINED");
+        if ((settlement.kind !== "joined" && settlement.kind !== "not-started")
+          || !sameProviderProcessBinding(snapshotProviderProcessBinding(settlement.binding), invocation)) {
+          throw Error("CODEX_ACCOUNT_PROCESS_JOIN_MISMATCH");
+        }
+        // Only native join supplies these physical facts. transportCompleted can
+        // reject and wrapper streams can fail while this exact proof stays valid.
+        return Object.freeze({ binding, processExited: true, processGroupStopped: true, stdoutEnded: true, stderrEnded: true });
+      } finally { clearTimeout(timer); }
+    },
+  } satisfies CodexAccountProcessPort);
 }

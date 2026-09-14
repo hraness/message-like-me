@@ -1,3 +1,4 @@
+import { createProcessWriteQueue } from "./process-write.ts";
 import { assertCapabilityProfile, type CapabilityBroker } from "./capabilities.ts";
 import { canonicalJson, createCodexCapabilityMapping, type CodexTaskSettings } from "./codex-config.ts";
 import { assertCodexManagedAccountResponse, assertCodexManagedConfigResponse, assertCodexManagedSettingsUpdate,
@@ -88,12 +89,13 @@ export async function runCodexManagedSession(options: {
     signal.throwIfAborted();
     assert(safeInteger(now(), 0, Number.MAX_SAFE_INTEGER) < request.executionDeadlineUnixMs, "CODEX_MANAGED_EXECUTION_DEADLINE");
   }
+  let writes: ReturnType<typeof createProcessWriteQueue> | undefined;
   async function write(value: unknown) {
-    active(); assert(process && !process.stdin.destroyed, "CODEX_MANAGED_STDIN_UNAVAILABLE");
-    const text = JSON.stringify(value) + "\n";
-    assert(Buffer.byteLength(text) <= limits.maxFrameBytes, "CODEX_MANAGED_WRITE_BOUND");
-    await codexBounded(new Promise<void>((resolve, reject) => process!.stdin.write(text,
-      error => error ? reject(Error("CODEX_MANAGED_WRITE_FAILED")) : resolve())), limits.ioMs, "CODEX_MANAGED_WRITE_DEADLINE");
+    active();
+    const bytes = Buffer.from(JSON.stringify(value) + "\n");
+    assert(bytes.byteLength <= limits.maxFrameBytes, "CODEX_MANAGED_WRITE_BOUND");
+    assert(writes !== undefined, "CODEX_MANAGED_STDIN_UNAVAILABLE");
+    await writes.write(bytes);
   }
   async function rpc(method: string, params: unknown) {
     active(); assert(pending.size < 4, "CODEX_MANAGED_PENDING_BOUND");
@@ -316,13 +318,16 @@ export async function runCodexManagedSession(options: {
     assert(selected.deadlineMs <= request.limits.maxRunMs && selected.cleanupMs <= cleanup
       && selected.cleanupMs <= request.limits.maxCleanupMs, "CODEX_MANAGED_LIMITS_EXCEED_TASK");
     limits = Object.freeze({ ...selected, deadlineMs: Math.min(selected.deadlineMs, remaining) });
+    writes = createProcessWriteQueue({ timeoutMs: limits.ioMs, assertActive: active,
+      failed: () => fail("CODEX_MANAGED_WRITE_FAILED"),
+      write: bytes => { assert(process !== null, "CODEX_MANAGED_STDIN_UNAVAILABLE"); return process!.write(bytes); } });
     timer = setTimeout(() => fail("CODEX_MANAGED_EXECUTION_DEADLINE"), limits.deadlineMs);
     assertAgentTaskAccountLease(admittedRequest);
     assertAgentTaskAccountLease(request);
     launchAttempted = true;
     process = await options.launcher.launch(Object.freeze({ request: admittedRequest, runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
       accountLease: request.accountLease, configuration: codexManagedTaskConfiguration(settings), cancellationSignal: signal }));
-    process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
+    process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin?.on("error", onError);
     workflow = (async () => {
       await process!.ready; active();
       await rpc("initialize", { clientInfo: { name: "agentrouter", version: "0.1.0" }, capabilities: { experimentalApi: true } });
@@ -348,7 +353,7 @@ export async function runCodexManagedSession(options: {
     active();
   } catch (error) { fail(failureCode(error)); }
   finally {
-    if (timer) clearTimeout(timer); closing = true; controller.abort(); broker.revoke();
+    if (timer) clearTimeout(timer); closing = true; writes?.stop(); controller.abort(); broker.revoke();
     for (const entry of pending.values()) entry.reject(Error("CODEX_MANAGED_SESSION_CLOSED")); pending.clear();
     let allowance = 1;
     try { allowance = Math.max(1, Math.min(limits.cleanupMs, request.cleanupDeadlineUnixMs - safeInteger(now(), 0, Number.MAX_SAFE_INTEGER))); }
@@ -358,12 +363,12 @@ export async function runCodexManagedSession(options: {
       begin(async () => { if (process) {
         processReceipt = await codexBounded(process.stopAndJoin(), allowance, "CODEX_MANAGED_PROCESS_JOIN_DEADLINE"); processJoined = true;
       } }),
-      begin(async () => { await codexBounded(Promise.allSettled([workflow, queue]), allowance, "CODEX_MANAGED_HANDLER_JOIN_DEADLINE"); handlersJoined = true; }),
+      begin(async () => { await codexBounded(Promise.allSettled([workflow, queue, writes?.settled()]), allowance, "CODEX_MANAGED_HANDLER_JOIN_DEADLINE"); handlersJoined = true; }),
       begin(async () => { await codexBounded(broker.close(), allowance, "CODEX_MANAGED_BROKER_JOIN_DEADLINE"); brokerJoined = true; }),
     ]);
     for (const result of cleanups) if (result.status === "rejected") fail(failureCode(result.reason));
     if (process && processReceipt === null) try { processReceipt = process.receipt(); } catch { fail("CODEX_MANAGED_PROCESS_RECEIPT_FAILED"); }
-    process?.stdout.off("data", onData); process?.stdout.off("end", onEnd); process?.stdout.off("error", onError); process?.stdin.off("error", onError);
+    process?.stdout.off("data", onData); process?.stdout.off("end", onEnd); process?.stdout.off("error", onError); process?.stdin?.off?.("error", onError);
     cancellation.removeEventListener("abort", onAbort);
   }
   const processStopped = (!launchAttempted || processJoined && processReceipt !== null && processReceipt.rootExited && processReceipt.groupAbsent
