@@ -384,7 +384,7 @@ describe('supported source presentation', () => {
     );
     expect(softwareApplication?.softwareVersion).toBeUndefined();
     expect(softwareApplication?.featureList).toEqual([
-      'Mac control panel and local daemon controls',
+      'macOS menu-bar companion and local daemon controls',
       'Contact-specific guidance and editable memory',
       'Configurable visible assistant disclosure',
       'Smart and keyword-only response controls',

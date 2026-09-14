@@ -39,7 +39,7 @@ test('renders Textbutler with the shared grammar and honest development status',
   expect(html).toContain('It is billed separately from a Claude Code subscription');
   expect(html).toContain('an explicitly selected ready agent account');
   expect(html).toContain('Live delivery and rich actions still need verification on your account.');
-  expect(html).toContain('A signed Mac download is not available yet');
+  expect(html).toContain('No windowed app download is provided');
   expect(html).toContain(`Message Like Me v${SOFTWARE_VERSION}`);
   expect(html).toContain('It does not install Textbutler or enable automatic replies.');
   expect(html).toContain('No. textbutler.app is informational');
@@ -127,7 +127,7 @@ test('keeps machine-readable setup and unavailable choices consistent with the l
   const discovery = await getDiscoveryText().text();
   expect(discovery).toContain('New installations start paused and new contacts start disabled.');
   expect(discovery).toContain('native Claude Code and Codex remain unavailable');
-  expect(discovery).toContain('There is no signed Textbutler Mac download yet.');
+  expect(discovery).toContain('There is no windowed Textbutler app download; releases ship the CLI and prebuilt menu companion.');
   expect(discovery).toContain('App Clips, mini apps, and Linq integration remain unavailable.');
   expect(discovery).toContain('Live delivery still needs verification on the selected account.');
 });
