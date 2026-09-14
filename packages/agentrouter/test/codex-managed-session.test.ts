@@ -186,12 +186,12 @@ test("selected IO deadline revokes an unacknowledged write and cleanup joins its
   let settle!: (value: import("../src/process-port.ts").ProviderProcessWriteResult) => void;
   const write = new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>(resolve => { settle = resolve; });
   let stopStarted = false;
-  const task = runCodexManagedSession({ ...peer, limits: { ioMs: 10 }, launcher: { async launch(input) {
+  const task = withTaskLease(peer.request, peer.broker.profile, request => runCodexManagedSession({ ...peer, request, limits: { ioMs: 10 }, launcher: { async launch(input) {
     const owned = await peer.launcher.launch(input);
     return { ...owned, write: () => write, async stopAndJoin() {
       stopStarted = true; settle({ outcome: "indeterminate", acceptedBytes: 0 }); return owned.stopAndJoin();
     } };
-  } } });
+  } } }), Date.now);
   try { await task; throw Error("Expected failed session"); }
   catch (error) {
     expect(error).toBeInstanceOf(CodexManagedSessionError);
