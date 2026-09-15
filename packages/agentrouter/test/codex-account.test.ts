@@ -262,7 +262,9 @@ describe("managed Codex account controller", () => {
     const f = fixture(), gate = f.holdRead(); const checked = f.controller.check().catch(error => error); await f.entered.promise;
     let nested: ReturnType<typeof f.controller.close> | undefined;
     f.requests[0]!.signal.addEventListener("abort", () => { nested = f.controller.close(); gate.resolve(); }, { once: true });
-    const outer = f.controller.close(); expect(await outer).toEqual({ released: true, state: "closed" }); expect(nested).toBe(outer);
+    const outer = f.controller.close();
+    expect(f.requests[0]!.signal.aborted).toBe(true); expect(nested).toBe(outer);
+    expect(await outer).toEqual({ released: true, state: "closed" }); expect(nested).toBe(outer);
     expect((await checked).message).toBe("CODEX_ACCOUNT_ABORTED"); expect(f.calls.filter(call => call === "close")).toHaveLength(1); expect(f.leases.releases).toBe(1);
   });
   test("wrong process close receipt never releases account", async () => {

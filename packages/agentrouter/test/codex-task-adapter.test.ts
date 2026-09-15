@@ -82,7 +82,9 @@ async function taskFixture(settings: { reasoningEffort: string | null; serviceTi
   } });
   const launcher: CodexProcessLauncher = { async launch(input) {
     endpoint = JSON.parse(input.configuration.split("\n").find(line => line.startsWith("base_url = "))!.slice(11));
-    return { cwd: "/synthetic/scratch", stdin, stdout, ready: Promise.resolve(), exited, receipt,
+    return { cwd: "/synthetic/scratch", write: (bytes: Uint8Array) => new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>((resolve, reject) => {
+      stdin.write(bytes, error => error ? reject(error) : resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }));
+    }), stdout, ready: Promise.resolve(), exited, receipt,
       async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); await transport; return receipt(); } };
   } };
   const adapter = createCodexTaskAdapter({ route: request.route,

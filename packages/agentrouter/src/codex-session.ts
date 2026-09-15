@@ -1,3 +1,4 @@
+import { createProcessWriteQueue } from "./process-write.ts";
 import type { ToolBroker } from "./broker.ts";
 import type { CapabilityBroker } from "./capabilities.ts";
 import { assertCapabilityProfile } from "./capabilities.ts";
@@ -54,7 +55,7 @@ export async function runCodexSession(options: {
   }
   let process: CodexProcessHandle | null = null, relay: CodexRelay | null = null, output: unknown;
   let processReceipt: CodexProcessReceipt | null = null, relayReceipt: CodexRelayReceipt | null = null;
-  let initialized = false, turnCompleted = false, handlersJoined = false, closing = false;
+  let initialized = false, turnCompleted = false, handlersJoined = false, processJoined = false, closing = false;
   let threadId: string | null = null, turnId: string | null = null, resolveDone!: () => void;
   const done = new Promise<void>(resolve => { resolveDone = resolve; });
   let frames = 0, stdoutBytes = 0, line = "", requestId = 0;
@@ -69,11 +70,14 @@ export async function runCodexSession(options: {
   const onAbort = () => fail("CODEX_CANCELLED");
   request.signal.addEventListener("abort", onAbort, { once: true });
   const timer = setTimeout(() => fail("CODEX_SESSION_DEADLINE"), limits.deadlineMs);
+  const writes = createProcessWriteQueue({ timeoutMs: limits.ioMs, assertActive: () => signal.throwIfAborted(),
+    failed: () => fail("CODEX_STDIN_WRITE_FAILED"),
+    write: bytes => { codexAssert(process !== null, "CODEX_STDIN_UNAVAILABLE"); return process!.write(bytes); } });
   async function write(value: unknown) {
-    signal.throwIfAborted(); codexAssert(process && !process.stdin.destroyed, "CODEX_STDIN_UNAVAILABLE");
-    const encoded = JSON.stringify(value) + "\n"; codexAssert(Buffer.byteLength(encoded) <= limits.maxFrameBytes, "CODEX_WRITE_FRAME_BOUND");
-    await codexBounded(new Promise<void>((resolve, reject) => process!.stdin.write(encoded,
-      error => error ? reject(new Error("CODEX_STDIN_WRITE_FAILED")) : resolve())), limits.ioMs, "CODEX_WRITE_DEADLINE");
+    signal.throwIfAborted();
+    const bytes = Buffer.from(JSON.stringify(value) + "\n");
+    codexAssert(bytes.byteLength <= limits.maxFrameBytes, "CODEX_WRITE_FRAME_BOUND");
+    await writes.write(bytes);
   }
   async function rpc(method: string, params: unknown): Promise<Record<string, unknown>> {
     codexAssert(pending.size < 4, "CODEX_PENDING_RPC_BOUND"); const id = ++requestId;
@@ -228,7 +232,7 @@ export async function runCodexSession(options: {
     // The launcher owns preparation cancellation and must return an owned handle once it spawns.
     process = await launcher.launch({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
       configuration: task ? codexTaskConfiguration(task.settings, relay.baseUrl) : codexConfiguration(request.model, relay.baseUrl), relayPort: relay.port, signal });
-    process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError); process.stdin.on("error", onError);
+    process.stdout.on("data", onData); process.stdout.on("end", onEnd); process.stdout.on("error", onError);
     workflow = (async () => {
       await process!.ready; signal.throwIfAborted();
       stage = "initialize";
@@ -259,22 +263,22 @@ export async function runCodexSession(options: {
     signal.throwIfAborted();
   } catch (error) { fail(failureCode(error)); }
   finally {
-    clearTimeout(timer); stage = "cleanup"; closing = true; controller.abort(new Error("CODEX_SESSION_CLOSED")); broker.revoke();
+    clearTimeout(timer); stage = "cleanup"; closing = true; writes.stop(); controller.abort(new Error("CODEX_SESSION_CLOSED")); broker.revoke();
     earlyTurnStarts = null;
     for (const entry of pending.values()) entry.reject(new Error("CODEX_SESSION_CLOSED")); pending.clear();
     // Attempt every cleanup independently; a blocked provider read never prevents child/server stop.
     const cleanups = await Promise.allSettled([
-      process ? process.stopAndJoin().then(value => { processReceipt = value; }) : Promise.resolve(),
+      process ? process.stopAndJoin().then(value => { processReceipt = value; processJoined = true; }) : Promise.resolve(),
       relay ? relay.close().then(value => { relayReceipt = value; }) : Promise.resolve(),
-      codexBounded(Promise.allSettled([workflow, queue]), limits.cleanupMs, "CODEX_HANDLER_JOIN_DEADLINE").then(() => { handlersJoined = true; }),
+      codexBounded(Promise.allSettled([workflow, queue, writes.settled()]), limits.cleanupMs, "CODEX_HANDLER_JOIN_DEADLINE").then(() => { handlersJoined = true; }),
     ]);
     cleanups.forEach(result => { if (result.status === "rejected") fail(failureCode(result.reason)); });
     if (process && processReceipt === null) processReceipt = process.receipt();
     if (relay && relayReceipt === null) relayReceipt = relay.receipt();
-    process?.stdout.off("data", onData); process?.stdout.off("end", onEnd); process?.stdout.off("error", onError); process?.stdin.off("error", onError);
+    process?.stdout.off("data", onData); process?.stdout.off("end", onEnd); process?.stdout.off("error", onError);
     request.signal.removeEventListener("abort", onAbort);
   }
-  const stopped = processReceipt !== null && processReceipt.rootExited && processReceipt.groupAbsent && processReceipt.stdioJoined
+  const stopped = processJoined && processReceipt !== null && processReceipt.rootExited && processReceipt.groupAbsent && processReceipt.stdioJoined
     && processReceipt.cleanupErrors.length === 0 && relayReceipt?.joined === true && handlersJoined;
   if (processReceipt?.runtimeErrors.length) fail("CODEX_NATIVE_RUNTIME_FAILED");
   if (!stopped) fail("CODEX_CUSTODY_UNPROVEN");

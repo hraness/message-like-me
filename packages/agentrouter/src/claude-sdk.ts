@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createSdkMcpServer, query, tool, type SDKSystemMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { literalClaudePrompt, restrictedClaudeOptions } from "./claude-options.ts";
-import { spawnBoundedProvider } from "./provider-process.ts";
+import { spawnBoundedProvider, type BoundedProviderProcess, type BoundedProviderProcessFactory } from "./provider-process.ts";
 import { type BrokerToolName, type ToolBroker } from "./broker.ts";
 import { assertQualified, AgentStoppedError, type AgentAdapter, type AgentRunRequest, type RuntimeQualification } from "./runtime.ts";
 
@@ -25,6 +25,9 @@ export interface ClaudeSdkAdapterOptions {
   stateRoot: string;
   credentials: ClaudeApiKeyResolver;
   qualification: RuntimeQualification;
+  /** Trusted host seam beneath the unchanged SDK restrictions. No native
+   * package is selected implicitly; omitted retains the existing process owner. */
+  processFactory?: BoundedProviderProcessFactory;
   now?: () => number;
   maxTurns?: number;
   maxBudgetUsd?: number;
@@ -129,6 +132,8 @@ function boundedInteger(value: number, minimum: number, maximum: number) {
 /** A real SDK subprocess adapter. Qualification is independent host evidence, never inferred from a response. */
 export function createClaudeSdkAdapter(options: ClaudeSdkAdapterOptions): AgentAdapter {
   const now = options.now ?? Date.now;
+  const processFactory = options.processFactory ?? spawnBoundedProvider;
+  if (typeof processFactory !== "function") throw Error("CLAUDE_PROCESS_FACTORY_INVALID");
   const maxTurns = boundedInteger(options.maxTurns ?? 12, 1, 32);
   const deadlineMs = boundedInteger(options.deadlineMs ?? 120_000, 1_000, 300_000);
   const maxBudgetUsd = options.maxBudgetUsd ?? 0.25;
@@ -173,7 +178,7 @@ export function createClaudeSdkAdapter(options: ClaudeSdkAdapterOptions): AgentA
           const env: Record<string, string> = { HOME: home, CLAUDE_CONFIG_DIR: config, TMPDIR: temp, PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8",
             ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", ENABLE_CLAUDEAI_MCP_SERVERS: "false",
             CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_AGENT_SDK_CLIENT_APP: "agentrouter/0.1.0", NO_COLOR: "1" };
-          let child: ReturnType<typeof spawnBoundedProvider> | undefined;
+          let child: BoundedProviderProcess | undefined;
           let admitted = false;
           const schema = schemas();
           const brokerTools = broker.tools.map((name) => tool(publicName(name), descriptions[name], schema[name], async (input) => {
@@ -191,8 +196,9 @@ export function createClaudeSdkAdapter(options: ClaudeSdkAdapterOptions): AgentA
             spawnClaudeCodeProcess: (input) => {
               if (child !== undefined || input.command !== executable || input.cwd !== cwd) throw new Error("CLAUDE_SPAWN_MISMATCH");
               controller.signal.throwIfAborted();
-              child = spawnBoundedProvider({ executable, args: input.args, cwd, env, onViolation: abort });
               processStopped = false;
+              child = processFactory({ executable, args: Object.freeze([...input.args]), cwd, env, onViolation: abort,
+                binding: Object.freeze({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId }) });
               return child.process;
             },
           });
@@ -226,6 +232,7 @@ export function createClaudeSdkAdapter(options: ClaudeSdkAdapterOptions): AgentA
               }
             } finally { delete env.ANTHROPIC_API_KEY; }
           }
+          if (!processStopped) throw new Error("CLAUDE_PROCESS_EXIT_UNPROVEN");
           if (failure || controller.signal.aborted) throw new AgentStoppedError("CLAUDE_RUN_FAILED");
           return { output, processStopped: true as const };
         });

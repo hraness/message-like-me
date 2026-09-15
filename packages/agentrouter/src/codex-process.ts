@@ -1,3 +1,4 @@
+import type { ProviderProcessWriteResult } from "./process-port.ts";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, closeSync, fsyncSync, openSync, writeSync } from "node:fs";
@@ -20,7 +21,9 @@ export type CodexProcessReceipt = Readonly<{
   nativeExitSignal: string | null; runtimeErrors: readonly string[]; cleanupErrors: readonly string[];
 }>;
 export interface CodexProcessHandle {
-  readonly cwd: string; readonly stdin: Writable; readonly stdout: Readable;
+  readonly cwd: string; readonly stdin?: Writable; readonly stdout: Readable;
+  /** Full acceptance is distinct from the RPC result; never replay uncertain bytes. */
+  write(bytes: Uint8Array): Promise<ProviderProcessWriteResult>;
   readonly exited: Promise<void>; readonly ready: Promise<void>;
   receipt(): CodexProcessReceipt;
   stopAndJoin(): Promise<CodexProcessReceipt>;
@@ -248,8 +251,23 @@ export function createCodexProcessLauncher(options: { executablePath: string; st
       try { value.groupAbsent = !signalGroup(0); } catch { failure("group-absence-unproven"); }
       return value.groupAbsent;
     };
+    let writesOpen = true, pendingWrite: ((value: ProviderProcessWriteResult) => void) | undefined;
+    const settleWrite = (value: ProviderProcessWriteResult) => { const resolve = pendingWrite; pendingWrite = undefined; resolve?.(value); };
+    child.once("close", () => { writesOpen = false; settleWrite({ outcome: "indeterminate", acceptedBytes: 0 }); });
+    function write(bytes: Uint8Array): Promise<ProviderProcessWriteResult> {
+      if (!writesOpen || pendingWrite !== undefined || child.stdin.destroyed) return Promise.resolve({ outcome: "refused-before-write", acceptedBytes: 0 });
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) return Promise.reject(Error("CODEX_WRITE_INVALID"));
+      const copy = Buffer.from(bytes);
+      return new Promise(resolve => {
+        pendingWrite = resolve;
+        try { child.stdin.write(copy, error => {
+          if (error) { writesOpen = false; settleWrite({ outcome: "indeterminate", acceptedBytes: 0 }); }
+          else settleWrite({ outcome: "accepted-full", acceptedBytes: copy.byteLength });
+        }); } catch { writesOpen = false; settleWrite({ outcome: "indeterminate", acceptedBytes: 0 }); }
+      });
+    }
     let stopping: Promise<CodexProcessReceipt> | undefined;
-    const stopAndJoin = () => stopping ??= (async () => {
+    const stopAndJoin = () => { writesOpen = false; return stopping ??= (async () => {
       await ready.catch(() => {});
       try { child.stdin.end(); } catch { failure("stdin-close"); }
       if (!value.rootExited) await waitFor(exited, 1500);
@@ -287,7 +305,7 @@ export function createCodexProcessLauncher(options: { executablePath: string; st
       try { persist(); } catch { failure("final-custody-write"); }
       if (custodyFd !== undefined) { closeSync(custodyFd); custodyFd = undefined; }
       return receipt();
-    })();
-    return Object.freeze({ cwd: join(scratch, "work"), stdin: child.stdin, stdout, exited, ready, receipt, stopAndJoin });
+    })(); };
+    return Object.freeze({ cwd: join(scratch, "work"), stdin: child.stdin, write, stdout, exited, ready, receipt, stopAndJoin });
   } });
 }

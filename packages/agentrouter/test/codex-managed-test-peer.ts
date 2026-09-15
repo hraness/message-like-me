@@ -135,7 +135,9 @@ export function managedPeer(options: ManagedPeerOptions = {}) {
   const launcher: CodexManagedProcessLauncher = { async launch(input) {
     launchInputs.push(input);
     launches++;
-    return { cwd: "/synthetic/work", stdin, stdout, ready: Promise.resolve(), exited, receipt,
+    return { cwd: "/synthetic/work", write: (bytes: Uint8Array) => new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>((resolve, reject) => {
+      stdin.write(bytes, error => error ? reject(error) : resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }));
+    }), stdout, ready: Promise.resolve(), exited, receipt,
       async stopAndJoin() { stopped = true; stdin.end(); stdout.end(); resolveExit(); return receipt(); } };
   } };
   return { request, settings, broker, launcher, launchInputs, controller, methods, answers, emit, settingsUpdate,

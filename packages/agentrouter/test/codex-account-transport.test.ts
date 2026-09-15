@@ -17,6 +17,7 @@ function fixture(options: {
 } = {}) {
   const stdout = new PassThrough(), stderr = new PassThrough(), messages: Message[] = [], events: CodexAccountEvent[] = [];
   const exited = deferred<void>(), initialized = deferred<void>(), stopStarted = deferred<void>();
+  const completed = deferred<void>();
   let stopped = false, stops = 0;
   const emit = (value: unknown) => stdout.write(JSON.stringify(value) + "\n");
   const stdin = new Writable({ write(chunk, _encoding, callback) {
@@ -29,17 +30,21 @@ function fixture(options: {
     callback();
   } });
   const finish = (): CodexAccountProcessCloseReceipt => {
-    stopped = true; stdin.end(); stdout.end(); stderr.end(); exited.resolve();
+    stopped = true; stdin.end(); stdout.end(); stderr.end(); exited.resolve(); completed.resolve();
     return { binding, processExited: true, processGroupStopped: true, stdoutEnded: true, stderrEnded: true };
   };
-  const port: CodexAccountProcessPort = { binding, stdin, stdout, stderr, ready: options.ready ?? Promise.resolve(), exited: exited.promise,
+  const port: CodexAccountProcessPort = { binding, stdout, stderr, ready: options.ready ?? Promise.resolve(), exited: exited.promise,
+    operationCompleted: completed.promise,
+    write(bytes) { return new Promise((resolve, reject) => {
+      stdin.write(bytes, error => error ? reject(error) : resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }));
+    }); },
     async stopAndJoin(request) { expect(request.binding).toEqual(binding); stops++; stopStarted.resolve(); return options.stop ? options.stop(finish) : finish(); } };
   const transport = createCodexAccountStdioTransport({ binding, process: port,
     ...(options.initializeTimeoutMs === undefined ? {} : { initializeTimeoutMs: options.initializeTimeoutMs }),
     closeTimeoutMs: 100, onEvent(event) { events.push(event); return options.onEvent?.(event); } });
   const request = (overrides: Partial<CodexAccountRequest> = {}): CodexAccountRequest => ({ binding, accountGeneration: 7,
     signal: new AbortController().signal, deadlineMs: Date.now() + 2000, ...overrides });
-  return { transport, port, stdout, stderr, stdin, emit, finish, messages, events, initialized: initialized.promise,
+  return { transport, port, stdout, stderr, stdin, emit, finish, messages, events, completed, initialized: initialized.promise,
     stopStarted: stopStarted.promise, request, stopped: () => stopped, stops: () => stops,
     close: (milliseconds = 1000) => transport.close({ binding, deadlineMs: Date.now() + milliseconds }) };
 }
@@ -373,4 +378,31 @@ test("a newer native stop receipt cannot release a prior timed-out stop task", a
     firstStop.resolve({ binding, processExited: true, processGroupStopped: true, stdoutEnded: true, stderrEnded: true });
     await f.close();
   }
+});
+
+test.each(["partial-known", "indeterminate"] as const)("an early RPC reply cannot turn a %s write into success", async outcome => {
+  const f = fixture(); await f.initialized;
+  f.port.write = async bytes => {
+    const message: Message = JSON.parse(Buffer.from(bytes).toString());
+    f.emit({ id: message.id, result: { synthetic: "reply before byte receipt" } });
+    return { outcome, acceptedBytes: 1 };
+  };
+  await expect(f.transport.accountRead({ ...f.request(), refreshToken: false })).rejects.toThrow("WRITE_FAILED");
+  await f.stopStarted;
+  await expect(f.transport.accountRead({ ...f.request(), refreshToken: false })).rejects.toThrow("CLOSED");
+  expect((await f.close()).processGroupStopped).toBe(true);
+});
+
+test("a reply followed by an unsettled write still obeys the caller deadline", async () => {
+  const reply = deferred<void>(); let completeWrite!: () => void;
+  const f = fixture(); await f.initialized;
+  f.port.write = bytes => {
+    const message: Message = JSON.parse(Buffer.from(bytes).toString());
+    f.emit({ id: message.id, result: { synthetic: "early reply" } }); reply.resolve();
+    return new Promise(resolve => { completeWrite = () => resolve({ outcome: "accepted-full", acceptedBytes: bytes.byteLength }); });
+  };
+  const call = f.transport.accountRead({ ...f.request({ deadlineMs: Date.now() + 20 }), refreshToken: false });
+  await reply.promise; await expect(call).rejects.toThrow("TIMEOUT");
+  expect((await f.close(20)).writesSettled).toBe(false);
+  completeWrite(); expect((await f.close()).writesSettled).toBe(true);
 });

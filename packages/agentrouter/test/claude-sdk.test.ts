@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { spawnBoundedProvider } from "../src/provider-process.ts";
 import { AgentRouter, CONTACT_TOOL_PROFILE, SqliteAccountLeases, createClaudeSdkAdapter, createToolBroker,
   inspectClaudeSdkRuntime, type RuntimeQualification, type ClaudeApiKeyResolver } from "../src/index.ts";
 
@@ -114,6 +115,54 @@ test("real SDK MCP bridge conditionally edits and stages messaging only within i
   ]);
 }, 10_000);
 
+test("real SDK uses the host process factory after exact runtime and tool admission", async () => {
+  const value = await setup(); let launches = 0;
+  const adapter = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials, now: () => 1,
+    processFactory(input) {
+      launches++;
+      expect(input.binding).toEqual({ accountId: "account-one", workspaceId: "contact-one", runId: "run-one" });
+      expect(Object.isFrozen(input.binding)).toBe(true); expect(Object.isFrozen(input.args)).toBe(true);
+      expect(input.executable).not.toBe(value.runtime.executablePath);
+      expect(input.args).toContain("--strict-mcp-config"); expect(input.args).toContain("--setting-sources=");
+      expect(input.env.ANTHROPIC_API_KEY).toBe(fakeKey);
+      // Delegation keeps the existing synthetic CLI and legacy stop owner. It
+      // does not claim shared native artifact or provider qualification.
+      return spawnBoundedProvider(input);
+    } });
+  const result = await adapter.run({ ...makeRequest({}), purpose: "classify" }, makeBroker(undefined, true).broker);
+  expect(launches).toBe(1); expect(result.processStopped).toBe(true);
+  expect((result.output as { toolsEmpty: boolean }).toolsEmpty).toBe(true);
+  await expect(stat(String((result.output as { cwd: string }).cwd))).rejects.toThrow();
+}, 10_000);
+
+test("a resolved factory stop without stopped evidence retains the account and private state", async () => {
+  const value = await setup(), db = new Database(":memory:"); let cwd = "";
+  try {
+    const leases = new SqliteAccountLeases(db);
+    const adapter = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials, now: () => 1,
+      processFactory(input) {
+        cwd = input.cwd; const owned = spawnBoundedProvider(input);
+        return { ...owned, isStopped: () => false };
+      } });
+    const router = new AgentRouter({ adapters: [adapter], leases, now: () => 1 });
+    await expect(router.run({ ...makeRequest({}), purpose: "classify" }, makeBroker(undefined, true).broker))
+      .rejects.toThrow("CLAUDE_PROCESS_EXIT_UNPROVEN");
+    expect(leases.inspect("claude", "account-one")).not.toBeNull(); expect((await stat(cwd)).isDirectory()).toBe(true);
+  } finally { db.close(); }
+}, 10_000);
+
+test("an unexpected factory throw supplies no no-launch custody evidence", async () => {
+  const value = await setup(), db = new Database(":memory:"); let cwd = "";
+  try {
+    const leases = new SqliteAccountLeases(db);
+    const adapter = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials, now: () => 1,
+      processFactory(input) { cwd = input.cwd; throw Error("SYNTHETIC_FACTORY_FAILURE"); } });
+    await expect(new AgentRouter({ adapters: [adapter], leases, now: () => 1 })
+      .run(makeRequest({}), makeBroker().broker)).rejects.toThrow("CLAUDE_PROCESS_EXIT_UNPROVEN");
+    expect(leases.inspect("claude", "account-one")).not.toBeNull(); expect((await stat(cwd)).isDirectory()).toBe(true);
+  } finally { db.close(); }
+}, 10_000);
+
 test.each([{ extraTool: true }, { badModel: true }])("unexpected native tool inventory or model fails closed and releases a joined account", async (payload) => {
   const value = await setup(); const { broker, calls } = makeBroker(); const db = new Database(":memory:");
   try {
@@ -126,15 +175,17 @@ test.each([{ extraTool: true }, { badModel: true }])("unexpected native tool inv
 }, 10_000);
 
 test("unqualified and changed executables fail before resolving an API key", async () => {
-  const value = await setup(); let resolves = 0;
+  const value = await setup(); let resolves = 0, launches = 0;
+  const processFactory: typeof spawnBoundedProvider = input => { launches++; return spawnBoundedProvider(input); };
   const guarded: ClaudeApiKeyResolver = { withApiKey: async () => { resolves++; throw new Error("MUST_NOT_RESOLVE"); } };
-  const unqualified = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials: guarded, now: () => 1,
+  const unqualified = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials: guarded, now: () => 1, processFactory,
     qualification: { status: "unqualified", reason: "fixture" } });
   await expect(unqualified.run(makeRequest({}), makeBroker().broker)).rejects.toThrow("PROVIDER_UNQUALIFIED");
   await writeFile(value.runtime.executablePath, "changed", { mode: 0o700 });
-  const changed = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials: guarded, now: () => 1 });
+  const changed = createClaudeSdkAdapter({ ...value, stateRoot: value.root, credentials: guarded, now: () => 1, processFactory });
   await expect(changed.run(makeRequest({}), makeBroker().broker)).rejects.toThrow("PREFLIGHT_FAILED");
   expect(resolves).toBe(0);
+  expect(launches).toBe(0);
 });
 
 test("revocation kills and joins a stalled SDK child before releasing account custody", async () => {

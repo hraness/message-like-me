@@ -2,14 +2,23 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { Transform } from "node:stream";
 import type { SpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
 
+export type BoundedProviderProcessInput = Readonly<{
+  executable: string; args: readonly string[]; cwd: string;
+  env: Readonly<Record<string, string>>; onViolation: () => void;
+}>;
+export type BoundedProviderProcess = Readonly<{
+  process: SpawnedProcess; stopAndJoin(): Promise<void>; isStopped(): boolean;
+}>;
+/** Trusted application factory. Return an owned handle synchronously, including
+ * failed readiness; never reject after a possible launch without retaining it.
+ * Exact shared-artifact admission, durable launch/Ready fences and native join
+ * belong to the application. This signature creates no runtime qualification. */
+export type BoundedProviderProcessFactory = (input: BoundedProviderProcessInput & Readonly<{
+  binding: Readonly<{ runId: string; accountId: string; workspaceId: string }>;
+}>) => BoundedProviderProcess;
+
 /** Host-owned subprocess custody. Model-controlled tools cannot call this module. */
-export function spawnBoundedProvider(input: {
-  executable: string;
-  args: readonly string[];
-  cwd: string;
-  env: Readonly<Record<string, string>>;
-  onViolation: () => void;
-}): { process: SpawnedProcess; stopAndJoin(): Promise<void>; isStopped(): boolean } {
+export function spawnBoundedProvider(input: BoundedProviderProcessInput): BoundedProviderProcess {
   if (process.platform !== "darwin" && process.platform !== "linux") throw new Error("PROVIDER_PROCESS_PLATFORM_UNSUPPORTED");
   const child: ChildProcessWithoutNullStreams = spawn(input.executable, [...input.args], {
     cwd: input.cwd, env: { ...input.env }, detached: true, stdio: ["pipe", "pipe", "pipe"], shell: false,

@@ -181,6 +181,28 @@ test("pending settings cannot authorize a callback or survive a mismatched turn 
   expect(replyReceipt.observedSettings?.serviceTier).toBe("default"); expect(wrongReply.counts().invocations).toBe(0);
 });
 
+test("selected IO deadline revokes an unacknowledged write and cleanup joins its eventual outcome", async () => {
+  const peer = managedPeer({ noTools: true });
+  let settle!: (value: import("../src/process-port.ts").ProviderProcessWriteResult) => void;
+  const write = new Promise<import("../src/process-port.ts").ProviderProcessWriteResult>(resolve => { settle = resolve; });
+  let stopStarted = false;
+  const task = withTaskLease(peer.request, peer.broker.profile, request => runCodexManagedSession({ ...peer, request, limits: { ioMs: 10 }, launcher: { async launch(input) {
+    const owned = await peer.launcher.launch(input);
+    return { ...owned, write: () => write, async stopAndJoin() {
+      stopStarted = true; settle({ outcome: "indeterminate", acceptedBytes: 0 }); return owned.stopAndJoin();
+    } };
+  } } }), Date.now);
+  try { await task; throw Error("Expected failed session"); }
+  catch (error) {
+    expect(error).toBeInstanceOf(CodexManagedSessionError);
+    const receipt = (error as CodexManagedSessionError).receipt;
+    expect(receipt.failures).toContain("CODEX_MANAGED_WRITE_FAILED");
+    expect(receipt.failures).not.toContain("CODEX_MANAGED_EXECUTION_DEADLINE");
+    expect(receipt.handlersJoined).toBe(true); expect(receipt.processStopped).toBe(true); expect(stopStarted).toBe(true);
+    expect(peer.methods).toHaveLength(0);
+  }
+});
+
 test.each(["account", "config", "thread"])("changed %s admission fails before a model turn or broker effect", async which => {
   const peer = managedPeer(which === "account" ? { mutateAccount(value) { value.account.type = "apiKey"; } }
     : which === "config" ? { mutateConfig(value) { value.config.model_provider = "foreign"; } }

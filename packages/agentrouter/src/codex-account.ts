@@ -234,7 +234,6 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
       // Publish the shared promise before abort listeners or a trusted close
       // implementation can synchronously reenter and duplicate cleanup.
       const task = Promise.resolve().then(async () => {
-        active?.abort(); pendingLogin = undefined; invalidate("unchecked");
         if (lease === undefined) { publish("closed"); return Object.freeze({ released: true, state: "closed" as const }); }
         try {
           if (transport === undefined || binding === undefined) throw new Error("CLOSE_UNPROVEN");
@@ -255,6 +254,9 @@ export function createManagedCodexAccountController(options: ManagedCodexAccount
         } catch { publish("recovery-required", { detail: "CODEX_ACCOUNT_STOP_UNPROVEN" }); return Object.freeze({ released: false, state: "recovery-required" as const }); }
       });
       closeTask = task;
+      // The published attempt makes reentrant abort listeners safe. Revoke the
+      // request synchronously, before an already queued transport write runs.
+      active?.abort(); pendingLogin = undefined; invalidate("unchecked");
       void task.then(result => { if (!result.released && closeTask === task) closeTask = undefined; });
       return task;
     },

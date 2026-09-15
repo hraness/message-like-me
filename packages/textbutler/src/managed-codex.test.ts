@@ -41,7 +41,10 @@ async function fixture(input: { ready?: Promise<void>; badBinding?: boolean; thr
     } });
     const finish = () => { stdin.end(); stdout.end(); stderr.end(); exit.resolve(); }; exits.push(finish);
     const port: CodexAccountProcessPort = { binding: input.badBinding ? { ...processOptions.binding, accountId: "foreign" } : processOptions.binding,
-      stdin, stdout, stderr, ready: input.ready ?? Promise.resolve(), exited: exit.promise,
+      stdout, stderr, ready: input.ready ?? Promise.resolve(), exited: exit.promise, operationCompleted: exit.promise,
+      async write(bytes) { return await new Promise(resolve => stdin.write(Buffer.from(bytes), error => resolve(error
+        ? { outcome: "indeterminate" as const, acceptedBytes: 0 }
+        : { outcome: "accepted-full" as const, acceptedBytes: bytes.byteLength }))); },
       async stopAndJoin(request) { stops++; expect(request.binding).toEqual(processOptions.binding); finish();
         return { binding: request.binding, processExited: true, processGroupStopped: joined, stdoutEnded: true, stderrEnded: true }; },
     }; return port;
