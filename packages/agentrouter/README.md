@@ -16,6 +16,18 @@ It provides:
 `src/index.ts` exports the complete current interface. `createPublicWeb()` provides bounded public HTTPS GETs with address pinning, redirect checks, no ambient authentication, a 15-second deadline, and a 256 KiB maximum text response. Run `bun test
 packages/agentrouter` from the repository root.
 
+## Standalone package
+
+`bun pm pack` produces a self-contained Bun tarball: the `files` allowlist ships
+only `src` and `MANAGED-CODEX.md`, and the manifest pins every registry
+dependency to an exact version. The package has no cross-package source imports,
+so a consumer installs it with only its declared dependencies. The repository
+gate `bun run check:agentrouter-package` packs the tarball, scans its contents,
+verifies the manifest contract and dependency completeness, installs it into an
+isolated consumer, and imports the public entry. The package remains private:
+packing and local installation are supported, registry publication is not
+configured or authorized.
+
 ## Application-owned capability profiles
 
 An application can define its own tools with `createCapabilityProfile()` and
