@@ -1,7 +1,7 @@
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
-import { installMenuBarBinary, installedMenuBarBinary, resolveMenuBarBinary } from "./menubar.ts";
+import { installMenuBarBinary, installedMenuBarBinary, menuBarBinaryCandidates, resolveMenuBarBinary } from "./menubar.ts";
 import { renderMenuBarLaunchAgentPlist } from "./launch-agent.ts";
 import { runTextbutlerCli } from "./cli.ts";
 
@@ -21,6 +21,20 @@ test("resolves only an owned, private, physical prebuilt binary", async () => {
 
 test("does not build or select a missing development binary", async () => {
   await expect(resolveMenuBarBinary(["/tmp/does-not-exist/textbutler-menubar"])).rejects.toThrow("Install the prebuilt CLI companion");
+});
+
+test("an explicit development binary replaces old installed bytes without silently falling back", async () => {
+  const root = await mkdtemp(join(await realpath("/tmp"), "textbutler-menubar-")); roots.push(root);
+  const old = join(root, "old"), current = join(root, "current");
+  await writeFile(old, "old binary", { mode: 0o700 });
+  await writeFile(current, "new binary", { mode: 0o700 });
+  const installed = await installMenuBarBinary(old, root);
+  const selected = await resolveMenuBarBinary(menuBarBinaryCandidates(root, current));
+  expect(selected).toBe(current);
+  await installMenuBarBinary(selected, root);
+  expect(await readFile(installed, "utf8")).toBe("new binary");
+  await rm(current);
+  await expect(resolveMenuBarBinary(menuBarBinaryCandidates(root, current))).rejects.toThrow("not installed");
 });
 
 test("stages a verified prebuilt binary in the stable private user location", async () => {

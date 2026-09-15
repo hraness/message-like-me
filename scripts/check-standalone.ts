@@ -27,6 +27,7 @@ const SCANNED_DIRECTORIES = [
   "src",
   "packages",
   "apps/macos/scripts",
+  "apps/macos/tests",
 ] as const;
 const SCANNED_ROOT_FILES = [
   ".gitignore",
@@ -34,6 +35,8 @@ const SCANNED_ROOT_FILES = [
   "PRODUCT.md",
   "apps/macos/package.json",
   "apps/macos/README.md",
+  "apps/macos/MenuControl.swift",
+  "apps/macos/menubar.swift",
   "CONTRIBUTING.md",
   "LICENSE",
   "README.md",
@@ -62,6 +65,7 @@ const TEXT_EXTENSIONS = new Set([
   ".rs",
   ".mjs",
   ".sh",
+  ".swift",
   ".toml",
   ".ts",
   ".tsx",

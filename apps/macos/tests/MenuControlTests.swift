@@ -20,7 +20,8 @@ private final class Server {
     private let listener: Int32
     private let done = DispatchGroup()
     init(readRequest: Bool = true, handler: @escaping (Int32, Data) -> Void) throws {
-        directory = "/private/tmp/tb-menu-" + UUID().uuidString.prefix(8)
+        directory = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent("tbm-" + UUID().uuidString.prefix(8)).path
         path = directory + "/daemon.sock"
         guard mkdir(directory, 0o700) == 0 else { throw Failure(message: "mkdir") }
         listener = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
@@ -29,6 +30,11 @@ private final class Server {
         address.sun_family = sa_family_t(AF_UNIX)
         address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
         let bytes = Array(path.utf8) + [0]
+        guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
+            Darwin.close(listener)
+            try? FileManager.default.removeItem(atPath: directory)
+            throw Failure(message: "Temporary socket path is too long")
+        }
         withUnsafeMutableBytes(of: &address.sun_path) { target in
             for (index, byte) in bytes.enumerated() { target[index] = byte }
         }

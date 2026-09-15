@@ -9,10 +9,9 @@ const BINARY_NAME = "textbutler-menubar";
 
 /** Fixed distribution locations only. This command never invokes swiftc, Bun,
  * a package manager, or a source checkout build as a fallback. */
-export function menuBarBinaryCandidates(home = homedir()): readonly string[] {
+export function menuBarBinaryCandidates(home = homedir(), developmentBinary = process.env.TEXTBUTLER_MENUBAR_DEV_BINARY): readonly string[] {
   const candidates = [join(home, "Library/Application Support/Textbutler/bin", BINARY_NAME)];
-  const developmentBinary = process.env.TEXTBUTLER_MENUBAR_DEV_BINARY;
-  return developmentBinary === undefined ? candidates : [...candidates, developmentBinary];
+  return developmentBinary === undefined ? candidates : [developmentBinary];
 }
 
 export function installedMenuBarBinary(home = homedir()): string {

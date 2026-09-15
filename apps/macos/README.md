@@ -43,6 +43,12 @@ be owned by the current user and private; the socket must have mode `0600`.
 Requests protect against `SIGPIPE`, bound newline-inclusive frames to 1 MiB,
 and close their descriptor on every outcome.
 
+To upgrade a login companion, first run `bun run textbutler menubar uninstall`,
+then install the newly built binary with the explicit path above. This stops
+only the owned menu service before replacing its executable. An already running
+foreground companion must be quit before launching the replacement; replacing
+binary bytes alone does not update a running process.
+
 Menu-open and periodic refreshes share one worker and at most one pending
 refresh. Pause/resume uses the current settings revision, cannot overlap another
 operation, and is never retried after an uncertain outcome. Instead the menu
