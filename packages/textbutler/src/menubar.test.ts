@@ -69,7 +69,7 @@ test("protected root-owned distribution bytes install into a user-owned private 
   const root = await mkdtemp(join(await realpath("/tmp"), "textbutler-menubar-")); roots.push(root);
   const target = await installMenuBarBinary(source, root);
   const info = await lstat(target);
-  expect(info.uid).toBe(process.getuid?.());
+  expect(info.uid).toBe(process.getuid?.() ?? -1);
   expect(info.mode & 0o077).toBe(0);
   expect(await readFile(target)).toEqual(await readFile(source));
 });
