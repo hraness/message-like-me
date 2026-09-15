@@ -20,8 +20,11 @@ private final class Server {
     private let listener: Int32
     private let done = DispatchGroup()
     init(readRequest: Bool = true, handler: @escaping (Int32, Data) -> Void) throws {
-        directory = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
-            .appendingPathComponent("tbm-" + UUID().uuidString.prefix(8)).path
+        guard let temporary = realpath(FileManager.default.temporaryDirectory.path, nil) else {
+            throw Failure(message: "Temporary directory is unavailable")
+        }
+        directory = String(cString: temporary) + "/tbm-" + UUID().uuidString.prefix(8)
+        free(temporary)
         path = directory + "/daemon.sock"
         guard mkdir(directory, 0o700) == 0 else { throw Failure(message: "mkdir") }
         listener = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
