@@ -45,13 +45,10 @@ export async function runCodexManagedSession(options: {
   cancellationSignal?: AbortSignal;
 }): Promise<{ output: string; receipt: CodexManagedSessionReceipt }> {
   const admittedRequest = options.request;
-  // Preserve the existing admission-boundary error for a request whose lease
-  // was admitted and then mutated. An unadmitted synthetic/host request is
-  // handled by the session error path below so cleanup remains observable.
-  try { assertAgentTaskAccountLease(admittedRequest); }
-  catch (error) {
-    if (error instanceof Error && error.message === "TASK_ACCOUNT_LEASE_BINDING_MISMATCH") throw error;
-  }
+  // Admission-boundary errors (untrusted or mutated leases) are caller-contract
+  // violations and surface verbatim; the session asserts again inside the
+  // workflow so a lease revoked after admission fails with an observable receipt.
+  assertAgentTaskAccountLease(admittedRequest);
   // Keep protocol values defensive while preserving the caller's original
   // runtime request for the native owner's independent provenance checks.
   const request = Object.freeze({ ...admittedRequest, route: Object.freeze({ ...admittedRequest.route }),
@@ -89,7 +86,7 @@ export async function runCodexManagedSession(options: {
   function failureCode(error: unknown) {
     if (error instanceof SyntaxError) return "CODEX_MANAGED_INVALID_JSON";
     if (error instanceof Error && /^PROVIDER_PROCESS_WRITE_/u.test(error.message)) return "CODEX_MANAGED_WRITE_FAILED";
-    if (error instanceof Error && /^CODEX_[A-Z_]+$/u.test(error.message)) return error.message;
+    if (error instanceof Error && /^(?:CODEX|TASK_ACCOUNT_LEASE)_[A-Z_]+$/u.test(error.message)) return error.message;
     return "CODEX_MANAGED_OPERATION_FAILED";
   }
   function active() {
