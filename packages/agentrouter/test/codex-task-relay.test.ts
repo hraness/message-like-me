@@ -19,7 +19,7 @@ const sse = (value: unknown) => new Response((value as Record<string, unknown>[]
 
 test("task relay binds generic profile, instructions, effort and service tier and returns text usage", async () => {
   const received: Record<string, unknown>[] = [];
-  const relay = startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
+  const relay = await startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
     limits: codexLimits({ ioMs: 1000, cleanupMs: 1000 }),
     task: { mapping, settings, executionDeadlineUnixMs: Date.now() + 120_000, maxOutputBytes: 4096 },
     fail: code => { throw new Error(code); },
@@ -47,7 +47,7 @@ test("task relay binds generic profile, instructions, effort and service tier an
 test.each(["changed-effort", "absent-reasoning", "null-reasoning", "absent-effort", "changed-tier", "absent-tier", "null-tier"])(
   "task relay refuses %s without an upstream call", async kind => {
   let calls = 0;
-  const relay = startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
+  const relay = await startCodexRelay({ model, prompt, tools: mapping.tools, signal: new AbortController().signal,
     limits: codexLimits({ ioMs: 1000, cleanupMs: 1000 }), task: { mapping, settings, executionDeadlineUnixMs: Date.now() + 120_000, maxOutputBytes: 4096 },
     fail: () => {}, upstream: { async request() { calls++; return sse(events("unused")); } } });
   relay.bindTurn("task-thread", "task-turn");

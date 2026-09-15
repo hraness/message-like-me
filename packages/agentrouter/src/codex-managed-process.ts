@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { openAccountDatabase, type SqliteDatabase } from "./sqlite-port.ts";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { constants, closeSync, fsyncSync, openSync, writeSync, type BigIntStats } from "node:fs";
@@ -344,7 +344,7 @@ export type CodexManagedOfflineDiagnosticReceipt = Readonly<{
   bootstrapJoined: boolean; processJoined: boolean; leaseReleased: boolean; protocol: OfflineProtocolReceipt | null; failures: readonly string[];
 }>;
 type DiagnosticBinding = Readonly<{ kind: "offline-diagnostic"; diagnosticId: string; accountId: string; accountLease: AccountLease }>;
-type DiagnosticCustody = { database: Database; journal: FileHandle; bootstrap?: CodexAccountOwnedProcessPort;
+type DiagnosticCustody = { database: SqliteDatabase; journal: FileHandle; bootstrap?: CodexAccountOwnedProcessPort;
   core?: OwnedCore<DiagnosticBinding, "agentrouter.codex-managed-offline-process.v1">; protocol?: ReturnType<typeof createManagedOfflineProtocol>; joins: Set<Promise<unknown>> };
 // Failed diagnostics keep the actual open store, native owners and pending joins.
 // There is no TTL takeover, implicit retry, or exported process handle.
@@ -375,10 +375,10 @@ export function runCodexManagedOfflineDiagnostic(options: CodexManagedOfflineDia
     const stateRoot = join(root, "state"); await mkdir(stateRoot, { mode: 0o700 }); await syncDirectory(root);
     const databasePath = join(root, "account-leases.sqlite"), journalPath = join(root, "diagnostic.jsonl"), receiptPath = join(root, "receipt.json");
     await durableFile(databasePath, ""); await durableFile(journalPath, "");
-    let acquiredJournal: FileHandle | undefined, acquiredDatabase: Database | undefined, leases: SqliteAccountLeases;
+    let acquiredJournal: FileHandle | undefined, acquiredDatabase: SqliteDatabase | undefined, leases: SqliteAccountLeases;
     try {
       acquiredJournal = await open(journalPath, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
-      acquiredDatabase = new Database(databasePath); leases = new SqliteAccountLeases(acquiredDatabase);
+      acquiredDatabase = await openAccountDatabase(databasePath); leases = new SqliteAccountLeases(acquiredDatabase);
     } catch (error) {
       try { acquiredDatabase?.close(); } finally { await acquiredJournal?.close(); }
       throw error;

@@ -18,15 +18,26 @@ packages/agentrouter` from the repository root.
 
 ## Standalone package
 
-`bun pm pack` produces a self-contained Bun tarball: the `files` allowlist ships
-only `src` and `MANAGED-CODEX.md`, and the manifest pins every registry
-dependency to an exact version. The package has no cross-package source imports,
-so a consumer installs it with only its declared dependencies. The repository
-gate `bun run check:agentrouter-package` packs the tarball, scans its contents,
-verifies the manifest contract and dependency completeness, installs it into an
-isolated consumer, and imports the public entry. The package remains private:
-packing and local installation are supported, registry publication is not
-configured or authorized.
+`bun pm pack` produces a self-contained tarball after `bun
+scripts/build-agentrouter-dist.ts` emits `dist/`: the `files` allowlist ships
+only `dist` (a bundled ESM entry plus TypeScript declarations) and
+`MANAGED-CODEX.md`, and the manifest pins every registry dependency to an exact
+version. The package has no cross-package source imports, so a consumer
+installs it with only its declared dependencies. Runtime facilities sit behind
+small ports — `loopback-server.ts` uses `node:http` and `sqlite-port.ts` lazily
+opens `bun:sqlite` or `node:sqlite` — so the built entry runs under both Bun
+≥1.3.14 and Node ≥22.13 (the first release where `node:sqlite` loads
+unflagged). Under Node, the first account-database open may emit Node's
+`ExperimentalWarning` for `node:sqlite` on stderr; the API and file semantics
+are pinned to match `bun:sqlite`. The managed native Codex launch path still
+requires its pinned Bun 1.3.14 runtime and fails closed anywhere else — runtime
+pinning is an admission invariant, not a portability gap. The repository gate
+`bun run check:agentrouter-package` builds and
+packs the tarball, scans its contents, verifies the manifest contract and
+dependency completeness, installs it into an isolated consumer, and executes
+the public entry — including an account-lease custody round trip — under both
+runtimes. The package remains private: packing and local installation are
+supported, registry publication is not configured or authorized.
 
 ## Application-owned capability profiles
 

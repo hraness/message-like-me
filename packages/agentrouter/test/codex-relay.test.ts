@@ -19,7 +19,7 @@ function response(): Response {
 }
 async function send(body: string | Uint8Array, names: readonly BrokerToolName[] = []): Promise<{ status: number; publicError: string; receipt: CodexRelayReceipt; received: unknown[]; failures: string[] }> {
   const received: unknown[] = [], failures: string[] = [];
-  const relay = startCodexRelay({ model, prompt, tools: codexTools(names), signal: new AbortController().signal,
+  const relay = await startCodexRelay({ model, prompt, tools: codexTools(names), signal: new AbortController().signal,
     limits: codexLimits({ ioMs: 1000, cleanupMs: 1000 }), fail: code => { failures.push(code); },
     upstream: { async request(value) { received.push(structuredClone(value)); return response(); } } });
   relay.bindTurn("thread-1", "turn-1");

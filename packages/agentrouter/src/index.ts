@@ -1,4 +1,6 @@
 export * from "./accounts.ts";
+export { openAccountDatabase, wrapSqliteDatabase } from "./sqlite-port.ts";
+export type { SqliteBinding, SqliteDatabase, SqliteStatement } from "./sqlite-port.ts";
 export * from "./broker.ts";
 export * from "./models.ts";
 export * from "./runtime.ts";

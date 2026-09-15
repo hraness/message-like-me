@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { createLoopbackServer } from "./loopback-server.ts";
 import type { BrokerToolName } from "./broker.ts";
 import { canonicalJson, CODEX_BASE_INSTRUCTIONS, CODEX_TOOL_NAMES, codexResponseTools, type CodexTool, type CodexCapabilityMapping, type CodexTaskSettings } from "./codex-config.ts";
 import { boundedText, object, safeInteger } from "./validation.ts";
@@ -87,8 +88,8 @@ export interface CodexRelay {
   close(): Promise<CodexRelayReceipt>;
 }
 
-export function startCodexRelay(options: { model: string; prompt: string; tools: readonly CodexTool[];
-  upstream: CodexResponsesUpstream; signal: AbortSignal; limits: CodexLimits; fail(code: string): void; task?: CodexTaskRelayOptions }): CodexRelay {
+export async function startCodexRelay(options: { model: string; prompt: string; tools: readonly CodexTool[];
+  upstream: CodexResponsesUpstream; signal: AbortSignal; limits: CodexLimits; fail(code: string): void; task?: CodexTaskRelayOptions }): Promise<CodexRelay> {
   boundedText(options.model, 160); boundedText(options.prompt, 512 * 1024);
   const task = options.task;
   if (task) {
@@ -294,8 +295,7 @@ export function startCodexRelay(options: { model: string; prompt: string; tools:
     return new Response(canonical.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""),
       { headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "close" } });
   }
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, maxRequestBodySize: limits.maxRequestBytes,
-    idleTimeout: 10, development: false,
+  const server = await createLoopbackServer({ hostname: "127.0.0.1", idleTimeoutMs: 10_000, maxRequestBodyBytes: limits.maxRequestBytes,
     fetch(request) {
       const operation = (async () => {
         active++;

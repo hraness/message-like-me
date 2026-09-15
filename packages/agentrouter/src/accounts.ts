@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { SqliteDatabase } from "./sqlite-port.ts";
 import { identifier, provider, safeInteger, type AgentProvider } from "./validation.ts";
 
 export type AccountLease = Readonly<{ provider: AgentProvider; accountId: string; owner: string; generation: number; expiresAt: number }>;
@@ -15,7 +15,7 @@ type Row = { provider: AgentProvider; account_id: string; owner: string | null; 
  * diagnostic, never permission to steal custody from a possibly live process.
  */
 export class SqliteAccountLeases implements AccountLeaseStore {
-  constructor(private readonly db: Database) {
+  constructor(private readonly db: SqliteDatabase) {
     db.exec(`CREATE TABLE IF NOT EXISTS agentrouter_account_leases (
       provider TEXT NOT NULL, account_id TEXT NOT NULL, owner TEXT,
       generation INTEGER NOT NULL, expires_at INTEGER NOT NULL,
