@@ -384,14 +384,14 @@ describe('supported source presentation', () => {
     );
     expect(softwareApplication?.softwareVersion).toBeUndefined();
     expect(softwareApplication?.featureList).toEqual([
-      'Mac control panel and local daemon controls',
+      'macOS menu-bar companion and local daemon controls',
       'Contact-specific guidance and editable memory',
       'Configurable visible assistant disclosure',
       'Smart and keyword-only response controls',
       'Global pause and active contact limits',
     ]);
     expect(renderedRootLayout).not.toContain('downloadUrl');
-    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; no signed Mac download');
+    expect(renderedRootLayout).toContain('In development; explicit messaging and agent setup required; CLI and menu companion');
     for (const supportedSource of SUPPORTED_SOURCES) {
       expect(readme).toContain(`| ${supportedSource.name} |`);
       expect(llms).toContain(supportedSource.name);

@@ -85,3 +85,20 @@ test("the menu-bar CLI delegates install without building a binary", async () =>
   expect(installedDataDir).toBe("/fixture/user/Library/Application Support/Textbutler");
   expect(JSON.parse(lines[0]!)).toMatchObject({ ok: true, binary: "/fixture/user/Library/Application Support/Textbutler/bin/textbutler-menubar", launchAgent: { label: "app.textbutler.menubar" } });
 });
+
+test("menu status reads only its lifecycle and reports uncertain custody as a failure", async () => {
+  for (const installation of ["absent", "installed", "conflict", "indeterminate", "unsupported"] as const) {
+    const lines: string[] = [];
+    const lifecycle = {
+      async install(): Promise<never> { throw new Error("status must not install"); },
+      async uninstall(): Promise<never> { throw new Error("status must not uninstall"); },
+      async status(dataDir: string) {
+        expect(dataDir).toBe("/fixture/private");
+        return { label: "app.textbutler.menubar" as const, installation, service: "not-loaded" as const, plistPath: "/fixture/menu.plist", pid: null, detail: "synthetic status", automaticReplies: "unavailable" as const };
+      },
+    };
+    const ok = installation === "absent" || installation === "installed";
+    expect(await runTextbutlerCli(["menubar", "status", "--data-dir", "/fixture/private"], { write: text => { lines.push(text); } }, { menuBarLaunchAgent: lifecycle })).toBe(ok ? 0 : 1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({ ok, launchAgent: { label: "app.textbutler.menubar", installation } });
+  }
+});

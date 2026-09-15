@@ -6,7 +6,10 @@
 
 web
 
-The product is a macOS-only desktop application with a Tauri webview and a separate user-session daemon. This platform marker describes the renderer; it does not imply Windows, Linux, iOS, or browser-hosted messaging support. The public website is informational.
+The product is a macOS-only CLI with a separate user-session daemon and an
+unbundled native menu-bar companion. There is no desktop window or app bundle. This platform marker does not
+imply Windows, Linux, iOS, or browser-hosted messaging support. The public
+website is informational.
 
 ## Users
 
@@ -22,7 +25,7 @@ The owner brings Codex or Claude Code and their account. Ghostget owns access to
 
 ## Operating Context
 
-The Mac must be awake and signed in for local messaging. Closing the settings window should leave the separately installed user agent running. A global pause is always available. Contacts are selected explicitly; smart response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`.
+The Mac must be awake and signed in for local messaging. Quitting the menu companion leaves the separately installed user agent running. A global pause is always available. Contacts are selected explicitly; smart response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`.
 
 ## Capabilities and Constraints
 
@@ -35,7 +38,9 @@ The Mac must be awake and signed in for local messaging. Closing the settings wi
 
 ## Brand Commitments
 
-Name: Textbutler. Domain: textbutler.app. The owner explicitly permits redesigning the previous product. Ghostget is the reference for a Mac application with a webview and a clean native boundary.
+Name: Textbutler. Domain: textbutler.app. The owner explicitly permits
+redesigning the previous product. Ghostget is the reference for the native
+provider seam; Textbutler's supported surface is the CLI and status item.
 
 ## Product Principles
 
@@ -47,8 +52,13 @@ Name: Textbutler. Domain: textbutler.app. The owner explicitly permits redesigni
 
 ## Evidence on Hand
 
-The existing repository contains bounded history ingestion, provenance-aware profiles, and frozen shared message contracts. New source packages contain the Textbutler runtime, provider-independent transport, and Agentrouter foundations. Automated fixtures are synthetic. They are not evidence of live provider qualification, actual message delivery, or a signed/notarized Mac release.
+The existing repository contains bounded history ingestion, provenance-aware
+profiles, and frozen shared message contracts. New source packages contain the
+Textbutler runtime, provider-independent transport, and Agentrouter foundations.
+Automated fixtures are synthetic. They are not evidence of live provider
+qualification or actual message delivery. Desktop app packaging has been removed. The CLI and menu-bar companion are the
+only local runtime surfaces.
 
 ## Open Decisions and Working Defaults
 
-The user delegated implementation judgment. The initial activation limit is five contacts, configurable from one to fifty. Smart response uses an eight-second message-burst delay, five-minute owner cooldown, twelve responses per contact per hour, and a classifier confidence threshold of 0.85. These are tunable initial defaults, not measured ideal values. A quiet Mac settings interface is the working design direction. Optional Linq transport remains a proposed extension; Ghostget is the required primary boundary.
+The user delegated implementation judgment. The initial activation limit is five contacts, configurable from one to fifty. Smart response uses an eight-second message-burst delay, five-minute owner cooldown, twelve responses per contact per hour, and a classifier confidence threshold of 0.85. These are tunable initial defaults, not measured ideal values. A compact native menu and explicit CLI commands are the working interface direction. Optional Linq transport remains a proposed extension; Ghostget is the required primary boundary.

@@ -22,8 +22,7 @@ export function installedMenuBarBinary(home = homedir()): string {
 async function executable(path: string, allowRoot = false): Promise<boolean> {
   try {
     const info = await lstat(path);
-    // Packaged app binaries are commonly 0755. Reject shared writes while
-    // allowing the read/execute bits needed by an app bundle.
+    // Protected system and checkout binaries may be 0755. Reject shared writes.
     if (!info.isFile() || info.isSymbolicLink() || ![process.getuid?.() ?? -1, ...(allowRoot ? [0] : [])].includes(info.uid) || (info.mode & 0o022) !== 0 || (info.mode & 0o111) === 0) return false;
     const parent = await lstat(dirname(path));
     return parent.isDirectory() && !parent.isSymbolicLink() && [0, process.getuid?.() ?? -1].includes(parent.uid)

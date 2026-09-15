@@ -1,53 +1,71 @@
-# Textbutler for macOS
+# Textbutler menu-bar companion
 
-A bundled Tauri 2 webview for contact settings, scoped memory, activity, connection setup, agent accounts and global pause. The installed app can explicitly manage its bundled background service; the daemon owns agent and messaging operations.
+Textbutler has an unbundled native macOS status-item companion for its CLI. Launch and login installation are explicit owner actions.
+The companion is a small, menu-only shell: it reads the owner-only
+`textbutler.control.v1` socket, shows daemon and contact state, account readiness,
+capabilities and eight recent activities, and dispatches only versioned
+pause/resume actions. A checkmark beside “Automatic replies paused” shows the
+confirmed pause setting. Checkmarks in the read-only contact, account and
+capability submenus show enablement or readiness. It never holds provider credentials or
+starts a daemon itself.
 
-The native entry communicates with the Textbutler daemon at `~/Library/Application Support/Textbutler/daemon.sock`. The control command accepts only the versioned requests in the shared control package. It checks directory/socket ownership and private modes, rejects symlink paths, checks the peer UID, bounds requests and responses to 1 MiB, caps concurrent relays at four, and enforces one absolute four-second connection/write/read deadline. Missing or refused sockets show a disconnected state; malformed responses and permission failures are visible errors. Long owner jobs return a polling receipt so global pause remains available.
+This directory contains the Swift source and explicit build, test and run helper.
+There is no desktop window, app bundle, signing or notarization workflow.
+`menubar install` copies an explicitly selected prebuilt binary to a private
+per-user location and installs its separate login service.
 
-A separate lifecycle command supports exactly service status, install and uninstall using fixed bundled runtime paths. The owner first moves the verified app to an Applications folder, checks service ownership, then explicitly installs it. New settings start paused. Uninstalling preserves contacts and memory. An uncertain lifecycle result requires ownership reconciliation; the UI cannot supply process paths, arguments or environment values.
-
-The native webview loads bundled assets only, denies external navigation and new windows, and has explicit control and lifecycle permissions. No shell, filesystem, HTTP, opener, or remote navigation plugin is installed. The daemon validates every request, scope, revision and capability. Memory writes use the content SHA-256 as a conditional revision; settings use the snapshot revision.
-
-## Build and inspect
-
-Use Bun 1.3.14 and the root checkout's installed TypeScript dependency:
-
-```sh
-cd apps/macos
-bun run check
-cargo check --manifest-path src-tauri/Cargo.toml --locked
-cargo test --manifest-path src-tauri/Cargo.toml --locked
-cargo run --manifest-path src-tauri/Cargo.toml --locked
-```
-
-Route native Cargo checks/builds through the installed host scheduler. The frontend must be built before Cargo embeds it. `bun run native:package` builds the complete unsigned app with pinned Bun and compiled CLI; `bun run native:smoke` checks the relocated runtime against synthetic state. The [distribution procedure](distribution/README.md) defines the separate signed, notarized, provenance-verified desktop release. Source builds and synthetic tests do not establish live provider qualification.
-
-## Synthetic interface preview
+Build the companion explicitly on macOS:
 
 ```sh
-bun run build:demo
-bun run preview
+bun run --cwd apps/macos menubar:build
 ```
 
-The loopback preview is explicitly synthetic and uses an in-memory control port. It supports contact selection, enable/disable and capacity validation, smart or keyword mode, Codex or Claude, disclosure-symbol validation and preview, editable memory, pause, and activity recording for preview configuration changes. Reloading resets everything. It never reads private data or calls a daemon, agent, messaging service, or network API. Synthetic contacts and activity are excluded from the native build and checked by the build script.
+Run the prebuilt binary in the foreground:
 
-Capability availability comes from the daemon snapshot. Owner-configured iMessage and WhatsApp connections, bounded conversation enrollment, optional history initialization and explicit agent account selection are described in the [runtime documentation](../../packages/textbutler/README.md). Rich actions remain unavailable unless their exact provider reports and admits them; unsupported iMessage app experiences are not simulated as live.
+```sh
+bun run --cwd apps/macos menubar
+```
 
-When an embedding host supplies a trusted managed Codex account controller,
-Agent accounts also exposes ChatGPT sign-in, cancellation, sign-out and checks.
-The device address and code stay in temporary view memory and are copied into
-the owner's browser; the webview's navigation restrictions remain in force.
-Signed-in accounts still show reply availability separately. The default bundled
-host does not yet supply a native account process factory. See the
-[account integration contract](../../packages/agentrouter/MANAGED-CODEX.md).
+For source-checkout login startup, select the physical absolute path to the
+binary you just built and install it explicitly:
 
-## Local design references
+```sh
+TEXTBUTLER_MENUBAR_DEV_BINARY=/absolute/checkout/apps/macos/out/textbutler-menubar bun run textbutler menubar install
+bun run textbutler menubar status
+bun run textbutler menubar uninstall
+```
 
-`PRODUCT.md` and `DESIGN.md` record the desktop scope and native utility direction. Ghostget informed the small Tauri-wrapper structure; its source, private runtime, permission state and credentials are not bundled here.
+The Textbutler CLI and companion are not yet a published package. Launching never builds source. The companion uses
+a per-user singleton lock, validates the private daemon socket before every
+request, checks the connected peer's user identity, and enforces one four-second
+deadline across connection, writes and reads. Its physical data directory must
+be owned by the current user and private; the socket must have mode `0600`.
+Requests protect against `SIGPIPE`, bound newline-inclusive frames to 1 MiB,
+and close their descriptor on every outcome.
 
-## Menu-bar companion
+Menu-open and periodic refreshes share one worker and at most one pending
+refresh. Pause/resume uses the current settings revision, cannot overlap another
+operation, and is never retried after an uncertain outcome. Instead the menu
+reads the authoritative state again. Last-confirmed freshness remains visible
+when the daemon cannot be reached, and stale state cannot enable a mutation.
+Labels and tooltips are bounded and strip control characters and bidi overrides.
+The website action opens `textbutler.app`; it does not claim to open local settings.
 
-The native menu companion provides bounded daemon status, confirmed pause controls,
-contact enablement, agent-account readiness, capabilities and recent activity.
-It uses the same owner-only control protocol as this app. See the
-[menu-bar companion guide](MENUBAR.md) for build, test and launch commands.
+Run the native synthetic protocol tests explicitly on macOS:
+
+```sh
+bun run --cwd apps/macos menubar:test
+```
+
+These compile the same control client used by the menu and exercise private
+fixture sockets in a private temporary directory, including malformed responses, size
+boundaries, unsafe paths, a slow peer, mutation framing and refresh coalescing.
+They never connect to the installed daemon. CI runs them alongside the native
+build. Both commands use a fresh Swift module cache, removed after completion.
+On a managed Hraness host, run these native commands through the installed
+`oompa-host-run` mac-native lane.
+
+The optional `--data-dir` argument selects the same physical private daemon
+directory for both foreground and login launches. Uninstalling the menu login
+service preserves daemon settings and contact data. The companion never starts
+or restarts the messaging daemon.
