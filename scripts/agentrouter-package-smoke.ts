@@ -2,6 +2,7 @@ import { access, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, write
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
+import { buildAgentrouterDist } from "./build-agentrouter-dist.ts";
 import { scanPackedPackage } from "./package-smoke.ts";
 
 const PACKAGE_NAME = "@hraness/agentrouter";
@@ -9,12 +10,15 @@ const PACKAGE_DIR = resolve(import.meta.dir, "../packages/agentrouter");
 const REPOSITORY_ROOT = resolve(import.meta.dir, "..");
 const MAXIMUM_COMMAND_OUTPUT_BYTES = 4 * 1_024 * 1_024;
 const BUILTIN_MODULES = new Set(["bun:sqlite", "bun:test"]);
+const MINIMUM_NODE_VERSION = "22.13.0";
 const REQUIRED_EXPORTS = [
   "AgentRouter",
+  "SqliteAccountLeases",
   "createCodexManagedTaskAdapter",
   "createPublicWeb",
   "createToolBroker",
   "codexManagedStaticCatalog",
+  "openAccountDatabase",
 ] as const;
 
 type JsonRecord = Record<string, unknown>;
@@ -96,7 +100,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...await sourceFiles(path));
-    else if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path);
+    else if (entry.isFile() && /\.(?:js|d\.ts)$/u.test(entry.name)) files.push(path);
   }
   return files.sort();
 }
@@ -105,7 +109,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
  * so a consumer's install resolves the complete import surface. */
 async function dependencyCompleteness(installedRoot: string, dependencies: ReadonlySet<string>): Promise<string[]> {
   const problems: string[] = [];
-  for (const file of await sourceFiles(join(installedRoot, "src"))) {
+  for (const file of await sourceFiles(join(installedRoot, "dist"))) {
     for (const name of importedPackageNames(await readFile(file, "utf8"))) {
       if (!dependencies.has(name)) {
         problems.push(`${basename(file)} imports undeclared package ${name}`);
@@ -115,6 +119,18 @@ async function dependencyCompleteness(installedRoot: string, dependencies: Reado
   return problems;
 }
 
+/** The package's Node floor is the first release where node:sqlite loads without
+ * an experimental flag; earlier runtimes cannot open account custody stores. */
+function nodeVersionSupported(version: string): boolean {
+  const parts = version.trim().replace(/^v/u, "").split(".").map(part => Number(part));
+  const floor = MINIMUM_NODE_VERSION.split(".").map(part => Number(part));
+  for (const [index, part] of floor.entries()) {
+    const observed = parts[index] ?? 0;
+    if (observed !== part) return observed > part;
+  }
+  return true;
+}
+
 export async function agentrouterPackageSmoke(): Promise<void> {
   const work = await mkdtemp(join(tmpdir(), "agentrouter-package-"));
   try {
@@ -122,6 +138,7 @@ export async function agentrouterPackageSmoke(): Promise<void> {
     const stage = join(work, "stage");
     const consumer = join(work, "consumer");
     await Promise.all([mkdir(stage), mkdir(consumer, { recursive: true })]);
+    await buildAgentrouterDist();
     await run([
       process.execPath, "pm", "pack", "--filename", archive, "--ignore-scripts", "--quiet",
     ], PACKAGE_DIR);
@@ -183,7 +200,7 @@ export async function agentrouterPackageSmoke(): Promise<void> {
 
     // Install the real packed artifact with its declared dependencies supplied
     // from the repository's pinned install, then prove the public entry resolves
-    // and executes under Bun. No network, registry or provider call is made.
+    // and executes under both Bun and Node. No network, registry or provider call.
     const modules = join(consumer, "node_modules");
     const scope = join(modules, "@hraness");
     await mkdir(scope, { recursive: true });
@@ -200,7 +217,7 @@ export async function agentrouterPackageSmoke(): Promise<void> {
       { mode: 0o600 },
     );
     await writeFile(
-      join(consumer, "smoke.ts"),
+      join(consumer, "smoke.mjs"),
       [
         `import { ${REQUIRED_EXPORTS.join(", ")} } from "${PACKAGE_NAME}";`,
         `const built = codexManagedStaticCatalog({ model: "smoke-model", catalog: { models: [{`,
@@ -218,16 +235,35 @@ export async function agentrouterPackageSmoke(): Promise<void> {
         `  base_instructions: "x" }] } });`,
         `if (built.model !== "smoke-model" || built.catalog.models.length !== 1 || !Object.isFrozen(built))`,
         `  throw new Error("packed catalog helper returned an unexpected result");`,
-        `console.log(JSON.stringify({ exports: ${REQUIRED_EXPORTS.length}, model: built.model, sha256: built.sha256.length }));`,
+        `const runtime = typeof Bun === "undefined" ? "node" : "bun";`,
+        `const database = await openAccountDatabase("smoke-leases-" + runtime + ".sqlite");`,
+        `const leases = new SqliteAccountLeases(database);`,
+        `const lease = leases.acquire({ provider: "codex", accountId: "smoke-account", owner: "smoke-owner", now: 1_000, ttlMs: 60_000 });`,
+        `if (!leases.release(lease) || leases.inspect("codex", "smoke-account") !== null)`,
+        `  throw new Error("packed account lease store failed its custody round trip");`,
+        `database.close();`,
+        `console.log(JSON.stringify({ exports: ${REQUIRED_EXPORTS.length}, model: built.model,`,
+        `  sha256: built.sha256.length, generation: lease.generation, runtime }));`,
       ].join("\n"),
       { mode: 0o600 },
     );
-    const output = await run([process.execPath, join(consumer, "smoke.ts")], consumer);
-    const observed = record(JSON.parse(output.trim()), "installed smoke output");
-    if (observed.exports !== REQUIRED_EXPORTS.length || observed.model !== "smoke-model" || observed.sha256 !== 64) {
-      throw new Error(`Installed AgentRouter smoke returned ${output.trim()}`);
+    const nodeVersion = (await run(["node", "--version"], consumer)).trim();
+    if (!nodeVersionSupported(nodeVersion)) {
+      throw new Error(`AgentRouter Node smoke requires node >= ${MINIMUM_NODE_VERSION}; found ${nodeVersion}`);
     }
-    console.log("AgentRouter standalone package boundary verified.");
+    for (const executable of [process.execPath, "node"]) {
+      const output = await run([executable, join(consumer, "smoke.mjs")], consumer);
+      const observed = record(JSON.parse(output.trim()), "installed smoke output");
+      if (observed.exports !== REQUIRED_EXPORTS.length || observed.model !== "smoke-model"
+        || observed.sha256 !== 64 || observed.generation !== 1) {
+        throw new Error(`Installed AgentRouter smoke under ${executable} returned ${output.trim()}`);
+      }
+      const expectedRuntime = executable === "node" ? "node" : "bun";
+      if (observed.runtime !== expectedRuntime) {
+        throw new Error(`Installed AgentRouter smoke ran under ${String(observed.runtime)}, expected ${expectedRuntime}`);
+      }
+    }
+    console.log("AgentRouter standalone package boundary verified under Bun and Node.");
   } finally {
     await rm(work, { recursive: true, force: true });
   }

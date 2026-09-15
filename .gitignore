@@ -1,5 +1,6 @@
 node_modules/
 coverage/
+packages/agentrouter/dist/
 site/.browser-artifacts/
 *.tgz
 *.tsbuildinfo

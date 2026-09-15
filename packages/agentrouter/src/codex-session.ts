@@ -224,7 +224,7 @@ export async function runCodexSession(options: {
     codexAssert(request.workspaceId === broker.workspaceId && request.runId === broker.runId, "CODEX_BROKER_SCOPE_MISMATCH");
     codexAssert(request.purpose !== "classify" || (task ? task.mapping.tools.length : (broker as ToolBroker).tools.length) === 0, "CODEX_CLASSIFIER_TOOLS_FORBIDDEN"); signal.throwIfAborted();
     const tools = task?.mapping.tools ?? codexTools([...(broker as ToolBroker).tools]);
-    relay = startCodexRelay({ model: request.model, prompt: request.prompt, tools, upstream, signal, limits, fail, ...(task ? { task } : {}) });
+    relay = await startCodexRelay({ model: request.model, prompt: request.prompt, tools, upstream, signal, limits, fail, ...(task ? { task } : {}) });
     // The launcher owns preparation cancellation and must return an owned handle once it spawns.
     process = await launcher.launch({ runId: request.runId, accountId: request.accountId, workspaceId: request.workspaceId,
       configuration: task ? codexTaskConfiguration(task.settings, relay.baseUrl) : codexConfiguration(request.model, relay.baseUrl), relayPort: relay.port, signal });
