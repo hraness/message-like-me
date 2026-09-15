@@ -6,6 +6,7 @@ import { buildRuntimeBundle } from "./runtime-bundle.ts";
 export const appRoot = resolve(import.meta.dir, "..");
 export const repository = resolve(appRoot, "../..");
 export const bundlePath = join(appRoot, "src-tauri/target/release/bundle/macos/Textbutler.app");
+const MENU_BAR_BINARY = "textbutler-menubar";
 async function normalizeRuntimePermissions(path: string): Promise<void> {
   const info = await lstat(path);
   requireValue(!info.isSymbolicLink(), "Runtime bundle contains a symbolic link");
@@ -14,7 +15,16 @@ async function normalizeRuntimePermissions(path: string): Promise<void> {
     for (const name of await readdir(path)) await normalizeRuntimePermissions(join(path, name));
     return;
   }
-  await chmod(path, path.endsWith("/textbutler-bun") ? 0o755 : 0o644);
+  await chmod(path, path.endsWith("/textbutler-bun") || path.endsWith(`/${MENU_BAR_BINARY}`) ? 0o755 : 0o644);
+}
+
+/** Compile the unbundled status-item companion as part of the explicit
+ * distribution build. Runtime commands only execute this admitted artifact;
+ * they never invoke swiftc or another compiler. */
+export function buildMenuBarBinary(output: string): void {
+  requireValue(process.platform === "darwin" && process.arch === "arm64", "The Textbutler menu-bar companion requires Apple Silicon macOS");
+  command(process.execPath, [join(appRoot, "scripts/menubar.ts"), "--build"], { cwd: appRoot, timeout: 180_000 });
+  command("/bin/cp", [join(appRoot, "out/textbutler-menubar"), output], { cwd: appRoot });
 }
 export function sourceCoordinate(): { schema: "textbutler.desktop-build.v1"; sourceSha: string; sourceTree: string; clean: boolean } {
   return { schema: "textbutler.desktop-build.v1", sourceSha: command("git", ["rev-parse", "HEAD"], { cwd: repository }).toString("utf8").trim(), sourceTree: command("git", ["rev-parse", "HEAD^{tree}"], { cwd: repository }).toString("utf8").trim(), clean: command("git", ["status", "--porcelain"], { cwd: repository }).length === 0 };
@@ -28,6 +38,7 @@ export async function stageRuntime(source = sourceCoordinate()): Promise<string>
   const bundledSource = await readFile(join(root, "cli.ts"), "utf8");
   requireValue(!bundledSource.includes(repository) && !bundledSource.includes("node_modules/") && !bundledSource.includes("/Users/"), "Runtime bundle contains an unportable path");
   await copyFile(process.execPath, join(root, "textbutler-bun")); await chmod(join(root, "textbutler-bun"), 0o755);
+  buildMenuBarBinary(join(root, MENU_BAR_BINARY));
   await copyFile(join(repository, "LICENSE"), join(root, "LICENSE.txt"));
   const notices = join(root, "notices"); await mkdir(notices);
   for (const name of ["README.md", "BUN-LICENSE.md", "RUST-LICENSES.md", "RUST-LICENSES.json", "RUST-1.97.1-COPYRIGHT-library.html", "RUST-1.97.1-LICENSE-MIT", "RUST-1.97.1-LICENSE-APACHE"]) await copyFile(join(appRoot, "distribution/notices", name), join(notices, name));

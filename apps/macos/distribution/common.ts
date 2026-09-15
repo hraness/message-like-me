@@ -13,7 +13,7 @@ export const requireValue: (value: unknown, message: string) => asserts value = 
 export const sha256 = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
 export function object(value: unknown): Record<string, unknown> { requireValue(!!value && typeof value === "object" && !Array.isArray(value), "Expected an object"); return value as Record<string, unknown>; }
 export function digest(value: unknown, length = 64): string { requireValue(typeof value === "string" && new RegExp(`^[a-f0-9]{${length}}$`, "u").test(value), "Invalid content digest"); return value; }
-const COMMAND_STAGES = ["command", "unsigned-archive-extract", "keychain-create", "keychain-configure", "keychain-unlock", "certificate-import", "keychain-partition", "notary-store-credentials", "signing-identity", "runtime-sign", "app-sign", "signature-verify", "notary-archive", "notary-submit", "notary-wait", "staple", "staple-validate", "signed-archive", "keychain-delete"] as const;
+const COMMAND_STAGES = ["command", "unsigned-archive-extract", "keychain-create", "keychain-configure", "keychain-unlock", "certificate-import", "keychain-partition", "notary-store-credentials", "signing-identity", "runtime-sign", "menubar-sign", "app-sign", "signature-verify", "notary-archive", "notary-submit", "notary-wait", "staple", "staple-validate", "signed-archive", "keychain-delete"] as const;
 const COMMAND_SIGNALS = ["SIGABRT", "SIGALRM", "SIGBUS", "SIGFPE", "SIGHUP", "SIGILL", "SIGINT", "SIGKILL", "SIGPIPE", "SIGQUIT", "SIGSEGV", "SIGSYS", "SIGTERM", "SIGTRAP", "SIGXCPU", "SIGXFSZ"] as const;
 const COMMAND_ERROR_CODES = ["E2BIG", "EACCES", "EAGAIN", "EINVAL", "EISDIR", "ELOOP", "EMFILE", "ENAMETOOLONG", "ENFILE", "ENOBUFS", "ENOENT", "ENOEXEC", "ENOMEM", "ENOTDIR", "EPERM", "ETIMEDOUT", "ERR_INVALID_ARG_TYPE", "ERR_INVALID_ARG_VALUE", "ERR_OUT_OF_RANGE"] as const;
 const NOTARY_HTTP_STATUSES = Object.freeze(["401", "403", "404", "429", "500", "502", "503"] as const);
@@ -109,7 +109,8 @@ export function inventory(root: string): FileEntry[] {
 export function assertRuntime(root: string): void {
   const manifest = object(JSON.parse(readPhysical(join(root, "runtime-manifest.json"), 1024 * 1024).toString("utf8")));
   requireValue(manifest.schema === "textbutler.runtime.v1" && manifest.bunVersion === BUN_VERSION && JSON.stringify(manifest.files) === JSON.stringify(inventory(root).filter(file => file.path !== "runtime-manifest.json")), "Runtime inventory mismatch");
-  requireValue((manifest.files as FileEntry[]).some(file => file.path === "cli.ts") && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-bun" && file.macho), "Packaged runtime is incomplete");
+  requireValue((manifest.files as FileEntry[]).some(file => file.path === "cli.ts") && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-bun" && file.macho)
+    && (manifest.files as FileEntry[]).some(file => file.path === "textbutler-menubar" && file.macho), "Packaged runtime is incomplete");
 }
 export type UnsignedReceipt = { schema: "textbutler.desktop-unsigned.v1"; repository: "hraness/message-like-me"; sourceSha: string; sourceTree: string; version: typeof VERSION; tag: typeof TAG; architecture: "arm64"; minimumMacOS: "14.5"; archive: { name: "unsigned.zip"; sha256: string; bytes: number }; bundleSha256: string };
 export function parseUnsigned(value: unknown): UnsignedReceipt {

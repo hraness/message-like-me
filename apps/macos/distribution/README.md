@@ -1,7 +1,8 @@
 # Textbutler macOS distribution
 
 The initial desktop target is Apple Silicon on macOS14.5 or newer. The app
-contains the native control panel, a compiled Textbutler CLI, and Bun1.3.14.
+contains the native control panel, a compiled Textbutler CLI, the prebuilt
+unbundled `textbutler-menubar` companion, and Bun1.3.14.
 It does not contain Ghostget, Claude Code, owner credentials, or private state.
 Opening the app does not install a service. The owner explicitly starts the
 background service after moving the app to `/Applications` or their own
@@ -44,6 +45,12 @@ relocated lifecycle entrypoint, JIT, SQLite, system FFI, paused empty daemon,
 socket response, and joined shutdown. It does not call launchctl, authenticate a
 provider, read private conversations, invoke a model, or send a message. Actual
 LaunchAgent and live-provider qualifications are separate evidence.
+
+The explicit package build compiles `textbutler-menubar` into the relocated
+runtime beside `cli.ts`. The packaged CLI passes that fixed companion path to
+`textbutler menubar install`, which stages it atomically at
+`~/Library/Application Support/Textbutler/bin/textbutler-menubar`; no runtime
+command invokes Swift, Bun bundling, or a package manager to create it.
 
 The native webview has a separate `textbutler.lifecycle.v1` command with exactly
 `status`, `install`, and `uninstall`. It selects only fixed bundled resources,

@@ -9,7 +9,7 @@ export const entitlements = (path: string): Readonly<Record<string, boolean>> =>
 export const plist = (values: Readonly<Record<string, boolean>>): string => `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>${Object.entries(values).map(([key, value]) => `<key>${key}</key><${value ? "true" : "false"}/>`).join("")}</dict></plist>`;
 export function nativePaths(app: string): string[] {
   const paths = inventory(app).filter(file => file.macho).map(file => file.path).sort();
-  requireValue(paths.join(",") === "Contents/MacOS/textbutler-desktop,Contents/Resources/textbutler-runtime/textbutler-bun", "Unexpected native code in Textbutler bundle"); return paths;
+  requireValue(paths.join(",") === "Contents/MacOS/textbutler-desktop,Contents/Resources/textbutler-runtime/textbutler-bun,Contents/Resources/textbutler-runtime/textbutler-menubar", "Unexpected native code in Textbutler bundle"); return paths;
 }
 function inspectSignature(path: string, args = ["--display", "--verbose=4"]): string {
   const result = spawnSync("/usr/bin/codesign", [...args, path], { env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 65_536 });
@@ -28,6 +28,10 @@ export function verifySignedBundle(app: string, team: string, identity: string):
   for (const path of nativePaths(app)) {
     const absolute = join(app, path); assertSignature(absolute, team); command("/usr/bin/codesign", ["--verify", "--strict", absolute]);
     requireValue(command("/usr/bin/lipo", ["-archs", absolute]).toString("utf8").trim() === "arm64", "Native architecture differs");
+    if (path.endsWith("/textbutler-menubar")) {
+      const build = command("/usr/bin/xcrun", ["vtool", "-show-build", absolute]).toString("utf8");
+      requireValue(/platform\s+MACOS\b/u.test(build) && /minos\s+14\.5(?:\.0)?(?:\s|$)/u.test(build), "Menu companion deployment target differs");
+    }
     const scratch = mkdtempSync(join(tmpdir(), "textbutler-signature-"));
     try { command("/usr/bin/codesign", ["--display", "--extract-certificates", join(scratch, "cert"), absolute]); requireValue(createHash("sha1").update(readFileSync(join(scratch, "cert0"))).digest("hex") === identity, "Developer ID leaf differs"); }
     finally { rmSync(scratch, { recursive: true, force: true }); }

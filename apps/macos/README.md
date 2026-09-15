@@ -44,3 +44,10 @@ host does not yet supply a native account process factory. See the
 ## Local design references
 
 `PRODUCT.md` and `DESIGN.md` record the desktop scope and native utility direction. Ghostget informed the small Tauri-wrapper structure; its source, private runtime, permission state and credentials are not bundled here.
+
+## Menu-bar companion
+
+The native menu companion provides bounded daemon status, confirmed pause controls,
+contact enablement, agent-account readiness, capabilities and recent activity.
+It uses the same owner-only control protocol as this app. See the
+[menu-bar companion guide](MENUBAR.md) for build, test and launch commands.

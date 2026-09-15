@@ -51,6 +51,15 @@ if (import.meta.main) {
     const entitlementPath = join(scratch, "entitlements.plist"); writeFileSync(entitlementPath, plist(entitlements(runtimePath)), { mode: 0o600 });
     apple("runtime-sign", "/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--entitlements", entitlementPath, join(app, runtimePath)]);
     assertSignature(join(app, runtimePath), team);
+    // The unbundled menu companion is a separate Mach-O inside the resource
+    // tree. Sign it explicitly before sealing the outer bundle so its
+    // Developer ID identity and hardened-runtime contract are independently
+    // verifiable after extraction.
+    const menuBarPath = paths.find(path => path.endsWith("/textbutler-menubar"));
+    requireValue(menuBarPath !== undefined, "Packaged menu companion is missing");
+    const menuBarEntitlements = join(scratch, "menubar-entitlements.plist"); writeFileSync(menuBarEntitlements, plist(entitlements(menuBarPath)), { mode: 0o600 });
+    apple("menubar-sign", "/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--entitlements", menuBarEntitlements, join(app, menuBarPath)]);
+    assertSignature(join(app, menuBarPath), team);
     const runtime = join(app, "Contents/Resources/textbutler-runtime");
     writeFileSync(join(runtime, "runtime-manifest.json"), `${JSON.stringify({ schema: "textbutler.runtime.v1", bunVersion: BUN_VERSION, files: inventory(runtime).filter(file => file.path !== "runtime-manifest.json") })}\n`);
     apple("app-sign", "/usr/bin/codesign", ["--force", "--sign", identity, "--keychain", keychain, "--timestamp", "--options", "runtime", "--identifier", IDENTIFIER, app]);

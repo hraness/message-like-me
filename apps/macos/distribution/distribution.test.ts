@@ -40,8 +40,8 @@ describe("desktop artifact admission", () => {
     const root = fixture();
     try {
       mkdirSync(join(root, "Contents/MacOS"), { recursive: true }); mkdirSync(join(root, "Contents/Resources/textbutler-runtime"), { recursive: true });
-      for (const path of ["Contents/MacOS/textbutler-desktop", "Contents/Resources/textbutler-runtime/textbutler-bun"]) writeFileSync(join(root, path), Buffer.from("feedfacf", "hex"));
-      expect(nativePaths(root)).toHaveLength(2); writeFileSync(join(root, "hidden"), Buffer.from("feedfacf", "hex")); expect(() => nativePaths(root)).toThrow();
+      for (const path of ["Contents/MacOS/textbutler-desktop", "Contents/Resources/textbutler-runtime/textbutler-bun", "Contents/Resources/textbutler-runtime/textbutler-menubar"]) writeFileSync(join(root, path), Buffer.from("feedfacf", "hex"));
+      expect(nativePaths(root)).toHaveLength(3); writeFileSync(join(root, "hidden"), Buffer.from("feedfacf", "hex")); expect(() => nativePaths(root)).toThrow();
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
   test("bounded archive roundtrip and hostile archives", () => {
