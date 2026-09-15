@@ -33,6 +33,7 @@ const SCANNED_ROOT_FILES = [
   ".gitignore",
   "AGENTS.md",
   "PRODUCT.md",
+  "Package.swift",
   "apps/macos/package.json",
   "apps/macos/README.md",
   "apps/macos/MenuControl.swift",

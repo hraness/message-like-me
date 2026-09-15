@@ -68,6 +68,10 @@ fixture sockets in a private temporary directory, including malformed responses,
 boundaries, unsafe paths, a slow peer, mutation framing and refresh coalescing.
 They never connect to the installed daemon. CI runs them alongside the native
 build. Both commands use a fresh Swift module cache, removed after completion.
+The root `Package.swift` exposes these same two runtime sources as a standalone
+executable for CodeQL's supported Swift package discovery. `swift build` creates
+an unbundled executable under `.build`; the explicit companion build remains the
+normal source-checkout path. No dependency, app bundle or signing step is added.
 On a managed Hraness host, run these native commands through the installed
 `oompa-host-run` mac-native lane.
 
