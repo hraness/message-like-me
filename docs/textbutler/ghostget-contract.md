@@ -4,7 +4,7 @@ Textbutler owns reply policy and contact memory. Ghostget owns messaging
 accounts, native permissions, synchronization, event storage and outward
 actions. Textbutler communicates with its own Ghostget owner process through
 `ghostget messaging automation serve --stdio`; it does not share the Ghostget
-Mac app's private helper or open provider databases.
+menu companion's private helper or open provider databases.
 
 [Ghostget 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2) is the
 verified published dependency for this contract. Its package includes both

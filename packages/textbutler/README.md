@@ -11,7 +11,8 @@ run replies. Claude API is an explicit, separately billed account choice;
 Claude Code and Codex remain unavailable until their native execution boundaries
 are qualified. Source-mode startup does not supply an API runtime attestation.
 See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
-tests do not attest a signed Mac release or live delivery on a particular account.
+tests do not attest live delivery on a particular account. CLI and menu-bar use
+do not require a signed Mac release; windowed desktop app packaging has been removed.
 
 ## Modules
 
@@ -70,7 +71,22 @@ bun run textbutler doctor
 
 Use `bun run textbutler --help` for the current command syntax. For foreground
 development, run `bun run textbutler daemon run`; closing that terminal stops
-the process. For an explicitly installed background service:
+the process. To launch the prebuilt menu companion in the foreground, use:
+
+```sh
+TEXTBUTLER_MENUBAR_DEV_BINARY=/absolute/checkout/apps/macos/out/textbutler-menubar bun run textbutler menubar
+```
+
+The menu command never compiles source and enforces one running companion per
+user. Install its per-user LaunchAgent only when login startup is wanted:
+
+```sh
+TEXTBUTLER_MENUBAR_DEV_BINARY=/absolute/checkout/apps/macos/out/textbutler-menubar bun run textbutler menubar install
+bun run textbutler menubar status
+bun run textbutler menubar uninstall
+```
+
+For an explicitly installed background service:
 
 ```sh
 bun run textbutler daemon install
@@ -110,14 +126,13 @@ No shell command, arbitrary arguments or environment fields are accepted.
 This configuration does not create an account or grant Messages permissions;
 complete that setup in Ghostget. Restart Textbutler after editing host settings.
 
-In the Mac app, choose **Add contact…** to request up to 200 recent Messages
-conversations. The picker distinguishes direct conversations from unsupported
-groups. Select one person and optionally check **Initialize from recent
-history**. Enrollment rechecks the account incarnation and participant identity,
-creates a disabled contact, and imports at most 200 recent text messages only
-when requested. The result records shortening and omissions. Attachments are
-not imported. The native Contacts directory remains unavailable through the
-current Ghostget contract.
+The owner control protocol supports listing up to 200 recent Messages
+conversations and enrolling one direct contact, optionally importing at most 200
+recent text messages. Enrollment rechecks account incarnation and participant
+identity and creates a disabled contact. Attachments are not imported. These
+operations currently have no menu or CLI enrollment interface; the menu shows
+existing contact state. The native Contacts directory remains unavailable
+through the current Ghostget contract.
 
 Long reads use bounded owner jobs; the global Pause button remains available.
 Bun source launches disable automatic `.env` loading. A cancelled Ghostget CLI
@@ -127,7 +142,7 @@ forced termination. Each invocation first claims the private
 outcomes preserve it; restarting the daemon does not clear the fence. Recovery
 requires owner inspection of the exact configuration digest and operation record,
 plus reconciliation of Ghostget's corresponding cleanup state. Do not delete the
-marker or run broad provider recovery merely to unblock a retry. The application
+marker or run broad provider recovery merely to unblock a retry. The daemon
 does not automatically invoke Ghostget recovery or infer descendant cleanup from
 the immediate parent process exiting.
 The configuration above selects the legacy read-only conversation path. For
@@ -137,18 +152,17 @@ automation, add `ghostget.automationAccounts`, an explicit list of at most one
 account IDs use lowercase letters, digits and hyphens, start with a letter, and
 have at most 48 characters. Keep the legacy `authId` for compatibility.
 
-In **Setup → Messaging connections**, connect the configured iMessage account or
-explicitly start WhatsApp synchronization. Provider configuration alone does not
-start WhatsApp sync. **Add contact…** then lists configured messaging networks;
-enrollment still creates a disabled contact and imports history only if selected.
-Choose a ready agent account in the contact's **Behavior** settings before
-enabling it, then resume the global switch when ready for incoming replies.
+Provider configuration alone does not start WhatsApp synchronization. The owner
+control protocol has separate connection, enrollment and activation operations.
+These require an explicit owner client; the menu cannot initiate them. New
+contacts remain disabled until a ready agent account and messaging grant have
+been selected through that protocol.
 
 Enabling revalidates the messaging identity and grants only currently available
 actions, for at most 30 days and 100,000 actions. While the contact remains enabled,
 the daemon can renew that bounded grant after checking current provider state,
 recipient identity, settings revision and remaining capacity. Textbutler also
-enforces its per-contact reply rate limit. The app shows grant expiry, recovery
+enforces its per-contact reply rate limit. Textbutler shows grant expiry, recovery
 requirements and last-confirmed rich-message capabilities. Pausing stops new
 dispatches; disabling also revokes the grant. An uncertain revocation retains
 private recovery state and blocks dispatch until reconciliation succeeds.

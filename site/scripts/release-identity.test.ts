@@ -40,7 +40,7 @@ describe("release identity", () => {
     );
   });
 
-  test("keeps legacy installation separate from the unreleased Mac app", async () => {
+  test("keeps legacy installation separate from the unreleased menu companion", async () => {
     const siteRoot = resolve(import.meta.dir, "..");
     const repositoryRoot = resolve(siteRoot, "..");
     const packageRelease = await packageVersion(resolve(repositoryRoot, "package.json"));

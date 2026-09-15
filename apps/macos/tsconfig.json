@@ -10,8 +10,16 @@
     "noUnusedParameters": true,
     "strict": true,
     "target": "ES2024",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "types": ["bun"]
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["src", "scripts", "distribution"]
+  "include": [
+    "scripts"
+  ]
 }
