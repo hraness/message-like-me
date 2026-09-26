@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { HRANESS_HOME_URL } from '@hraness/site-footer';
 
 import AboutPage from '../app/about/page.tsx';
+import CompareGhostReplyPage from '../app/compare/ghostreply/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
 import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
@@ -29,6 +30,7 @@ const publicPages: readonly Readonly<{
   { name: '/docs', render: DocsPage },
   { name: '/methodology', render: MethodologyPage },
   { name: '/research', render: ResearchPage },
+  { name: '/compare/ghostreply', render: CompareGhostReplyPage },
   { name: 'not-found', render: NotFound },
 ];
 

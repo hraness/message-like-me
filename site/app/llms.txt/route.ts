@@ -46,6 +46,7 @@ export function GET() {
     `- ${absoluteUrl('/methodology')}`,
     `- ${absoluteUrl('/research')}`,
     `- ${absoluteUrl('/about')}`,
+    `- ${absoluteUrl('/compare/ghostreply')}`,
     '',
     '## Blog',
     `- ${absoluteUrl('/blog')}`,

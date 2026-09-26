@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import AboutPage from '../app/about/page.tsx';
+import CompareGhostReplyPage from '../app/compare/ghostreply/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
 import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
@@ -37,6 +38,7 @@ const canonicalPages: readonly Readonly<{
   { path: '/docs', render: DocsPage },
   { path: '/methodology', render: MethodologyPage },
   { path: '/research', render: ResearchPage },
+  { path: '/compare/ghostreply', render: CompareGhostReplyPage },
 ];
 
 function askAiNav(html: string): string {
@@ -77,7 +79,7 @@ function assertAskAiLinks(html: string, path: CanonicalPagePath): void {
   }
 }
 
-test('server-renders exact Ask AI subjects on all six canonical pages', async () => {
+test('server-renders exact Ask AI subjects on all canonical pages', async () => {
   expect(canonicalPages.map(({ path }) => path)).toEqual([
     ...CANONICAL_PAGE_PATHS,
   ]);
