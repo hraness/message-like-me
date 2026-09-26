@@ -25,6 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: absoluteUrl('/methodology'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
     { url: absoluteUrl('/research'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
     { url: absoluteUrl('/about'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.7 },
+    { url: absoluteUrl('/compare/ghostreply'), lastModified: new Date('2026-09-26T00:00:00Z'), changeFrequency: 'monthly', priority: 0.6 },
     ...blogEntries(),
   ];
 }

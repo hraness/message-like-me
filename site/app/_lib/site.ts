@@ -25,6 +25,7 @@ export const CANONICAL_PAGE_PATHS = [
   '/docs',
   '/methodology',
   '/research',
+  '/compare/ghostreply',
 ] as const;
 
 export type CanonicalPagePath = (typeof CANONICAL_PAGE_PATHS)[number];

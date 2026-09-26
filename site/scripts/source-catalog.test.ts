@@ -39,6 +39,7 @@ describe('supported source presentation', () => {
       ['/methodology', '2026-09-11T00:00:00.000Z'],
       ['/research', '2026-09-11T00:00:00.000Z'],
       ['/about', '2026-09-11T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-09-26T00:00:00.000Z'],
     ]);
   });
 
