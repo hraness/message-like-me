@@ -73,7 +73,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('MIT-licensed');
   expect(html).toContain('test delivery and rich actions on your own account');
   expect(html).toContain('no app to download');
-  expect(html).toContain(`Message Like Me v${SOFTWARE_VERSION}`);
+  expect(html).toContain(`>Textbutler v${SOFTWARE_VERSION}</a> release.`);
   expect(html).toContain('It does not install Textbutler or enable automatic replies.');
   expect(html).toContain('No. textbutler.app is informational');
   expect(html).toContain('"@type":"FAQPage"');
