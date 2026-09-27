@@ -15,7 +15,7 @@ function setup(overrides: Partial<RuntimePorts> = {}) {
   const journal = RunJournal.memory(); journals.push(journal);
   const contact = { ...newContact("c1", "Example", "r1"), enabled: true, mode: "smart" as const };
   let settings: Settings = parseSettings({ schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [contact] });
-  let snapshot: ConversationSnapshot = { contextId: "ctx1", messageIds: ["m1"], state: { latestRevision: "v1", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } };
+  let snapshot: ConversationSnapshot = { contextId: "ctx1", messageIds: ["m1"], relatedMessageIds: new Map(), state: { latestRevision: "v1", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } };
   const submitted: ActionIntent[][] = [], acks: ActionIntent[][] = [];
   const transport: TextbutlerTransport = {
     capabilities: async () => ({ ok: true, value: { protocol: TRANSPORT_PROTOCOL, provider: "synthetic", capabilities: ["text", "attachment", "reaction", "sticker", "link", "autonomous-send"].map(capability => ({ capability: capability as "text", available: true, reason: null })) } }),
@@ -80,17 +80,35 @@ test("the ack's own history echo does not cancel the reply it precedes", async (
   // recheck. Only the echo's journaled id may explain the drift; a foreign id
   // still cancels as conversation-changed.
   fixture.ports.agent.compose = async () => {
-    fixture.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "accepted:p1:0"], state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
+    fixture.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "accepted:p1:0"], relatedMessageIds: new Map(), state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
     return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] };
   };
   expect((await fixture.runtime.process(event)).status).toBe("submitted");
   const raced = setup();
   raced.ports.agent.compose = async () => {
-    raced.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "m9"], state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
+    raced.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "m9"], relatedMessageIds: new Map(), state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
     return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] };
   };
   expect((await raced.runtime.process(event)).status).toBe("cancelled");
   expect(raced.submitted).toEqual([]);
+});
+test("a self-chat ack echo under a fresh id does not cancel the reply", async () => {
+  const fixture = setup();
+  // In a self-chat the butler's own ack lands again as an incoming row whose id
+  // differs from the accepted outgoing id; only relatedMessageId ties them.
+  fixture.ports.agent.compose = async () => {
+    fixture.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "echo-of-ack"], relatedMessageIds: new Map([["echo-of-ack", "accepted:p1:0"]]), state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
+    return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] };
+  };
+  expect((await fixture.runtime.process(event)).status).toBe("submitted");
+  expect(fixture.submitted).toEqual([[{ kind: "text", text: "🤖{ Hello there. }" }]]);
+  const raced = setup();
+  // A new id related to a foreign message — not this run's ack — still cancels.
+  raced.ports.agent.compose = async () => {
+    raced.setSnapshot({ contextId: "ctx2", messageIds: ["m1", "echo-foreign"], relatedMessageIds: new Map([["echo-foreign", "someone-elses"]]), state: { latestRevision: "v2", lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 } });
+    return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] };
+  };
+  expect((await raced.runtime.process(event)).status).toBe("cancelled");
 });
 test("nontext intent gets a disclosed companion before the action", async () => {
   const fixture = setup();
@@ -214,7 +232,7 @@ test.each(["partial", "indeterminate"] as const)("a concurrent event cannot clai
   // The second event passes the early uncertainty check while the first run is
   // dispatching, then waits before the journal claim. The new event has its own
   // revision, and the first run has already passed its final context check.
-  fixture.setSnapshot({ ...fixture.getSnapshot(), contextId: "ctx2", messageIds: ["m2"], state: { ...fixture.getSnapshot().state, latestRevision: "v2" } });
+  fixture.setSnapshot({ ...fixture.getSnapshot(), contextId: "ctx2", messageIds: ["m2"], relatedMessageIds: new Map(), state: { ...fixture.getSnapshot().state, latestRevision: "v2" } });
   const second = fixture.runtime.process({ ...event, id: "m2", revision: "v2" });
   await secondReadinessEntered.promise;
   settleSend.resolve();

@@ -167,7 +167,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     }
     const cluster = pendingCluster(page.messages, contact, journal);
     service.notePending(contact.id, cluster === null ? null : { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: page.enrollment.ready, observedAt: now() });
-    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), state: { latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000) } };
+    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), relatedMessageIds: new Map(page.messages.filter(message => message.kind === "message" && message.relatedMessageId !== null).map(message => [message.id, message.relatedMessageId!])), state: { latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000) } };
   }
   /** Settles a wedged send only from positive provider evidence. A terminal
    * upstream row is a receipt; no reply row beside a settled ack row proves
