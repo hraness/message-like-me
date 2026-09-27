@@ -157,7 +157,7 @@ Enable its switch. macOS may require your password in its own dialog.
 
 Configure the exact Ghostget `src/cli.ts`, Bun runtime, private state directory
 and `imessage:ACCOUNT` binding using `setup` above. This development version pins
-Ghostget 0.18.21 and its reviewed `imsg` helper artifact. Native setup provisions
+Ghostget 0.18.38 and its reviewed `imsg` helper artifact. Native setup provisions
 that pinned helper into the connector state directory (`imessage transport install`)
 before linking; a missing or mismatched artifact stops setup instead of reaching
 messaging. Setup links only

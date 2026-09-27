@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { AUTOMATION_ACTIONS, automationBoolean, automationHash, automationId, automationProvider, automationRecord, parseAutomationConversation, parseAutomationCoordinate, parseAutomationEnrollment, parseAutomationGrant, parseAutomationIdentity, parseAutomationMessage, parseAutomationRun, parseAutomationStatus, type AutomationAction, type AutomationCoordinate, type AutomationEnrollment, type AutomationEvent, type AutomationGrantRequest, type AutomationPlan, type AutomationProvider } from "./automation-contract";
+import { AUTOMATION_ACTIONS, automationBoolean, automationHash, automationId, automationProvider, automationRecord, parseAutomationConversation, parseAutomationCoordinate, parseAutomationEnrollment, parseAutomationGrant, parseAutomationIdentity, parseAutomationMessage, parseAutomationRun, parseAutomationStatus, type AutomationAction, type AutomationCoordinate, type AutomationEnrollment, type AutomationEvent, type AutomationGrantRequest, type AutomationPlan, type AutomationProvider, type AutomationRun } from "./automation-contract";
 import { array, canonicalJson, digest, failure, integer, parseActionIntent, string, success, timestamp } from "./validation";
-import { TRANSPORT_PROTOCOL, type ActionPlan, type HistoryMessage, type TextbutlerTransport } from "./types";
+import { TRANSPORT_PROTOCOL, type ActionPlan, type HistoryMessage, type SendReceipt, type TextbutlerTransport, type TransportResult } from "./types";
 import { AutomationOperationError, automationFailure } from "./automation-diagnostics.ts";
 export * from "./automation-contract";
 export * from "./automation-diagnostics.ts";
@@ -191,26 +191,48 @@ export function createGhostgetAutomationTransport(options: { client: GhostgetAut
       prune(); const known = plans.get(plan.id);
       if (!known || known.consumed || automationHash(plan) !== automationHash(known.public) || authorization.mode !== "delegated") return failure("authorization-required", "An exact unconsumed contact grant and plan are required.");
       known.consumed = true;
-      try {
-        const result = await client.submit(known.upstream.id, authorization.grantId, signal);
+      const uncertain = () => failure("indeterminate", "Ghostget send outcome is uncertain. Reconcile the recorded intent before another send.");
+      const neverStarted = () => failure("dispatch-failed", "The provider proved this send never started. A new message may be sent.");
+      const record = (result: AutomationRun): TransportResult<SendReceipt> => {
         if (result.enrollmentId !== enrollmentId || result.intentId !== plan.intentId || result.totalActions !== plan.actions.length) throw new Error("Run scope changed");
-        return success({ planId: plan.id, runId: result.id, state: result.state === "accepted" ? "submitted" : result.state === "started" ? "indeterminate" : result.state, submittedCount: result.accepted.length, totalCount: result.totalActions, acceptedMessageIds: result.accepted.map(part => part.messageId), recordedAt: new Date(now()).toISOString(), delivery: "unknown", retryable: false });
+        const state: SendReceipt["state"] = result.state === "accepted" ? "submitted" : result.state === "started" ? "indeterminate" : result.state;
+        return success({ planId: plan.id, runId: result.id, state, submittedCount: result.accepted.length, totalCount: result.totalActions, acceptedMessageIds: result.accepted.map(part => part.messageId), recordedAt: new Date(now()).toISOString(), delivery: "unknown", retryable: false });
+      };
+      // A remote refusal means the host finished the dispatch attempt: the
+      // intent ledger then arbitrates. A terminal row carries its outcome;
+      // no row at all is proof the run insert never committed. Non-terminal
+      // rows and arbiter faults stay unproven — the dispatch may still be
+      // live upstream.
+      const arbitrate = async () => {
+        const observed = await client.runByIntent(known.upstream.intentId);
+        return observed === null ? null : observed.state === "accepted" || observed.state === "failed" ? record(observed) : undefined;
+      };
+      try {
+        return record(await client.submit(known.upstream.id, authorization.grantId, signal));
       } catch (error) {
-        // A remote refusal means the host finished the dispatch attempt: the
-        // intent ledger then arbitrates. A terminal row carries its outcome;
-        // no row at all is proof the run insert never committed, so the send
-        // provably did not start. Local transport faults and in-flight rows
-        // stay indeterminate — the dispatch may still be live upstream.
-        if (automationFailure(error).stage === "provider") {
+        if (automationFailure(error).stage !== "provider") return uncertain();
+        let observed;
+        try { observed = await arbitrate(); } catch { return uncertain(); }
+        if (observed !== null) return observed ?? uncertain();
+        // The intent ledger proved no run exists, so a rebind on the live
+        // revision cannot double-send: a first attempt that committed late
+        // still returns its stored row through the same intent. Rebinding is
+        // read-only planning — a fault there is still a proven non-send.
+        let fresh;
+        try {
+          const { enrollment } = await client.history(enrollmentId, 1);
+          if (!enrollment.ready) return neverStarted();
+          fresh = await client.prepare({ enrollmentId, expectedRevision: enrollment.revision, intentId: known.upstream.intentId, actions: known.upstream.actions });
+        } catch { return neverStarted(); }
+        try {
+          return record(await client.submit(fresh.id, authorization.grantId, signal));
+        } catch (retryError) {
+          if (automationFailure(retryError).stage !== "provider") return uncertain();
           try {
-            const observed = await client.runByIntent(known.upstream.intentId);
-            if (observed === null) return failure("dispatch-failed", "The provider proved this send never started. A new message may be sent.");
-            if (observed.state === "accepted" || observed.state === "failed") {
-              return success({ planId: plan.id, runId: observed.id, state: observed.state === "accepted" ? "submitted" : "failed", submittedCount: observed.accepted.length, totalCount: observed.totalActions, acceptedMessageIds: observed.accepted.map(part => part.messageId), recordedAt: new Date(now()).toISOString(), delivery: "unknown", retryable: false });
-            }
-          } catch { /* The arbiter read failed too: the outcome stays unproven. */ }
+            const second = await arbitrate();
+            return second === null ? neverStarted() : second ?? uncertain();
+          } catch { return uncertain(); }
         }
-        return failure("indeterminate", "Ghostget send outcome is uncertain. Reconcile the recorded intent before another send.");
       }
     },
   };
