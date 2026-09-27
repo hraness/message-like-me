@@ -129,6 +129,8 @@ describe('blog pages', () => {
       expect(html, post.slug).not.toMatch(/human/iu);
       expect(html, post.slug).toContain('"@type":"BlogPosting"');
       expect(html, post.slug).toContain(`"@id":"${absoluteUrl(blogPostPath(post))}#article"`);
+      // The Hraness author/publisher party resolves to a real entity.
+      expect(html, post.slug).toContain('"url":"https://hraness.com","sameAs":["https://github.com/hraness"]');
       expect(html, post.slug).toContain('class="plain-publication__sources"');
     }
   });

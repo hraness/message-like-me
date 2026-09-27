@@ -39,6 +39,7 @@ export function DocumentPage({
       '@type': 'Organization',
       name: SITE_NAME,
       url: absoluteUrl('/'),
+      sameAs: ['https://github.com/hraness'],
     },
     isPartOf: {
       '@type': 'WebSite',

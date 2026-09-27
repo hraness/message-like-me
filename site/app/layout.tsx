@@ -92,6 +92,7 @@ const structuredData = {
       '@id': organizationId,
       name: 'Hraness',
       url: 'https://hraness.com',
+      sameAs: ['https://github.com/hraness'],
     },
     {
       '@type': 'WebSite',

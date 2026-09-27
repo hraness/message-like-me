@@ -42,7 +42,13 @@ export const BLOG_SITE: SearchSite = {
 
 // Every post carries the organization byline; see ARTICLE_COPY.md in @hraness/design-kit.
 export const BLOG_AUTHOR: ArticleAuthor = { kind: 'organization', name: 'Hraness', href: 'https://hraness.com' };
-const BLOG_PARTY: ArticleParty = { kind: 'Organization', name: 'Hraness' };
+// The Hraness party resolves to its canonical site and GitHub organization.
+export const BLOG_PARTY: ArticleParty = {
+  kind: 'Organization',
+  name: 'Hraness',
+  url: 'https://hraness.com',
+  sameAs: ['https://github.com/hraness'],
+};
 
 export function admissionFor(post: BlogPost): ArticleAdmission {
   const admission = blogAdmission(blogPostPath(post));

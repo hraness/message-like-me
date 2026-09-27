@@ -7,6 +7,7 @@ import {
   articleDiscovery,
   BLOG_DESCRIPTION,
   BLOG_FEED_PATH,
+  BLOG_PARTY,
   BLOG_PATH,
   BLOG_SITE,
   BLOG_TITLE,
@@ -46,7 +47,7 @@ export default function BlogIndexPage() {
   const posts = indexableBlogPosts();
   const jsonLd = blogJsonLd(
     BLOG_SITE,
-    { path: BLOG_PATH, name: BLOG_TITLE, description: BLOG_DESCRIPTION, publisher: { kind: 'Organization', name: 'Hraness' } },
+    { path: BLOG_PATH, name: BLOG_TITLE, description: BLOG_DESCRIPTION, publisher: BLOG_PARTY },
     posts.map(articleDiscovery),
   );
   return (
