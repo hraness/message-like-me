@@ -157,15 +157,15 @@ test('browser waits have a bounded deadline', async () => {
 test('presentation admission rejects missing atoms, fallback fonts, collection and preset leaks', () => {
   const sample = { width: 1440, theme: 'light', path: '/' };
   const valid = { paper: 'paper', background: 'rgb(251, 241, 199)', bodyFont: '"Nebula Sans", sans-serif', coarse: false, overflow: 0,
-    forms: 8, appearanceControls: [...['catppuccin','gruvbox','rose-pine','tokyo-night','paper'].map(value => ({name:'fixture-palette',value,legend:'Theme'})), ...['light','dark','system'].map(value => ({name:'fixture-mode',value,legend:'Appearance'}))], headers: 1, footers: 1, askAi: 1, preset: 'editorial', material: 'lantern', headerBackdrop: 'blur(20px) saturate(1.1)',
+    forms: 8, appearanceControls: [...['catppuccin','gruvbox','rose-pine','tokyo-night','paper'].map(value => ({name:'fixture-palette',value,legend:'Theme'})), ...['light','dark','system'].map(value => ({name:'fixture-mode',value,legend:'Appearance'}))], headers: 1, footers: 1, askAi: 1, preset: 'editorial', material: 'lantern', headerBackdrop: 'none',
     layers: ['components.hraness-ui.priority1', 'components.hraness-design-kit.priority1'],
-    fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }],
-    headingSize: 88, headingLeading: 89.76, headingTracking: -2.2, headingWeight: '400', headerMinHeight: '52px',
-    headerWidth: 1216, gutter: '32px', heroPadding: ['112px', '128px'],
-    sections: Array.from({ length: 9 }, () => ({ font: '"Instrument Serif", serif', weight: '400', size: 56, leading: 60.48, tracking: -1.12 })),
-    summarySize: 20, summaryLeading: 33, workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
-    workspaceBackground: 'rgb(255, 253, 249)', frameBackground: 'rgb(255, 253, 249)',
-    actionHeights: [42, 42, 42, 42, 42], actionRadii: ['12px'], fieldBackground: 'url("/grain.svg"), repeating-conic-gradient(from 45deg, red, transparent), radial-gradient(red, blue), linear-gradient(red, blue)', fieldBackgroundSize: '64px 64px, 24px 24px, 100% 100%, 100% 100%' };
+    fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],
+    headingFont: '"Nebula Sans", sans-serif', headingSize: 64, headingLeading: 67.84, headingTracking: -1.92, headingWeight: '550', headerMinHeight: '52px',
+    headerWidth: 1216, gutter: '32px',
+    sections: Array.from({ length: 8 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
+    workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
+    workspaceBackground: 'rgb(255, 253, 249)', terminalBackground: 'rgb(255, 253, 249)',
+    actionHeights: [42, 42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
   for (const path of ['/docs', '/sources', '/preview', '/blog', '/blog/introducing-textbutler']) {
     const preview = path === '/preview';
@@ -177,10 +177,11 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
   for (const change of [{ layers: [] }, { renderedFonts: [] }, { fontWeights: [] }, { forms: 9 }, { appearanceControls: [] }, { appearanceControls: valid.appearanceControls.map((control, index) => index === 0 ? {...control, value: 'email'} : control) },
     { appearanceControls: valid.appearanceControls.map((control, index) => index === 0 ? {...control, name: 'contact'} : control) },
     { appearanceControls: valid.appearanceControls.map((control, index) => index === 0 ? {...control, legend: 'Private data'} : control) },
-    { material: null }, { headerBackdrop: 'none' }, { fieldBackgroundSize: 'auto' }, { fieldBackground: 'linear-gradient(red, blue)' },
-    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionRadii: ['10px'] }, { actionRadii: ['4px'] },
-    { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { summaryLeading: 24.65 },
-    { heroPadding: ['112px', '72px'] }, { gutter: '20px' }, { headerWidth: 1120 }]) {
+    { material: null }, { headerBackdrop: 'blur(20px) saturate(1.1)' }, { wall: true }, { bodyBackgroundImage: 'url("/grain.svg")' },
+    { renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }] },
+    { headingWeight: '400' }, { headingFont: '"Instrument Serif", serif' }, { terminalBackground: 'rgba(0, 0, 0, 0)' },
+    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionHeights: [30, 42, 42, 42, 42] },
+    { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { gutter: '20px' }, { headerWidth: 1120 }]) {
     expect(() => assertPresentation({ ...valid, ...change }, sample)).toThrow();
   }
 });

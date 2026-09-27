@@ -160,41 +160,36 @@ export function assertPresentation(value, sample) {
   for (const weight of ['400', '500', '600', '700']) assert.ok(value.fontWeights.includes(weight), `Nebula Sans ${weight} missing.`);
   assert.equal(value.preset, sample.path === '/' ? 'editorial' : null);
   assert.equal(value.material, 'lantern');
-  const expectedFont = sample.path === '/' ? /InstrumentSerif/iu : /Nebula/iu;
+  // The Quiet direction sets every heading, landing included, in Nebula Sans.
   assert.ok(value.renderedFonts.some((font) => font.isCustomFont && font.glyphCount > 0
-    && expectedFont.test(font.postScriptName || font.familyName)), 'The heading rendered with a fallback font.');
+    && /Nebula/iu.test(font.postScriptName || font.familyName)), 'The heading rendered with a fallback font.');
   if (sample.path === '/') {
-    const h1Size = Math.min(88, Math.max(48, 33.6 + sample.width * 0.042));
-    assert.ok(Math.abs(value.headingSize - h1Size) < 0.1, `Editorial H1 size: ${value.headingSize}px`);
-    assert.ok(Math.abs(value.headingLeading - h1Size * 1.02) < 0.1, `Editorial H1 leading: ${value.headingLeading}px`);
-    assert.ok(Math.abs(value.headingTracking + h1Size * 0.025) < 0.01);
-    assert.equal(value.headingWeight, '400');
+    const h1Size = Math.min(64, Math.max(38, 25.6 + sample.width * 0.032));
+    assert.ok(Math.abs(value.headingSize - h1Size) < 0.1, `Landing H1 size: ${value.headingSize}px`);
+    assert.ok(Math.abs(value.headingLeading - h1Size * 1.06) < 0.1, `Landing H1 leading: ${value.headingLeading}px`);
+    assert.ok(Math.abs(value.headingTracking + h1Size * 0.03) < 0.01);
+    assert.equal(value.headingWeight, '550');
+    assert.match(value.headingFont, /Nebula Sans/u);
     assert.equal(value.headerMinHeight, '52px');
     assert.equal(value.headerWidth, Math.min(1216, sample.width));
     assert.equal(value.gutter, sample.width < 761 ? '20px' : '32px');
-    assert.deepEqual(value.heroPadding, sample.width < 761 ? ['56px', '72px'] : [String(Math.min(112, Math.max(64, sample.width * .08))) + 'px', String(Math.min(128, Math.max(72, sample.width * .09))) + 'px']);
-    const h2Size = Math.min(56, Math.max(34, 23.2 + sample.width * 0.026));
-    assert.equal(value.sections.length, 9);
+    const h2Size = Math.min(40, Math.max(28, 21.6 + sample.width * 0.016));
+    assert.equal(value.sections.length, 8);
     for (const section of value.sections) {
-      assert.match(section.font, /Instrument Serif/u);
-      assert.equal(section.weight, '400');
-      assert.ok(Math.abs(section.size - h2Size) < 0.1, `Editorial H2 size: ${section.size}px`);
-      assert.ok(Math.abs(section.leading - h2Size * 1.08) < 0.1);
+      assert.match(section.font, /Nebula Sans/u);
+      assert.equal(section.weight, '550');
+      assert.ok(Math.abs(section.size - h2Size) < 0.1, `Landing H2 size: ${section.size}px`);
+      assert.ok(Math.abs(section.leading - h2Size * 1.12) < 0.1);
       assert.ok(Math.abs(section.tracking + h2Size * 0.02) < 0.01);
     }
-    assert.equal(value.summarySize, sample.width < 761 ? 16 : Math.min(20, Math.max(17, 16 + sample.width * .0035)));
-    assert.ok(Math.abs(value.summaryLeading - value.summarySize * 1.65) < 0.1);
     assert.equal(value.workspaceInk, value.bodyInk, 'The Paper file tree must not inherit inverse-surface ink.');
     assert.notEqual(value.workspaceBackground, 'rgba(0, 0, 0, 0)');
-    assert.notEqual(value.frameBackground, 'rgba(0, 0, 0, 0)');
+    assert.notEqual(value.terminalBackground, 'rgba(0, 0, 0, 0)', 'The terminal proof sits on an opaque surface.');
     assert.ok(value.actionHeights.length >= 5, 'The header, hero and closing actions must all remain styled.');
-    assert.ok(value.actionHeights.every((height) => height >= (sample.width < 500 ? 44 : 42)));
-    assert.ok(value.actionRadii.every((radius) => radius === '12px'), 'Material controls retain their shared 12px radius.');
-    assert.equal(value.headerBackdrop, 'blur(20px) saturate(1.1)');
-    assert.equal((value.fieldBackground.match(/gradient\(/gu) ?? []).length, 3);
-    assert.equal((value.fieldBackground.match(/url\(/gu) ?? []).length, 1);
-    assert.ok(value.fieldBackground.includes('repeating-conic-gradient(from 45deg,'), 'The Gruvbox field uses the shared weave.');
-    assert.ok(!value.fieldBackground.includes('repeating-linear-gradient('));
-    assert.equal(value.fieldBackgroundSize, '64px 64px, 24px 24px, 100% 100%, 100% 100%');
+    assert.ok(value.actionHeights.every((height) => height >= (sample.width < 500 ? 44 : 40)));
+    // No backdrop, pattern, wall texture, or translucent header remains.
+    assert.equal(value.headerBackdrop, 'none');
+    assert.equal(value.wall, false);
+    assert.equal(value.bodyBackgroundImage, 'none');
   }
 }
