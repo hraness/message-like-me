@@ -8,6 +8,7 @@ import { requestDaemon } from "./daemon.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { awaitOwnerJob, type OwnerControlClient } from "./owner-cli.ts";
 import { createLaunchAgentLifecycle, defaultLaunchAgentHost, isolatedBunInvocation } from "./launch-agent.ts";
+import { macosAppExecutable, readInstalledMacosApp, type MacosAppIdentity } from "./macos-app.ts";
 import { settingsPath, settingsUrl } from "./permission-copy.ts";
 import { terminalPromptIO } from "./permission-prompt.ts";
 import { macosAccessStep } from "./permission-readiness.ts";
@@ -413,15 +414,38 @@ async function opened(result: Promise<unknown>): Promise<void> {
   catch { throw new MenuFailure("open-failed", "Couldn't open the page", "Check your default browser, then try again."); }
 }
 
-/** Delegate the product `menubar` command family to the shared lifecycle. */
-export function companionForeground(dataDir: string, entrypoint: string, host: { home: string; runtime: string } = { home: homedir(), runtime: process.execPath }): { executable: string; args: readonly string[] } {
+/** The local app identity stays off until the owner turns it on (T7): with
+ * HRANESS_LOCAL_APP=1, a verified TextButler.app for this exact data folder,
+ * runtime and entrypoint runs the menu, so macOS attributes it and its login
+ * item to Textbutler. */
+export const localAppEnabled = (env: NodeJS.ProcessEnv = process.env): boolean => env.HRANESS_LOCAL_APP === "1";
+
+/** How the menu runs in the foreground, now and at login. With a verified app
+ * it is the app's executable with no arguments, the launcher's menu role,
+ * which checks its pinned runtime and entrypoint before starting. The app
+ * keeps the same path across upgrades, so its login item stays valid. */
+export function companionForeground(dataDir: string, entrypoint: string, host: { home: string; runtime: string } = { home: homedir(), runtime: process.execPath },
+  app: Pick<MacosAppIdentity, "appPath"> | null = null): { executable: string; args: readonly string[] } {
+  if (app !== null) return { executable: macosAppExecutable(app), args: [] };
   return isolatedBunInvocation({ ...host, entrypoint, args: ["menubar", "--foreground", "--data-dir", dataDir] });
 }
+
+/** The installed app for this checkout, or null when the switch is off, no
+ * app is installed, or its receipt doesn't match. Never repairs or installs. */
+export async function menuApp(dataDir: string, entrypoint: string, options: { env?: NodeJS.ProcessEnv; home?: string; runtime?: string;
+  read?: typeof readInstalledMacosApp } = {}): Promise<MacosAppIdentity | null> {
+  if (!localAppEnabled(options.env) || process.platform !== "darwin" && options.read === undefined) return null;
+  try {
+    return await (options.read ?? readInstalledMacosApp)({ home: options.home ?? homedir(), dataDir, runtime: options.runtime ?? process.execPath, entrypoint });
+  } catch { return null; }
+}
 export async function runMenuBarCommand(args: readonly string[], dataDir: string, entrypoint: string, write: (result: unknown) => void,
-  hooks: { handle?: typeof handleCompanionCommand; exit?: (code: number) => void } = {}): Promise<number> {
+  hooks: { handle?: typeof handleCompanionCommand; exit?: (code: number) => void; app?: () => Promise<MacosAppIdentity | null> } = {}): Promise<number> {
+  // The app's own menu role is already the foreground process, so it never relaunches itself.
+  const app = args[0] === "--foreground" ? null : await (hooks.app ?? (() => menuApp(dataDir, entrypoint)))();
   const code = await (hooks.handle ?? handleCompanionCommand)(companionOptions(dataDir, openBrowser, entrypoint), {
     args,
-    foreground: companionForeground(dataDir, entrypoint),
+    foreground: companionForeground(dataDir, entrypoint, undefined, app),
     write,
   });
   if (args[0] === "--foreground") exitSoon(code, hooks.exit ?? (value => process.exit(value)));

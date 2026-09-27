@@ -307,6 +307,14 @@ doesn't work, a ⚠︎ line under the status says why. Suggestions show a previe
 only: use the terminal to review complete outgoing actions before sending. The
 menu cannot send hidden or truncated draft content.
 
+If you installed `TextButler.app`, you can have it run the menu too, so macOS
+lists Textbutler rather than Bun under Login Items. This is off by default while
+the local app identity is checked on a clean macOS account. To try it, run
+`HRANESS_LOCAL_APP=1 bun run textbutler menubar install`. The app keeps its path
+across upgrades, so that login item keeps working. Otherwise, after
+`bun run textbutler:install --upgrade`, the installer tells you when the menu
+still starts the previous version; run `textbutler menubar install` again.
+
 Menu startup and daemon startup are separate. Quitting the menu leaves the
 installed daemon running. `menubar stop` closes the menu; `daemon uninstall`
 unregisters the background service and retains your data.

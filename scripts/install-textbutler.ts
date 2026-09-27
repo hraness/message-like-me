@@ -124,6 +124,22 @@ export async function installTextbutler(options: { from: string; prefix: string;
   return { command, directory, version: source.manifest.version };
 }
 
+/** The menu's login item, when it still starts a version this upgrade
+ * replaced (T7). Read only: installation stays inert, so the owner repoints
+ * it with one command. A login item that runs TextButler.app keeps working,
+ * because the app keeps its path across upgrades. */
+export async function staleMenuLoginItem(home: string, previousDirectory: string): Promise<boolean> {
+  const path = join(home, "Library", "LaunchAgents", "app.hraness.companion.textbutler.plist");
+  let text: string;
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.size > 65_536) return false;
+    text = (await readArtifact(path, 65_536)).toString("utf8");
+  } catch { return false; }
+  const escaped = previousDirectory.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("'", "&apos;").replaceAll('"', "&quot;");
+  return text.includes(`${escaped}/`) || text.includes(`${previousDirectory}/`);
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2); let from: string | undefined, prefix = join(homedir(), ".local"), upgrade = false;
   try {
@@ -138,6 +154,9 @@ if (import.meta.main) {
     const distribution = from ?? (await buildTextbutler()).directory;
     const installed = await installTextbutler({ from: distribution, prefix, upgrade });
     const { manifest } = await verifyDistribution(installed.directory);
-    process.stdout.write(`${JSON.stringify({ ok: true, ...installed, providerAdmission: manifest.providerAdmission, next: [installed.command, "setup"], detail: "Local pilot installed. No daemon, menu, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission." })}\n`);
+    const staleMenu = installed.previous !== undefined && await staleMenuLoginItem(homedir(), installed.previous.directory);
+    process.stdout.write(`${JSON.stringify({ ok: true, ...installed, providerAdmission: manifest.providerAdmission, next: [installed.command, "setup"],
+      ...(staleMenu ? { menuLoginItem: { state: "previous-version", next: [installed.command, "menubar", "install"] } } : {}),
+      detail: `Local pilot installed. No daemon, menu, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission.${staleMenu ? " The menu still starts the previous version at login: run textbutler menubar install to point it at this one." : ""}` })}\n`);
   } catch (error) { process.stderr.write(`${error instanceof Error ? error.message : "Textbutler installation failed."}\n`); process.exitCode = 1; }
 }
