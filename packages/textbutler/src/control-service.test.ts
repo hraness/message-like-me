@@ -176,6 +176,25 @@ describe("persistent owner control service", () => {
     expect(await service.request({ ...request, expectedRevision: 2 })).toMatchObject({ ok: true, revision: 3, ownerRevision: 2 });
     expect(notifications).toEqual(["synthetic-a", "synthetic-a"]);
   });
+  test("habitats show exposes claimed unknown work, live cancellation and receipt identities without new writes", async () => {
+    const { service } = await setup(), journal = service.runJournal(), habitat = new ContactHabitat(journal, "synthetic-a");
+    habitat.record({ runId: "operation-run", at: 1, intent: "Synthetic evaluation", trigger: { id: "trigger", at: 0, author: "contact", kind: "message", text: "private source", relatedMessageId: null },
+      context: [], messageIds: ["sent"], text: "private answer", planDigest: null });
+    const checkpoint = habitat.claim(1)!, retained = journal.habitatState("synthetic-a");
+    const read = async () => {
+      const response = await service.request({ protocol, command: "habitat.read", contactId: "synthetic-a" });
+      if (!response.ok || response.kind !== "habitat") throw Error("Expected habitat view");
+      expect(response.content).not.toContain("private source"); expect(response.content).not.toContain("private answer");
+      return JSON.parse(response.content).operations.find((operation: { id: string }) => operation.id === checkpoint.key);
+    };
+    expect(await read()).toMatchObject({ state: "uncertain", cancellation: "unknown", repeatable: false });
+    const receipt = `sha256:${"a".repeat(64)}`;
+    const remove = service.observeHabitatOperations(contactId => contactId === "synthetic-a" ? { key: checkpoint.key, cancellation: "requested", receipts: [receipt] } : undefined);
+    expect(await read()).toMatchObject({ state: "running", cancellation: "requested", receipts: [receipt], repeatable: false });
+    remove();
+    expect(await read()).toMatchObject({ state: "uncertain", cancellation: "unknown", repeatable: false });
+    expect(journal.habitatState("synthetic-a")).toEqual(retained); expect(habitat.claim(1)).toBeNull();
+  });
   test("habitat inspection includes bounded tool evidence without reply bodies and reports omitted entries", async () => {
     const { service } = await setup(), journal = service.runJournal(), habitat = new ContactHabitat(journal, "synthetic-a");
     const plan = { ...DEFAULT_HABITAT_PLAN, guidance: "g".repeat(4096) }, baseline = habitat.snapshot();

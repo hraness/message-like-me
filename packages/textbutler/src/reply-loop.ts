@@ -20,7 +20,7 @@ import { createRepoShelf, type RepoShelf } from "./contact-repos.ts";
 import { parseRepoUrl } from "./config.ts";
 import type { JsonValue } from "@hraness/algal";
 
-type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { setReplyAgent?: (agent: ButlerAgent) => void };
+type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { setReplyAgent?: (agent: ButlerAgent) => void; observeHabitatOperations?: TextbutlerControlService["observeHabitatOperations"] };
 type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
 const RECONCILE_DETAIL = "A previous send needs reconciliation. Check Messages, then run `textbutler replies reconcile`.";
 const SYNC_FAILURE_THRESHOLD = 3;
@@ -134,6 +134,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       createHabitatEvolutionExecutor({ contact: { ...contact, provider: "claude", accountId: "native-claude-code" }, providers: service.providers!, model: options.habitat!.config.evolutionModel!, runId, now }) }),
   }) : undefined;
   if (habitat) service.setReplyAgent?.(habitat.agent);
+  const unsubscribeOperations = habitat ? service.observeHabitatOperations?.(id => habitat.operation(id)) : undefined;
   const agent = options.agent ?? habitat?.agent ?? (service.providers ? createRoutedButlerAgent({ router: service.providers.router,
     selection: (contact, purpose) => service.providers!.selection(contact, purpose),
     runManagedTask: (request, broker) => service.providers!.runManagedTask(request, broker),
@@ -365,6 +366,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     // only covers whatever the bounded grace cannot wait out.
     await Promise.race([Promise.allSettled([...work]), new Promise(resolve => setTimeout(resolve, 10_000))]);
     for (const state of contacts.values()) state.runtime.pause();
-    await Promise.allSettled([...work]); await habitat?.close();
+    await Promise.allSettled([...work]);
+    try { await habitat?.close(); } finally { unsubscribeOperations?.(); }
   } };
 }

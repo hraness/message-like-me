@@ -50,3 +50,51 @@ test("structured personality remains style data and is bound into the replayable
   const stored = JSON.parse(JSON.stringify(result));
   expect((await verifyReceipt(stored.receipt, stored.manifest, new MemoryStore(), new Map())).ok).toBe(true);
 });
+
+for (const phase of ["respond", "reflect", "judge"] as const) test(`${phase} binds its task inputs, object output and effective host budgets`, async () => {
+  let calls = 0;
+  const context = { synthetic: phase };
+  const result = await executeHabitatProgram({ phase, context, plan: DEFAULT_HABITAT_PLAN, signal: new AbortController().signal,
+    executor: { id: `synthetic-${phase}`, cacheable: true, retryable: true, async execute(request) {
+      calls++;
+      expect(request.kind).toBe("agent");
+      expect(request.context.inputs).toEqual({ context: { evidence: context, preferences: DEFAULT_HABITAT_PLAN } });
+      expect(request.output).toEqual({ kind: "json", schema: { type: "object" } });
+      expect(request.budget).toEqual({ maxContextBytes: phase === "respond" ? 40_960 : 106_496, maxOutputBytes: 16_384 });
+      return { phase };
+    } } });
+  expect(result.manifest.interface).toMatchObject({ inputs: { context: { cell: "input", port: "context" } }, outputs: { result: { cell: "task", port: "out" } } });
+  expect(result.manifest.budgets).toMatchObject({ maxSteps: 4, maxAgentCalls: 1, maxWork: 200_000, maxOutputBytes: 65_536, maxDepth: 4 });
+  const cell = result.manifest.cells.find(cell => cell.id === "task");
+  if (cell?.kind !== "agent") throw Error("Expected task agent");
+  expect(cell.budget?.maxEffectMs).toBe(phase === "respond" ? 25_000 : 120_000);
+  expect(result.output).toEqual({ phase });
+  expect((await verifyReceipt(result.receipt as unknown as JsonValue, manifestToJson(result.manifest), new MemoryStore(), new Map())).ok).toBe(true);
+  expect(calls).toBe(1);
+});
+
+test("task cancellation joins provider cleanup before rejecting and never repeats an unknown result", async () => {
+  let entered!: () => void, release!: () => void, calls = 0;
+  const started = new Promise<void>(resolve => { entered = resolve; }), released = new Promise<void>(resolve => { release = resolve; });
+  const controller = new AbortController();
+  let settled = false;
+  const pending = executeHabitatProgram({ phase: "reflect", plan: DEFAULT_HABITAT_PLAN, context: {}, signal: controller.signal,
+    executor: { id: "synthetic-unknown", retryable: true, async execute(_request, signal) {
+      calls++; entered(); await released; expect(signal?.aborted).toBe(true); throw Error("Unknown provider completion");
+    } } }).then(() => { settled = true; }, () => { settled = true; });
+  await started; controller.abort();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  expect(settled).toBe(false); release(); await pending;
+  expect(settled).toBe(true); expect(calls).toBe(1);
+});
+
+test("task object outputs remain enforced and provider failures are not retried", async () => {
+  for (const mode of ["invalid-object", "unknown-completion"] as const) {
+    let calls = 0;
+    await expect(executeHabitatProgram({ phase: "judge", plan: DEFAULT_HABITAT_PLAN, context: {}, signal: new AbortController().signal,
+      executor: { id: `synthetic-${mode}`, retryable: true, async execute() {
+        calls++; if (mode === "unknown-completion") throw Error("Provider completion is unknown"); return "not an object";
+      } } })).rejects.toThrow("Habitat inference did not complete");
+    expect(calls).toBe(1);
+  }
+});
