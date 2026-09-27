@@ -173,7 +173,7 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 @media (max-width: 760px) {
   .textbutler-marketing .hraness-marketing-hero { gap: 2rem; }
   .textbutler-marketing .hraness-marketing-hero__summary { font-size: 1.0625rem; }
-  .textbutler-marketing .hraness-marketing-action { min-block-size: 2.75rem; }
+  .textbutler-marketing .hraness-marketing-page .hraness-marketing-action { min-block-size: 2.75rem; }
   .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 8rem; }
 }
 @media (max-width: 24rem) {
