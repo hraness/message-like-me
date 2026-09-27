@@ -39,6 +39,7 @@ body {
   flex-direction: column;
   min-height: 100dvh;
 }
+body > * { min-inline-size: 0; }
 body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 .skip-link {
   background: var(--inverse);
