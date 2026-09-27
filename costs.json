@@ -6,6 +6,11 @@
       "budget": { "contacts": 128, "bytesPerContact": 524288, "episodesPerContact": 16, "followupsPerEpisode": 5, "toolsPerEpisode": 2, "toolQueryBytes": 256, "toolResultBytes": 4096, "actionKindsPerEpisode": 8, "memoryEntriesPerContact": 64, "memoryTextBytes": 1024, "memoryBytesPerContact": 98304, "memoryEntriesPerEpisode": 8, "priorMemoryEntriesPerEpisode": 24, "lineageEntries": 16, "evaluationsPerDayPerContact": 8 },
       "note": "private journal state; contact-scoped personalities, source-backed remembered observations and owner tool configuration, bounded observation and tool-result evidence, at-most-once checkpoint claims and conditional host-owned promotion"
     },
+    "local:contact-habitat-operations": {
+      "kind": "derived", "retention": "ephemeral", "source": "existing contact habitat state and the active evaluation runner", "owner": "packages/textbutler/src/contact-habitat.ts",
+      "budget": { "rowsPerContact": 80, "receiptsPerRow": 8, "responseBytes": 262144 },
+      "note": "read-only checkpoint status in habitats show; missing liveness and cancellation remain unknown; no new durable state or retry authority"
+    },
     "local:contact-memory-search": {
       "kind": "derived", "retention": "ephemeral", "source": "one contact's retained memory archive", "owner": "packages/textbutler/src/memory-search.ts",
       "budget": { "archiveEntriesRead": 64, "queryBytes": 256, "queryTerms": 16, "returnedEntries": 8, "excerptBytes": 256, "resultBytes": 4096 },

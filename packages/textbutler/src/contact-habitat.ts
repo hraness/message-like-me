@@ -97,6 +97,35 @@ function updateMemory(checkpoint: HabitatCheckpoint, update: NonNullable<Habitat
 const due = (episode: HabitatEpisode, now: number) => !episode.initialClaimed || !episode.followupClaimed && (episode.followups.length >= HABITAT_LIMITS.followups
   || now >= episode.reply.at + HABITAT_LIMITS.windowMs || episode.followups.length >= 3 && now >= episode.followups.at(-1)!.at + HABITAT_LIMITS.quietMs);
 
+/** Ephemeral liveness supplied by the one existing evaluation runner. Absence
+ * proves neither cancellation nor provider completion. It grants no retry. */
+export type HabitatLiveOperation = Readonly<{ key: string; cancellation: "unknown" | "requested"; receipts: readonly string[] }>;
+export type HabitatOperation = {
+  id: string; checkpointKey: string | null; runId: string | null; phase: "initial" | "followup"; at: number;
+  state: "queued" | "waiting" | "running" | "uncertain" | "retained" | "promoted";
+  reason: string; receipts: string[]; cancellation: "requested" | "unknown"; repeatable: false;
+};
+/** Pure view of already-retained state. An unclaimed episode is a future
+ * checkpoint, not an admitted operation. Pending claims are never requeued. */
+export function inspectHabitatOperations(state: HabitatState, now: number, live?: HabitatLiveOperation): HabitatOperation[] {
+  if (!Number.isSafeInteger(now) || now < 0) throw Error("Invalid habitat clock");
+  const budgetAvailable = state.evaluations.filter(value => value.at >= Math.floor(now / 86_400_000) * 86_400_000).length < HABITAT_LIMITS.evaluationsPerDay;
+  const queued = state.episodes.filter(episode => !episode.initialClaimed || !episode.followupClaimed).map((episode): HabitatOperation => {
+    const phase = episode.initialClaimed ? "followup" : "initial", ready = due(episode, now);
+    return { id: `unclaimed:${episode.reply.runId}:${phase}`, checkpointKey: null, runId: episode.reply.runId, phase, at: episode.reply.at,
+      state: ready && budgetAvailable ? "queued" : "waiting", reason: !ready ? "Waiting for follow-up evidence or the observation window."
+        : !budgetAvailable ? "The daily evaluation limit is reached." : "Eligible for the existing evaluator when its host is available.",
+      receipts: [], cancellation: "unknown", repeatable: false };
+  });
+  return [...queued, ...state.evaluations.map((evaluation): HabitatOperation => {
+    const active = evaluation.status === "pending" && live?.key === evaluation.key;
+    return { id: evaluation.key, checkpointKey: evaluation.key, runId: null, phase: evaluation.phase, at: evaluation.at,
+      state: evaluation.status === "pending" ? active ? "running" : "uncertain" : evaluation.status,
+      reason: evaluation.reason, receipts: active ? [...new Set([...evaluation.receipts, ...live.receipts])].slice(0, 8) : [...evaluation.receipts],
+      cancellation: active ? live.cancellation : "unknown", repeatable: false };
+  })];
+}
+
 export class ContactHabitat {
   constructor(private readonly journal: Pick<RunJournal, "habitatState" | "writeHabitatState">, readonly contactId: string) {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(contactId)) throw Error("Invalid habitat contact");

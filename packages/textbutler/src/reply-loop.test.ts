@@ -26,7 +26,8 @@ async function fixture(fast = false) {
   const binding = automationBinding(enrolled()), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
   const intentRuns = new Map<string, unknown>();
-  let failEvents = 0, eventsCalls = 0;
+  let failEvents = 0, eventsCalls = 0, pollSetCalls = 0, statusCalls = 0;
+  const armed: { fire: () => void; delayMs: number; live: boolean }[] = [];
   let beforeSubmit: (() => Promise<void>) | undefined;
   const allowed: [string, string][] = [], notices: string[] = [], synced: [string, string][] = [];
   const shelf = { sync: async (contactId: string, url: string) => { synced.push([contactId, url]); return { name: "bio", url, commit: "c".repeat(40), syncedAt: time }; },
@@ -34,6 +35,8 @@ async function fixture(fast = false) {
     list: async () => [] as const };
   const client = createGhostgetAutomationClient(async (method, params) => {
     if (method === "poll") return enrolled();
+    if (method === "pollSet") pollSetCalls++;
+    if (method === "status") statusCalls++;
     if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: null })) };
     if (method === "history") return { enrollment: enrolled(), messages: messages.slice(-Number(params.limit)) };
     if (method === "events") { eventsCalls++; if (failEvents > 0) { failEvents--; throw new Error("Synthetic events stream failure"); }
@@ -53,6 +56,7 @@ async function fixture(fast = false) {
     return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ value: { respond: true, confidence: 0.99, reason: "requested", summary: "Explain briefly", actions: [{ kind: "text", text: "Synthetic answer" }], tool: null } }) } }] });
   } });
   const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: value => { statuses.push({ state: value.state, detail: value.detail }); }, repos: shelf,
+    scheduleDispatch: (fire, delayMs) => { const entry = { fire, delayMs, live: true }; armed.push(entry); return () => { entry.live = false; }; },
     ...(fast ? { habitat: { config: { enabled: true, driver: driver.config, evolutionModel: null, debounceMs: 1000 }, driver } }
       : { agent: { qualified: (contact: Parameters<ButlerAgent["qualified"]>[0]) => agent.qualified(contact), classify: (request: Parameters<ButlerAgent["classify"]>[0]) => agent.classify(request), compose: (request: Parameters<ButlerAgent["compose"]>[0]) => agent.compose(request) } }), service: {
     dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": binding }, grants: {} }), runJournal: () => journal,
@@ -70,6 +74,8 @@ async function fixture(fast = false) {
     habitatChanged(id: string) { for (const listener of habitatListeners) listener(id); }, habitatListenerCount: () => habitatListeners.size,
     beforeSubmit(callback: () => Promise<void>) { beforeSubmit = callback; },
     failNextEvents(count: number) { failEvents = count; }, eventsCalls: () => eventsCalls,
+    pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
+    fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
@@ -81,6 +87,37 @@ test("reply loop establishes a silent startup boundary then debounces a disclose
   f.advance(9000); await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toHaveLength(1); expect(f.sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }, { kind: "reaction", messageId: "message:2", emoji: "👍", remove: false }]);
   expect(f.journal.recent("contact-1")[0]?.state).toBe("submitted");
+});
+test("an elapsed debounce starts the run without waiting for another provider poll", async () => {
+  const f = await fixture(); await f.loop.tick();
+  f.add("butler help with this"); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0);
+  const debounceMs = f.settings().contacts[0]!.debounceMs;
+  expect(f.armed().map(entry => entry.delayMs)).toEqual([debounceMs]);
+  const polls = f.pollSetCalls(), drains = f.eventsCalls();
+  f.advance(debounceMs); expect(f.fireArmed()).toBe(1); await f.loop.idle();
+  expect(f.sent).toHaveLength(1); expect(f.acks).toHaveLength(1);
+  expect(f.pollSetCalls()).toBe(polls); expect(f.eventsCalls()).toBe(drains);
+  // The run spends one provider status read before claiming.
+  expect(f.statusCalls()).toBe(1);
+  // The following poll tick finds nothing left to start.
+  await f.loop.tick(); await f.loop.idle(); expect(f.sent).toHaveLength(1);
+});
+test("the debounce dispatch never starts a paused, fenced or not-yet-due contact", async () => {
+  const f = await fixture(); await f.loop.tick();
+  const debounceMs = f.settings().contacts[0]!.debounceMs;
+  // A newer message moves the window: an early fire re-arms instead of starting.
+  f.add("butler first"); await f.loop.tick(); f.advance(debounceMs - 1000); f.add("butler second"); await f.loop.tick();
+  f.advance(1000); expect(f.fireArmed()).toBe(1); await f.loop.idle(); expect(f.sent).toHaveLength(0);
+  expect(f.armed()).toHaveLength(1);
+  // Pause wins over an armed dispatch.
+  f.change({ ...f.settings(), paused: true }); f.advance(debounceMs); f.fireArmed(); await f.loop.idle(); expect(f.sent).toHaveLength(0);
+  // Resuming re-establishes the silent boundary before new requests arm.
+  f.change({ ...f.settings(), paused: false }); await f.loop.tick();
+  // An unreconciled send stays with the poll tick, which alone reconciles.
+  f.add("butler third"); await f.loop.tick(); expect(f.armed()).toHaveLength(1);
+  f.journal.claim("fenced-run", "contact-1", "event:fenced", Date.parse("2026-09-11T12:00:00.000Z")); f.journal.transition("fenced-run", "running", "indeterminate", "synthetic", Date.parse("2026-09-11T12:00:00.000Z"));
+  f.advance(debounceMs); f.fireArmed(); await f.loop.idle(); expect(f.sent).toHaveLength(0);
 });
 test("backfill and an active owner conversation never reach the response agent", async () => {
   const f = await fixture(); await f.loop.tick();
@@ -257,6 +294,73 @@ test("one batched pollSet covers the set and a failed entry only fails its conta
   // The run's intake refresh reuses the set-poll enrollment; a contact's own
   // provider poll never leaves the serialized lane even while a run claims.
   expect(singlePolls).toBe(0);
+  expect(sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }]);
+});
+
+test("a sibling enrollment's poll flap replays history without cancelling an in-flight run", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "butler-loop-"))), journal = RunJournal.memory();
+  let time = Date.parse("2026-09-11T12:00:00.000Z"), revision = 0;
+  const settings: Settings = { schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [
+    { ...newContact("contact-1", "Flapping", "enrollment:a"), enabled: true },
+    { ...newContact("contact-2", "Healthy", "enrollment:b"), enabled: true },
+  ] };
+  const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
+  const conversation = (id: number) => ({ coordinate: { provider: "imessage" as const, chatGuid: `iMessage;-;c${id}@example.test`, service: "iMessage" as const, observedChatRowId: id }, title: `C${id}`, kind: "single" as const, participants: [`c${id}@example.test`] });
+  const enrolled = (id: string, conv: ReturnType<typeof conversation>) => ({ id, identity, conversation: conv, bindingDigest: automationBindingDigest(identity, conv), revision, ready: true, reason: null });
+  const enrollmentA = enrolled("enrollment:a", conversation(1)), enrollmentB = enrolled("enrollment:b", conversation(2));
+  const bindingA = automationBinding(enrollmentA), bindingB = automationBinding(enrollmentB);
+  const events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
+  const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>();
+  let failA = false;
+  let releaseCompose: () => void = () => {};
+  const composeGate = new Promise<void>(resolve => { releaseCompose = resolve; });
+  const client = createGhostgetAutomationClient(async (method, params) => {
+    const forEnrollment = String(params.enrollmentId ?? "");
+    if (method === "pollSet") {
+      const ids = (params.enrollmentIds as string[]).map(String);
+      return { results: ids.map(id => failA && id === "enrollment:a"
+        ? { enrollmentId: id, enrollment: null, error: "unavailable" }
+        : { enrollmentId: id, enrollment: { ...(id === "enrollment:a" ? enrollmentA : enrollmentB), revision }, error: null }) };
+    }
+    if (method === "poll") return { ...(forEnrollment === "enrollment:a" ? enrollmentA : enrollmentB), revision };
+    if (method === "history") { const enrollment = forEnrollment === "enrollment:a" ? enrollmentA : enrollmentB; return { enrollment: { ...enrollment, revision }, messages: messages.filter(message => automationHash(message.coordinate) === automationHash(enrollment.conversation.coordinate)).slice(-Number(params.limit)) }; }
+    if (method === "events") return { events: events.slice(Number(params.cursor ?? 0)), nextCursor: String(events.length), caughtUp: true };
+    if (method === "status") return { identity, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) };
+    if (method === "prepare") { const body = { ...params, bindingDigest: bindingB.bindingDigest, expiresAt: new Date(time + 120000).toISOString() }, digest = automationHash(body), plan = { ...body, digest, id: `plan:${digest}` } as AutomationPlan; plans.set(plan.id, plan); return plan; }
+    if (method === "submit") { const plan = plans.get(String(params.planId))!; (plan.intentId.endsWith(":ack") ? mutableAcks : mutableSent).push([...plan.actions]); return { id: `run:${sent.length + acks.length}`, planId: plan.id, intentId: plan.intentId, enrollmentId: plan.enrollmentId ?? bindingB.enrollmentId, state: "accepted", accepted: plan.actions.map((_action, index) => ({ messageId: `sent:${sent.length + acks.length}:${index}`, providerReceiptId: null })), totalActions: plan.actions.length, reason: null, retryable: false }; }
+    throw new Error(`Unexpected fixture operation ${method}`);
+  }, () => time);
+  let composes = 0, classifies = 0;
+  const statuses: string[] = [];
+  const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: v => statuses.push(v.state),
+    agent: { async qualified() { return true; }, async classify() { classifies++; return { respond: true, confidence: 0.99, reason: "requested" }; },
+      async compose() { composes++; await composeGate; return { summary: "Here is help", actions: [{ kind: "text" as const, text: "Hello" }] }; } },
+    service: {
+      dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": bindingA, "contact-2": bindingB }, grants: {} }), runJournal: () => journal,
+      delegatedGrant: async contact => settings.contacts.some(current => current.enabled && current.id === contact.id && current.revision === contact.revision) ? "grant:fixture" : null,
+      onSettingsChanged() { return () => {}; },
+      onHabitatChanged() { return () => {}; },
+      notePending() {},
+      async allowContactRepo() { return "added" as const; },
+      async notifySelfChat() {},
+    } });
+  cleanup.push(async () => { releaseCompose(); await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); });
+  await loop.tick();
+  // contact-2's inbound claims a run whose compose is still in flight.
+  revision++; const inbound: AutomationMessage = { id: "message:1", coordinate: enrollmentB.conversation.coordinate, direction: "incoming", occurredAt: new Date(time).toISOString(), text: "butler ping", kind: "message", relatedMessageId: null, attachments: [] };
+  messages.push(inbound); events.push({ sequence: revision, enrollmentId: enrollmentB.id, revision, message: inbound });
+  await loop.tick(); time += 9000; await loop.tick();
+  // Intake refresh does real workspace I/O before the claim; wait for the run
+  // to reach the compose gate deterministically.
+  for (let i = 0; i < 100 && composes === 0; i++) await new Promise(resolve => setTimeout(resolve, 0));
+  expect(composes).toBe(1);
+  // A sibling poll failure drops enrollment:a from the drain; the membership
+  // flip resets the shared cursor and replays every event. The replayed inbound
+  // must not read as fresh owner activity and cancel the run.
+  failA = true; await loop.tick();
+  failA = false; await loop.tick();
+  releaseCompose(); await loop.idle();
+  expect(sent).toHaveLength(1);
   expect(sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }]);
 });
 

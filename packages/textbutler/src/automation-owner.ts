@@ -24,7 +24,9 @@ export interface OwnerAutomationPort {
    * quota and expiry) for a single explicit owner-initiated send. */
   grantScoped(binding: AutomationBinding, request: AutomationGrantRequest, intentId: string, signal: AbortSignal): Promise<AutomationGrant>;
   grantByIntent(intentId: string, signal: AbortSignal): Promise<AutomationGrant | null>;
-  grantStatus(binding: AutomationBinding, grantId: string, signal: AbortSignal): Promise<AutomationGrant>;
+  /** `maxStatusAgeMs` lets the automatic reply gate reuse a recent provider
+   * status read; owner-initiated checks omit it and always read fresh. */
+  grantStatus(binding: AutomationBinding, grantId: string, signal: AbortSignal, maxStatusAgeMs?: number): Promise<AutomationGrant>;
   revoke(id: string, signal?: AbortSignal): Promise<void>;
 }
 export function parseAutomationBinding(value: unknown): AutomationBinding {
@@ -150,11 +152,11 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
         actions, expiresAt: new Date(expiresAt).toISOString(), maximumActions: request.maximumActions, minimumIntervalMs: request.minimumIntervalMs }, intentId, signal));
     },
     grantByIntent: (intentId, signal) => client.grantByIntent(intentId, signal),
-    async grantStatus(binding, grantId, signal) {
+    async grantStatus(binding, grantId, signal, maxStatusAgeMs = 0) {
       const expected = parseAutomationBinding(binding);
       const grant = await client.grantStatus(grantId, signal);
       if (grant.enrollmentId !== expected.enrollmentId || grant.expectedBindingDigest !== expected.bindingDigest) throw new Error("Messaging grant changed recipient");
-      const status = await client.status(expected.identity.provider, signal); signal.throwIfAborted();
+      const status = await client.status(expected.identity.provider, signal, maxStatusAgeMs); signal.throwIfAborted();
       if (automationHash(status.identity) !== automationHash(expected.identity) || !status.connected || !status.events.available) throw new Error("Messaging grant changed provider identity or became unavailable");
       remember(status); return grant;
     },

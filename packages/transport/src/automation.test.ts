@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationCoordinate, parseAutomationEnrollment, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
+import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationCoordinate, parseAutomationEnrollment, STATUS_REUSE_MS, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
 import { parseActionIntent } from "./validation";
 
 const now = Date.parse("2026-09-11T00:00:00.000Z");
@@ -10,7 +10,7 @@ export function automationFixture() {
   const enrollment: AutomationEnrollment = { id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision: 1, ready: true, reason: null };
   const calls: { method: string; params: Readonly<Record<string, unknown>> }[] = [];
   const plans = new Map<string, AutomationPlan>();
-  let altered = false, lost = false, blocked = false, cancelled = false, release: (() => void) | undefined, refusal: "none" | "no-run" | "accepted-run" | "failed-run" | "active-run" | "blind" = "none", planTtlMs = 120000;
+  let altered = false, lost = false, blocked = false, cancelled = false, release: (() => void) | undefined, refusal: "none" | "no-run" | "accepted-run" | "failed-run" | "active-run" | "blind" = "none", planTtlMs = 120000, submitsBeforeSuccess = 0;
   const fixtureRun = (intentId: string, state: string, accepted: { messageId: string | null; providerReceiptId: string | null }[]) =>
     ({ id: "run:fixture", planId: "plan:fixture", intentId, enrollmentId: enrollment.id, state, accepted, totalActions: 1, reason: state === "accepted" ? null : "Synthetic provider outcome", retryable: false });
   const invoke: GhostgetAutomationInvoker = async (method, params) => {
@@ -34,6 +34,7 @@ export function automationFixture() {
       return { run: null };
     }
     if (method === "submit") {
+      if (submitsBeforeSuccess > 0) { submitsBeforeSuccess -= 1; throw new AutomationOperationError("remote-unavailable"); }
       if (refusal !== "none") throw new AutomationOperationError("remote-unavailable");
       if (lost) throw new Error("Synthetic missing response");
       if (blocked) await new Promise<void>(resolve => { release = resolve; });
@@ -44,7 +45,7 @@ export function automationFixture() {
   };
   const client = createGhostgetAutomationClient(invoke, () => now), bytes = Buffer.from("Synthetic attachment");
   const transport = createGhostgetAutomationTransport({ client, enrollmentId: enrollment.id, now: () => now, admitAsset: async path => { if (path !== "outbox/fixture.txt") throw new Error("Foreign file"); return { bytes, sha256: createHash("sha256").update(bytes).digest("hex") }; } });
-  return { client, transport, enrollment, calls, state: { altered(value: boolean) { altered = value; }, lost(value: boolean) { lost = value; }, blocked(value: boolean) { blocked = value; }, refuse(value: typeof refusal) { refusal = value; }, planTtl(value: number) { planTtlMs = value; } } };
+  return { client, transport, enrollment, calls, state: { altered(value: boolean) { altered = value; }, lost(value: boolean) { lost = value; }, blocked(value: boolean) { blocked = value; }, refuse(value: typeof refusal) { refusal = value; }, planTtl(value: number) { planTtlMs = value; }, flakySubmits(count: number) { submitsBeforeSuccess = count; } } };
 }
 test("automation binds a disclosed rich turn and its attachment bytes to one enrollment", async () => {
   const f = automationFixture();
@@ -91,6 +92,18 @@ test("a terminal provider row on the refused intent returns its recorded outcome
   const second = await f.transport.prepare({ conversationId: f.enrollment.id, contextId: automationContextId(f.enrollment), intentId: "intent:other", actions: [{ kind: "text", text: "Synthetic" }] }); if (!second.ok) throw new Error("Fixture plan failed");
   expect(await f.transport.submit(second.value, { mode: "delegated", grantId: "grant:fixture" }))
     .toMatchObject({ ok: true, value: { state: "failed" } });
+});
+test("a refusal the intent ledger proves unsent rebinds on the live revision and dispatches once", async () => {
+  const f = automationFixture(); const plan = await f.transport.prepare({ conversationId: f.enrollment.id, contextId: automationContextId(f.enrollment), intentId: "intent:fixture", actions: [{ kind: "text", text: "Synthetic" }] }); if (!plan.ok) throw new Error("Fixture plan failed");
+  f.state.flakySubmits(1);
+  // First dispatch dies before its run insert commits: the ledger read finds
+  // no row, so one rebind-and-resubmit on the same intent is safe. The stored
+  // intent still arbitrates a first attempt that committed late.
+  expect(await f.transport.submit(plan.value, { mode: "delegated", grantId: "grant:fixture" }))
+    .toMatchObject({ ok: true, value: { state: "submitted", submittedCount: 1 } });
+  const submits = f.calls.filter(call => call.method === "submit");
+  expect(submits).toHaveLength(2);
+  expect(f.calls.filter(call => call.method === "run.by-intent")).toHaveLength(1);
 });
 test("an unresolved provider row or a blind arbiter keeps the refusal indeterminate", async () => {
   for (const mode of ["active-run", "blind"] as const) {
@@ -225,6 +238,40 @@ test("a set-poll answers exactly the requested enrollments and nothing else", as
     const client = createGhostgetAutomationClient(async () => ({ results }));
     await expect(client.pollSet(["enrollment:a", "enrollment:b"])).rejects.toThrow();
   }
+});
+
+test("provider status reuse is opt-in, shared in flight, bounded, and never keeps a failure", async () => {
+  const f = automationFixture();
+  const ok = (accountSubject: string) => ({ identity: { ...f.enrollment.identity, accountSubject }, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) });
+  let clock = now, calls = 0, fail = false, subject = "whatsapp:pn:15550000000", release: (() => void) | undefined;
+  const client = createGhostgetAutomationClient(async method => {
+    if (method !== "status") throw new Error("Unexpected synthetic operation");
+    calls++;
+    await new Promise<void>(resolve => { release = resolve; });
+    if (fail) throw new AutomationOperationError("remote-unavailable");
+    return ok(subject);
+  }, () => clock);
+  const settle = async <T>(value: Promise<T>) => { await Promise.resolve(); release!(); return await value; };
+  // Two automatic gates asking together share one native session.
+  const first = client.status("whatsapp", undefined, STATUS_REUSE_MS), second = client.status("whatsapp", undefined, STATUS_REUSE_MS);
+  await settle(first); await second; expect(calls).toBe(1);
+  // A gate inside the reuse window spends no session; one after it does.
+  clock += STATUS_REUSE_MS - 1; await client.status("whatsapp", undefined, STATUS_REUSE_MS); expect(calls).toBe(1);
+  clock += 1; await settle(client.status("whatsapp", undefined, STATUS_REUSE_MS)); expect(calls).toBe(2);
+  // Callers without an age bound (owner checks) always read fresh and see a changed account.
+  subject = "whatsapp:pn:15559999999";
+  expect((await settle(client.status("whatsapp"))).identity.accountSubject).toBe(subject); expect(calls).toBe(3);
+  // A requested bound tighter than the cap is honored.
+  clock += 1000; await settle(client.status("whatsapp", undefined, 500)); expect(calls).toBe(4);
+  // A failed read is never served to a later gate.
+  clock += STATUS_REUSE_MS; fail = true;
+  await expect(settle(client.status("whatsapp", undefined, STATUS_REUSE_MS))).rejects.toThrow(); await Promise.resolve();
+  fail = false; await settle(client.status("whatsapp", undefined, STATUS_REUSE_MS)); expect(calls).toBe(6);
+  // One gate's cancellation does not cancel the shared read for the others.
+  clock += STATUS_REUSE_MS; const controller = new AbortController();
+  const abandoned = client.status("whatsapp", controller.signal, STATUS_REUSE_MS), kept = client.status("whatsapp", undefined, STATUS_REUSE_MS);
+  controller.abort(new Error("caller cancelled")); await expect(abandoned).rejects.toThrow("caller cancelled");
+  await settle(kept); expect(calls).toBe(7);
 });
 
 test("only complete allowlisted native markers survive remote unavailable classification", () => {

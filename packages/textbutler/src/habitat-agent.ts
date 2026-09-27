@@ -6,7 +6,7 @@ import type { AgentRequest, ButlerAgent, SubmittedReply } from "./runtime.ts";
 import { NoReplyNeeded } from "./runtime.ts";
 import type { ContactSettings } from "./config.ts";
 import type { RunJournal } from "./journal.ts";
-import { ContactHabitat, HABITAT_LIMITS, boundHabitatObservation, habitatDigest, parseHabitatPlan, parseHabitatAssessment, type HabitatObservation, type HabitatPlan, type HabitatReply, type HabitatMemory } from "./contact-habitat.ts";
+import { ContactHabitat, HABITAT_LIMITS, boundHabitatObservation, habitatDigest, parseHabitatPlan, parseHabitatAssessment, type HabitatObservation, type HabitatPlan, type HabitatReply, type HabitatMemory, type HabitatLiveOperation } from "./contact-habitat.ts";
 import { executeHabitatProgram } from "./habitat-program.ts";
 import type { ContactWorkspace } from "./workspace.ts";
 import type { FastDriver } from "./fast-driver.ts";
@@ -119,6 +119,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     return scope;
   }
   let evolving: Promise<void> | undefined, evolutionController: AbortController | undefined, evolutionContact: ContactSettings | undefined;
+  let activeCheckpoint: { contactId: string; key: string; signal: AbortSignal; receipts: string[] } | undefined;
   const backoff = new Map<string, { attempts: number; after: number; firstAt: number }>();
   const evalChecked = new Map<string, number>();
   function releaseContactScope(contactId: string): void {
@@ -267,6 +268,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     assertCurrent();
     const habitat = new ContactHabitat(ports.journal, contact.id), checkpoint = habitat.claim(now()); if (!checkpoint) return;
     const receipts: string[] = [];
+    activeCheckpoint = { contactId: contact.id, key: checkpoint.key, signal, receipts };
     try {
       const { memory: previousMemory, ...observed } = checkpoint.episode.reply;
       const reflectionContext = fitMemory({ episode: { ...checkpoint.episode, reply: observed }, episodeMemoryOmitted: previousMemory?.length ?? 0,
@@ -337,6 +339,10 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       if (evolutionContact?.id === contactId) evolutionController?.abort();
       backoff.delete(contactId); evalChecked.delete(contactId);
     },
+    operation(contactId: string): HabitatLiveOperation | undefined {
+      if (activeCheckpoint?.contactId !== contactId) return undefined;
+      return { key: activeCheckpoint.key, cancellation: activeCheckpoint.signal.aborted ? "requested" : "unknown", receipts: [...activeCheckpoint.receipts] };
+    },
     observe(contactId: string, message: HabitatObservation) { if (!shutdown.signal.aborted) new ContactHabitat(ports.journal, contactId).observe(message, now()); },
     reconcile() { if (evolutionContact && !ports.active(evolutionContact)) evolutionController?.abort(); },
     settingsChanged() { backoff.clear(); },
@@ -354,7 +360,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         if (backoff.size >= 200 && !backoff.has(contact.id)) backoff.delete(backoff.keys().next().value!);
         const attempts = (failed?.attempts ?? 0) + 1;
         backoff.set(contact.id, { attempts, after: now() + 60_000 * 5 ** (attempts - 1), firstAt: failed?.firstAt ?? now() });
-      }).finally(() => { evolving = undefined; evolutionController = undefined; evolutionContact = undefined; releaseContactScope(contact.id); });
+      }).finally(() => { activeCheckpoint = undefined; evolving = undefined; evolutionController = undefined; evolutionContact = undefined; releaseContactScope(contact.id); });
     },
     async idle() { await evolving; },
     async close() { shutdown.abort(); await evolving; cached.clear(); runs.clear(); contacts.clear(); backoff.clear(); evalChecked.clear(); },

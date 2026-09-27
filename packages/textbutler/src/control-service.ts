@@ -12,13 +12,13 @@ import type { ProviderHost } from "./provider-host.ts";
 import type { AccountLeaseStore } from "@hraness/agentmixer";
 import { selectButlerModel } from "./routed-agent.ts";
 import { parseAutomationBinding, type AutomationBinding, type AutomationCandidate, type OwnerAutomationPort } from "./automation-owner.ts";
-import { automationBindingDigest, parseAutomationGrant, type AutomationGrant, type AutomationProvider, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
+import { automationBindingDigest, parseAutomationGrant, STATUS_REUSE_MS, type AutomationGrant, type AutomationProvider, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import { OwnerReplies, type PendingObservation } from "./owner-replies.ts";
 import { OwnerMessages } from "./owner-messages.ts";
 import { parseActionIntent } from "../../transport/src/index.ts";
 import { Hooks } from "./hooks.ts";
 import type { ButlerAgent } from "./runtime.ts";
-import { ContactHabitat, parseHabitatPlan } from "./contact-habitat.ts";
+import { ContactHabitat, inspectHabitatOperations, parseHabitatPlan, type HabitatLiveOperation } from "./contact-habitat.ts";
 import type { HabitatHostConfig } from "./host-config.ts";
 
 export const TEXTBUTLER_CONTROL_PROTOCOL = "textbutler.control.v1" as const;
@@ -241,6 +241,7 @@ export class TextbutlerControlService {
   private candidates = new Map<string, { conversation: ObservedConversation; expires: number }>();
   private automationCandidates = new Map<string, { candidate: AutomationCandidate; expires: number }>();
   private readonly settingsListeners = new Set<(settings: Settings) => void>();
+  private habitatOperation: ((contactId: string) => HabitatLiveOperation | undefined) | undefined;
   private readonly habitatListeners = new Set<(contactId: string) => void>();
   private readonly grantWork = new Map<string, Promise<unknown>>();
   private readonly grantFailures = new Set<string>();
@@ -290,6 +291,11 @@ export class TextbutlerControlService {
   private habitatConfig: HabitatHostConfig | undefined;
   setReplyAgent(agent: ButlerAgent): void { this.replies?.useAgent(agent); }
   setHabitatConfig(config: HabitatHostConfig): void { this.habitatConfig = config; }
+  /** Inspection callback only; the evaluation runner retains all ownership. */
+  observeHabitatOperations(observer: (contactId: string) => HabitatLiveOperation | undefined): () => void {
+    this.habitatOperation = observer;
+    return () => { if (this.habitatOperation === observer) this.habitatOperation = undefined; };
+  }
   setRuntimeStatus(status: { state: "running" | "paused" | "unavailable"; detail: string }): void {
     if (!["running", "paused", "unavailable"].includes(status.state) || typeof status.detail !== "string" || status.detail.length > 512) throw new Error("Invalid runtime diagnostic");
     this.runtimeStatus = { ...status };
@@ -310,7 +316,7 @@ export class TextbutlerControlService {
     if (this.closed || state.settings.paused || !selected?.enabled || selected.revision !== contact.revision || binding?.version !== 2) return null;
     if (prior) {
       try {
-        const live = await this.automation.grantStatus(binding, prior.id, AbortSignal.timeout(60_000));
+        const live = await this.automation.grantStatus(binding, prior.id, AbortSignal.timeout(60_000), STATUS_REUSE_MS);
         const current = (await this.current()).state;
         if (this.closed || this.grantRecovery || current.settings.paused || this.grantWork.has(contact.id) || this.grantChanging.has(contact.id)
           || current.grants[contact.id]?.id !== live.id || this.pendingGrant(contact.id)
@@ -642,17 +648,19 @@ export class TextbutlerControlService {
       const view = { enabled: config?.enabled ?? false, driver: config?.driver.kind ?? null, model: config?.driver.model ?? null,
         evolutionModel: config?.evolutionModel ?? null, dailyBudgetUsd: config?.driver.kind === "gateway" ? config.driver.dailyBudgetUsd : 0,
         plan: state.champion, memory: state.memory ?? [], memoryCutoff: state.memoryCutoff ?? null,
+        operations: inspectHabitatOperations(state, Date.now(), this.habitatOperation?.(request.contactId)),
         episodes: state.episodes.length, evaluations: [...state.evaluations], lineage: [...state.lineage],
         recentEpisodes: state.episodes.slice(-8).map(({ reply }) => ({ runId: reply.runId, at: reply.at, planDigest: reply.planDigest,
           actionKinds: reply.actionKinds ?? [], tools: reply.tools ?? [],
           memoryIds: (reply.memory ?? []).map(entry => entry.id), priorMemory: reply.priorMemory ?? [] })),
-        omitted: { evaluations: 0, lineage: 0, episodes: Math.max(0, state.episodes.length - 8) } };
+        omitted: { operations: 0, evaluations: 0, lineage: 0, episodes: Math.max(0, state.episodes.length - 8) } };
       let content = JSON.stringify(view);
       // Keep learned excerpts and recent tool evidence inspectable without
       // returning full conversations or overflowing the control response.
       while (Buffer.byteLength(content) > 262_144) {
         if (view.evaluations.length) { view.evaluations.shift(); view.omitted.evaluations++; }
         else if (view.lineage.length) { view.lineage.shift(); view.omitted.lineage++; }
+        else if (view.operations.length) { view.operations.shift(); view.omitted.operations++; }
         else if (view.recentEpisodes.length) { view.recentEpisodes.shift(); view.omitted.episodes++; }
         else fail("capacity", "The habitat plan exceeds the control response limit.");
         content = JSON.stringify(view);
