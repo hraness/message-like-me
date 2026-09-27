@@ -534,3 +534,27 @@ test("JavaScript tool evidence contains only a source digest while local memory 
     expect(habitat.snapshot().episodes).toHaveLength(1);
   } finally { journal.close(); }
 });
+
+test("operation inspection is read-only and never turns a claimed unknown outcome back into queued work", async () => {
+  const { inspectHabitatOperations } = await import("./contact-habitat.ts");
+  const journal = RunJournal.memory();
+  try {
+    const habitat = new ContactHabitat(journal, "contact-a");
+    expect(inspectHabitatOperations(habitat.snapshot(), at)).toEqual([]);
+    expect(journal.habitatState("contact-a")).toBeNull();
+    habitat.record(reply());
+    expect(inspectHabitatOperations(habitat.snapshot(), at)).toMatchObject([{ runId: "run-1", state: "queued", checkpointKey: null, repeatable: false }]);
+    const checkpoint = habitat.claim(at)!;
+    const before = journal.habitatState("contact-a");
+    const unknown = inspectHabitatOperations(new ContactHabitat(journal, "contact-a").snapshot(), at);
+    expect(unknown.find(operation => operation.id === checkpoint.key)).toMatchObject({ state: "uncertain", cancellation: "unknown", repeatable: false, receipts: [] });
+    expect(unknown.some(operation => operation.phase === "initial" && operation.state === "queued")).toBe(false);
+    expect(habitat.claim(at)).toBeNull();
+    expect(journal.habitatState("contact-a")).toEqual(before);
+    const receipt = `sha256:${"a".repeat(64)}`;
+    const live = inspectHabitatOperations(habitat.snapshot(), at, { key: checkpoint.key, cancellation: "requested", receipts: [receipt] });
+    expect(live.find(operation => operation.id === checkpoint.key)).toMatchObject({ state: "running", cancellation: "requested", receipts: [receipt], repeatable: false });
+    habitat.finish(checkpoint, { candidate: null, reason: "Provider outcome unknown; incumbent retained without retry.", evidenceIds: [], scores: [] }, [receipt]);
+    expect(inspectHabitatOperations(habitat.snapshot(), at).find(operation => operation.id === checkpoint.key)).toMatchObject({ state: "retained", receipts: [receipt], cancellation: "unknown", reason: "Provider outcome unknown; incumbent retained without retry." });
+  } finally { journal.close(); }
+});

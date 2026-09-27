@@ -370,9 +370,14 @@ test("contact invalidation cancels only its own in-flight evolution", async () =
   const state = new ContactHabitat(f.journal, f.request.contact.id);
   state.record({ runId: "recorded", at: f.now, intent: "Explain", trigger: { id: "trigger", at: f.now - 1000, author: "contact", kind: "message", text: "Synthetic request", relatedMessageId: null }, context: [], text: "Answer", messageIds: ["sent"], planDigest: null });
   f.habitat.schedule(f.request.contact); await entered.promise;
+  const operation = f.habitat.operation(f.request.contact.id);
+  expect(operation).toMatchObject({ key: expect.any(String), cancellation: "unknown", receipts: [] });
+  expect(f.habitat.operation("other-contact")).toBeUndefined();
   f.habitat.invalidateContact("other-contact"); expect(evolutionSignal?.aborted).toBe(false);
   f.habitat.invalidateContact(f.request.contact.id); expect(evolutionSignal?.aborted).toBe(true);
+  expect(f.habitat.operation(f.request.contact.id)).toMatchObject({ key: operation!.key, cancellation: "requested" });
   release.resolve(); await f.habitat.idle();
+  expect(f.habitat.operation(f.request.contact.id)).toBeUndefined();
   expect(state.snapshot().champion).toEqual(DEFAULT_HABITAT_PLAN);
   expect(state.snapshot().evaluations.at(-1)?.status).toBe("retained");
 });
