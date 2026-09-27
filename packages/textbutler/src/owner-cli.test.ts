@@ -95,6 +95,27 @@ describe("owner CLI commands", () => {
     expect(f.calls).toHaveLength(2);
   });
 
+  test("labels rename a contact by exact id or unique name without touching reply settings", async () => {
+    const f = fixture();
+    expect(await f.run(["contacts", "label", "contact-1", "Alice", "from", "school"])).toBe(0);
+    expect(f.calls).toEqual([{ protocol: CONTROL_PROTOCOL, command: "snapshot" }, {
+      protocol: CONTROL_PROTOCOL, command: "contact.label.update", contactId: "contact-1", expectedRevision: 19, label: "Alice from school" }]);
+    const byName = fixture();
+    expect(await byName.run(["contacts", "label", "Alice", "Mom"])).toBe(0);
+    expect(byName.calls[1]).toMatchObject({ command: "contact.label.update", contactId: "contact-1", label: "Mom" });
+    // A missing label is a usage error before any request; empty, oversized or
+    // control-character labels fail after the read but never reach a mutation.
+    const missing = fixture();
+    await rejectsOwnerFacing(missing.run(["contacts", "label", "contact-1"]));
+    expect(missing.calls).toHaveLength(0);
+    for (const args of [["contacts", "label", "contact-1", "  "], ["contacts", "label", "contact-1", "x".repeat(201)], ["contacts", "label", "contact-1", "bad\nname"]]) {
+      const bad = fixture();
+      await rejectsOwnerFacing(bad.run(args));
+      expect(bad.calls).toHaveLength(1);
+      expect(bad.calls[0]).toMatchObject({ command: "snapshot" });
+    }
+  });
+
   test("mode and activation change only the selected contact settings", async () => {
     const state = snapshot(), f = fixture(state);
     expect(await f.run(["contacts", "mode", "contact-1", "keyword", "--keyword", "help"])).toBe(0);

@@ -1,0 +1,33 @@
+{
+  "kind": "independent-ai-source-review",
+  "scope": "T9 owner-set contact labels (devin/contacts-label-t9): a dedicated contact.label.update control command — request shape in packages/control/src/index.ts, parse and revision-checked mutation in packages/textbutler/src/control-service.ts via configureContact({label}), and `contacts label <contact> <name>` in packages/textbutler/src/owner-cli.ts resolving the same exact-id-or-unique-name contact selector as every other verb. cli-help.ts documents it; owner-cli.test.ts and control-service.test.ts cover it. A label is display metadata only: snapshot name, reply views, menu rows and owner self-chat notices all read it, while identity, routing and grants stay on contact.id, routeId and bindings.",
+  "rounds": [
+    {
+      "round": 1,
+      "design": "Fold the label into the existing contact.settings.update wire object, so every owner mutation path keeps one shape.",
+      "verdict": "blockers",
+      "blockers": [
+        "Routing a label through contact.settings.update with enabled:true on a version-2 (automation-bound) contact enters enableAutomation, which revokes the live grant and mints a fresh one — a heavyweight, fallible delegation event just to rename a display string. On a v1 binding it would instead spawn a re-verification job. A label change must never move send authority.",
+        "Reusing the settings object also drags the accountId provider-validation and capacity checks into a pure rename, adding refusal modes unrelated to the intent.",
+        "Wire-vs-store bound drift: the stored label parser bounds 200 characters while control text() bounds bytes; a 200-character emoji-heavy label is legal in the store but would be rejected at the wire if text() were reused — the two must agree or the CLI can write labels the daemon later rejects on reload."
+      ]
+    },
+    {
+      "round": 2,
+      "design": "Give labels their own command — contact.label.update carrying {contactId, expectedRevision, label} — parsed beside contact.settings.update, revision-checked, and applied through the same configureContact/parseContact/publish chain; owner-cli sends it directly (no job polling, since no grant or enrollment work can run).",
+      "verdict": "blockers-fixed",
+      "blockers": [
+        "The dedicated command sits after the shared contact lookup and expectedRevision conflict check but before every contact.settings.update dispatch (enableAutomation, v1 re-verify, generic settings write), so a label can never trigger grant work — verified by code path and by the control-service test asserting settings untouched (enabled/keyword/mode preserved).",
+        "The wire validator mirrors the stored parser exactly: string, nonempty after trim, at most 200 characters, no C0/C1/DEL — the same predicates config.ts string() applies — so no label can pass the wire and fail the store.",
+        "exact() on the request rejects unknown fields, and the parse runs before any state read or mutation; unknown contacts and stale revisions fail invalid-request/conflict respectively — both pinned in tests."
+      ],
+      "acceptedNits": [
+        "Leading/trailing whitespace in a label is stored verbatim (the trim check only proves nonemptiness), matching the stored parser's existing behavior for enrolled titles.",
+        "report() prints the whole updated snapshot JSON rather than a one-line confirmation — consistent with every other owner mutation.",
+        "The TUI does not yet expose label editing; the owner CLI covers it and the menu picks it up automatically through contact.name on the next refresh."
+      ],
+      "verification": "control-service.test.ts new case: label update bumps the owner revision, renames snapshot.name and the stored label while preserving enabled/keyword/mode, conflicts on a stale revision, and rejects empty/oversized/control-character/non-string labels, unknown contacts and extra fields — all fail-closed. owner-cli.test.ts new case: exact-id and unique-name resolution, multi-word labels, and usage/validation errors that never reach a mutation. Focused run: owner-cli + control-service 49/49; tsc -p packages/textbutler clean. The contacts help golden snapshot gained the two documented lines (width 79 ≤ 80) and was regenerated. Final measured bun run check post-rebind: exit 0 — 492/492 aggregate + 754/754 Textbutler (xcb-textbutler-v1-current-check.log); one transient timing-sensitive xcb-client capability-settlement case (2009ms deadline race) failed once mid-run and passes standalone at 186ms and in the final aggregate run."
+    }
+  ],
+  "result": "Ship. Owner-set labels land as a dedicated, revision-checked metadata write that cannot touch send authority, with wire bounds identical to the stored parser."
+}

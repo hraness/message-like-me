@@ -115,6 +115,8 @@ A contact is an exact ID or a unique name from textbutler contacts list.`,
                                          message includes the keyword
   contacts self <contact> on|off         Mark a chat with yourself, so your
                                          own echoed texts aren't answered
+  contacts label <contact> <name>        Rename a chat, so commands read a name
+                                         instead of a raw number
 
 Choosing an account never turns a chat on, and resume never does either.`,
     example: "textbutler contacts mode Alex keyword --keyword butler" },
