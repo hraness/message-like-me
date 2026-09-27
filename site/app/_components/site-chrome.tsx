@@ -15,7 +15,7 @@ import {
 // eslint-disable-next-line @next/next/no-img-element
 const productMark = <img alt="" height={20} src="/icon.png" width={20} />;
 
-export function SiteHeader({ lantern = false }: Readonly<{ lantern?: boolean }>) {
+export function SiteHeader() {
   return (
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
@@ -25,7 +25,7 @@ export function SiteHeader({ lantern = false }: Readonly<{ lantern?: boolean }>)
         brand="Textbutler"
         brandLabel="Textbutler home"
         brandMark="/marks/message-like-me.svg"
-        className={lantern ? "site-header hraness-material-chrome" : "site-header"}
+        className="site-header"
         trailing={<ThemeMenuButton aria-label="Appearance" />}
         links={[
           { href: '/#how-it-works', label: 'How it works' },

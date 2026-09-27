@@ -143,7 +143,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html className={initialPalette.className} data-hraness-theme="paper" data-hraness-material="lantern" data-hraness-pattern="weave" data-palette="gruvbox" lang="en" suppressHydrationWarning>
+    <html className={initialPalette.className} data-hraness-theme="paper" data-hraness-material="lantern" data-hraness-pattern="none" data-palette="gruvbox" lang="en" suppressHydrationWarning>
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/theme-bootstrap.js" />
