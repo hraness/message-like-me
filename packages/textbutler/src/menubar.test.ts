@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { planAutostart, validateSnapshot, type MenuItem, type Snapshot } from "@hraness/desktop-foundation";
 import { runTextbutlerCli } from "./cli.ts";
 import { startDaemon, type RunningDaemon } from "./daemon.ts";
-import { companionForeground, companionOptions, menuLabel, snapshotItems } from "./menubar.ts";
+import { companionForeground, companionOptions, exitSoon, menuLabel, runMenuBarCommand, snapshotItems } from "./menubar.ts";
+import { ACTION_ERROR_MS, describeMenuFailure, MenuFailure, MenuPending } from "./menu-errors.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { disconnectedSnapshot, type DesktopSnapshot } from "../../control/src/index.ts";
 
@@ -306,4 +307,94 @@ test("pending menu operations keep the job ID and a terminal failure clears the 
   expect(labels(await options.snapshot(signal))).not.toContain("An operation is still pending");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(2);
+});
+
+describe("failed menu actions (T6)", () => {
+  const signal = new AbortController().signal;
+  function fake(respond: (command: string) => unknown) {
+    let clock = 1_000_000;
+    const options = companionOptions("/unused", async () => { throw new Error("no browser at /secret/path"); }, "/unused/cli.ts", { jobWaitMs: 0, now: () => clock,
+      request: async request => (request.command === "snapshot"
+        ? { protocol: "textbutler.control.v1", ok: true, kind: "snapshot", snapshot: base({ messagingProviders: ["imessage"] }) }
+        : respond(request.command)) as never });
+    return { options, advance: (ms: number) => { clock += ms; } };
+  }
+  test("a daemon refusal shows a ⚠︎ row with its plain sentence until the next action", async () => {
+    const { options } = fake(() => ({ protocol: "textbutler.control.v1", ok: false, code: "unavailable",
+      message: "Textbutler can't read your Messages: macOS access is off for Textbutler." }));
+    await options.snapshot(signal);
+    await expect(options.onAction("messaging.start:imessage", signal)).rejects.toThrow("messaging-connection-unconfirmed");
+    const items = await options.snapshot(signal);
+    wire(items);
+    expect(labels(items).slice(0, 3)).toEqual(["Automatic replies paused", "⚠︎ Couldn't connect iMessage",
+      "Textbutler can't read your Messages: macOS access is off for Textbutler."]);
+    await options.onAction("refresh", signal);
+    expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
+  });
+  test("the row goes away at the first refresh after thirty seconds", async () => {
+    const { options, advance } = fake(() => ({ protocol: "textbutler.control.v1", ok: false, code: "unavailable", message: "No automation." }));
+    await options.snapshot(signal);
+    await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
+    advance(ACTION_ERROR_MS - 1);
+    expect(labels(await options.snapshot(signal))).toContain("⚠︎ Couldn't check for replies");
+    advance(1);
+    expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
+  });
+  test("a job that is still running shows the pending row, not a ⚠︎ row", async () => {
+    const { options } = fake(() => ({ protocol: "textbutler.control.v1", ok: true, kind: "job", jobId: "job-9" }));
+    await options.snapshot(signal);
+    await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
+    const shown = labels(await options.snapshot(signal));
+    expect(shown).toContain("An operation is still pending");
+    expect(shown.some(label => label.startsWith("⚠︎"))).toBe(false);
+  });
+  test("unexpected errors never show their own text", async () => {
+    const { options } = fake(() => ({}));
+    await options.snapshot(signal);
+    await expect(options.onAction("open-website", signal)).rejects.toThrow("open-failed");
+    const shown = labels(await options.snapshot(signal));
+    expect(shown).toContain("⚠︎ Couldn't open the page");
+    expect(shown.join("\n")).not.toContain("/secret/path");
+    expect(describeMenuFailure(new Error("ENOENT /var/private/x"))).toEqual({ sentence: "That didn't work",
+      detail: "Try again. Setup & readiness in the guided terminal shows what's missing." });
+    expect(describeMenuFailure(new MenuPending("x"))).toBeNull();
+    expect(describeMenuFailure(new MenuFailure("code", "Couldn't do it"))).toEqual({ sentence: "Couldn't do it" });
+  });
+  test("every failure row is short, sentence case and free of codes", async () => {
+    const sentences = [...(await Bun.file(new URL("./menubar.ts", import.meta.url)).text()).matchAll(/new MenuFailure\([^,]+, "([^"]+)"/gu), 
+      ...(await Bun.file(new URL("./menubar.ts", import.meta.url)).text()).matchAll(/unconfirmed\(response, "[^"]+", "([^"]+)"\)/gu)].map(match => match[1]!);
+    expect(sentences.length).toBeGreaterThan(8);
+    expect(sentences).toMatchSnapshot();
+    for (const sentence of sentences) {
+      expect([...sentence].length).toBeLessThanOrEqual(48);
+      expect(sentence).not.toMatch(/[.…]$|\b[a-z]+-[a-z]+-|\//u); // no final period, kebab code or path
+      expect(sentence.slice(1)).not.toMatch(/ [A-Z]/u); // sentence case
+    }
+  });
+});
+
+describe("Quit Textbutler ends the menu process", () => {
+  test("the foreground menu exits once the runner closes, even with a daemon wait still open", async () => {
+    const exits: number[] = [];
+    const code = await runMenuBarCommand(["--foreground"], "/unused", "/unused/cli.ts", () => {}, { handle: async () => 0, exit: value => { exits.push(value); } });
+    expect(code).toBe(0);
+    await Bun.sleep(1_100);
+    expect(exits).toEqual([0]);
+  });
+  test("lifecycle verbs return normally and never exit the caller", async () => {
+    const exits: number[] = [];
+    for (const verb of ["start", "stop", "status", "install"]) {
+      await runMenuBarCommand([verb], "/unused", "/unused/cli.ts", () => {}, { handle: async () => 0, exit: value => { exits.push(value); } });
+    }
+    await Bun.sleep(1_100);
+    expect(exits).toEqual([]);
+  });
+  test("the exit timer never holds the process open by itself", () => {
+    const child = Bun.spawnSync([process.execPath, "-e", `import(${JSON.stringify(new URL("./menubar.ts", import.meta.url).href)}).then(m => { m.exitSoon(0, () => { console.log("forced"); process.exit(7); }, 60_000); console.log("done"); })`]);
+    expect(child.stdout.toString().trim()).toBe("done");
+    expect(child.exitCode).toBe(0);
+    let fired = false;
+    exitSoon(3, () => { fired = true; }, 0);
+    return Bun.sleep(10).then(() => expect(fired).toBe(true));
+  });
 });

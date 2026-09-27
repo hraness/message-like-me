@@ -8,6 +8,7 @@ import { requestDaemon } from "./daemon.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { awaitOwnerJob, type OwnerControlClient } from "./owner-cli.ts";
 import { createLaunchAgentLifecycle, defaultLaunchAgentHost, isolatedBunInvocation } from "./launch-agent.ts";
+import { ACTION_ERROR_MS, daemonDetail, describeMenuFailure, MenuFailure, MenuPending, type ShownFailure } from "./menu-errors.ts";
 
 const WEBSITE = "https://textbutler.app/";
 const SUPPORT = "https://account.hraness.com/support?product=message-like-me&source=desktop#support";
@@ -184,7 +185,7 @@ export function snapshotItems(snapshot: DesktopSnapshot, status: { confirmedAgeS
 /** The Textbutler menu companion is a disposable client of the owner daemon.
  * All state reads and mutations use the existing owner-only control socket;
  * the shared runner renders them and enforces revision-checked dispatch. */
-export function companionOptions(dataDir: string, open: typeof openBrowser = openBrowser, entrypoint: string = fileURLToPath(new URL("cli.ts", import.meta.url)), options: { request?: OwnerControlClient; jobWaitMs?: number } = {}): CompanionOptions {
+export function companionOptions(dataDir: string, open: typeof openBrowser = openBrowser, entrypoint: string = fileURLToPath(new URL("cli.ts", import.meta.url)), options: { request?: OwnerControlClient; jobWaitMs?: number; now?: () => number } = {}): CompanionOptions {
   const request = options.request ?? ((value: ControlRequest) => requestDaemon({ dataDir, request: value }));
   let lastSnapshot: DesktopSnapshot | null = null;
   let confirmedAt: number | null = null;
@@ -193,9 +194,12 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
   let discoveryDetail = "";
   let pendingJobId: string | null = null;
   let lastOperationDetail: string | null = null;
+  /** The last action that didn't work, shown as a ⚠︎ row (T6). */
+  let failure: (ShownFailure & { at: number }) | null = null;
+  const now = options.now ?? Date.now;
   /** Job-backed control calls resolve their stored result before returning. */
   const daemonJob = async (operation: ControlRequest): Promise<ControlResponse> => {
-    if (pendingJobId !== null) throw new Error("previous-operation-pending");
+    if (pendingJobId !== null) throw new MenuFailure("previous-operation-pending", "Another action is still running", "Wait for it to finish, then try again.");
     const response = await awaitOwnerJob(operation, request, { waitMs: options.jobWaitMs ?? 90_000 });
     if (response.ok && response.kind === "job") pendingJobId = response.jobId;
     return response;
@@ -239,6 +243,8 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         ] });
       }
       if (lastOperationDetail) items.splice(1, 0, { kind: "submenu", label: "Last operation", items: detailItems(lastOperationDetail) });
+      if (failure !== null && now() - failure.at >= ACTION_ERROR_MS) failure = null;
+      if (failure !== null) items.splice(1, 0, { kind: "label", label: menuLabel(`⚠︎ ${failure.sentence}`) }, ...(failure.detail === undefined ? [] : detailItems(failure.detail)));
       if (pendingJobId) items.splice(1, 0, { kind: "submenu", label: "An operation is still pending", items: [
         { kind: "label", label: "Do not repeat it; inspect its final result." },
         { kind: "label", label: menuLabel(`textbutler jobs show ${pendingJobId}`) },
@@ -246,10 +252,22 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
       ] });
       return boundedMenu(items);
     },
-    onAction: async id => {
+    onAction: async (id, signal) => {
+      try {
+        await act(id, signal);
+        failure = null;
+      } catch (error) {
+        const shown = describeMenuFailure(error);
+        failure = shown === null ? null : { ...shown, at: now() };
+        throw error;
+      }
+    },
+  };
+
+  async function act(id: string, _signal: AbortSignal): Promise<void> {
       if (id === "job.refresh" && pendingJobId) {
         const response = await request({ protocol: CONTROL_PROTOCOL, command: "owner.job.read", jobId: pendingJobId });
-        if (response.ok && response.kind === "job" || !response.ok && response.code === "disconnected") throw new Error("operation-not-yet-confirmed");
+        if (response.ok && response.kind === "job" || !response.ok && response.code === "disconnected") throw new MenuPending("operation-not-yet-confirmed");
         const completedJob = pendingJobId;
         pendingJobId = null;
         if (!response.ok) { lastOperationDetail = `Job ${completedJob}: ${response.message} Inspect the outcome before repeating the original action.`; return; }
@@ -258,11 +276,15 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         lastOperationDetail = response.kind === "reply-sent" ? `Reply outcome: ${response.state}. ${response.detail}` : "The pending operation completed. Refresh to see its current state.";
         return;
       }
-      if (id === "open-guide") { await open("https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md"); return; }
-      if (id === "daemon.install") { await createLaunchAgentLifecycle(defaultLaunchAgentHost(entrypoint)).install(dataDir); return; }
+      if (id === "open-guide") { await opened(open("https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md")); return; }
+      if (id === "daemon.install") {
+        try { await createLaunchAgentLifecycle(defaultLaunchAgentHost(entrypoint)).install(dataDir); }
+        catch { throw new MenuFailure("daemon-install-failed", "Couldn't start the background service", "Setup & readiness in the guided terminal shows why."); }
+        return;
+      }
       if (id === "contacts.discover") {
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "conversations.list" });
-        if (!response.ok || response.kind !== "conversations") throw new Error("conversation-discovery-unconfirmed");
+        if (!response.ok || response.kind !== "conversations") throw unconfirmed(response, "conversation-discovery-unconfirmed", "Couldn't find conversations");
         candidates = response.candidates; candidateRevision = lastSnapshot?.revision ?? null; discoveryDetail = response.detail;
         return;
       }
@@ -270,16 +292,16 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         const provider = id.slice(16);
         if (provider !== "imessage" && provider !== "whatsapp" && provider !== "beeper" || !lastSnapshot?.messagingProviders?.includes(provider)) return;
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "messaging.start", provider });
-        if (!response.ok || response.kind === "job") throw new Error("messaging-connection-unconfirmed");
+        if (!response.ok || response.kind === "job") throw unconfirmed(response, "messaging-connection-unconfirmed", `Couldn't connect ${appName(provider)}`);
         return;
       }
       if (id.startsWith("contact.add:")) {
         const candidate = candidates.find(candidate => candidate.id === id.slice(12));
-        if (!candidate?.eligible || !lastSnapshot || candidateRevision !== lastSnapshot.revision) throw new Error("refresh-conversation-selection");
+        if (!candidate?.eligible || !lastSnapshot || candidateRevision !== lastSnapshot.revision) throw new MenuFailure("refresh-conversation-selection", "The conversation list changed", "Find conversations again, then add the one you want.");
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "contact.enroll", candidateId: candidate.id,
           expectedRevision: lastSnapshot.revision, initializeHistory: false });
         candidates = []; candidateRevision = null;
-        if (!response.ok || response.kind !== "enrolled") throw new Error("contact-enrollment-unconfirmed");
+        if (!response.ok || response.kind !== "enrolled") throw unconfirmed(response, "contact-enrollment-unconfirmed", "Couldn't add the conversation");
         return;
       }
       if (id.startsWith("contact.toggle:") || id.startsWith("contact.account:")) {
@@ -294,28 +316,28 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
           : { ...contact.settings, enabled: !contact.settings.enabled };
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "contact.settings.update", contactId: contact.id,
           expectedRevision: snapshot.revision, settings });
-        if (!response.ok || response.kind === "job") throw new Error("contact-settings-unconfirmed");
+        if (!response.ok || response.kind === "job") throw unconfirmed(response, "contact-settings-unconfirmed", account ? "Couldn't change the agent account" : settings.enabled ? "Couldn't turn on automatic replies" : "Couldn't turn off automatic replies");
         return;
       }
-      if (id === "open-website") { await open(WEBSITE); return; }
-      if (id === "product.support") { await open(SUPPORT); return; }
+      if (id === "open-website") { await opened(open(WEBSITE)); return; }
+      if (id === "product.support") { await opened(open(SUPPORT)); return; }
       if (id === "refresh") return; // the runner re-reads state after every action
       if (id === "replies.scan") {
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "replies.scan" });
-        if (!response.ok || response.kind === "job") throw new Error("replies-scan-unconfirmed");
+        if (!response.ok || response.kind === "job") throw unconfirmed(response, "replies-scan-unconfirmed", "Couldn't check for replies");
         return;
       }
       if (id.startsWith("replies.suggest:")) {
         const response = await daemonJob({ protocol: CONTROL_PROTOCOL, command: "replies.suggest", contactId: id.slice(16) });
-        if (!response.ok || response.kind === "job") throw new Error("replies-suggest-unconfirmed");
+        if (!response.ok || response.kind === "job") throw unconfirmed(response, "replies-suggest-unconfirmed", "Couldn't suggest a reply");
         return;
       }
       // The menu exposes previews only. Full ordered actions and their digest
       // are reviewed in the TUI/CLI before a draft can be sent.
-      if (id.startsWith("replies.send:")) throw new Error("full-draft-review-required");
+      if (id.startsWith("replies.send:")) throw new MenuFailure("full-draft-review-required", "Review this reply in the terminal first", "The guided terminal shows every action before anything is sent.");
       if (id.startsWith("replies.discard:")) {
         const response = await request({ protocol: CONTROL_PROTOCOL, command: "replies.discard", draftId: id.slice(16) });
-        if (!response.ok) throw new Error(`replies-discard-${response.code}`);
+        if (!response.ok) throw new MenuFailure(`replies-discard-${response.code}`, "Couldn't discard the suggestion", daemonDetail(response.message));
         return;
       }
       if (id === "toggle-pause") {
@@ -328,20 +350,45 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         });
         // The runner re-reads state after this callback; a daemon rejection or
         // indeterminate mutation is observed there, never retried here.
-        if (!response.ok) throw new Error(`settings-update-${response.code}`);
+        if (!response.ok) throw new MenuFailure(`settings-update-${response.code}`, current.settings.paused ? "Couldn't resume automatic replies" : "Couldn't pause automatic replies", daemonDetail(response.message));
       }
-    },
-  };
+  }
+}
+
+const appName = (provider: string): string => provider === "imessage" ? "iMessage" : provider === "whatsapp" ? "WhatsApp" : "Beeper";
+
+/** A job-backed call that didn't confirm. A job that is still running shows
+ * the pending row instead of a ⚠︎ row. */
+function unconfirmed(response: ControlResponse, code: string, sentence: string): Error {
+  if (response.ok && response.kind === "job") return new MenuPending(code);
+  return new MenuFailure(code, sentence, response.ok ? undefined : daemonDetail(response.message));
+}
+
+async function opened(result: Promise<unknown>): Promise<void> {
+  try { await result; }
+  catch { throw new MenuFailure("open-failed", "Couldn't open the page", "Check your default browser, then try again."); }
 }
 
 /** Delegate the product `menubar` command family to the shared lifecycle. */
 export function companionForeground(dataDir: string, entrypoint: string, host: { home: string; runtime: string } = { home: homedir(), runtime: process.execPath }): { executable: string; args: readonly string[] } {
   return isolatedBunInvocation({ ...host, entrypoint, args: ["menubar", "--foreground", "--data-dir", dataDir] });
 }
-export async function runMenuBarCommand(args: readonly string[], dataDir: string, entrypoint: string, write: (result: unknown) => void): Promise<number> {
-  return await handleCompanionCommand(companionOptions(dataDir, openBrowser, entrypoint), {
+export async function runMenuBarCommand(args: readonly string[], dataDir: string, entrypoint: string, write: (result: unknown) => void,
+  hooks: { handle?: typeof handleCompanionCommand; exit?: (code: number) => void } = {}): Promise<number> {
+  const code = await (hooks.handle ?? handleCompanionCommand)(companionOptions(dataDir, openBrowser, entrypoint), {
     args,
     foreground: companionForeground(dataDir, entrypoint),
     write,
   });
+  if (args[0] === "--foreground") exitSoon(code, hooks.exit ?? (value => process.exit(value)));
+  return code;
+}
+
+/** Quit Textbutler ends the menu process. Once the menu has closed, an action
+ * that is still waiting on the daemon (up to 90 seconds) must not keep it
+ * alive: the daemon keeps the job, and the next menu reads its result. The
+ * timer never holds the process open by itself. */
+export function exitSoon(code: number, exit: (code: number) => void, delayMs = 1_000): void {
+  const timer = setTimeout(() => exit(code), delayMs);
+  (timer as { unref?: () => void }).unref?.();
 }
