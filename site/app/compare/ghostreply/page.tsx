@@ -31,7 +31,7 @@ const questions = [
   {
     question: 'Do I need my own AI account?',
     answer:
-      'Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Textbutler writes AI replies through your own Claude Code or Codex subscription connected with xcb, though connecting chats and sending replies you type yourself need no AI account.',
+      'Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Textbutler writes AI replies through your own Claude Code, Codex, or Devin subscription connected with xcb, though connecting chats and sending replies you type yourself need no AI account.',
   },
   {
     question: 'Can either app send without me watching?',
@@ -157,7 +157,7 @@ export default function CompareGhostReplyPage() {
               <tr>
                 <th scope="row">What you pay</th>
                 <td>10 replies free, then $4.99 once for a one-Mac personal license with hosted AI included</td>
-                <td>Nothing for the software, which is MIT licensed; AI replies use the Claude Code or Codex subscription you already pay for</td>
+                <td>Nothing for the software, which is MIT licensed; AI replies use the Claude Code, Codex, or Devin subscription you already pay for</td>
               </tr>
               <tr>
                 <th scope="row">What ships today</th>

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import Home from '../app/page.tsx';
+import Home, { TERMINAL_FIRST_RUN } from '../app/page.tsx';
 import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
@@ -49,7 +49,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('Your AI butler replies in the chats you choose.');
-  for (const role of ['header', 'hero', 'proof-frame', 'section', 'flow', 'trust', 'questions', 'cta', 'footer']) {
+  for (const role of ['header', 'hero', 'section', 'flow', 'questions', 'cta', 'footer']) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
   expect(html).toContain('hraness-marketing-header__brand');
@@ -60,17 +60,17 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(header).not.toContain('src="/icon.png"');
   expect(html).toContain('data-foil=""');
   expect(html).toContain('Textbutler');
-  expect(html).toContain('How replies stay off');
+  expect(html).toContain('How replies work');
   expect(html.split(SITE_STATUS)).toHaveLength(2);
   expect(html).toContain('New installations start paused');
   expect(html).toContain('iMessage and WhatsApp');
-  expect(html).toContain('Claude Code or Codex, through your own subscription and xcb');
+  expect(html).toContain('Claude Code, Codex, or Devin, through your own subscription and xcb');
   expect(html).toContain('billed separately from a Claude Code subscription');
   expect(html).toContain('Vercel AI Gateway');
   expect(html).toContain('no AI account');
   expect(html).toContain('Running from source never writes AI replies.');
   expect(html).toContain('no tools of its own');
-  expect(html).toContain('MIT-licensed');
+  expect(html).toContain('MIT licensed');
   expect(html).toContain('test delivery and rich actions on your own account');
   expect(html).toContain('no app to download');
   expect(html).toContain(`>Textbutler v${SOFTWARE_VERSION}</a> release.`);
@@ -111,21 +111,28 @@ test('keeps delivery vocabulary off the product pages', async () => {
   }
 });
 
-test('shows synthetic contact context and disclosure without claiming transport support', () => {
+test('shows the real first terminal screen, synthetic contact context, and disclosure without claiming transport support', async () => {
   const html = renderToStaticMarkup(<Home />);
-  expect(html).toContain('Illustration only.');
-  expect(html).toContain('The contact, messages, and reply are made up, and nothing was sent.');
+  // The hero proof is the guided terminal's own first screen, not a mockup.
+  const tui = await readFile(resolve(siteRoot, '../packages/textbutler/src/tui.ts'), 'utf8');
+  for (const line of TERMINAL_FIRST_RUN) {
+    if (line) expect(tui, line).toContain(JSON.stringify(line));
+  }
+  expect(html).toContain('$ bun run textbutler tui');
+  expect(html).not.toContain('Illustration only.');
+  expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   expect(html).toContain('🤖{ Where are you headed, and for how long? }');
   expect(html).not.toContain('Happy to help');
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
+  expect(html).toContain('the word “butler”');
   expect(html).toContain('App Clips, mini apps, and Linq aren’t supported.');
   expect(html).toContain('System Integrity Protection disabled');
   expect(html).toContain('Textbutler never changes that setting.');
   expect(html).toContain('under its own data policies');
 });
 
-test('binds Design Kit v0.15.0 to the portable Paper palette', async () => {
+test('binds Design Kit v0.23.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -137,7 +144,7 @@ test('binds Design Kit v0.15.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.21.0');
+    .toBe('github:hraness/design-kit#v0.23.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
@@ -149,7 +156,8 @@ test('binds Design Kit v0.15.0 to the portable Paper palette', async () => {
   expect(paper).toContain('--hraness-site-accent-ink: var(--primary-foreground);');
   expect(css).toContain(':where(.hraness-marketing-page, .hraness-marketing-header) {');
   expect(css).toContain('.textbutler-marketing .hraness-marketing-hero {');
-  expect(css).toContain('.mlm-marketing-trust .hraness-marketing-trust-grid {');
+  expect(css).not.toMatch(/backdrop-filter:(?!\s*none)/u);
+  expect(layout).toContain('data-hraness-pattern="none"');
   expect(css).not.toContain('--acid');
   expect(css).not.toMatch(/transition:/u);
 });
@@ -157,19 +165,17 @@ test('binds Design Kit v0.15.0 to the portable Paper palette', async () => {
 
 test('admits the released finite marketing snapshot and scopes it to the landing', async () => {
   const snapshot = await checkMarketingSnapshot();
-  expect(snapshot.source.commit).toBe('8937fceab35ae5bf591202bde3d641d48cec7f46');
-  expect(snapshot.files['product-marketing-preset.css'].sha256).toBe('279d8878f8e233e355202c9e0a19797a32ea7999486e711dae7836497879a1e6');
+  expect(snapshot.source.commit).toBe('3df4c411c7f5e5cbc02448463571696f0d47cee5');
   const html = renderToStaticMarkup(<Home />);
   // React hoists the product icon's preload ahead of the document root.
   expect(html.replace(/^(?:<link\b[^>]*>\s*)+/u, ''))
-    .toStartWith('<div class="textbutler-marketing" data-hraness-marketing-preset="editorial" data-hraness-material="lantern">');
-  expect(html).toContain('<div class="hraness-material-wall">');
+    .toStartWith('<div class="textbutler-marketing" data-hraness-marketing-preset="editorial" data-hraness-pattern="none">');
   expect(renderToStaticMarkup(<About />)).not.toContain('data-hraness-marketing-preset');
   expect(renderToStaticMarkup(<Preview />)).not.toContain('data-hraness-marketing-preset');
-  expect(renderToStaticMarkup(<About />)).not.toContain('hraness-material');
-  expect(renderToStaticMarkup(<Preview />)).not.toContain('hraness-material');
-  expect(html).toContain('hraness-material-chrome');
-  expect(html).toContain('hraness-material-pane');
+  // The Quiet landing uses no material panes, walls, or translucent chrome.
+  for (const page of [html, renderToStaticMarkup(<About />), renderToStaticMarkup(<Preview />)]) {
+    expect(page).not.toContain('hraness-material');
+  }
 });
 
 test('keeps machine-readable setup and conditional subscription admission consistent with the landing', async () => {

@@ -34,7 +34,12 @@ body {
   font-synthesis: none;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  /* Short pages keep the in-flow footer at the bottom of the viewport. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
 }
+body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 .skip-link {
   background: var(--inverse);
   color: var(--inverse-foreground);
@@ -383,10 +388,6 @@ body {
   color: var(--muted);
   font-size: 1.05rem;
   line-height: 1.55;
-}
-
-.mlm-marketing-trust .hraness-marketing-trust-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
 
 /* Install panel commands. */
