@@ -74,6 +74,71 @@ test("an unproven ack wedges the run; a proven failure only skips it", async () 
   expect((await recovered.runtime.process(event)).status).toBe("submitted");
   expect(recovered.submitted).toEqual([[{ kind: "text", text: "🤖{ Hello there. }" }]]);
 });
+function gate() { let open!: () => void; const opened = new Promise<void>(resolve => { open = resolve; }); return { open, opened }; }
+test("composition runs while the ack dispatches and the reply waits for the ack", async () => {
+  const fixture = setup(); const ackHeld = gate(), composeStarted = gate(); const order: string[] = [];
+  const submit = fixture.transport.submit;
+  fixture.transport.submit = async (plan, options, signal) => {
+    if (plan.intentId.endsWith(":ack")) { order.push("ack-start"); await ackHeld.opened; order.push("ack-done"); }
+    else order.push("reply");
+    return submit(plan, options, signal);
+  };
+  fixture.ports.agent.compose = async () => { order.push("compose"); composeStarted.open(); return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] }; };
+  const run = fixture.runtime.process(event);
+  await composeStarted.opened;
+  expect(fixture.runtime.submitInFlight()).toBe(true);
+  ackHeld.open();
+  expect((await run).status).toBe("submitted");
+  expect(order).toEqual(["ack-start", "compose", "ack-done", "reply"]);
+  expect(fixture.runtime.submitInFlight()).toBe(false);
+});
+test("a run never finishes while its ack may still be dispatching", async () => {
+  const fixture = setup(); const ackHeld = gate(); let settled = false;
+  const submit = fixture.transport.submit;
+  fixture.transport.submit = async (plan, options, signal) => { if (plan.intentId.endsWith(":ack")) await ackHeld.opened; return submit(plan, options, signal); };
+  fixture.ports.agent.compose = async () => { throw new Error("compose failed"); };
+  const run = fixture.runtime.process(event).then(outcome => { settled = true; return outcome; });
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(settled).toBe(false);
+  ackHeld.open();
+  expect((await run).status).toBe("failed");
+  // The ack that did land is still journaled so its echo attributes to the butler.
+  expect(fixture.journal.knownSentMessage("accepted:p1:0")).toBe(true);
+});
+test("owner activity during the ack cancels composition, never the ack send", async () => {
+  const fixture = setup(); const ackHeld = gate(), composing = gate(); let ackSignal: AbortSignal | undefined, composeSignal: AbortSignal | undefined;
+  const submit = fixture.transport.submit;
+  fixture.transport.submit = async (plan, options, signal) => { if (plan.intentId.endsWith(":ack")) { ackSignal = signal; await ackHeld.opened; } return submit(plan, options, signal); };
+  fixture.ports.agent.compose = async request => { composeSignal = request.signal; composing.open(); await new Promise((_, reject) => request.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })); return {}; };
+  const run = fixture.runtime.process(event);
+  await composing.opened;
+  fixture.runtime.cancelContact("c1");
+  expect(composeSignal?.aborted).toBe(true); expect(ackSignal?.aborted).toBe(false);
+  ackHeld.open();
+  expect((await run).status).toBe("cancelled");
+  expect(fixture.acks).toHaveLength(1); expect(fixture.submitted).toEqual([]);
+  expect(fixture.journal.knownSentMessage("accepted:p1:0")).toBe(true);
+});
+test("an unknown ack outcome stops composition and wedges the run", async () => {
+  const fixture = setup(); const composing = gate(); let composeSignal: AbortSignal | undefined;
+  const submit = fixture.transport.submit;
+  fixture.transport.submit = async (plan, options, signal) => { if (plan.intentId.endsWith(":ack")) { await composing.opened; throw new Error("dispatch lost"); } return submit(plan, options, signal); };
+  fixture.ports.agent.compose = async request => { composeSignal = request.signal; composing.open(); await new Promise((_, reject) => request.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })); return {}; };
+  expect(await fixture.runtime.process(event)).toMatchObject({ status: "indeterminate", reason: "ack-dispatch-unknown" });
+  expect(composeSignal?.aborted).toBe(true); expect(fixture.submitted).toEqual([]);
+});
+test("a global pause aborts an in-flight ack send", async () => {
+  const fixture = setup(); const reached = gate(); let ackSignal: AbortSignal | undefined;
+  const submit = fixture.transport.submit;
+  fixture.transport.submit = async (plan, options, signal) => {
+    if (plan.intentId.endsWith(":ack")) { ackSignal = signal; reached.open(); await new Promise(resolve => signal?.addEventListener("abort", resolve, { once: true })); throw new Error("aborted mid-dispatch"); }
+    return submit(plan, options, signal);
+  };
+  const run = fixture.runtime.process(event);
+  await reached.opened; fixture.runtime.pause();
+  expect(ackSignal?.aborted).toBe(true);
+  expect((await run).status).toBe("indeterminate");
+});
 test("the ack's own history echo does not cancel the reply it precedes", async () => {
   const fixture = setup();
   // The ack send bumps the enrollment revision before the post-compose
