@@ -1,0 +1,30 @@
+{
+    "kind": "independent-ai-source-review",
+    "scope": "Drain-replay deduplication in the reply loop (packages/textbutler/src/reply-loop.ts): receive() now skips an event whose sequence is at or below the enrollment's delivered watermark, so a cursor reset caused by enrollment-set membership change no longer replays history into the cancel path.",
+    "rounds": [
+        {
+            "round": 1,
+            "design": "Accept the drain's documented claim that replayed events are harmless because receive() deduplicates them downstream.",
+            "verdict": "blockers",
+            "blockers": [
+                "receive() had no deduplication at all: the journal.claim unique index catches re-claims only after the run starts, but a replayed contact-authored message reaches cancelContact (line 236) before any claim — so a setKey flip mid-run aborted in-flight unpinned runs as cancelled-at-dispatch (observed live: runs a58d82c1, 3803d418, 9c165be8; stack-captured via instrumented daemon: cancelContact <- receive <- tickOnce).",
+                "The replay is structural, not accidental: the events cursor is fingerprint-bound to the enrollment id set server-side, so any poll wobble that drops a sibling enrollment forces setCursor=null and a full re-delivery of every retained event."
+            ]
+        },
+        {
+            "round": 2,
+            "design": "Keep a per-enrollment high-water map beside the drain cursor state and return from receive() before any side effect when event.sequence is not newer than delivered.",
+            "verdict": "blockers-fixed",
+            "blockers": [
+                "Keying the watermark on ContactLoop state would reset it on rebuild and reopen the race after a drain failure; the map lives in the reply-loop closure keyed by enrollmentId so it survives ContactLoop replacement. Fixed by scoping deliveredSeq with setCursor/lastSetKey.",
+                "Skipping at the drain-delivery site would leave habitat.observe double-observing replays; the watermark sits at the top of receive() so observation, pending updates and cancels are all suppressed together."
+            ],
+            "acceptedNits": [
+                "Events skipped while a contact is uninitialized are not watermarked, so a later replay still delivers them once initialized — identical to pre-change replay semantics for the boot window.",
+                "A daemon restart clears the map, so a post-restart drain replays retained events once; journal.claim and decideReply stale-event drops absorb that exactly as before.",
+                "A genuinely fresh inbound always carries a higher sequence than the watermark, so real new messages still cancel or queue normally."
+            ],
+            "verification": "New regression test: a sibling enrollment's pollSet failure flips the drain set mid-run while compose is gated in-flight; without the watermark the replayed inbound aborts the run (cancelContact logged with active=true), with it the run submits. Instrumented live daemon captured the production stack: cancelContact <- receive() at reply-loop.ts:236 <- tickOnce drain."
+        }
+    ]
+}

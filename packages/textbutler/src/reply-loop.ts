@@ -86,6 +86,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     return cached;
   };
   let setCursor: string | null = null, lastSetKey = "";
+  const deliveredSeq = new Map<string, number>();
   const active = (id: string, revision: number) => !closed && !settings.paused && settings.contacts.some(contact => contact.id === id && contact.enabled && contact.revision === revision && contact.pausedUntil <= now());
   const shelf = options.repos ?? createRepoShelf({ dataDir: service.dataDir, now });
   /** Repo requests the agent could not resolve locally ask the owner through
@@ -211,6 +212,14 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     contacts.set(contact.id, state); return state;
   }
   function receive(contact: ContactSettings, state: ContactLoop, event: AutomationEvent): void {
+    // The drain cursor resets whenever enrollment-set membership changes, so an
+    // event can be delivered twice — including to a rebuilt ContactLoop. The
+    // per-enrollment watermark makes a replay a true no-op; without it a
+    // replayed recent contact message reaches cancelContact and aborts an
+    // in-flight unpinned run.
+    const seen = deliveredSeq.get(event.enrollmentId) ?? 0;
+    if (event.sequence <= seen) return;
+    deliveredSeq.set(event.enrollmentId, event.sequence);
     const who = author(event.message, contact);
     if (habitat && (who === "owner" || who === "contact") && (event.message.kind === "message" || event.message.kind === "reaction")) {
       try { habitat.observe(contact.id, boundHabitatObservation({ id: event.message.id, at: Date.parse(event.message.occurredAt), author: who, kind: event.message.kind,
