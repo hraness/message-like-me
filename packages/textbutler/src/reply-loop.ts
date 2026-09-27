@@ -21,7 +21,7 @@ import { parseRepoUrl } from "./config.ts";
 import type { JsonValue } from "@hraness/algal";
 
 type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { setReplyAgent?: (agent: ButlerAgent) => void; observeHabitatOperations?: TextbutlerControlService["observeHabitatOperations"] };
-type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
+type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; healthy: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
 const RECONCILE_DETAIL = "A previous send needs reconciliation. Check Messages, then run `textbutler replies reconcile`.";
 const SYNC_FAILURE_THRESHOLD = 3;
 export interface ReplyLoopOptions {
@@ -36,6 +36,9 @@ export interface ReplyLoopOptions {
   /** Synthetic tests inject a repo shelf so approval never spawns real git. */
   repos?: RepoShelf;
   onStatus?: (value: { state: "running" | "paused" | "unavailable"; detail: string }) => void;
+  /** Arms the dispatch that follows an elapsed debounce and returns its
+   * disarm. Automatic loops use a timer; synthetic tests fire it directly. */
+  scheduleDispatch?: (fire: () => void, delayMs: number) => () => void;
 }
 
 /** Self-chat owner intents resolve repo requests without the driver: the model
@@ -204,7 +207,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     const previous = contacts.get(contact.id);
     if (previous && previous.binding.bindingDigest === binding.bindingDigest && previous.binding.enrollmentId === binding.enrollmentId && previous.settingsRevision === contact.revision) return previous;
     previous?.runtime.cancelContact(contact.id);
-    const state = { binding, settingsRevision: contact.revision, initialized: false, running: false, runningPinned: false, lastOwnerAt: null, lastEnrollment: null, historyRevision: null, pendingFirstAt: null, syncFailures: 0, runFailures: 0 } as unknown as ContactLoop;
+    const state = { binding, settingsRevision: contact.revision, initialized: false, healthy: false, running: false, runningPinned: false, lastOwnerAt: null, lastEnrollment: null, historyRevision: null, pendingFirstAt: null, syncFailures: 0, runFailures: 0 } as unknown as ContactLoop;
     state.runtime = new ButlerRuntime({ settings: () => settings, refresh: currentContact => snapshot(currentContact, state), agent,
       transport: createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, admitAsset: async path => (await workspace(contact.id)).admitAsset(path), now }),
       journal: service.runJournal(), hooks, delegatedGrant: current => service.delegatedGrant(current),
@@ -307,6 +310,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       // Pending messages survive a degraded tick: snapshot refresh supersedes a
       // stale event, so keeping it is both safe and what the sender expects.
       const healthy = !pollFailed.has(contact.id) && ready.get(contact.id) === true;
+      state.healthy = healthy;
       if (healthy && caughtUp && !drainFailed) state.syncFailures = 0; else state.syncFailures++;
       if (!healthy) continue;
       if (!state.initialized) { state.initialized = true; await snapshot(contact, state, fresh.get(contact.id)); continue; }
@@ -317,33 +321,9 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       } else if (state.blocked === RECONCILE_DETAIL) delete state.blocked;
       const event = state.pending;
       if (!event && !state.running && !state.blocked) habitat?.schedule(contact);
-      if (!event || state.running || !active(contact.id, contact.revision) || now() < event.observedAt + contact.debounceMs) continue;
-      state.running = true; state.runningPinned = event.pinned === true;
-      const task = state.runtime.process(event).then(outcome => {
-        if (outcome.status !== "deferred" && state.pending?.id === event.id) { delete state.pending; state.pendingFirstAt = null; }
-        // Messages queued behind a finished run form a new stream with its own
-        // debounce window, so a flood earns at most one reply per window.
-        else if (outcome.status !== "deferred" && state.pending && state.pendingFirstAt !== null) {
-          const { pinned: _pinned, ...queued } = state.pending;
-          state.pendingFirstAt = now(); state.pending = { ...queued, observedAt: now() };
-        }
-        if (outcome.status === "submitted" || outcome.status === "ignored" || outcome.status === "cancelled") { state.runFailures = 0; if (outcome.status === "submitted") delete state.blocked; }
-        else if (outcome.status === "blocked" || outcome.status === "indeterminate" || outcome.status === "partial") {
-          state.blocked = outcome.reason === "reconcile-previous-send" || outcome.status === "indeterminate" || outcome.status === "partial" ? RECONCILE_DETAIL
-            : `Automatic reply needs attention: ${outcome.reason}.`;
-          options.onStatus?.({ state: "unavailable", detail: state.blocked });
-        } else if (outcome.status === "failed") {
-          state.runFailures++;
-          const detail = outcome.reason === "run-failed:driver-budget" ? "The daily AI budget is exhausted. Automatic replies resume when it resets."
-            : outcome.reason === "run-failed:driver-unavailable" ? "The reply provider is unreachable. Automatic replies pause until it recovers."
-            : outcome.reason === "run-failed:driver-output" ? "The reply provider returned unusable output. Automatic replies pause until it recovers."
-            : outcome.reason === "run-failed:hook" ? "A reply extension timed out. Check installed extensions."
-            : `Automatic reply failed: ${outcome.reason}.`;
-          if (outcome.reason === "run-failed:driver-budget" || state.runFailures >= SYNC_FAILURE_THRESHOLD) { state.blocked = detail; options.onStatus?.({ state: "unavailable", detail }); }
-        }
-      }).catch(() => { state.runtime.cancelContact(contact.id); delete state.pending; state.pendingFirstAt = null; state.blocked = "Automatic reply state could not be verified. Check activity before resuming."; options.onStatus?.({ state: "unavailable", detail: state.blocked }); })
-        .finally(() => { state.running = false; state.runningPinned = false; work.delete(task); });
-      work.add(task);
+      if (!event || state.running || !active(contact.id, contact.revision)) continue;
+      if (now() < event.observedAt + contact.debounceMs) { armDebounce(event.observedAt + contact.debounceMs); continue; }
+      startRun(contact, state, event);
     }
     const blocked = [...contacts.entries()].find(([id, state]) => active(id, state.settingsRevision) && state.blocked)?.[1].blocked;
     const failing = [...contacts.entries()].filter(([id, state]) => active(id, state.settingsRevision) && state.syncFailures >= SYNC_FAILURE_THRESHOLD)
@@ -352,15 +332,67 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       detail: blocked ?? (failing.length ? `Messaging synchronization needs attention for ${failing.join(", ")}. Pending messages are kept; sync retries every second.`
         : "Monitoring enabled conversations. Provider account and contact grants are checked before each reply.") });
   }
+  // A drained event waits out only its debounce, not the next provider poll:
+  // each poll spends native sessions, so the due run starts on the health the
+  // latest poll established. Uninitialized, unhealthy, blocked or fenced
+  // contacts stay with the poll tick, which alone snapshots and reconciles.
+  const scheduleDispatch = options.scheduleDispatch ?? (options.automatic === false ? undefined
+    : (fire: () => void, delayMs: number) => { const handle = setTimeout(fire, delayMs); return () => clearTimeout(handle); });
+  let disarmDebounce: (() => void) | undefined, debounceAt = Infinity;
+  function armDebounce(at: number): void {
+    if (closed || !scheduleDispatch || at >= debounceAt) return;
+    disarmDebounce?.();
+    debounceAt = at;
+    disarmDebounce = scheduleDispatch(dispatchDue, Math.max(0, at - now()));
+  }
+  function dispatchDue(): void {
+    disarmDebounce = undefined; debounceAt = Infinity;
+    if (closed || settings.paused) return;
+    for (const contact of settings.contacts) {
+      const state = contacts.get(contact.id), event = state?.pending;
+      if (!state || !event || state.running || state.blocked || !state.initialized || !state.healthy || state.settingsRevision !== contact.revision
+        || !active(contact.id, contact.revision) || service.runJournal().hasUncertainSend(contact.id)) continue;
+      if (now() < event.observedAt + contact.debounceMs) { armDebounce(event.observedAt + contact.debounceMs); continue; }
+      startRun(contact, state, event);
+    }
+  }
+  function startRun(contact: ContactSettings, state: ContactLoop, event: MessageEvent): void {
+    state.running = true; state.runningPinned = event.pinned === true;
+    const task = state.runtime.process(event).then(outcome => {
+      if (outcome.status !== "deferred" && state.pending?.id === event.id) { delete state.pending; state.pendingFirstAt = null; }
+      // Messages queued behind a finished run form a new stream with its own
+      // debounce window, so a flood earns at most one reply per window.
+      else if (outcome.status !== "deferred" && state.pending && state.pendingFirstAt !== null) {
+        const { pinned: _pinned, ...queued } = state.pending;
+        state.pendingFirstAt = now(); state.pending = { ...queued, observedAt: now() };
+      }
+      if (outcome.status === "submitted" || outcome.status === "ignored" || outcome.status === "cancelled") { state.runFailures = 0; if (outcome.status === "submitted") delete state.blocked; }
+      else if (outcome.status === "blocked" || outcome.status === "indeterminate" || outcome.status === "partial") {
+        state.blocked = outcome.reason === "reconcile-previous-send" || outcome.status === "indeterminate" || outcome.status === "partial" ? RECONCILE_DETAIL
+          : `Automatic reply needs attention: ${outcome.reason}.`;
+        options.onStatus?.({ state: "unavailable", detail: state.blocked });
+      } else if (outcome.status === "failed") {
+        state.runFailures++;
+        const detail = outcome.reason === "run-failed:driver-budget" ? "The daily AI budget is exhausted. Automatic replies resume when it resets."
+          : outcome.reason === "run-failed:driver-unavailable" ? "The reply provider is unreachable. Automatic replies pause until it recovers."
+          : outcome.reason === "run-failed:driver-output" ? "The reply provider returned unusable output. Automatic replies pause until it recovers."
+          : outcome.reason === "run-failed:hook" ? "A reply extension timed out. Check installed extensions."
+          : `Automatic reply failed: ${outcome.reason}.`;
+        if (outcome.reason === "run-failed:driver-budget" || state.runFailures >= SYNC_FAILURE_THRESHOLD) { state.blocked = detail; options.onStatus?.({ state: "unavailable", detail }); }
+      }
+    }).catch(() => { state.runtime.cancelContact(contact.id); delete state.pending; state.pendingFirstAt = null; state.blocked = "Automatic reply state could not be verified. Check activity before resuming."; options.onStatus?.({ state: "unavailable", detail: state.blocked }); })
+      .finally(() => { state.running = false; state.runningPinned = false; work.delete(task); });
+    work.add(task);
+  }
   const tick = (): Promise<void> => {
     if (closed) return Promise.resolve();
-    ticking ??= tickOnce().catch(() => { for (const state of contacts.values()) { state.initialized = false; state.lastEnrollment = null; } options.onStatus?.({ state: "unavailable", detail: "Owner settings or messaging state could not be verified." }); }).finally(() => { ticking = undefined; });
+    ticking ??= tickOnce().catch(() => { for (const state of contacts.values()) { state.initialized = false; state.healthy = false; state.lastEnrollment = null; } options.onStatus?.({ state: "unavailable", detail: "Owner settings or messaging state could not be verified." }); }).finally(() => { ticking = undefined; });
     return ticking;
   };
   const schedule = () => { if (!closed) timer = setTimeout(() => { void tick().finally(schedule); }, 1000); };
   if (options.automatic !== false) schedule();
   return { tick, async idle() { await ticking; await Promise.allSettled([...work]); }, async close() {
-    if (closed) return; closed = true; if (timer) clearTimeout(timer); unsubscribe(); unsubscribeHabitat();
+    if (closed) return; closed = true; if (timer) clearTimeout(timer); disarmDebounce?.(); unsubscribe(); unsubscribeHabitat();
     await ticking;
     // In-flight dispatches settle while the transport is still alive; pause
     // only covers whatever the bounded grace cannot wait out.

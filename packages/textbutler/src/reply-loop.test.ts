@@ -26,7 +26,8 @@ async function fixture(fast = false) {
   const binding = automationBinding(enrolled()), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
   const intentRuns = new Map<string, unknown>();
-  let failEvents = 0, eventsCalls = 0;
+  let failEvents = 0, eventsCalls = 0, pollSetCalls = 0, statusCalls = 0;
+  const armed: { fire: () => void; delayMs: number; live: boolean }[] = [];
   let beforeSubmit: (() => Promise<void>) | undefined;
   const allowed: [string, string][] = [], notices: string[] = [], synced: [string, string][] = [];
   const shelf = { sync: async (contactId: string, url: string) => { synced.push([contactId, url]); return { name: "bio", url, commit: "c".repeat(40), syncedAt: time }; },
@@ -34,6 +35,8 @@ async function fixture(fast = false) {
     list: async () => [] as const };
   const client = createGhostgetAutomationClient(async (method, params) => {
     if (method === "poll") return enrolled();
+    if (method === "pollSet") pollSetCalls++;
+    if (method === "status") statusCalls++;
     if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: null })) };
     if (method === "history") return { enrollment: enrolled(), messages: messages.slice(-Number(params.limit)) };
     if (method === "events") { eventsCalls++; if (failEvents > 0) { failEvents--; throw new Error("Synthetic events stream failure"); }
@@ -53,6 +56,7 @@ async function fixture(fast = false) {
     return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ value: { respond: true, confidence: 0.99, reason: "requested", summary: "Explain briefly", actions: [{ kind: "text", text: "Synthetic answer" }], tool: null } }) } }] });
   } });
   const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: value => { statuses.push({ state: value.state, detail: value.detail }); }, repos: shelf,
+    scheduleDispatch: (fire, delayMs) => { const entry = { fire, delayMs, live: true }; armed.push(entry); return () => { entry.live = false; }; },
     ...(fast ? { habitat: { config: { enabled: true, driver: driver.config, evolutionModel: null, debounceMs: 1000 }, driver } }
       : { agent: { qualified: (contact: Parameters<ButlerAgent["qualified"]>[0]) => agent.qualified(contact), classify: (request: Parameters<ButlerAgent["classify"]>[0]) => agent.classify(request), compose: (request: Parameters<ButlerAgent["compose"]>[0]) => agent.compose(request) } }), service: {
     dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": binding }, grants: {} }), runJournal: () => journal,
@@ -70,6 +74,8 @@ async function fixture(fast = false) {
     habitatChanged(id: string) { for (const listener of habitatListeners) listener(id); }, habitatListenerCount: () => habitatListeners.size,
     beforeSubmit(callback: () => Promise<void>) { beforeSubmit = callback; },
     failNextEvents(count: number) { failEvents = count; }, eventsCalls: () => eventsCalls,
+    pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
+    fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
@@ -81,6 +87,37 @@ test("reply loop establishes a silent startup boundary then debounces a disclose
   f.advance(9000); await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toHaveLength(1); expect(f.sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }, { kind: "reaction", messageId: "message:2", emoji: "👍", remove: false }]);
   expect(f.journal.recent("contact-1")[0]?.state).toBe("submitted");
+});
+test("an elapsed debounce starts the run without waiting for another provider poll", async () => {
+  const f = await fixture(); await f.loop.tick();
+  f.add("butler help with this"); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0);
+  const debounceMs = f.settings().contacts[0]!.debounceMs;
+  expect(f.armed().map(entry => entry.delayMs)).toEqual([debounceMs]);
+  const polls = f.pollSetCalls(), drains = f.eventsCalls();
+  f.advance(debounceMs); expect(f.fireArmed()).toBe(1); await f.loop.idle();
+  expect(f.sent).toHaveLength(1); expect(f.acks).toHaveLength(1);
+  expect(f.pollSetCalls()).toBe(polls); expect(f.eventsCalls()).toBe(drains);
+  // The run spends one provider status read before claiming.
+  expect(f.statusCalls()).toBe(1);
+  // The following poll tick finds nothing left to start.
+  await f.loop.tick(); await f.loop.idle(); expect(f.sent).toHaveLength(1);
+});
+test("the debounce dispatch never starts a paused, fenced or not-yet-due contact", async () => {
+  const f = await fixture(); await f.loop.tick();
+  const debounceMs = f.settings().contacts[0]!.debounceMs;
+  // A newer message moves the window: an early fire re-arms instead of starting.
+  f.add("butler first"); await f.loop.tick(); f.advance(debounceMs - 1000); f.add("butler second"); await f.loop.tick();
+  f.advance(1000); expect(f.fireArmed()).toBe(1); await f.loop.idle(); expect(f.sent).toHaveLength(0);
+  expect(f.armed()).toHaveLength(1);
+  // Pause wins over an armed dispatch.
+  f.change({ ...f.settings(), paused: true }); f.advance(debounceMs); f.fireArmed(); await f.loop.idle(); expect(f.sent).toHaveLength(0);
+  // Resuming re-establishes the silent boundary before new requests arm.
+  f.change({ ...f.settings(), paused: false }); await f.loop.tick();
+  // An unreconciled send stays with the poll tick, which alone reconciles.
+  f.add("butler third"); await f.loop.tick(); expect(f.armed()).toHaveLength(1);
+  f.journal.claim("fenced-run", "contact-1", "event:fenced", Date.parse("2026-09-11T12:00:00.000Z")); f.journal.transition("fenced-run", "running", "indeterminate", "synthetic", Date.parse("2026-09-11T12:00:00.000Z"));
+  f.advance(debounceMs); f.fireArmed(); await f.loop.idle(); expect(f.sent).toHaveLength(0);
 });
 test("backfill and an active owner conversation never reach the response agent", async () => {
   const f = await fixture(); await f.loop.tick();

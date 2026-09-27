@@ -8,14 +8,45 @@ export * from "./automation-diagnostics.ts";
 
 /** Only the trusted daemon owns this port. It is never an agent tool. */
 export type GhostgetAutomationInvoker = (method: string, params: Readonly<Record<string, unknown>>, signal?: AbortSignal) => Promise<unknown>;
+/** Each provider status spawns a native session that queues behind the poll
+ * loop; the automatic pre-claim capability and grant gates read the same answer
+ * seconds apart. Those gates opt into a briefly reused success; Ghostget still
+ * re-verifies identity inside every dispatch. Every other caller reads fresh,
+ * and a failed read evicts what any later gate could reuse. */
+export const STATUS_REUSE_MS = 10_000;
+async function unlessAborted<T>(value: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return await value;
+  signal.throwIfAborted();
+  let onAbort = () => {};
+  try { return await Promise.race([value, new Promise<never>((_, reject) => { onAbort = () => reject(signal.reason); signal.addEventListener("abort", onAbort, { once: true }); })]); }
+  finally { signal.removeEventListener("abort", onAbort); }
+}
 export function createGhostgetAutomationClient(invoke: GhostgetAutomationInvoker, now: () => number = Date.now) {
   const known = new Map<string, AutomationEnrollment>();
+  const statuses = new Map<AutomationProvider, { at: number; value: Promise<ReturnType<typeof parseAutomationStatus>> }>();
   const remember = (value: unknown): AutomationEnrollment => { const result = parseAutomationEnrollment(value); known.set(result.id, result); return result; };
+  const readStatus = async (provider: AutomationProvider, signal?: AbortSignal) => {
+    const result = parseAutomationStatus(await invoke("status", { provider: automationProvider(provider) }, signal));
+    if (result.identity.provider !== provider) throw new Error("Provider status changed network"); return result;
+  };
   return {
-    async start(provider: AutomationProvider, signal?: AbortSignal) { return parseAutomationStatus(await invoke("start", { provider: automationProvider(provider) }, signal)); },
-    async status(provider: AutomationProvider, signal?: AbortSignal) {
-      const result = parseAutomationStatus(await invoke("status", { provider: automationProvider(provider) }, signal));
-      if (result.identity.provider !== provider) throw new Error("Provider status changed network"); return result;
+    async start(provider: AutomationProvider, signal?: AbortSignal) { statuses.delete(provider); return parseAutomationStatus(await invoke("start", { provider: automationProvider(provider) }, signal)); },
+    /** `maxAgeMs` opts into sharing an in-flight read or reusing a success at
+     * most that old (capped at STATUS_REUSE_MS); zero always reads fresh. */
+    async status(provider: AutomationProvider, signal?: AbortSignal, maxAgeMs = 0) {
+      if (maxAgeMs <= 0) {
+        try { const result = await readStatus(provider, signal); statuses.set(provider, { at: now(), value: Promise.resolve(result) }); return result; }
+        catch (error) { statuses.delete(provider); throw error; }
+      }
+      signal?.throwIfAborted();
+      const cached = statuses.get(provider);
+      if (cached && now() - cached.at < Math.min(maxAgeMs, STATUS_REUSE_MS)) return await unlessAborted(cached.value, signal);
+      // A shared read never carries one caller's signal: an abandoned gate
+      // must not fail the others waiting on the same session.
+      const value = readStatus(provider), entry = { at: now(), value };
+      statuses.set(provider, entry);
+      value.then(() => { entry.at = now(); }, () => { if (statuses.get(provider) === entry) statuses.delete(provider); });
+      return await unlessAborted(value, signal);
     },
     async conversations(provider: AutomationProvider, limit = 200, signal?: AbortSignal) {
       const value = await invoke("conversations", { provider: automationProvider(provider), limit: integer(limit, 1, 200) }, signal);
@@ -142,7 +173,7 @@ export function createGhostgetAutomationTransport(options: { client: GhostgetAut
   return {
     async capabilities() {
       try {
-        const { enrollment } = await client.history(enrollmentId, 1), status = await client.status(enrollment.identity.provider);
+        const { enrollment } = await client.history(enrollmentId, 1), status = await client.status(enrollment.identity.provider, undefined, STATUS_REUSE_MS);
         if (automationHash(status.identity) !== automationHash(enrollment.identity)) return unavailable();
         return success({ protocol: TRANSPORT_PROTOCOL, provider: `ghostget-${enrollment.identity.provider}`, capabilities: [
           { capability: "history", available: true, reason: null }, { capability: "contacts", available: false, reason: "Choose an exact Ghostget conversation." },

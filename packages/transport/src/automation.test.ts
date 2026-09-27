@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationCoordinate, parseAutomationEnrollment, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
+import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationCoordinate, parseAutomationEnrollment, STATUS_REUSE_MS, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
 import { parseActionIntent } from "./validation";
 
 const now = Date.parse("2026-09-11T00:00:00.000Z");
@@ -238,6 +238,40 @@ test("a set-poll answers exactly the requested enrollments and nothing else", as
     const client = createGhostgetAutomationClient(async () => ({ results }));
     await expect(client.pollSet(["enrollment:a", "enrollment:b"])).rejects.toThrow();
   }
+});
+
+test("provider status reuse is opt-in, shared in flight, bounded, and never keeps a failure", async () => {
+  const f = automationFixture();
+  const ok = (accountSubject: string) => ({ identity: { ...f.enrollment.identity, accountSubject }, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) });
+  let clock = now, calls = 0, fail = false, subject = "whatsapp:pn:15550000000", release: (() => void) | undefined;
+  const client = createGhostgetAutomationClient(async method => {
+    if (method !== "status") throw new Error("Unexpected synthetic operation");
+    calls++;
+    await new Promise<void>(resolve => { release = resolve; });
+    if (fail) throw new AutomationOperationError("remote-unavailable");
+    return ok(subject);
+  }, () => clock);
+  const settle = async <T>(value: Promise<T>) => { await Promise.resolve(); release!(); return await value; };
+  // Two automatic gates asking together share one native session.
+  const first = client.status("whatsapp", undefined, STATUS_REUSE_MS), second = client.status("whatsapp", undefined, STATUS_REUSE_MS);
+  await settle(first); await second; expect(calls).toBe(1);
+  // A gate inside the reuse window spends no session; one after it does.
+  clock += STATUS_REUSE_MS - 1; await client.status("whatsapp", undefined, STATUS_REUSE_MS); expect(calls).toBe(1);
+  clock += 1; await settle(client.status("whatsapp", undefined, STATUS_REUSE_MS)); expect(calls).toBe(2);
+  // Callers without an age bound (owner checks) always read fresh and see a changed account.
+  subject = "whatsapp:pn:15559999999";
+  expect((await settle(client.status("whatsapp"))).identity.accountSubject).toBe(subject); expect(calls).toBe(3);
+  // A requested bound tighter than the cap is honored.
+  clock += 1000; await settle(client.status("whatsapp", undefined, 500)); expect(calls).toBe(4);
+  // A failed read is never served to a later gate.
+  clock += STATUS_REUSE_MS; fail = true;
+  await expect(settle(client.status("whatsapp", undefined, STATUS_REUSE_MS))).rejects.toThrow(); await Promise.resolve();
+  fail = false; await settle(client.status("whatsapp", undefined, STATUS_REUSE_MS)); expect(calls).toBe(6);
+  // One gate's cancellation does not cancel the shared read for the others.
+  clock += STATUS_REUSE_MS; const controller = new AbortController();
+  const abandoned = client.status("whatsapp", controller.signal, STATUS_REUSE_MS), kept = client.status("whatsapp", undefined, STATUS_REUSE_MS);
+  controller.abort(new Error("caller cancelled")); await expect(abandoned).rejects.toThrow("caller cancelled");
+  await settle(kept); expect(calls).toBe(7);
 });
 
 test("only complete allowlisted native markers survive remote unavailable classification", () => {
