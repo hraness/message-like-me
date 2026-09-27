@@ -7,7 +7,7 @@ import { Hooks, type HookContext } from "./hooks.ts";
 import { RunJournal, type RunState } from "./journal.ts";
 import { DriverFault } from "./fast-driver.ts";
 
-export type ConversationSnapshot = Readonly<{ state: ConversationState; contextId: string; messageIds: readonly string[] }>;
+export type ConversationSnapshot = Readonly<{ state: ConversationState; contextId: string; messageIds: readonly string[]; relatedMessageIds: ReadonlyMap<string, string> }>;
 export type AgentRequest = Readonly<{ runId: string; contact: ContactSettings; event: MessageEvent; signal: AbortSignal; capabilities?: readonly string[] }>;
 export class NoReplyNeeded extends Error {}
 export type SubmittedReply = Readonly<{ runId: string; contact: ContactSettings; event: MessageEvent; actions: readonly ActionIntent[]; messageIds: readonly string[]; at: number }>;
@@ -168,10 +168,13 @@ export class ButlerRuntime {
       // arrived that isn't this run's ack", which still catches contact or
       // owner messages — including owner sends journaled separately — while
       // ignoring the ack's own echo (and any reaction or edit, which adds no
-      // message id). Without an ack, drift remains the strict scalar
-      // revision/context comparison.
+      // message id). In a self-chat the echo arrives under a fresh incoming id
+      // that only points back through relatedMessageId, so attribution needs
+      // the relation, not just the id set. Without an ack, drift remains the
+      // strict scalar revision/context comparison.
+      const isAckEcho = (id: string) => { const related = refreshed.relatedMessageIds.get(id); return related !== undefined && ackIds.has(related); };
       const changed = event.pinned !== true && (acked
-        ? refreshed.messageIds.some(id => !snapshot.messageIds.includes(id) && !ackIds.has(id))
+        ? refreshed.messageIds.some(id => !snapshot.messageIds.includes(id) && !ackIds.has(id) && !isAckEcho(id))
         : refreshed.state.latestRevision !== snapshot.state.latestRevision || refreshed.contextId !== snapshot.contextId);
       if (controller.signal.aborted || !stillReply || changed) return finish("cancelled", "conversation-changed");
       const plan = await this.ports.transport.prepare({ intentId: runId, conversationId: contact.routeId, contextId: refreshed.contextId, actions });
