@@ -17,7 +17,7 @@ const description =
   'GhostReply answers iMessages in your texting style on a $4.99 license. Textbutler replies as a marked assistant on your own AI subscription.';
 
 export const metadata = pageMetadata({
-  title: 'Compared with GhostReply',
+  title: 'GhostReply alternative: Textbutler compared',
   description,
   path: '/compare/ghostreply',
 });
@@ -68,9 +68,10 @@ export default function CompareGhostReplyPage() {
           <p className="eyebrow">Compare</p>
           <h1>Textbutler compared with GhostReply</h1>
           <p>
-            Both apps watch the iMessage conversations you choose on a Mac and can answer them
-            without you typing. They differ in who the reply claims to be, where the AI runs,
-            and how you pay for it.
+            GhostReply and Textbutler both watch the iMessage conversations you choose on a Mac
+            and can answer them without you typing. GhostReply writes replies that read as yours;
+            Textbutler marks its replies as an assistant’s and runs them on your own AI
+            subscription.
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
@@ -78,7 +79,7 @@ export default function CompareGhostReplyPage() {
           <p>
             <a href={GHOSTREPLY_URL}>GhostReply</a> is a $4.99 Mac app whose pitch is that the
             reply reads like you wrote it. Textbutler is a free, MIT-licensed butler whose replies
-            announce that an assistant sent them. That difference shapes everything below.
+            announce that an assistant sent them.
           </p>
           <p>{SITE_STATUS}</p>
 
@@ -111,9 +112,9 @@ export default function CompareGhostReplyPage() {
           <p>
             By default its replies carry a disclosure marker:{' '}
             <code>{'🤖{ hello this is my response }'}</code>. The three symbols are configurable
-            per contact. Smart response is designed to yield
-            while you are talking; keyword-only mode waits for a direct invitation. Drafts you
-            review send only with their exact review digest. AI replies run on your own Claude Code
+            per contact. Smart response is designed to yield while you are talking, and
+            keyword-only mode waits for a direct invitation. A draft you review sends only in the
+            version you approved. AI replies run on your own Claude Code
             or Codex subscription through <a href="https://github.com/hraness/xcb">xcb</a> from the
             local install; an optional fast-reply mode can use a Qwen model through Vercel AI
             Gateway or a model server on your Mac.
