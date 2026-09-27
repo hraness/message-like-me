@@ -1,0 +1,51 @@
+● Automatic replies on in 1 of 1 chats
+⚠︎ Couldn't pause automatic replies · Settings changed. Try again.
+↻ An action is still running · Check again
+─────────
+Check for replies
+Conversations ▸
+  Alice Example ▸
+    ✓ Automatic replies
+    iMessage · Contact grant active
+    ─────────
+    Agent account (turn off replies to change)
+    ✓ Claude · Ready  (dimmed)
+  ─────────
+  Find conversations to add
+  Connect iMessage
+  Connect Beeper
+─────────
+Pause automatic replies
+─────────
+Details ▸
+  Updated 4s ago
+  Replies are live.
+  ─────────
+  Recent activity ▸
+    Nothing yet
+  Agent accounts ▸
+    Claude · Ready ▸
+      Ready.
+  Capabilities ▸
+    Messages · Needs setup ▸
+      Connect the daemon to negotiate Ghostget Messages access.
+    Contacts · Needs setup ▸
+      Contacts appear after Ghostget grants scoped access.
+    Agent · Needs setup ▸
+      A qualified Claude, Codex, or Devin account is required.
+    Attachments · Needs setup ▸
+      File sending must be reported by the connected provider.
+    Reactions · Needs setup ▸
+      Available only when the transport supports reactions.
+    Stickers · Not supported ▸
+      No qualified sticker transport is connected.
+    Links · Needs setup ▸
+      Connect messaging to check rich link support.
+    Polls · Needs setup ▸
+      Connect messaging to check native poll support.
+    Mini-apps · Not supported ▸
+      No qualified iMessage app transport is connected.
+  Refresh now
+  Setup guide ↗
+Help & support ↗
+Quit Textbutler  ⌘Q

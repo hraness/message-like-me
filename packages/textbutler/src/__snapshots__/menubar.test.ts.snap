@@ -5,6 +5,7 @@ exports[`failed menu actions (T6) every failure row is short, sentence case and 
   "Another action is still running",
   "Couldn't start the background service",
   "The conversation list changed",
+  "Couldn't open System Settings",
   "Review this reply in the terminal first",
   "Couldn't discard the suggestion",
   "Couldn't open the page",

@@ -1,0 +1,44 @@
+● Automatic replies on in 1 of 2 chats
+─────────
+Check for replies · 2 waiting
+Replies waiting ▸
+  Alice Example · 2 to answer ▸
+    Dinner at 7?
+    Suggest a reply
+Conversations ▸
+  Alice Example ▸
+    ✓ Automatic replies
+    iMessage · Contact grant active
+    ─────────
+    Agent account (turn off replies to change)
+    ✓ Claude · Ready  (dimmed)
+  Contact 2 ▸
+    Automatic replies
+    Beeper
+    ─────────
+    Agent account
+    Claude · Ready
+  ─────────
+  Find conversations to add
+  Connect iMessage
+  Connect Beeper
+─────────
+Pause automatic replies
+─────────
+Details ▸
+  Updated 4s ago
+  Replies are live.
+  ─────────
+  Recent activity ▸
+    ✓ Replied · 3:48 PM ▸
+      Replied in one message.
+  Agent accounts ▸
+    Claude · Ready ▸
+      Ready.
+  Capabilities ▸
+    Messages · Available ▸
+      Reads and sends in chats you turn on.
+  Refresh now
+  Setup guide ↗
+Help & support ↗
+Quit Textbutler  ⌘Q

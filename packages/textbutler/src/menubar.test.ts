@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { planAutostart, validateSnapshot, type MenuItem, type Snapshot } from "@hraness/desktop-foundation";
 import { runTextbutlerCli } from "./cli.ts";
 import { startDaemon, type RunningDaemon } from "./daemon.ts";
-import { companionForeground, companionOptions, exitSoon, menuLabel, runMenuBarCommand, snapshotItems } from "./menubar.ts";
+import { companionForeground, companionOptions, exitSoon, menuLabel, menuTime, runMenuBarCommand, snapshotItems } from "./menubar.ts";
 import { ACTION_ERROR_MS, describeMenuFailure, MenuFailure, MenuPending } from "./menu-errors.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { disconnectedSnapshot, type DesktopSnapshot } from "../../control/src/index.ts";
@@ -24,6 +24,11 @@ function labels(items: readonly MenuItem[]): string[] {
 function action(items: readonly MenuItem[], id: string): Extract<MenuItem, { kind: "action" }> {
   const found = items.find(item => item.kind === "action" && item.id === id);
   if (!found || found.kind !== "action") throw new Error(`missing action ${id}`);
+  return found;
+}
+function submenu(items: readonly MenuItem[], label: string): Extract<MenuItem, { kind: "submenu" }> {
+  const found = items.find(item => item.kind === "submenu" && item.label === label);
+  if (found?.kind !== "submenu") throw new Error(`missing submenu ${label}`);
   return found;
 }
 function base(overrides: Partial<DesktopSnapshot> = {}): DesktopSnapshot {
@@ -73,68 +78,89 @@ describe("companion identity", () => {
   });
 });
 
-describe("snapshot menu mapping", () => {
-  test("reflects paused, running, setup and disconnected states in the wire contract", () => {
-    for (const [snapshot, state, checked, enabled] of [
-      [base(), "Automatic replies paused", true, true],
-      [base({ settings: { paused: false, activeContactLimit: 5 }, automation: { state: "running", detail: "Replies are live." } }), "Automatic replies running", false, true],
-      [base({ settings: { paused: false, activeContactLimit: 5 } }), "Automatic replies need setup", false, true],
-      [disconnectedSnapshot(), "Daemon disconnected", true, false],
+describe("snapshot menu mapping (T5)", () => {
+  const running = { settings: { paused: false, activeContactLimit: 5 }, automation: { state: "running" as const, detail: "Replies are live." }, messagingProviders: ["imessage" as const] };
+  const contact = (index: number, enabled = false) => ({ id: `contact-${index}`, name: `Contact ${index}\u202a`, subtitle: `Subtitle ${index}`,
+    settings: { enabled, responseMode: "smart" as const, keyword: "butler", provider: "codex" as const, disclosure: { character: "🤖", begin: "{", end: "}" } } });
+  test("a status line leads, one primary action follows, and the pause toggle reads as a verb", () => {
+    for (const [snapshot, status, primary, toggle] of [
+      [base({ ...running, contacts: [contact(1, true)] }), "● Automatic replies on in 1 of 1 chats", "replies.scan", "Pause automatic replies"],
+      [base({ messagingProviders: ["imessage"], contacts: [contact(1)] }), "⏸︎ Automatic replies paused", "replies.scan", "Resume automatic replies"],
+      [base(), "◐ Getting started", "open-guide", "Resume automatic replies"],
+      [disconnectedSnapshot(), "⊘ Textbutler isn't running", "daemon.install", null],
     ] as const) {
       const items = snapshotItems(snapshot, { confirmedAgeSeconds: 3, fresh: true });
       const actions = wire(items);
-      expect(items[0]).toMatchObject({ kind: "label", label: state });
-      const toggle = action(items, "toggle-pause");
-      expect(toggle.checked).toBe(checked);
-      expect(toggle.enabled).toBe(enabled);
-      expect(actions.get("toggle-pause")).toBe(enabled);
-      expect(action(items, "refresh").enabled).not.toBe(false);
+      expect(items[0]).toEqual({ kind: "label", label: status });
+      expect(items[1]).toEqual({ kind: "separator" });
+      expect(items[2]).toMatchObject({ kind: "action", id: primary });
+      if (toggle === null) expect(actions.has("toggle-pause")).toBe(false);
+      else expect(action(items, "toggle-pause")).toEqual({ kind: "action", id: "toggle-pause", label: toggle });
       expect(actions.get("product.support")).toBe(true);
-      expect(actions.has("product.updates")).toBe(false);
-      expect(items.at(-1)).toMatchObject({ kind: "quit", label: "Quit Textbutler" });
+      expect(items.at(-1)).toEqual({ kind: "quit", label: "Quit Textbutler" });
     }
   });
-  test("bounds contact rows and reports the remainder", () => {
-    const contacts = Array.from({ length: 23 }, (_, index) => ({
-      id: `contact-${index}`, name: `Contact ${index}\u202a`, subtitle: `Subtitle ${index}`,
-      settings: { enabled: index % 2 === 0, responseMode: "smart" as const, keyword: "butler", provider: "codex" as const, disclosure: { character: "🤖", begin: "{", end: "}" } },
-    }));
-    const items = snapshotItems(base({ contacts }), { confirmedAgeSeconds: 0, fresh: true });
-    wire(items);
-    const contactsMenu = items.find(item => item.kind === "submenu" && item.label === "Contacts");
-    if (contactsMenu?.kind !== "submenu") throw new Error("missing contacts submenu");
-    expect(contactsMenu.items.filter(item => item.kind === "submenu").length).toBe(20);
-    expect(labels(contactsMenu.items)).toContain("3 more contacts");
-    expect(labels(items).some(label => /[\u202a-\u202e]/u.test(label))).toBe(false);
-    expect(items[1]).toMatchObject({ label: "12 enabled of 23 contacts · limit 5" });
+  test("macOS access needs replace the primary action with the Settings pane", async () => {
+    const opened: string[] = [];
+    for (const [needs, status, id] of [["full-disk-access", "🔒︎ Needs Full Disk Access", "settings.full-disk-access"],
+      ["automation", "🔒︎ Needs Automation for Messages", "settings.automation"]] as const) {
+      const items = snapshotItems(base(running), { confirmedAgeSeconds: 0, fresh: true }, { access: { needs } });
+      expect(items[0]).toEqual({ kind: "label", label: status });
+      expect(items[2]).toMatchObject({ kind: "action", id });
+    }
+    const options = companionOptions("/unused", async () => {}, "/unused/cli.ts", { access: async () => ({ needs: "full-disk-access" }), openSettings: async url => { opened.push(url); return true; },
+      request: async () => ({ protocol: "textbutler.control.v1", ok: true, kind: "snapshot", snapshot: base(running) }) as never });
+    const signal = new AbortController().signal;
+    expect((await options.snapshot(signal))[0]).toEqual({ kind: "label", label: "🔒︎ Needs Full Disk Access" });
+    await options.onAction("settings.full-disk-access", signal);
+    await options.onAction("settings.automation", signal);
+    expect(opened).toEqual(["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"]);
   });
-  test("summarizes accounts, capabilities and newest-first activity", () => {
+  test("conversations are bounded, sanitized and toggled per contact", () => {
+    const contacts = Array.from({ length: 23 }, (_, index) => contact(index, index % 2 === 0));
+    const items = snapshotItems(base({ ...running, contacts }), { confirmedAgeSeconds: 0, fresh: true });
+    wire(items);
+    const menu = submenu(items, "Conversations");
+    expect(menu.items.filter(item => item.kind === "submenu").length).toBe(20);
+    expect(labels(menu.items)).toContain("3 more in the guided terminal");
+    expect(labels(items).some(label => /[\u202a-\u202e]/u.test(label))).toBe(false);
+    const first = submenu(menu.items, "Contact 0");
+    expect(action(first.items, "contact.toggle:contact-0")).toMatchObject({ label: "Automatic replies", checked: true });
+    expect(items[0]).toEqual({ kind: "label", label: "● Automatic replies on in 12 of 23 chats" });
+  });
+  test("diagnostics sit under Details with local times and plain activity", () => {
     const items = snapshotItems(base({
       providerAccounts: [
         { id: "claude-main", label: "Claude primary", provider: "claude", route: "claude-api", status: "ready", detail: "Ready detail", defaultReplyModel: "m", classifierModel: "c" },
         { id: "codex-main", label: "Codex primary", provider: "codex", route: "codex", status: "setup-required", detail: "Setup detail", defaultReplyModel: null, classifierModel: null },
       ],
       activity: [
-        { id: "old", at: "2026-01-01T00:00:00Z", contactId: null, title: "Old event", detail: "old detail" },
-        { id: "new", at: "2026-03-01T00:00:00Z", contactId: null, title: "New event", detail: "new detail" },
+        { id: "old", at: "2026-01-01T00:00:00Z", contactId: null, title: "ignored", detail: "No keyword." },
+        { id: "new", at: "2026-03-01T15:48:00Z", contactId: null, title: "submitted", detail: "Sent." },
       ],
     }), { confirmedAgeSeconds: 61, fresh: true });
     wire(items);
-    const all = labels(items);
-    expect(all).toContain("Agent accounts · 1 of 2 ready");
+    const details = submenu(items, "Details");
+    const all = labels(details.items);
     expect(all).toContain("Claude primary · Ready");
-    expect(all).toContain("Codex primary · Setup required");
-    expect(all).toContain("Messages · Setup required");
-    expect(all.indexOf("New event")).toBeLessThan(all.indexOf("Old event"));
+    expect(all).toContain("Codex primary · Needs setup");
+    expect(all).toContain("Messages · Needs setup");
     expect(all).toContain("Updated 1m ago");
+    expect(all.findIndex(label => label.startsWith("✓ Replied · "))).toBeLessThan(all.findIndex(label => label.startsWith("– Skipped · ")));
+    expect(all.some(label => /\d{4}-\d{2}-\d{2}T/u.test(label))).toBe(false);
+    expect(labels(items.filter(item => item.kind !== "submenu" || item.label !== "Details")).some(label => /Capabilities|Agent accounts|Updated/u.test(label))).toBe(false);
+  });
+  test("local clock times, never ISO timestamps", () => {
+    expect(menuTime("2026-03-01T15:48:00Z", "UTC")).toBe("3:48 PM");
+    expect(menuTime("not a time")).toBe("");
   });
   test("marks unconfirmed and stale states distinctly", () => {
-    expect(labels(snapshotItems(disconnectedSnapshot(), { confirmedAgeSeconds: null, fresh: false }))).toContain("Daemon status not confirmed");
-    expect(labels(snapshotItems(disconnectedSnapshot(), { confirmedAgeSeconds: 90, fresh: false }))).toContain("Last confirmed 1m ago");
+    expect(labels(submenu(snapshotItems(disconnectedSnapshot(), { confirmedAgeSeconds: null, fresh: false }), "Details").items)).toContain("Status not confirmed yet");
+    expect(labels(submenu(snapshotItems(disconnectedSnapshot(), { confirmedAgeSeconds: 90, fresh: false }), "Details").items)).toContain("Last confirmed 1m ago");
   });
 });
 
-describe("owner replies submenu", () => {
+describe("replies waiting", () => {
   const replies = (overrides: Partial<import("../../control/src/index.ts").RepliesView> = {}) => ({
     scannedAt: "2026-03-01T00:00:00Z", pending: [], drafts: [], ...overrides,
   });
@@ -146,53 +172,38 @@ describe("owner replies submenu", () => {
     id: "draft:abc", contactId: "contact-1", name: "Alice Example", summary: "Suggestion",
     preview: "\ud83e\udd16{ Yes, 7 works. }", actionCount: 1, expiresAt: "2026-03-01T00:15:00Z",
   };
-  function repliesMenu(items: readonly MenuItem[]): Extract<MenuItem, { kind: "submenu" }> {
-    const menu = items.find(item => item.kind === "submenu" && item.label.startsWith("Replies"));
-    if (menu?.kind !== "submenu") throw new Error("missing replies submenu");
-    return menu;
-  }
-  test("pending conversations offer a scan and a suggest action only when sendable", () => {
-    const items = snapshotItems(base({ replies: replies({ pending: [pending] }) }), { confirmedAgeSeconds: 0, fresh: true });
+  const ready = { messagingProviders: ["imessage" as const], contacts: [{ id: "contact-1", name: "Alice Example", subtitle: "iMessage",
+    settings: { enabled: true, responseMode: "smart" as const, keyword: "butler", provider: "codex" as const, disclosure: { character: "🤖", begin: "{", end: "}" } } }] };
+  test("the primary row carries the waiting count and a suggest action only when sendable", () => {
+    const items = snapshotItems(base({ ...ready, replies: replies({ pending: [pending] }) }), { confirmedAgeSeconds: 0, fresh: true });
     wire(items);
-    const menu = repliesMenu(items);
-    expect(menu.label).toBe("Replies · 2 waiting");
+    expect(items[2]).toEqual({ kind: "action", id: "replies.scan", label: "Check for replies · 2 waiting" });
+    const menu = submenu(items, "Replies waiting");
     const all = labels(menu.items);
     expect(all).toContain("Alice Example · 2 to answer");
     expect(all.some(label => label.includes("\u202e"))).toBe(false);
     expect(all.some(label => label.includes("Dinner at 7?"))).toBe(true);
-    const conversation = menu.items.find(item => item.kind === "submenu" && item.label.includes("Alice Example"));
-    if (conversation?.kind !== "submenu") throw new Error("missing conversation row");
-    expect(conversation.items.some(item => item.kind === "action" && item.id === "replies.suggest:contact-1")).toBe(true);
-    const blocked = snapshotItems(base({ replies: replies({ pending: [{ ...pending, sendable: false, reason: "A previous send needs reconciliation." }], drafts: [] }) }), { confirmedAgeSeconds: 0, fresh: true });
-    const blockedMenu = repliesMenu(blocked);
-    const blockedConversation = blockedMenu.items.find(item => item.kind === "submenu" && item.label.includes("Alice Example"));
-    if (blockedConversation?.kind !== "submenu") throw new Error("missing blocked row");
-    expect(labels(blockedConversation.items)).toContain("A previous send needs reconciliation.");
-    expect(blockedConversation.items.some(item => item.kind === "action" && item.id === "replies.suggest:contact-1")).toBe(false);
+    expect(submenu(menu.items, "Alice Example · 2 to answer").items.some(item => item.kind === "action" && item.id === "replies.suggest:contact-1")).toBe(true);
+    const blocked = submenu(snapshotItems(base({ ...ready, replies: replies({ pending: [{ ...pending, sendable: false, reason: "A previous send needs reconciliation." }] }) }), { confirmedAgeSeconds: 0, fresh: true }), "Replies waiting");
+    const row = submenu(blocked.items, "Alice Example · 2 to answer");
+    expect(labels(row.items)).toContain("A previous send needs reconciliation.");
+    expect(row.items.some(item => item.kind === "action" && item.id === "replies.suggest:contact-1")).toBe(false);
   });
-  test("draft previews require full terminal review and only expose discard", () => {
-    const items = snapshotItems(base({ replies: replies({ pending: [pending], drafts: [draft] }) }), { confirmedAgeSeconds: 0, fresh: true });
+  test("suggestions need the full terminal review and only expose discard", () => {
+    const items = snapshotItems(base({ ...ready, replies: replies({ pending: [pending], drafts: [draft] }) }), { confirmedAgeSeconds: 0, fresh: true });
     wire(items);
-    const menu = repliesMenu(items);
-    const draftRow = menu.items.find(item => item.kind === "submenu" && item.label === "Draft · Alice Example");
-    if (draftRow?.kind !== "submenu") throw new Error("missing draft row");
-    expect(labels(draftRow.items)).toContain("\ud83e\udd16{ Yes, 7 works. }");
-    expect(draftRow.items.some(item => item.kind === "action" && item.id === "replies.send:draft:abc")).toBe(false);
-    expect(labels(draftRow.items)).toContain("Preview only · full review in textbutler tui");
-    expect(draftRow.items.some(item => item.kind === "action" && item.id === "replies.discard:draft:abc")).toBe(true);
-    // The menu never offers a free-text send path.
+    const row = submenu(submenu(items, "Replies waiting").items, "Suggestion for Alice Example");
+    expect(labels(row.items)).toContain("\ud83e\udd16{ Yes, 7 works. }");
+    expect(labels(row.items)).toContain("Review and send it in the guided terminal");
+    expect(row.items.some(item => item.kind === "action" && item.id === "replies.discard:draft:abc")).toBe(true);
     const ids = JSON.stringify(items);
     expect(ids).not.toContain("replies.text");
     expect(ids.match(/"replies.send:[^"]*"/g)).toBeNull();
   });
-  test("empty and unconfigured reply states stay explanatory", () => {
-    const fresh = repliesMenu(snapshotItems(base({ replies: replies() }), { confirmedAgeSeconds: 0, fresh: true }));
-    expect(fresh.label).toBe("Replies · 0 waiting");
-    expect(labels(fresh.items)).toContain("Nothing waiting for a reply");
-    const unscanned = repliesMenu(snapshotItems(base({ replies: replies({ scannedAt: null }) }), { confirmedAgeSeconds: 0, fresh: true }));
-    expect(labels(unscanned.items)).toContain("Check for replies to scan enrolled conversations");
-    const missing = repliesMenu(snapshotItems(base(), { confirmedAgeSeconds: 0, fresh: true }));
-    expect(labels(missing.items)).toContain("Messaging automation is not configured");
+  test("nothing waiting shows no replies submenu, only the check action", () => {
+    const items = snapshotItems(base({ ...ready, replies: replies() }), { confirmedAgeSeconds: 0, fresh: true });
+    expect(items.some(item => item.kind === "submenu" && item.label === "Replies waiting")).toBe(false);
+    expect(items[2]).toEqual({ kind: "action", id: "replies.scan", label: "Check for replies" });
   });
   test("stale menu send actions cannot bypass full draft review", async () => {
     const dataDir = await root();
@@ -227,8 +238,8 @@ describe("daemon-backed companion options", () => {
     const options = companionOptions(dataDir);
     const items = await options.snapshot(new AbortController().signal);
     wire(items);
-    expect(items[0]).toMatchObject({ label: "Automatic replies paused" });
-    expect(labels(items)).toContain("Updated 0s ago");
+    expect(items[0]).toMatchObject({ label: "◐ Getting started" });
+    expect(labels(submenu(items, "Details").items)).toContain("Updated 0s ago");
     expect((await daemon.service.snapshot()).revision).toBe(1);
   });
   test("an unreachable daemon degrades to a bounded disconnected menu", async () => {
@@ -236,9 +247,10 @@ describe("daemon-backed companion options", () => {
     const options = companionOptions(dataDir);
     const items = await options.snapshot(new AbortController().signal);
     wire(items);
-    expect(items[0]).toMatchObject({ label: "Daemon disconnected" });
-    expect(action(items, "toggle-pause").enabled).toBe(false);
-    expect(labels(items)).toContain("Daemon status not confirmed");
+    expect(items[0]).toMatchObject({ label: "⊘ Textbutler isn't running" });
+    expect(items.some(item => item.kind === "action" && item.id === "toggle-pause")).toBe(false);
+    expect(action(items, "daemon.install").label).toBe("Start Textbutler at login");
+    expect(labels(submenu(items, "Details").items)).toContain("Status not confirmed yet");
   });
   test("toggle-pause applies one revision-checked daemon mutation and never retries", async () => {
     const dataDir = await root();
@@ -286,7 +298,7 @@ test("fully populated menu stays within the native runner's total node budget", 
   const actions = wire(items);
   expect(actions.get("toggle-pause")).toBe(true);
   expect(items.at(-1)?.kind).toBe("quit");
-  expect(labels(items)).toContain("More options and full replies in textbutler tui");
+  expect(labels(items)).toContain("More in the guided terminal");
 });
 
 test("pending menu operations keep the job ID and a terminal failure clears the busy state", async () => {
@@ -300,11 +312,14 @@ test("pending menu operations keep the job ID and a terminal failure clears the 
   await options.snapshot(signal);
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
   const pending = await options.snapshot(signal);
-  expect(labels(pending)).toContain("textbutler jobs show job-123");
+  expect(action(pending, "job.refresh").label).toBe("↻ An action is still running · Check again");
+  expect(JSON.stringify(pending)).not.toContain("job-123");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("previous-operation-pending");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(1);
   await options.onAction("job.refresh", signal);
-  expect(labels(await options.snapshot(signal))).not.toContain("An operation is still pending");
+  const settled = await options.snapshot(signal);
+  expect(settled.some(item => item.kind === "action" && item.id === "job.refresh")).toBe(false);
+  expect(labels(settled)[1]).toBe("⚠︎ The last action didn't finish · The contact changed.");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(2);
 });
@@ -326,8 +341,8 @@ describe("failed menu actions (T6)", () => {
     await expect(options.onAction("messaging.start:imessage", signal)).rejects.toThrow("messaging-connection-unconfirmed");
     const items = await options.snapshot(signal);
     wire(items);
-    expect(labels(items).slice(0, 3)).toEqual(["Automatic replies paused", "⚠︎ Couldn't connect iMessage",
-      "Textbutler can't read your Messages: macOS access is off for Textbutler."]);
+    expect(labels(items).slice(0, 2)).toEqual(["◐ Getting started",
+      "⚠︎ Couldn't connect iMessage · Textbutler can't read your Messages: macOS access is off for Textbutler."]);
     await options.onAction("refresh", signal);
     expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
   });
@@ -336,7 +351,7 @@ describe("failed menu actions (T6)", () => {
     await options.snapshot(signal);
     await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
     advance(ACTION_ERROR_MS - 1);
-    expect(labels(await options.snapshot(signal))).toContain("⚠︎ Couldn't check for replies");
+    expect(labels(await options.snapshot(signal))).toContain("⚠︎ Couldn't check for replies · No automation.");
     advance(1);
     expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
   });
@@ -345,7 +360,7 @@ describe("failed menu actions (T6)", () => {
     await options.snapshot(signal);
     await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
     const shown = labels(await options.snapshot(signal));
-    expect(shown).toContain("An operation is still pending");
+    expect(shown).toContain("↻ An action is still running · Check again");
     expect(shown.some(label => label.startsWith("⚠︎"))).toBe(false);
   });
   test("unexpected errors never show their own text", async () => {
@@ -353,7 +368,7 @@ describe("failed menu actions (T6)", () => {
     await options.snapshot(signal);
     await expect(options.onAction("open-website", signal)).rejects.toThrow("open-failed");
     const shown = labels(await options.snapshot(signal));
-    expect(shown).toContain("⚠︎ Couldn't open the page");
+    expect(shown).toContain("⚠︎ Couldn't open the page · Check your default browser, then try again.");
     expect(shown.join("\n")).not.toContain("/secret/path");
     expect(describeMenuFailure(new Error("ENOENT /var/private/x"))).toEqual({ sentence: "That didn't work",
       detail: "Try again. Setup & readiness in the guided terminal shows what's missing." });
@@ -368,7 +383,7 @@ describe("failed menu actions (T6)", () => {
     for (const sentence of sentences) {
       expect([...sentence].length).toBeLessThanOrEqual(48);
       expect(sentence).not.toMatch(/[.…]$|\b[a-z]+-[a-z]+-|\//u); // no final period, kebab code or path
-      expect(sentence.slice(1)).not.toMatch(/ [A-Z]/u); // sentence case
+      expect(sentence.slice(1).replace(/System Settings|Messages|iMessage|WhatsApp|Beeper|Textbutler/gu, "")).not.toMatch(/ [A-Z]/u); // sentence case
     }
   });
 });

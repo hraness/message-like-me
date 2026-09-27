@@ -297,10 +297,15 @@ bun run textbutler menubar install
 `start` opens it now; `install` registers login startup. The first start retrieves
 and verifies the pinned shared native companion. No local Rust build is needed.
 
-The menu gives you pause, connection checks, conversation selection, per-contact
-activation, agent selection, the reply inbox and recent activity. Draft previews
-are intentionally labeled: use the terminal to review complete outgoing actions
-before sending. The menu cannot send hidden or truncated draft content.
+The menu starts with one status line, then the one thing to do next: start
+Textbutler, open the macOS setting iMessage still needs, read the setup guide,
+or check for replies. **Conversations** holds per-contact replies and agent
+choice, conversation search and app connections; **Pause automatic replies**
+and **Resume automatic replies** sit at the top level. **Details** keeps
+activity, agent accounts and capabilities out of the way. When an action
+doesn't work, a ⚠︎ line under the status says why. Suggestions show a preview
+only: use the terminal to review complete outgoing actions before sending. The
+menu cannot send hidden or truncated draft content.
 
 Menu startup and daemon startup are separate. Quitting the menu leaves the
 installed daemon running. `menubar stop` closes the menu; `daemon uninstall`
