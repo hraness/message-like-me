@@ -1,0 +1,29 @@
+{
+    "kind": "independent-ai-source-review",
+    "scope": "Connector pin bump 0.18.21 -> 0.18.38 in packages/textbutler/src/imessage-setup.ts, matching test fixtures and docs. The pinned build now includes per-enrollment dispatch lanes (ghostget 177edc1) and run.by-intent arbitration with a five-minute dispatch window (ghostget e8bdbfe).",
+    "rounds": [
+        {
+            "round": 1,
+            "design": "Repin by editing VERSION only; keep PROTOCOL unchanged.",
+            "verdict": "blockers",
+            "blockers": [
+                "The wire protocol had to be proven unchanged: textbutler's transport speaks ghostget.messaging-automation/1 and the staged 0.18.38 connector still serves that exact protocol string, verified by direct source comparison of messaging-automation-server.ts.",
+                "A pin bump without fixture updates would leave the setup tests exercising 0.18.21 as the accepted version while it is no longer pinned; the synthetic connector manifest and snapshot fixtures now report 0.18.38 and 0.18.21 joins the refused-version list so the upgrade boundary is tested in both directions."
+            ]
+        },
+        {
+            "round": 2,
+            "design": "Pin 0.18.38 and update every version-sensitive fixture and doc reference.",
+            "verdict": "blockers-fixed",
+            "blockers": [
+                "Enrollment identity is bound to the connector implementation identity, so an upgraded connector invalidates stored enrollments at runtime; the pin change is only safe because the deployed state was re-enrolled against the 0.18.38 implementation before this lands, preserving contact ids, settings and grants.",
+                "run.by-intent is a read-side arbitration surface only: it returns the stored run for an intent and lets a resubmitted plan return its recorded outcome instead of double-sending. It does not settle a non-terminal row, so an indeterminate run still requires owner-evidenced reconciliation; no unsupported settle path was claimed or added."
+            ],
+            "acceptedNits": [
+                "The version gate is exercised only in the native setup path; the running daemon does not re-check it per spawn, so deployed connectors are swapped by reviewed host configuration rather than this constant.",
+                "Docs retain the admission-pending caveats because artifact admission and live conversation checks are still outstanding for this pin."
+            ],
+            "verification": "bun test packages/textbutler/src/imessage-setup.test.ts passes 23/23 including the expanded refused-version list; aggregate bun run check green except the expected admission-rebind and one load-sensitive git release-ref timeout that passes standalone. Live 0.18.38 connector verified: five key files byte-identical to ghostget e8bdbfe, seven contacts re-enrolled, daemon healthy on revision 46."
+        }
+    ]
+}
