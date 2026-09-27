@@ -10,6 +10,8 @@ import { runSetup } from "./onboarding.ts";
 import { CliUsageError, symbolsFor } from "./cli-style.ts";
 import { describeControlResult, describeMenuBarResult, describeServiceInstall } from "./tui-results.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
+import { detectBun, detectConnector, needsBun, resolveTyped, type DetectedConnector } from "./connect-detect.ts";
+import { shellWord } from "./permission-readiness.ts";
 
 export interface TerminalSession {
   write(text: string): unknown;
@@ -67,13 +69,52 @@ async function pick<T>(io: TerminalSession, title: string, values: readonly T[],
     } else filtered = values.filter(item => label(item).toLowerCase().includes(value.trim().toLowerCase()));
   }
 }
+const GHOSTGET_GUIDE = "https://ghostget.com/docs/tutorials/getting-started/";
+
+/** The connect step's Ghostget and Bun paths (T10). A found Ghostget is offered
+ * as the default; typing a path is the fallback. Returns null when cancelled. */
+export interface ConnectorHooks {
+  detect?: () => Promise<DetectedConnector>;
+  findBun?: () => Promise<string | undefined>;
+  isScript?: (path: string) => Promise<boolean>;
+  resolve?: (path: string) => Promise<string>;
+}
+export async function chooseConnector(io: TerminalSession, hooks: ConnectorHooks = {}): Promise<{ executable: string; runtime: string } | null> {
+  const { detect = detectConnector, findBun = detectBun, isScript = needsBun, resolve = resolveTyped } = hooks;
+  const found = await detect().catch((): DetectedConnector => ({ needsRuntime: false }));
+  if (found.ghostget !== undefined && !found.needsRuntime) {
+    io.write(`Found Ghostget at ${found.ghostget}${found.runtime === undefined ? "" : `\nIt runs with Bun at ${found.runtime}`}\n`);
+    const answer = await io.ask("Use it? [Y/n]: ");
+    if (answer === null) return null;
+    if (!["n", "no"].includes(answer.trim().toLowerCase())) return { executable: found.ghostget, runtime: found.runtime ?? "" };
+  } else if (found.ghostget !== undefined) {
+    io.write(`Found Ghostget at ${found.ghostget}. It runs with Bun, which isn't in the usual folders.\n`);
+  } else if (found.unsafe?.reason === "writable") {
+    io.write(`Found Ghostget at ${found.unsafe.path}, but other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w ${shellWord(found.unsafe.path)}\n`);
+  } else if (found.unsafe !== undefined) {
+    io.write(`Found Ghostget at ${found.unsafe.path}, but another user owns that file, so Textbutler won't run it. Install your own copy: ${GHOSTGET_GUIDE}\n`);
+  } else {
+    io.write(`Ghostget isn't in the usual install folders. Install it first: ${GHOSTGET_GUIDE}\n`);
+  }
+  const answer = found.ghostget !== undefined && found.needsRuntime ? found.ghostget : (await io.ask("Path to Ghostget (Enter to cancel): "))?.trim();
+  if (!answer) return null;
+  // Setup accepts only the physical file, so resolve a symlink such as the one `which ghostget` prints.
+  const typed = await resolve(answer).catch(() => answer);
+  if (!await isScript(typed).catch(() => false)) return { executable: typed, runtime: "" };
+  const bun = found.runtime ?? await findBun().catch(() => undefined);
+  if (bun !== undefined) { io.write(`It runs with Bun at ${bun}\n`); return { executable: typed, runtime: bun }; }
+  const runtime = (await io.ask("Path to Bun, which runs Ghostget (Enter to cancel): "))?.trim();
+  return runtime ? { executable: typed, runtime } : null;
+}
+
 function printResponse(io: TerminalSession, response: ControlResponse, dataDir: string, done = "Settings updated."): void {
   io.write(`${terminalText(describeControlResult(response, symbolsFor(), done, { dataDir }))}\n`);
 }
 
 /** A thin owner client, following XCB's separation between interaction and
  * runtime authority. Selection never becomes a shell command or recipient guess. */
-export async function runTerminalSession(dataDir: string, io: TerminalSession, client: OwnerControlClient = request => requestDaemon({ dataDir, request }), options: { entrypoint?: string } = {}): Promise<number> {
+export async function runTerminalSession(dataDir: string, io: TerminalSession, client: OwnerControlClient = request => requestDaemon({ dataDir, request }),
+  options: { entrypoint?: string; connector?: ConnectorHooks } = {}): Promise<number> {
   const entrypoint = options.entrypoint ?? fileURLToPath(new URL("cli.ts", import.meta.url));
   const lifecycle = () => createLaunchAgentLifecycle(defaultLaunchAgentHost(entrypoint));
   const job = (request: ControlRequest) => awaitOwnerJob(request, client);
@@ -110,11 +151,12 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
         if (provider === "configure") {
           io.write("Sign in to each app with Ghostget first. iMessage also needs macOS access for Textbutler (textbutler help permissions). Beeper must be open with its linked apps. Adding connections requires the Textbutler service to be stopped.\n");
           const config = await loadHostConfig(dataDir).catch(() => null);
-          const executable = config?.ghostget?.executable ?? await io.ask("Physical path to Ghostget executable (Enter to cancel): ");
-          if (!executable?.trim()) continue;
-          const runtime = config?.ghostget ? config.ghostget.runtimeExecutable ?? "" : await io.ask("Physical path to Bun if Ghostget is a .ts file (otherwise Enter): ");
-          if (runtime === null) continue;
-          const accounts = await io.ask("Accounts, separated by commas (for example imessage:messages,beeper:beeper-main): ");
+          const paths = config?.ghostget ? { executable: config.ghostget.executable, runtime: config.ghostget.runtimeExecutable ?? "" }
+            : await chooseConnector(io, options.connector);
+          if (!paths) continue;
+          const { executable, runtime } = paths;
+          io.write("Next, the Ghostget sign-in for each app, as app:name. ghostget auth list shows your sign-in names.\n");
+          const accounts = await io.ask("Sign-ins, separated by commas (for example imessage:messages,beeper:beeper-main): ");
           if (!accounts?.trim()) continue;
           const args = ["--ghostget", executable.trim(), ...(runtime.trim() ? ["--runtime", runtime.trim()] : []),
             ...(config?.ghostget?.stateHome ? ["--state-home", config.ghostget.stateHome] : [])];

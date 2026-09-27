@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CONTROL_PROTOCOL, disconnectedSnapshot, type ControlRequest, type ControlResponse } from "../../control/src/index.ts";
-import { runTerminalSession, terminalDashboard, terminalText, terminalDraft } from "./tui.ts";
+import { chooseConnector, runTerminalSession, terminalDashboard, terminalText, terminalDraft } from "./tui.ts";
 const snapshot = { ...disconnectedSnapshot(), connection: "connected" as const, revision: 7 };
 const view: ControlResponse = { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot };
 function session(answers: (string | null)[]) { const output: string[] = []; return { output, io: { write: (text: string) => output.push(text), ask: async () => answers.shift() ?? null } }; }
@@ -81,11 +81,56 @@ test("rich-action review preserves complete target identifiers and escapes termi
 });
 test("a mistyped account in the connect step shows the fix, not an uncertain-operation warning", async () => {
   const root = await mkdtemp(join(await realpath("/tmp"), "textbutler-tui-usage-"));
-  const output: string[] = [], answers = ["2", "/usr/bin/true", "", "imessage", "q"];
+  const output: string[] = [], answers = ["2", "/usr/bin/true", "imessage", "q"];
   try {
     await runTerminalSession(root, { write: value => output.push(value), ask: async () => answers.shift() ?? null },
-      async () => ({ protocol: CONTROL_PROTOCOL, ok: false, code: "unavailable", message: "Disconnected" }));
+      async () => ({ protocol: CONTROL_PROTOCOL, ok: false, code: "unavailable", message: "Disconnected" }), { connector: { detect: async () => ({ needsRuntime: false }) } });
     expect(output.join("")).toContain("Setup needs different options. See: textbutler help setup");
     expect(output.join("")).not.toContain("could not be confirmed");
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+describe("connect step finds Ghostget (T10)", () => {
+  const disconnected = async (): Promise<ControlResponse> => ({ protocol: CONTROL_PROTOCOL, ok: false, code: "unavailable", message: "Disconnected" });
+  test("a found Ghostget and Bun are the default; Enter saves them without typing a path", async () => {
+    const root = await mkdtemp(join(await realpath("/tmp"), "textbutler-tui-connect-"));
+    try {
+      const ghostget = join(root, "cli.ts"), bun = join(root, "bun");
+      await writeFile(ghostget, "#!/usr/bin/env bun\n"); await chmod(ghostget, 0o644);
+      await writeFile(bun, "#!/bin/sh\n"); await chmod(bun, 0o755);
+      const output: string[] = [], prompts: string[] = [], answers = ["2", "", "imessage:messages", "q"];
+      await runTerminalSession(join(root, "data"), { write: value => output.push(value), ask: async prompt => { prompts.push(prompt); return answers.shift() ?? null; } },
+        disconnected, { connector: { detect: async () => ({ ghostget, runtime: bun, needsRuntime: false }) } });
+      expect(output.join("")).toContain(`Found Ghostget at ${ghostget}\nIt runs with Bun at ${bun}\n`);
+      expect(prompts).not.toContain("Path to Ghostget (Enter to cancel): ");
+      expect(output.join("")).toContain("Connection saved.");
+      const host = JSON.parse(await readFile(join(root, "data", "state", "host.json"), "utf8"));
+      expect(host.ghostget).toMatchObject({ executable: ghostget, runtimeExecutable: bun, automationAccounts: [{ provider: "imessage", authId: "messages" }] });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+  test("declining the found path asks for one, and a script path picks up the found Bun", async () => {
+    const output: string[] = [], prompts: string[] = [], answers = ["n", "/opt/bin/ghostget"];
+    const io = { write: (value: string) => output.push(value), ask: async (prompt: string) => { prompts.push(prompt); return answers.shift() ?? null; } };
+    expect(await chooseConnector(io, { detect: async () => ({ ghostget: "/a/ghostget", runtime: "/a/bun", needsRuntime: false }), isScript: async path => path.endsWith(".ts"),
+      resolve: async path => path === "/opt/bin/ghostget" ? "/opt/ghostget/cli.ts" : path })).toEqual({ executable: "/opt/ghostget/cli.ts", runtime: "/a/bun" });
+    expect(prompts).toEqual(["Use it? [Y/n]: ", "Path to Ghostget (Enter to cancel): "]);
+  });
+  test("a found script Ghostget without Bun asks only for Bun", async () => {
+    const prompts: string[] = [], answers = ["/b/bun"];
+    const io = { write: () => {}, ask: async (prompt: string) => { prompts.push(prompt); return answers.shift() ?? null; } };
+    expect(await chooseConnector(io, { detect: async () => ({ ghostget: "/a/cli.ts", needsRuntime: true }), findBun: async () => undefined, isScript: async () => true }))
+      .toEqual({ executable: "/a/cli.ts", runtime: "/b/bun" });
+    expect(prompts).toEqual(["Path to Bun, which runs Ghostget (Enter to cancel): "]);
+  });
+  test("an unsafe Ghostget explains the fix; nothing found links the install guide; Enter cancels", async () => {
+    for (const [found, expected] of [
+      [{ needsRuntime: false, unsafe: { path: "/opt/shared/ghostget/cli.ts", reason: "writable" } }, "other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w /opt/shared/ghostget/cli.ts\n"],
+      [{ needsRuntime: false, unsafe: { path: "/usr/local/bin/ghostget", reason: "owner" } }, "another user owns that file, so Textbutler won't run it. Install your own copy: https://ghostget.com/docs/tutorials/getting-started/\n"],
+      [{ needsRuntime: false }, "Ghostget isn't in the usual install folders. Install it first: https://ghostget.com/docs/tutorials/getting-started/\n"],
+    ] as const) {
+      const output: string[] = [];
+      expect(await chooseConnector({ write: value => output.push(value), ask: async () => "" }, { detect: async () => found })).toBeNull();
+      expect(output.join("")).toContain(expected);
+    }
+  });
 });
