@@ -260,6 +260,73 @@ test("one batched pollSet covers the set and a failed entry only fails its conta
   expect(sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }]);
 });
 
+test("a sibling enrollment's poll flap replays history without cancelling an in-flight run", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "butler-loop-"))), journal = RunJournal.memory();
+  let time = Date.parse("2026-09-11T12:00:00.000Z"), revision = 0;
+  const settings: Settings = { schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [
+    { ...newContact("contact-1", "Flapping", "enrollment:a"), enabled: true },
+    { ...newContact("contact-2", "Healthy", "enrollment:b"), enabled: true },
+  ] };
+  const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
+  const conversation = (id: number) => ({ coordinate: { provider: "imessage" as const, chatGuid: `iMessage;-;c${id}@example.test`, service: "iMessage" as const, observedChatRowId: id }, title: `C${id}`, kind: "single" as const, participants: [`c${id}@example.test`] });
+  const enrolled = (id: string, conv: ReturnType<typeof conversation>) => ({ id, identity, conversation: conv, bindingDigest: automationBindingDigest(identity, conv), revision, ready: true, reason: null });
+  const enrollmentA = enrolled("enrollment:a", conversation(1)), enrollmentB = enrolled("enrollment:b", conversation(2));
+  const bindingA = automationBinding(enrollmentA), bindingB = automationBinding(enrollmentB);
+  const events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
+  const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>();
+  let failA = false;
+  let releaseCompose: () => void = () => {};
+  const composeGate = new Promise<void>(resolve => { releaseCompose = resolve; });
+  const client = createGhostgetAutomationClient(async (method, params) => {
+    const forEnrollment = String(params.enrollmentId ?? "");
+    if (method === "pollSet") {
+      const ids = (params.enrollmentIds as string[]).map(String);
+      return { results: ids.map(id => failA && id === "enrollment:a"
+        ? { enrollmentId: id, enrollment: null, error: "unavailable" }
+        : { enrollmentId: id, enrollment: { ...(id === "enrollment:a" ? enrollmentA : enrollmentB), revision }, error: null }) };
+    }
+    if (method === "poll") return { ...(forEnrollment === "enrollment:a" ? enrollmentA : enrollmentB), revision };
+    if (method === "history") { const enrollment = forEnrollment === "enrollment:a" ? enrollmentA : enrollmentB; return { enrollment: { ...enrollment, revision }, messages: messages.filter(message => automationHash(message.coordinate) === automationHash(enrollment.conversation.coordinate)).slice(-Number(params.limit)) }; }
+    if (method === "events") return { events: events.slice(Number(params.cursor ?? 0)), nextCursor: String(events.length), caughtUp: true };
+    if (method === "status") return { identity, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) };
+    if (method === "prepare") { const body = { ...params, bindingDigest: bindingB.bindingDigest, expiresAt: new Date(time + 120000).toISOString() }, digest = automationHash(body), plan = { ...body, digest, id: `plan:${digest}` } as AutomationPlan; plans.set(plan.id, plan); return plan; }
+    if (method === "submit") { const plan = plans.get(String(params.planId))!; (plan.intentId.endsWith(":ack") ? mutableAcks : mutableSent).push([...plan.actions]); return { id: `run:${sent.length + acks.length}`, planId: plan.id, intentId: plan.intentId, enrollmentId: plan.enrollmentId ?? bindingB.enrollmentId, state: "accepted", accepted: plan.actions.map((_action, index) => ({ messageId: `sent:${sent.length + acks.length}:${index}`, providerReceiptId: null })), totalActions: plan.actions.length, reason: null, retryable: false }; }
+    throw new Error(`Unexpected fixture operation ${method}`);
+  }, () => time);
+  let composes = 0, classifies = 0;
+  const statuses: string[] = [];
+  const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: v => statuses.push(v.state),
+    agent: { async qualified() { return true; }, async classify() { classifies++; return { respond: true, confidence: 0.99, reason: "requested" }; },
+      async compose() { composes++; await composeGate; return { summary: "Here is help", actions: [{ kind: "text" as const, text: "Hello" }] }; } },
+    service: {
+      dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": bindingA, "contact-2": bindingB }, grants: {} }), runJournal: () => journal,
+      delegatedGrant: async contact => settings.contacts.some(current => current.enabled && current.id === contact.id && current.revision === contact.revision) ? "grant:fixture" : null,
+      onSettingsChanged() { return () => {}; },
+      onHabitatChanged() { return () => {}; },
+      notePending() {},
+      async allowContactRepo() { return "added" as const; },
+      async notifySelfChat() {},
+    } });
+  cleanup.push(async () => { releaseCompose(); await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); });
+  await loop.tick();
+  // contact-2's inbound claims a run whose compose is still in flight.
+  revision++; const inbound: AutomationMessage = { id: "message:1", coordinate: enrollmentB.conversation.coordinate, direction: "incoming", occurredAt: new Date(time).toISOString(), text: "butler ping", kind: "message", relatedMessageId: null, attachments: [] };
+  messages.push(inbound); events.push({ sequence: revision, enrollmentId: enrollmentB.id, revision, message: inbound });
+  await loop.tick(); time += 9000; await loop.tick();
+  // Intake refresh does real workspace I/O before the claim; wait for the run
+  // to reach the compose gate deterministically.
+  for (let i = 0; i < 100 && composes === 0; i++) await new Promise(resolve => setTimeout(resolve, 0));
+  expect(composes).toBe(1);
+  // A sibling poll failure drops enrollment:a from the drain; the membership
+  // flip resets the shared cursor and replays every event. The replayed inbound
+  // must not read as fresh owner activity and cancel the run.
+  failA = true; await loop.tick();
+  failA = false; await loop.tick();
+  releaseCompose(); await loop.idle();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toEqual([{ kind: "text", text: "🤖{ Hello }" }]);
+});
+
 test("a degraded events drain keeps pending work and only flags attention after repeated failure", async () => {
   const f = await fixture(); await f.loop.tick();
   f.add("butler could you explain?"); await f.loop.tick();
