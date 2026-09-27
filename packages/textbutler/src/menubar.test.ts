@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { planAutostart, validateSnapshot, type MenuItem, type Snapshot } from "@hraness/desktop-foundation";
 import { runTextbutlerCli } from "./cli.ts";
 import { startDaemon, type RunningDaemon } from "./daemon.ts";
-import { companionForeground, companionOptions, exitSoon, menuLabel, menuTime, runMenuBarCommand, snapshotItems } from "./menubar.ts";
+import { companionForeground, companionOptions, exitSoon, localAppEnabled, menuApp, menuLabel, menuTime, runMenuBarCommand, snapshotItems } from "./menubar.ts";
 import { ACTION_ERROR_MS, describeMenuFailure, MenuFailure, MenuPending } from "./menu-errors.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { disconnectedSnapshot, type DesktopSnapshot } from "../../control/src/index.ts";
@@ -416,5 +416,37 @@ describe("Quit Textbutler ends the menu process", () => {
     let fired = false;
     exitSoon(3, () => { fired = true; }, 0);
     return Bun.sleep(10).then(() => expect(fired).toBe(true));
+  });
+});
+
+describe("menu through TextButler.app (T7)", () => {
+  const identity = { appPath: "/Volumes/Owner/Applications/TextButler.app" } as import("./macos-app.ts").MacosAppIdentity;
+  test("the switch is off unless HRANESS_LOCAL_APP=1", async () => {
+    expect(localAppEnabled({})).toBe(false);
+    expect(localAppEnabled({ HRANESS_LOCAL_APP: "true" })).toBe(false);
+    expect(localAppEnabled({ HRANESS_LOCAL_APP: "1" })).toBe(true);
+    let reads = 0;
+    const read = async () => { reads++; return identity; };
+    expect(await menuApp("/data", "/cli.ts", { env: {}, read })).toBeNull();
+    expect(reads).toBe(0);
+    expect(await menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read })).toBe(identity);
+    expect(await menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read: async () => null })).toBeNull();
+    // An app built from another version is an error, never a silent Bun login item.
+    await expect(menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read: async () => { throw new Error("receipt mismatch"); } })).rejects.toThrow("TextButler.app was built from a different Textbutler version");
+  });
+  test("with a verified app, start and login run the app's menu role with no arguments", async () => {
+    expect(companionForeground("/data", "/cli.ts", { home: "/home", runtime: "/bun" }, identity))
+      .toEqual({ executable: "/Volumes/Owner/Applications/TextButler.app/Contents/MacOS/TextButler", args: [] });
+    const seen: { executable: string; args: readonly string[] }[] = [];
+    await runMenuBarCommand(["install"], "/data", "/cli.ts", () => {}, { app: async () => identity,
+      handle: async (_options, invocation) => { seen.push(invocation.foreground!); return 0; } });
+    expect(seen[0]!.executable).toEndWith("/TextButler.app/Contents/MacOS/TextButler");
+  });
+  test("only start and install look up the app; its own foreground run never relaunches it", async () => {
+    let asked = false;
+    for (const verb of ["stop", "status"]) await runMenuBarCommand([verb], "/data", "/cli.ts", () => {}, { app: async () => { asked = true; return identity; }, handle: async () => 0 });
+    await runMenuBarCommand(["--foreground"], "/data", "/cli.ts", () => {}, { app: async () => { asked = true; return identity; },
+      handle: async (_options, invocation) => { expect(invocation.foreground!.args).toContain("--foreground"); return 0; }, exit: () => {} });
+    expect(asked).toBe(false);
   });
 });

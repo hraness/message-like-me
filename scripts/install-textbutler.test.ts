@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { installTextbutler } from "./install-textbutler.ts";
+import { installTextbutler, menuLoginItemAfterUpgrade } from "./install-textbutler.ts";
 import { DISTRIBUTION_FILES, publishArtifact, renderLauncher, sha256, validateBun, verifyDistribution, type DistributionFile, type DistributionManifest } from "./textbutler-distribution.ts";
 
 const roots: string[] = [];
@@ -107,4 +107,20 @@ test("upgrade preserves an unrelated existing launcher backup", async () => {
   await expect(installTextbutler({ from: f.next.from, prefix: f.prefix, upgrade: true })).rejects.toThrow("preserved");
   expect(await readFile(old.command)).toEqual(before);
   expect(await readFile(backup, "utf8")).toBe("owner backup sentinel");
+});
+
+test("an upgrade reports a menu login item that still starts the previous version or the app, and never edits it", async () => {
+  const home = await mkdtemp(join(await realpath("/tmp"), "tb-menu-login-")); roots.push(home);
+  const previous = join(home, "owner's prefix", "share/textbutler/versions", "a".repeat(64));
+  expect(await menuLoginItemAfterUpgrade(home, previous)).toBeNull();
+  await mkdir(join(home, "Library", "LaunchAgents"), { recursive: true });
+  const plist = join(home, "Library", "LaunchAgents", "app.hraness.companion.textbutler.plist");
+  const render = (directory: string) => `<plist><dict><key>ProgramArguments</key><array><string>/opt/bun</string><string>${directory.replaceAll("'", "&apos;")}/textbutler.mjs</string><string>menubar</string></array></dict></plist>`;
+  await writeFile(plist, render(previous), { mode: 0o644 });
+  expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("previous-version");
+  expect(await menuLoginItemAfterUpgrade(home, `${previous}0`)).toBeNull();
+  // TextButler.app runs the version it was built from, so it needs a rebuild.
+  await writeFile(plist, "<plist><dict><key>ProgramArguments</key><array><string>/Volumes/Owner/Applications/TextButler.app/Contents/MacOS/TextButler</string></array></dict></plist>");
+  expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("app");
+  expect(await readFile(plist, "utf8")).toContain("TextButler.app");
 });
