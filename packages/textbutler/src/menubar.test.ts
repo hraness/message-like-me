@@ -278,7 +278,15 @@ describe("menubar CLI routing", () => {
   test("status reports the shared companion lifecycle, not a LaunchAgent", async () => {
     const dataDir = await root();
     const lines: string[] = [];
-    expect(await runTextbutlerCli(["menubar", "status", "--data-dir", dataDir], { write: text => lines.push(text) })).toBe(0);
+    // The kit renders human text on stdout; agents get the JSON status object.
+    const prior = process.env.HRANESS_AUDIENCE;
+    process.env.HRANESS_AUDIENCE = "agent";
+    try {
+      expect(await runTextbutlerCli(["menubar", "status", "--data-dir", dataDir], { write: text => lines.push(text) })).toBe(0);
+    } finally {
+      if (prior === undefined) delete process.env.HRANESS_AUDIENCE;
+      else process.env.HRANESS_AUDIENCE = prior;
+    }
     expect(JSON.parse(lines[0]!)).toMatchObject({ appId: "textbutler", running: false, state: "stopped" });
     expect(lines[0]).not.toContain("launchAgent");
   });
