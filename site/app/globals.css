@@ -40,6 +40,8 @@ body {
   min-height: 100dvh;
 }
 body > * { min-inline-size: 0; }
+/* Column flex does not stretch auto-margin items, so centered columns size explicitly. */
+body > :where(main, nav) { inline-size: 100%; }
 body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 .skip-link {
   background: var(--inverse);
