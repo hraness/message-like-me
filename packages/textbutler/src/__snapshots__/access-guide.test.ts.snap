@@ -20,7 +20,7 @@ Stop the background service, then run app setup from your Textbutler source fold
 
 exports[`guided access step (T3) an Automation denial shows the recovery, and o opens only the Automation pane 1`] = `
 "
-Step 2 of 2: Automation
+Step 1 of 1: Automation
 ✗ Textbutler can't control Messages: macOS access is off for Textbutler.
   Turn on Textbutler in System Settings › Privacy & Security › Automation.
 → press o to open Settings, then run app setup again
