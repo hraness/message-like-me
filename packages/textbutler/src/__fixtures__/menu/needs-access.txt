@@ -1,6 +1,7 @@
-🔒︎ Needs Full Disk Access
+🔒︎ Needs Full Disk Access · Then finish setup in the guided terminal
 ─────────
 Open Full Disk Access settings…
+Check for replies
 Conversations ▸
   Alice Example ▸
     ✓ Automatic replies

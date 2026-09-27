@@ -102,16 +102,18 @@ describe("snapshot menu mapping (T5)", () => {
   });
   test("macOS access needs replace the primary action with the Settings pane", async () => {
     const opened: string[] = [];
-    for (const [needs, status, id] of [["full-disk-access", "🔒︎ Needs Full Disk Access", "settings.full-disk-access"],
-      ["automation", "🔒︎ Needs Automation for Messages", "settings.automation"]] as const) {
-      const items = snapshotItems(base(running), { confirmedAgeSeconds: 0, fresh: true }, { access: { needs } });
+    for (const [needs, status, id] of [["full-disk-access", "🔒︎ Needs Full Disk Access · Then finish setup in the guided terminal", "settings.full-disk-access"],
+      ["automation", "🔒︎ Needs Automation for Messages · Then run app setup again", "settings.automation"]] as const) {
+      const items = snapshotItems(base({ ...running, contacts: [contact(1, true)] }), { confirmedAgeSeconds: 0, fresh: true }, { access: { needs } });
       expect(items[0]).toEqual({ kind: "label", label: status });
       expect(items[2]).toMatchObject({ kind: "action", id });
+      // The record changes only when app setup runs again, so checking stays reachable.
+      expect(items[3]).toMatchObject({ kind: "action", id: "replies.scan" });
     }
     const options = companionOptions("/unused", async () => {}, "/unused/cli.ts", { access: async () => ({ needs: "full-disk-access" }), openSettings: async url => { opened.push(url); return true; },
       request: async () => ({ protocol: "textbutler.control.v1", ok: true, kind: "snapshot", snapshot: base(running) }) as never });
     const signal = new AbortController().signal;
-    expect((await options.snapshot(signal))[0]).toEqual({ kind: "label", label: "🔒︎ Needs Full Disk Access" });
+    expect(labels(await options.snapshot(signal))[0]!.startsWith("🔒︎ Needs Full Disk Access")).toBe(true);
     await options.onAction("settings.full-disk-access", signal);
     await options.onAction("settings.automation", signal);
     expect(opened).toEqual(["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"]);
@@ -320,6 +322,9 @@ test("pending menu operations keep the job ID and a terminal failure clears the 
   const settled = await options.snapshot(signal);
   expect(settled.some(item => item.kind === "action" && item.id === "job.refresh")).toBe(false);
   expect(labels(settled)[1]).toBe("⚠︎ The last action didn't finish · The contact changed.");
+  // The result shows once: the next action clears it.
+  await options.onAction("refresh", signal);
+  expect(labels(await options.snapshot(signal))).not.toContain("⚠︎ The last action didn't finish · The contact changed.");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(2);
 });

@@ -159,8 +159,8 @@ function statusLine(snapshot: DesktopSnapshot, extras: MenuExtras): string {
   const on = snapshot.contacts.filter(contact => contact.settings.enabled).length;
   const chats = `${on} of ${snapshot.contacts.length} chats`;
   if (!connected) return "⊘ Textbutler isn't running";
-  if (extras.access?.needs === "full-disk-access") return "🔒︎ Needs Full Disk Access";
-  if (extras.access?.needs === "automation") return "🔒︎ Needs Automation for Messages";
+  if (extras.access?.needs === "full-disk-access") return "🔒︎ Needs Full Disk Access · Then finish setup in the guided terminal";
+  if (extras.access?.needs === "automation") return "🔒︎ Needs Automation for Messages · Then run app setup again";
   if (!(snapshot.messagingProviders?.length) || !snapshot.contacts.length) return "◐ Getting started";
   if (snapshot.settings.paused) return "⏸︎ Automatic replies paused";
   return snapshot.automation?.state === "running" ? `● Automatic replies on in ${chats}` : "⚠︎ Replies need setup";
@@ -189,7 +189,9 @@ export function snapshotItems(snapshot: DesktopSnapshot, status: { confirmedAgeS
   else if (extras.access?.needs === "full-disk-access" || extras.access?.needs === "automation")
     top.push({ kind: "action", id: `settings.${extras.access.needs}`, label: extras.access.needs === "full-disk-access" ? "Open Full Disk Access settings…" : "Open Automation settings…" });
   else if (!ready) top.push({ kind: "action", id: "open-guide", label: "Get started ↗" });
-  else top.push({ kind: "action", id: "replies.scan", label: waiting ? `Check for replies · ${waiting} waiting` : "Check for replies" });
+  // The access record changes only when app setup runs again, so checking for
+  // replies stays reachable while it says access is missing.
+  if (connected && ready) top.push({ kind: "action", id: "replies.scan", label: waiting ? `Check for replies · ${waiting} waiting` : "Check for replies" });
 
   if (connected) {
     if (snapshot.replies && (snapshot.replies.pending.length || snapshot.replies.drafts.length))
@@ -230,7 +232,9 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
   let candidateRevision: number | null = null;
   let discoveryDetail = "";
   let pendingJobId: string | null = null;
-  let lastOperationDetail: string | null = null;
+  /** The result of the last job that finished in the background, shown once
+   * under the status line until the next action or 30 seconds. */
+  let lastOperation: { text: string; at: number } | null = null;
   /** The last action that didn't work, shown as a ⚠︎ row (T6). */
   let failure: (ShownFailure & { at: number }) | null = null;
   const now = options.now ?? Date.now;
@@ -269,13 +273,15 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         lastSnapshot = null;
       }
       if (failure !== null && now() - failure.at >= ACTION_ERROR_MS) failure = null;
+      if (lastOperation !== null && now() - lastOperation.at >= ACTION_ERROR_MS) lastOperation = null;
       const access = await (options.access ?? (() => accessNeed(dataDir, snapshot)))().catch(() => undefined);
       return snapshotItems(snapshot, { confirmedAgeSeconds: confirmedAt === null ? null : Math.max(0, Math.floor((Date.now() - confirmedAt) / 1000)), fresh }, {
-        access, failure: failure ?? undefined, pending: pendingJobId !== null, lastOperation: lastOperationDetail,
+        access, failure: failure ?? undefined, pending: pendingJobId !== null, lastOperation: lastOperation?.text ?? null,
         candidates: candidateRevision !== null && candidateRevision === snapshot.revision ? { detail: discoveryDetail, list: candidates } : undefined,
       });
     },
     onAction: async (id, signal) => {
+      lastOperation = null;
       try {
         await act(id, signal);
         failure = null;
@@ -292,10 +298,10 @@ export function companionOptions(dataDir: string, open: typeof openBrowser = ope
         const response = await request({ protocol: CONTROL_PROTOCOL, command: "owner.job.read", jobId: pendingJobId });
         if (response.ok && response.kind === "job" || !response.ok && response.code === "disconnected") throw new MenuPending("operation-not-yet-confirmed");
         pendingJobId = null;
-        if (!response.ok) { lastOperationDetail = `⚠︎ The last action didn't finish · ${daemonDetail(response.message) ?? "Check its result before you repeat it."}`; return; }
+        if (!response.ok) { lastOperation = { text: `⚠︎ The last action didn't finish · ${daemonDetail(response.message) ?? "Check its result before you repeat it."}`, at: now() }; return; }
         if (response.kind === "conversations") { candidates = response.candidates; candidateRevision = lastSnapshot?.revision ?? null; discoveryDetail = response.detail; }
         if (response.kind === "snapshot" || response.kind === "enrolled") { lastSnapshot = response.snapshot; candidates = []; candidateRevision = null; }
-        lastOperationDetail = response.kind === "reply-sent" ? `✓ Reply ${response.state} · ${daemonDetail(response.detail) ?? ""}`.replace(/ · $/u, "") : "✓ The last action finished";
+        lastOperation = { text: response.kind === "reply-sent" ? `✓ Reply ${response.state} · ${daemonDetail(response.detail) ?? ""}`.replace(/ · $/u, "") : "✓ The last action finished", at: now() };
         return;
       }
       if (id === "open-guide" || id === "setup-guide") { await opened(open("https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md")); return; }
