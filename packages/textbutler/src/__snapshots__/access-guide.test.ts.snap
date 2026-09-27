@@ -1,0 +1,31 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`guided access step (T3) first run: Full Disk Access notice, Enter opens only its pane, then the Automation notice and the setup command 1`] = `
+"
+Step 1 of 2: Full Disk Access
+🔐 Textbutler needs Full Disk Access to read your Messages.
+   macOS doesn't ask for this. Turn on Textbutler in System Settings › Privacy & Security › Full Disk Access. Only the chats you pick are read.
+   Press Enter to open Settings · s to skip
+Turn on Textbutler in the list. If it isn't there, click +, press Command-Shift-G, enter ~/Applications/TextButler.app and choose Open.
+
+Step 2 of 2: Automation
+🔐 macOS will ask to let Textbutler control Messages.
+   Textbutler only sends replies in chats you turn on. Change this any time in System Settings › Privacy & Security › Automation.
+   App setup shows this notice again before macOS asks.
+Stop the background service, then run app setup from your Textbutler source folder:
+  bun run textbutler:app imessage-setup --data-dir '/Volumes/Data/Application Support/Textbutler'
+→ Then choose Setup & readiness (1) to check the result.
+"
+`;
+
+exports[`guided access step (T3) an Automation denial shows the recovery, and o opens only the Automation pane 1`] = `
+"
+Step 2 of 2: Automation
+✗ Textbutler can't control Messages: macOS access is off for Textbutler.
+  Turn on Textbutler in System Settings › Privacy & Security › Automation.
+→ press o to open Settings, then run app setup again
+Stop the background service, then run app setup from your Textbutler source folder:
+  bun run textbutler:app imessage-setup --data-dir '/Volumes/Data/Application Support/Textbutler'
+→ Then choose Setup & readiness (1) to check the result.
+"
+`;

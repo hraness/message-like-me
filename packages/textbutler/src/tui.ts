@@ -10,6 +10,7 @@ import { runSetup } from "./onboarding.ts";
 import { CliUsageError, symbolsFor } from "./cli-style.ts";
 import { describeControlResult, describeMenuBarResult, describeServiceInstall } from "./tui-results.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
+import { openSettingsUrl, runAccessGuide, type AccessGuideOptions } from "./access-guide.ts";
 import { detectBun, detectConnector, needsBun, resolveTyped, type DetectedConnector } from "./connect-detect.ts";
 import { shellWord } from "./permission-readiness.ts";
 
@@ -29,7 +30,7 @@ export function terminalDashboard(snapshot: DesktopSnapshot | null): string {
   const state = !snapshot ? "Service not connected" : snapshot.settings.paused ? "Automatic replies paused" : snapshot.automation?.state === "running" ? "Automatic replies running" : "Automatic replies need setup";
   return ["", "TEXTBUTLER", "Your conversations, with you in control.", "", state,
     snapshot ? `${snapshot.contacts.length} conversations · ${active} with automatic replies on` : "Start with Setup & readiness.",
-    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Menu bar companion", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
+    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Menu bar companion", "  9  Give Textbutler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
 }
 export function terminalDraft(draft: ReplyDraftDetail): string {
   const field = (value: string): string => terminalText(JSON.stringify(value));
@@ -114,7 +115,7 @@ function printResponse(io: TerminalSession, response: ControlResponse, dataDir: 
 /** A thin owner client, following XCB's separation between interaction and
  * runtime authority. Selection never becomes a shell command or recipient guess. */
 export async function runTerminalSession(dataDir: string, io: TerminalSession, client: OwnerControlClient = request => requestDaemon({ dataDir, request }),
-  options: { entrypoint?: string; connector?: ConnectorHooks } = {}): Promise<number> {
+  options: { entrypoint?: string; connector?: ConnectorHooks; access?: Partial<Omit<AccessGuideOptions, "symbols">> & { openUrl?: (url: string) => Promise<boolean> } } = {}): Promise<number> {
   const entrypoint = options.entrypoint ?? fileURLToPath(new URL("cli.ts", import.meta.url));
   const lifecycle = () => createLaunchAgentLifecycle(defaultLaunchAgentHost(entrypoint));
   const job = (request: ControlRequest) => awaitOwnerJob(request, client);
@@ -141,6 +142,11 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
           const result = await lifecycle().install(dataDir);
           io.write(`${terminalText(describeServiceInstall(result, symbolsFor()))}\n`);
         }
+        continue;
+      }
+      if (choice.trim() === "9") {
+        const { openUrl = openSettingsUrl, ...access } = options.access ?? {};
+        await runAccessGuide(dataDir, { write: text => io.write(text), ask: prompt => io.ask(prompt), openUrl }, { symbols: symbolsFor(), ...access });
         continue;
       }
       if (!snapshot && !["2", "8"].includes(choice.trim())) { io.write("Choose Setup & readiness (1) to start the background service, then return here. For a foreground session use textbutler daemon run in another terminal.\n"); continue; }
@@ -230,7 +236,7 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
         const command = action === "s" ? "start" : action === "l" ? "install" : action === "x" ? "stop" : null;
         if (command) await runMenuBarCommand([command], dataDir, entrypoint,
           result => io.write(`${terminalText(describeMenuBarResult(command, result, symbolsFor()))}\n`));
-      } else io.write("Choose a number from 1 to 8, or q to quit.\n");
+      } else io.write("Choose a number from 1 to 9, or q to quit.\n");
     } catch (error) {
       if (error instanceof OwnerCliError) { io.write(`${terminalText(error.message)}\n`); continue; }
       // Input mistakes are not uncertain operations: show the one-line fix.
