@@ -1,8 +1,8 @@
 /** Shows a permission notice before macOS asks, and recovery after a denial.
  * Mirrors prePrompt() and the audience table from the desktop-foundation
- * permissions kit (docs/permissions.md).
- * TODO(df-0.8): use prePrompt from @hraness/desktop-foundation.
- * TODO(wave-b): switch to the kit once Textbutler depends on 0.8.0. */
+ * permissions kit (docs/permissions.md). It keeps its own flow rather than
+ * the kit's prePrompt because iMessage setup names the Textbutler app as the
+ * requester whichever terminal runs it; the copy and audience come from the kit. */
 import { detectAudience, symbolsFor } from "./cli-style.ts";
 import { formatNotice, formatRecovery, renderPrePrompt, settingsUrl, SETTINGS_URLS, type PermissionNeed } from "./permission-copy.ts";
 

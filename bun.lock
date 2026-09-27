@@ -12,7 +12,7 @@
         "@anthropic-ai/sdk": "0.125.0",
         "@hraness/agentmixer": "https://github.com/hraness/xcb/releases/download/v0.3.0/hraness-agentmixer-0.3.0.tgz",
         "@hraness/algal": "github:hraness/algal#ac68f096d2e10e1824b9ee4d6fe031b4846094da",
-        "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.7.0/hraness-desktop-foundation-0.7.0.tgz",
+        "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
         "@hraness/local-custody": "github:hraness/local-custody#v0.4.0",
         "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
         "@jitl/quickjs-singlefile-browser-release-sync": "0.32.0",
@@ -58,7 +58,7 @@
 
     "@hraness/algal": ["@hraness/algal@github:hraness/algal#ac68f09", { "bin": { "algal": "./cli.ts" } }, "hraness-algal-ac68f09", "sha512-hv8fFpNqr5fmnqhskaumbGmicR3Zxwog81K2EujYv/waFWqRd41g7E0UxtJOarXgWU+DWig2tjjcZTOFvxQG3w=="],
 
-    "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.7.0/hraness-desktop-foundation-0.7.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-lmGe/kJJqtVcbEIPKNGz0iWqVIb3jM4se1v5wR8vY6dA+haZ5u2XNBPL6n1zbLlMupZ7/Ue5/3SDU65x/yJ7SA=="],
+    "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-VvuyeA+KwOj+SR7Opeivhy5p2uNHlGBhEBV8860105kAPOauUuttcSUSTV93dqkNQYBBUwhVZx9CchRj/dmhHw=="],
 
     "@hraness/local-custody": ["@hraness/local-custody@github:hraness/local-custody#12c88e0", {}, "hraness-local-custody-12c88e0", "sha512-NQAU1Edt9oz9aHaZmWSLRdfAxfijIAJhIVYYIA481TMlTi9rcbBcFjuuF8FZ5FGN4RJMquEd5iQJKIcAenDqUw=="],
 

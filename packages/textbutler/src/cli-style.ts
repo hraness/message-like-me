@@ -1,27 +1,21 @@
 /** Hraness CLI style contract (desktop-foundation docs, SPEC § C and § D):
- * audience detection, status symbols with ASCII fallbacks, and the one-line
- * error shape. Textbutler prints no color, so NO_COLOR needs no handling here.
- * TODO(df-0.8): use detectAudience and cli-style from @hraness/desktop-foundation
- * once 0.8.0 is released. TODO(wave-b): switch to the kit. */
+ * audience detection from the kit, status symbols with ASCII fallbacks, and
+ * the one-line error shape. Textbutler prints no color, so NO_COLOR needs no
+ * handling here. */
+import { CLI_SYMBOLS, detectAudience as kitAudience, type Audience } from "@hraness/desktop-foundation";
 
-export type Audience = "human" | "agent" | "quiet";
+export type { Audience };
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** Exact names only. Prefixes such as CODEX_ also match human configuration. */
-const AGENT_MARKERS = ["AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CURSOR_AGENT", "GEMINI_CLI"] as const;
-
 export function detectAudience(input: { env?: Env; stderrIsTTY?: boolean } = {}): Audience {
-  const env = input.env ?? process.env;
-  const forced = env.HRANESS_AUDIENCE;
-  if (forced === "human" || forced === "agent" || forced === "quiet") return forced;
-  if (forced === "off") return "quiet";
-  if (AGENT_MARKERS.some(name => (env[name] ?? "") !== "")) return "agent";
-  return (input.stderrIsTTY ?? process.stderr.isTTY === true) ? "human" : "quiet";
+  return kitAudience({ ...(input.env ? { env: input.env as NodeJS.ProcessEnv } : {}), ...(input.stderrIsTTY === undefined ? {} : { stderrIsTTY: input.stderrIsTTY }) });
 }
 
 export interface Symbols { ok: string; fail: string; warn: string; next: string; on: string; off: string; skip: string; busy: string; notice: string }
-const UNICODE: Symbols = { ok: "✓", fail: "✗", warn: "⚠", next: "→", on: "●", off: "○", skip: "–", busy: "↻", notice: "🔐" };
-const ASCII: Symbols = { ok: "OK", fail: "FAIL", warn: "WARN", next: "->", on: "*", off: "o", skip: "-", busy: "...", notice: "NOTE" };
+const pick = (form: "glyph" | "ascii"): Symbols => ({ ok: CLI_SYMBOLS.ok[form], fail: CLI_SYMBOLS.fail[form], warn: CLI_SYMBOLS.warn[form], next: CLI_SYMBOLS.next[form],
+  on: CLI_SYMBOLS.on[form], off: CLI_SYMBOLS.off[form], skip: CLI_SYMBOLS.skip[form], busy: CLI_SYMBOLS.progress[form], notice: CLI_SYMBOLS.notice[form] });
+const UNICODE: Symbols = pick("glyph");
+const ASCII: Symbols = pick("ascii");
 
 /** ASCII when TERM=dumb, HRANESS_ASCII=1, or no locale variable names UTF-8. */
 export function symbolsFor(env: Env = process.env): Symbols {

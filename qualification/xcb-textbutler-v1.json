@@ -13,8 +13,8 @@
     }
   },
   "sources": {
-    "bun.lock": "1d8fd172a66a8a550bf8b4faaea763c9024ff7bd7245fc83720253bdc564dc87",
-    "package.json": "eb819e8521cd3a33f274bda99ea4c0425448684eec50a697e66ca9abc28285a3",
+    "bun.lock": "38775b47adf4f0a8e167aa2c43e87a1a839d555a1c5d347aee6a0d527b06d833",
+    "package.json": "0b9950e406b5dc214fc1a848efe6ab752674cfcfa954fb55738dd99e2614feb8",
     "packages/control/src/index.ts": "614f56a989dabf8f212449493399bc355ddfd812e22148bfa91cd103b553d058",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
@@ -54,11 +54,11 @@
     "packages/textbutler/src/xcb-integration.ts": "7fbb9e8e65ac9e0920990b8bee965f2dcaeec6ad5250713ccf3adda429dc0cad",
     "packages/transport/src/automation-contract.ts": "629e02b9dda6f913cc482a815cd3df5f54ed9aad5c67af780cfbe2c64887da18",
     "packages/transport/src/automation-diagnostics.ts": "c3ae9b6f666a73887b53d276095ca02e0ca99b2cb19832150337fee441cbf535",
-    "scripts/build-textbutler.ts": "89645b8c85058de94641de3f67291f802094e2be6b9261da5605e8a7797db272",
+    "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "6d2843d10d2be3ee2bb77bcb993bda2f3b58e013f5e74edbfa9793a5bf2c69af"
   },
   "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/imessage-setup.test.ts packages/transport/src/automation.test.ts packages/textbutler/src/control-service.test.ts",
-    "receiptSha256": "a00991e63c30e0c64fe280eaf4ad6f896d2a05f3d89df1b497ee6c768848fa65"
+    "command": "bun run check",
+    "receiptSha256": "dd4d371b2f63b98dab21f8837c60e1d44b634669c42f2d523787bf017f40e2cc"
   }
 }

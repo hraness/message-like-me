@@ -1,30 +1,18 @@
-/** macOS permission notices and recovery copy for Textbutler.
- *
- * The strings follow the desktop-foundation permissions kit templates
- * (docs/permissions.md, "Copy templates") word for word, so every Hraness
- * product reads the same. The kit ships in @hraness/desktop-foundation 0.8.0.
- * TODO(df-0.8): use renderPrePrompt/renderRecovery/permissionError from the kit.
- * TODO(wave-b): switch to the kit once Textbutler depends on 0.8.0, and delete
- * this file.
+/** macOS permission notices and recovery copy for Textbutler, from the
+ * desktop-foundation permissions kit so every Hraness product reads the same.
+ * This file keeps Textbutler's two presets and its small rendering API.
  *
  * Nothing here triggers a macOS prompt. Opening System Settings happens only
  * for an explicit owner keypress, and only for the allowlisted URLs below. */
+import { renderPrePrompt as kitPrePrompt, renderRecovery as kitRecovery, settingsPath as kitPath, settingsUrl as kitUrl, type PermissionNeed as KitNeed } from "@hraness/desktop-foundation";
 import type { Symbols } from "./cli-style.ts";
 
 export type TextbutlerPermissionKind = "full-disk-access" | "automation";
 
-interface KindInfo { behavior: "asks" | "settings-only"; pane: string; path: string; settingsUrl: string }
-const KINDS: Record<TextbutlerPermissionKind, KindInfo> = {
-  "full-disk-access": { behavior: "settings-only", pane: "Full Disk Access", path: "System Settings › Privacy & Security › Full Disk Access",
-    settingsUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" },
-  automation: { behavior: "asks", pane: "Automation", path: "System Settings › Privacy & Security › Automation",
-    settingsUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation" },
-};
-
-export const settingsUrl = (kind: TextbutlerPermissionKind): string => KINDS[kind].settingsUrl;
-export const settingsPath = (kind: TextbutlerPermissionKind): string => KINDS[kind].path;
+export const settingsUrl = (kind: TextbutlerPermissionKind): string => kitUrl(kind)!;
+export const settingsPath = (kind: TextbutlerPermissionKind): string => kitPath(kind)!;
 /** The only URLs Textbutler ever hands to /usr/bin/open for System Settings. */
-export const SETTINGS_URLS: readonly string[] = Object.values(KINDS).map(kind => kind.settingsUrl);
+export const SETTINGS_URLS: readonly string[] = (["full-disk-access", "automation"] as const).map(settingsUrl);
 
 export interface PermissionNeed {
   kind: TextbutlerPermissionKind;
@@ -47,7 +35,10 @@ export const MESSAGES_FDA: PermissionNeed = { ...REF, kind: "full-disk-access", 
 /** AUTOMATION(ref, "Messages", why) preset. */
 export const MESSAGES_AUTOMATION: PermissionNeed = { ...REF, kind: "automation", ask: "control Messages", why: "Textbutler only sends replies in chats you turn on." };
 
-const forProduct = (need: PermissionNeed): string => need.requester === need.product ? "" : ` for ${need.product}`;
+/** A fixed environment, so the requester is always the Textbutler app rather
+ * than whichever terminal runs the command. */
+const APP_ENV: NodeJS.ProcessEnv = {};
+const kit = (need: PermissionNeed): KitNeed => ({ kind: need.kind, product: need.product, command: "textbutler", requester: need.requester, ask: need.ask, why: need.why, next: need.next });
 
 export interface RenderedNotice { lines: string[]; confirm?: string }
 
@@ -55,21 +46,15 @@ export interface RenderedNotice { lines: string[]; confirm?: string }
  * Settings (settings-only). `interactive` adds the confirm line; it is true
  * only when stdin and stderr are both terminals. */
 export function renderPrePrompt(need: PermissionNeed, interactive: boolean): RenderedNotice {
-  const info = KINDS[need.kind];
-  if (info.behavior === "settings-only") return {
-    lines: [`${need.product} needs ${info.pane} to ${need.ask}.`, `macOS doesn't ask for this. Turn on ${need.requester} in ${info.path}. ${need.why}`],
-    ...(interactive ? { confirm: "Press Enter to open Settings · s to skip" } : {}) };
-  return {
-    lines: [`macOS will ask to let ${need.requester} ${need.ask}${forProduct(need)}.`, `${need.why} Change this any time in ${info.path}.`],
-    ...(interactive ? { confirm: "Press Enter to continue · s to skip" } : {}) };
+  const shown = kitPrePrompt(kit(need), "cli", APP_ENV);
+  return { lines: [shown.title, ...shown.lines], ...(interactive && shown.confirm ? { confirm: shown.confirm } : {}) };
 }
 
 /** Recovery after a denial, or when access can't be confirmed. */
 export function renderRecovery(need: PermissionNeed, state: "denied" | "unknown", interactive: boolean): { headline: string; detail: string; next: string } {
-  const info = KINDS[need.kind];
-  if (state === "denied") return { headline: `${need.product} can't ${need.ask}: macOS access is off for ${need.requester}.`, detail: `Turn on ${need.requester} in ${info.path}.`,
-    next: `${need.next}${interactive ? " · press o to open Settings" : ""}` };
-  return { headline: `${need.product} couldn't ${need.ask}. macOS may be blocking ${need.requester}.`, detail: `Check ${info.path}.`, next: need.next };
+  const shown = kitRecovery(kit(need), state, "cli", APP_ENV);
+  const next = shown.next ?? need.next;
+  return { headline: shown.title, detail: shown.lines.join(" "), next: interactive && shown.confirm ? `${next} · ${shown.confirm}` : next };
 }
 
 /** The headline and detail as one line, for status text (doctor, JSON detail). */
