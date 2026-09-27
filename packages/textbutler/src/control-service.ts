@@ -12,7 +12,7 @@ import type { ProviderHost } from "./provider-host.ts";
 import type { AccountLeaseStore } from "@hraness/agentmixer";
 import { selectButlerModel } from "./routed-agent.ts";
 import { parseAutomationBinding, type AutomationBinding, type AutomationCandidate, type OwnerAutomationPort } from "./automation-owner.ts";
-import { automationBindingDigest, parseAutomationGrant, type AutomationGrant, type AutomationProvider, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
+import { automationBindingDigest, parseAutomationGrant, STATUS_REUSE_MS, type AutomationGrant, type AutomationProvider, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import { OwnerReplies, type PendingObservation } from "./owner-replies.ts";
 import { OwnerMessages } from "./owner-messages.ts";
 import { parseActionIntent } from "../../transport/src/index.ts";
@@ -316,7 +316,7 @@ export class TextbutlerControlService {
     if (this.closed || state.settings.paused || !selected?.enabled || selected.revision !== contact.revision || binding?.version !== 2) return null;
     if (prior) {
       try {
-        const live = await this.automation.grantStatus(binding, prior.id, AbortSignal.timeout(60_000));
+        const live = await this.automation.grantStatus(binding, prior.id, AbortSignal.timeout(60_000), STATUS_REUSE_MS);
         const current = (await this.current()).state;
         if (this.closed || this.grantRecovery || current.settings.paused || this.grantWork.has(contact.id) || this.grantChanging.has(contact.id)
           || current.grants[contact.id]?.id !== live.id || this.pendingGrant(contact.id)
