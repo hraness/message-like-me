@@ -1,0 +1,253 @@
+● Automatic replies on in 8 of 24 chats
+⚠︎ Couldn't check for replies
+─────────
+Check for replies · 12 waiting
+Replies waiting ▸
+  Contact 0 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 1 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 2 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 3 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 4 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 5 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 6 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 7 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 8 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Contact 9 · 1 to answer ▸
+    See you then.
+    Suggest a fresh reply
+  Suggestion for Contact 0 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 1 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 2 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 3 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 4 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 5 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 6 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 7 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 8 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+  Suggestion for Contact 9 ▸
+    Sounds good.
+    Includes 2 actions
+    Expires at 3:48 PM
+    Review and send it in the guided terminal
+    Discard suggestion
+Conversations ▸
+  Contact 0 ▸
+    ✓ Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account (turn off replies to change)
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready  (dimmed)
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready  (dimmed)
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready  (dimmed)
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready  (dimmed)
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready  (dimmed)
+  Contact 1 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 2 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 3 ▸
+    ✓ Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account (turn off replies to change)
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready  (dimmed)
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready  (dimmed)
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready  (dimmed)
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready  (dimmed)
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready  (dimmed)
+  Contact 4 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 5 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 6 ▸
+    ✓ Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account (turn off replies to change)
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready  (dimmed)
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready  (dimmed)
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready  (dimmed)
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready  (dimmed)
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready  (dimmed)
+  Contact 7 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 8 ▸
+    Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready
+    Account 8 · Needs setup  (dimmed)
+    Account 9 · Ready
+  Contact 9 ▸
+    ✓ Automatic replies
+    Beeper · Butler off or grant unavailable
+    ─────────
+    Agent account (turn off replies to change)
+    Account 0 · Needs setup  (dimmed)
+    Account 1 · Ready  (dimmed)
+    Account 2 · Needs setup  (dimmed)
+    Account 3 · Ready  (dimmed)
+    Account 4 · Needs setup  (dimmed)
+    Account 5 · Ready  (dimmed)
+    Account 6 · Needs setup  (dimmed)
+    Account 7 · Ready  (dimmed)
+    More in the guided terminal
+  More in the guided terminal
+─────────
+Pause automatic replies
+─────────
+Details ▸
+  More in the guided terminal
+Help & support ↗
+Quit Textbutler  ⌘Q

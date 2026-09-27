@@ -1,0 +1,36 @@
+⊘ Textbutler isn't running
+─────────
+Start Textbutler at login
+Get started ↗
+─────────
+Details ▸
+  Status not confirmed yet
+  The Textbutler daemon is not connected.
+  ─────────
+  Recent activity ▸
+    Nothing yet
+  Agent accounts ▸
+    No agent accounts yet
+  Capabilities ▸
+    Messages · Needs setup ▸
+      Connect the daemon to negotiate Ghostget Messages access.
+    Contacts · Needs setup ▸
+      Contacts appear after Ghostget grants scoped access.
+    Agent · Needs setup ▸
+      A qualified Claude, Codex, or Devin account is required.
+    Attachments · Needs setup ▸
+      File sending must be reported by the connected provider.
+    Reactions · Needs setup ▸
+      Available only when the transport supports reactions.
+    Stickers · Not supported ▸
+      No qualified sticker transport is connected.
+    Links · Needs setup ▸
+      Connect messaging to check rich link support.
+    Polls · Needs setup ▸
+      Connect messaging to check native poll support.
+    Mini-apps · Not supported ▸
+      No qualified iMessage app transport is connected.
+  Refresh now
+  Setup guide ↗
+Help & support ↗
+Quit Textbutler  ⌘Q
