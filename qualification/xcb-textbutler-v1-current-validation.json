@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "scope": "Ghostget connector pin bump 0.18.21 to 0.18.38 (packages/textbutler/src/imessage-setup.ts): the pinned setup contract now requires the e8bdbfe build with per-enrollment lanes, the five-minute dispatch window, and run.by-intent arbitration; test fixtures updated and 0.18.21 added to the refused-version list; docs updated.",
+  "scope": "Ghostget connector pin bump 0.18.21 to 0.18.38 plus companion reliability: (a) packages/textbutler/src/imessage-setup.ts pins the e8bdbfe build with per-enrollment lanes, the five-minute dispatch window and run.by-intent arbitration; (b) packages/transport/src/automation.ts retries a send once on the same intent when the intent ledger proves the run insert never committed, so a pre-insert provider fault can no longer strand an acknowledged reply; (c) packages/textbutler/src/fast-driver.ts gives kind:local drivers a 60s budget because the habitat bridge observes 11-19s latency that fits nowhere inside 20s.",
   "toolchain": "Bun 1.3.14",
   "command": "bun run check",
   "result": {
     "exitCode": 1,
-    "evidence": "Every gate phase through the test aggregate passes: cost-surfaces, typecheck, effect, and 490/492 tests across 55 files. Failures are the isolated-installation admission test, which validates this receipt's predecessor hashes \u2014 expected, since this change rebinds reviewed sources \u2014 and one git release-ref authority case that timed out at 5s under host fseventsd saturation (passes standalone in seconds). The receipt update is generated from the same tree and the focused admission test passes with it. Required CI on the PR head is the final gate."
+    "evidence": "Focused suites pass: imessage-setup 23/23, transport automation 15/15 including a new regression that proves a refused-but-unrecorded send rebinds and submits exactly once, fast-driver 5/5. The aggregate bun run check passes every gate phase with 490/492 tests across 55 files; the two failures are the isolated-installation admission test validating this receipt's predecessor hashes and one git release-ref timeout under host fseventsd saturation that passes standalone in seconds. The receipt is generated from the same tree and the admission gate accepts it. Required CI on the PR head is the final gate."
   },
   "sourceInventoryCount": 43,
-  "sourceDigest": "1d3f1c8700281b2edd17233094a2c6468d09714ef8216a92dd9fd0559125f9da",
+  "sourceDigest": "94785bd700d7a2550b3656e8610432cf583c723d39108a317628bd1b23959c3a",
   "sourceSha256": {
     "bun.lock": "d7275c271129b75f91181da97a3af8450127f7b1d1e0d1c8000b1e829f0be216",
     "package.json": "f7662cd480547dd92a0de558b472e1438e2ddebb39a66f44b8a0a1e7f8f3b83e",
@@ -19,7 +19,7 @@
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
     "packages/textbutler/src/control-service.ts": "185874912a60352805e346234fa9b4eb8d60e510702cdbb2a1313b2f561d7d86",
     "packages/textbutler/src/daemon.ts": "158a15c0404de06c4b318a338ed7ba7e1727617b49f9301d095cf6406e1aa95c",
-    "packages/textbutler/src/fast-driver.ts": "1b2263f783e575aa43e5ee30f19d0d05b7ee346056969a0ddb79fbb3ca6300d2",
+    "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
     "packages/textbutler/src/habitat-agent.ts": "f0a9b384436882115fccaa9615de1e5933bf714c83a0182bb53334573f3f77b0",
     "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",

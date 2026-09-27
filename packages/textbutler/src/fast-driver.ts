@@ -10,7 +10,7 @@ const localConfig = z.strictObject({ kind: z.literal("local"), model: z.string()
 const configuration = z.discriminatedUnion("kind", [gatewayConfig, localConfig]);
 export type FastDriverConfig = z.infer<typeof configuration>;
 export const parseFastDriverConfig = (value: unknown): FastDriverConfig => configuration.parse(value);
-export const FAST_DRIVER_LIMITS = Object.freeze({ inputBytes: 131_072, responseBytes: 65_536, maxTokens: 1024, timeoutMs: 20_000, reservationMicroUsd: 25_000 });
+export const FAST_DRIVER_LIMITS = Object.freeze({ inputBytes: 131_072, responseBytes: 65_536, maxTokens: 1024, timeoutMs: 20_000, localTimeoutMs: 60_000, reservationMicroUsd: 25_000 });
 export type FastFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** Stable failure classes so the reply loop can surface the real cause instead
@@ -41,7 +41,9 @@ const responseSchema = z.object({ choices: z.array(z.object({ finish_reason: z.l
 export function createFastDriver(input: FastDriverConfig, ports: { journal: Pick<RunJournal, "reserveApiUsage" | "settleApiUsage">; credential?: () => Promise<string>; fetch?: FastFetch; now?: () => number }) {
   const config = parseFastDriverConfig(input), fetcher = ports.fetch ?? fetch, now = ports.now ?? Date.now;
   async function completion(operationId: string, prompt: string, outputBytes: number, external?: AbortSignal): Promise<ExecutorResult> {
-    const signal = AbortSignal.any([AbortSignal.timeout(FAST_DRIVER_LIMITS.timeoutMs), ...(external ? [external] : [])]); signal.throwIfAborted();
+    // A local driver crosses the habitat bridge and provider runtime; its
+    // observed 11-19s bridge latency leaves no headroom at 20s under load.
+    const signal = AbortSignal.any([AbortSignal.timeout(config.kind === "local" ? FAST_DRIVER_LIMITS.localTimeoutMs : FAST_DRIVER_LIMITS.timeoutMs), ...(external ? [external] : [])]); signal.throwIfAborted();
     let credential: string | undefined;
     if (config.kind === "gateway") {
       credential = await ports.credential?.();

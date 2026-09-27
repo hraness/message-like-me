@@ -22,7 +22,7 @@
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
     "packages/textbutler/src/control-service.ts": "185874912a60352805e346234fa9b4eb8d60e510702cdbb2a1313b2f561d7d86",
     "packages/textbutler/src/daemon.ts": "158a15c0404de06c4b318a338ed7ba7e1727617b49f9301d095cf6406e1aa95c",
-    "packages/textbutler/src/fast-driver.ts": "1b2263f783e575aa43e5ee30f19d0d05b7ee346056969a0ddb79fbb3ca6300d2",
+    "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
     "packages/textbutler/src/habitat-agent.ts": "f0a9b384436882115fccaa9615de1e5933bf714c83a0182bb53334573f3f77b0",
     "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
@@ -59,6 +59,6 @@
   },
   "validation": {
     "command": "bun run check",
-    "receiptSha256": "b63d0d517812863535fc40abc8eb7e8749c7ffe408d77a80d9206c5130473d78"
+    "receiptSha256": "fa5e8a9dbcb7d2884cabe9ba08142a8b07aab7de9e5478059006a7b2aae640cc"
   }
 }
