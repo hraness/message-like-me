@@ -1,0 +1,30 @@
+{
+    "kind": "independent-ai-source-review",
+    "scope": "Self-chat ack-echo attribution in ButlerRuntime.process (packages/textbutler/src/runtime.ts) and the conversation snapshot builder (packages/textbutler/src/reply-loop.ts): the post-compose conversation-changed recheck now attributes an incoming echo to this run's ack through relatedMessageId, matching the attribution pattern contact-habitat.ts already uses for reply followups.",
+    "rounds": [
+        {
+            "round": 1,
+            "design": "Treat any new message id absent from both the pre-compose snapshot and this run's accepted ack ids as conversation-changed (pre-change behavior).",
+            "verdict": "blockers",
+            "blockers": [
+                "In a self-chat the provider re-delivers the butler's own ack as an incoming row under a fresh message id, so the ack's own echo always read as a foreign new message: every acked run in the owner self-chat cancelled as conversation-changed between ack dispatch and reply submit (observed live, run 4ef7ac99).",
+                "The echo is not an owner send, so the failure was silent: the contact saw the disclosure ack and then nothing, indistinguishable from a compose crash."
+            ]
+        },
+        {
+            "round": 2,
+            "design": "Carry each message's relatedMessageId in ConversationSnapshot and exempt a new id from the change check only when it relates to a journaled ack id of this same run.",
+            "verdict": "blockers-fixed",
+            "blockers": [
+                "Exempting by disclosure text would also excuse a contact quoting or spoofing the ack marker; relation-to-journaled-ack is structural and cannot be manufactured by message text. Fixed by keying the exemption on the provider-assigned relatedMessageId.",
+                "Exempting all related messages would let a contact reply to the ack race the reply; only relations targeting this run's accepted ack ids pass. Fixed by comparing the relation target against the run-scoped ackIds set, not the global journal."
+            ],
+            "acceptedNits": [
+                "A provider that re-ids echoes without relatedMessageId still cancels — fail-safe direction, identical to the prior foreign-id treatment.",
+                "Contact replies that genuinely target the ack (reply-to) would pass the exemption only when the provider models them as a relation of the ack id; iMessage expressives do not carry relatedMessageId, so the exemption is narrower than the observed echo in practice.",
+                "The reply leg itself has the same theoretical self-echo, but no changed-check runs after the reply submit, so nothing new cancels."
+            ],
+            "verification": "Live ghostget event stream shows the self-chat ack arriving as outgoing id DFC96D36 then re-landing as incoming id 32A75E0C with relatedMessageId=DFC96D36; runtime.test.ts now pins both the echo exemption and the foreign-relation cancel."
+        }
+    ]
+}
