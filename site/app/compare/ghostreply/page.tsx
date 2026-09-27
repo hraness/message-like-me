@@ -36,7 +36,7 @@ const questions = [
   {
     question: 'Can either app send without me watching?',
     answer:
-      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. Textbutler’s smart response is designed to yield while you are talking, keyword-only mode waits for a direct invitation, and new contacts start disabled.',
+      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New Textbutler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler holds back for a few minutes after you write.',
   },
   {
     question: 'Where does my message history go?',
@@ -112,10 +112,10 @@ export default function CompareGhostReplyPage() {
           <p>
             By default its replies carry a disclosure marker:{' '}
             <code>{'🤖{ hello this is my response }'}</code>. The three symbols are configurable
-            per contact. Smart response is designed to yield while you are talking, and
-            keyword-only mode waits for a direct invitation. A draft you review sends only in the
-            version you approved. AI replies run on your own Claude Code
-            or Codex subscription through <a href="https://github.com/hraness/xcb">xcb</a> from the
+            per contact. By default the butler answers only messages that contain a keyword
+            you choose; smart mode lets it decide which messages need an answer. A draft you review sends only in the
+            version you approved. AI replies run on your own Claude Code,
+            Codex, or Devin subscription through <a href="https://github.com/hraness/xcb">xcb</a> from the
             local install; an optional fast-reply mode can use a Qwen model through Vercel AI
             Gateway or a model server on your Mac.
           </p>
@@ -147,7 +147,7 @@ export default function CompareGhostReplyPage() {
               <tr>
                 <th scope="row">Where the AI runs</th>
                 <td>GhostReply’s Cloudflare backend calls Cloudflare Workers AI; there is no API key to create or choose</td>
-                <td>Your own Claude Code or Codex subscription through xcb on your Mac; the optional fast-reply path uses a Qwen model through Vercel AI Gateway or a local model server</td>
+                <td>Your own Claude Code, Codex, or Devin subscription through xcb on your Mac; the optional fast-reply path uses a Qwen model through Vercel AI Gateway or a local model server</td>
               </tr>
               <tr>
                 <th scope="row">What it reads</th>

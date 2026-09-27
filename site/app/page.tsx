@@ -25,6 +25,7 @@ import {
   SITE_TITLE,
   SOFTWARE_VERSION,
 } from './_lib/site';
+import { TERMINAL_FIRST_RUN } from './_lib/terminal';
 
 export const metadata = pageMetadata({
   title: SITE_TITLE,
@@ -70,29 +71,6 @@ const HOME_QUESTIONS = [
   },
 ] as const;
 
-// The first screen of the guided terminal on a fresh install, copied from
-// terminalDashboard(null) in packages/textbutler/src/tui.ts. A site test keeps
-// every line equal to that source.
-export const TERMINAL_FIRST_RUN = [
-  'TEXTBUTLER',
-  'Your conversations, with you in control.',
-  '',
-  'Service not connected',
-  'Start with Setup & readiness.',
-  '',
-  '  1  Setup & readiness',
-  '  2  Connect messaging apps',
-  '  3  Add a conversation',
-  '  4  Inbox & replies',
-  '  5  Manage a contact',
-  '  6  Pause automatic replies',
-  '  7  Resume automatic replies',
-  '  8  Menu bar companion',
-  '  9  Give Textbutler access',
-  '  q  Quit terminal',
-  '',
-  'Quitting leaves the background service running.',
-] as const;
 
 function TerminalProof() {
   return (
@@ -154,7 +132,8 @@ export default function Home() {
             <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md     your standing instructions\n├── ABOUT.md      what matters in this relationship\n├── MEMORY.md     dated notes, with sources\n├── STYLE.md      how to help in this conversation\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre><p>Your settings, sign-ins, and permissions live elsewhere, where the butler can’t edit them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></p></div>
           </MarketingSection>
 
-          <MarketingSection heading="Start with a reply you write" headingId="development-title" id="get-started" label="Get started" summary={SITE_STATUS}>
+          <MarketingSection heading="Start with a reply you write" headingId="development-title" id="get-started" label="Get started" summary="Textbutler runs from source on your Mac. Start with replies you write, and connect AI when you’re ready.">
+            <p className="tb-status">{SITE_STATUS}</p>
             <ol className="tb-steps">
               <li>
                 <h3>Open the guided terminal</h3>

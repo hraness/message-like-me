@@ -130,23 +130,28 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   background: none;
 }
 .textbutler-marketing .hraness-marketing-section__summary { max-inline-size: 42rem; }
+.textbutler-marketing .hraness-marketing-flow__detail { max-inline-size: 62ch; }
 .textbutler-marketing .hraness-marketing-header__brand { font-size: 1.125rem; }
 .textbutler-marketing .hraness-marketing-header__nav a { font-size: 0.875rem; }
-.textbutler-marketing .hraness-marketing-action {
+.textbutler-marketing .hraness-marketing-page .hraness-marketing-action {
   min-block-size: var(--hraness-marketing-action-height);
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
 }
-/* Hero and closing actions: one solid primary button and one text link. */
-.textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="primary"] {
+/* Primary actions are one flat accent button everywhere, header included;
+ * hero and closing secondary actions read as a text link. */
+:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"] {
   border: 1px solid var(--primary);
   background: var(--primary);
   background-image: none;
   box-shadow: none;
   color: var(--primary-foreground);
   -webkit-text-fill-color: currentColor;
-  padding-inline: 1.25rem;
 }
+:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"]:hover {
+  background: color-mix(in oklch, var(--primary) 86%, var(--foreground));
+}
+.textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="primary"] { padding-inline: 1.25rem; }
 .textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="secondary"] {
   border-color: transparent;
   background: none;
@@ -170,6 +175,12 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   .textbutler-marketing .hraness-marketing-hero__summary { font-size: 1.0625rem; }
   .textbutler-marketing .hraness-marketing-action { min-block-size: 2.75rem; }
   .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 8rem; }
+}
+@media (max-width: 24rem) {
+  /* The smallest phones keep brand, action, and appearance on one row. */
+  .hraness-marketing-header .hraness-marketing-header__inner { column-gap: 0.75rem; }
+  .textbutler-marketing .hraness-marketing-header__brand { font-size: 1rem; }
+  .hraness-marketing-header .hraness-marketing-action { padding-inline: 0.7rem; font-size: 0.8125rem; }
 }
 
 :where(
@@ -799,7 +810,6 @@ nav.message-like-me-ask-ai + footer {
   border: 1px solid var(--line);
   border-radius: 0.875rem;
   background: var(--surface);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.06), 0 24px 48px -24px oklch(0 0 0 / 0.28);
 }
 .hero-visual .terminal-card { border-left: 0; border-top: 1px solid var(--line); }
 .privacy-stamp {
@@ -877,6 +887,10 @@ html { scrollbar-color: var(--muted) var(--paper); }
   tab-size: 2;
 }
 .tb-terminal__prompt { color: var(--primary); }
+@media (max-width: 30rem) {
+  /* Phones wrap terminal lines instead of hiding their ends off-screen. */
+  .tb-terminal pre { padding-inline: 1rem; font-size: 0.75rem; white-space: pre-wrap; }
+}
 .tb-terminal pre:focus-visible,
 .workspace-example pre:focus-visible,
 .tb-steps pre:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -900,7 +914,7 @@ html { scrollbar-color: var(--muted) var(--paper); }
   font: 0.8125rem/1.8 var(--font-mono);
   overflow-x: auto;
 }
-.workspace-example p { color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
+.workspace-example p { margin: 0.9rem 0 0; color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
 .workspace-example a, .tb-steps a, .legacy-note a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 
 .architecture-rows { margin: 0; border-block-end: 1px solid var(--line); }
@@ -909,6 +923,9 @@ html { scrollbar-color: var(--muted) var(--paper); }
 .architecture-rows dt a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 .architecture-rows dd { margin: 0; color: var(--muted); max-width: 62ch; }
 .mlm-section-link { margin-block-start: 1.25rem; }
+
+/* The one development-status statement, set apart from the steps. */
+.tb-status { margin: 0 0 2rem; max-width: 62ch; padding-inline-start: 1rem; border-inline-start: 2px solid var(--primary); color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
 
 /* Get started: numbered steps, each with its real command. */
 .tb-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: tb-step; }

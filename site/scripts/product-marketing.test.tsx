@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import Home, { TERMINAL_FIRST_RUN } from '../app/page.tsx';
+import Home from '../app/page.tsx';
+import { TERMINAL_FIRST_RUN } from '../app/_lib/terminal.ts';
 import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
