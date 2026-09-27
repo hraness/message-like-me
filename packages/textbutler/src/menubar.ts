@@ -8,6 +8,7 @@ import { requestDaemon } from "./daemon.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { awaitOwnerJob, type OwnerControlClient } from "./owner-cli.ts";
 import { createLaunchAgentLifecycle, defaultLaunchAgentHost, isolatedBunInvocation } from "./launch-agent.ts";
+import { CliUsageError } from "./cli-style.ts";
 import { macosAppExecutable, readInstalledMacosApp, type MacosAppIdentity } from "./macos-app.ts";
 import { settingsPath, settingsUrl } from "./permission-copy.ts";
 import { terminalPromptIO } from "./permission-prompt.ts";
@@ -422,27 +423,30 @@ export const localAppEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =
 
 /** How the menu runs in the foreground, now and at login. With a verified app
  * it is the app's executable with no arguments, the launcher's menu role,
- * which checks its pinned runtime and entrypoint before starting. The app
- * keeps the same path across upgrades, so its login item stays valid. */
+ * which checks its pinned runtime and entrypoint before starting. The app runs
+ * the version it was built from, so a CLI upgrade needs an app rebuild too. */
 export function companionForeground(dataDir: string, entrypoint: string, host: { home: string; runtime: string } = { home: homedir(), runtime: process.execPath },
   app: Pick<MacosAppIdentity, "appPath"> | null = null): { executable: string; args: readonly string[] } {
   if (app !== null) return { executable: macosAppExecutable(app), args: [] };
   return isolatedBunInvocation({ ...host, entrypoint, args: ["menubar", "--foreground", "--data-dir", dataDir] });
 }
 
-/** The installed app for this checkout, or null when the switch is off, no
- * app is installed, or its receipt doesn't match. Never repairs or installs. */
+/** The installed app for this Textbutler version, or null when the switch is
+ * off or no app is installed. An app built from another version or folder is
+ * an error, never a silent fall back to Bun. Never repairs or installs. */
 export async function menuApp(dataDir: string, entrypoint: string, options: { env?: NodeJS.ProcessEnv; home?: string; runtime?: string;
   read?: typeof readInstalledMacosApp } = {}): Promise<MacosAppIdentity | null> {
   if (!localAppEnabled(options.env) || process.platform !== "darwin" && options.read === undefined) return null;
   try {
     return await (options.read ?? readInstalledMacosApp)({ home: options.home ?? homedir(), dataDir, runtime: options.runtime ?? process.execPath, entrypoint });
-  } catch { return null; }
+  } catch {
+    throw new CliUsageError("TextButler.app was built from a different Textbutler version or data folder, so it can't run this menu.", "textbutler help permissions", "local-app-mismatch");
+  }
 }
 export async function runMenuBarCommand(args: readonly string[], dataDir: string, entrypoint: string, write: (result: unknown) => void,
   hooks: { handle?: typeof handleCompanionCommand; exit?: (code: number) => void; app?: () => Promise<MacosAppIdentity | null> } = {}): Promise<number> {
   // The app's own menu role is already the foreground process, so it never relaunches itself.
-  const app = args[0] === "--foreground" ? null : await (hooks.app ?? (() => menuApp(dataDir, entrypoint)))();
+  const app = args[0] !== "start" && args[0] !== "install" ? null : await (hooks.app ?? (() => menuApp(dataDir, entrypoint)))();
   const code = await (hooks.handle ?? handleCompanionCommand)(companionOptions(dataDir, openBrowser, entrypoint), {
     args,
     foreground: companionForeground(dataDir, entrypoint, undefined, app),

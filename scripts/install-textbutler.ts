@@ -124,20 +124,21 @@ export async function installTextbutler(options: { from: string; prefix: string;
   return { command, directory, version: source.manifest.version };
 }
 
-/** The menu's login item, when it still starts a version this upgrade
- * replaced (T7). Read only: installation stays inert, so the owner repoints
- * it with one command. A login item that runs TextButler.app keeps working,
- * because the app keeps its path across upgrades. */
-export async function staleMenuLoginItem(home: string, previousDirectory: string): Promise<boolean> {
+/** The menu's login item after an upgrade (T7). Read only: installation
+ * stays inert, so the owner repoints it with one command. "previous-version"
+ * starts the replaced version through Bun; "app" starts TextButler.app, which
+ * runs the version it was built from until the app is rebuilt from this one. */
+export async function menuLoginItemAfterUpgrade(home: string, previousDirectory: string): Promise<"previous-version" | "app" | null> {
   const path = join(home, "Library", "LaunchAgents", "app.hraness.companion.textbutler.plist");
   let text: string;
   try {
     const info = await lstat(path);
-    if (!info.isFile() || info.size > 65_536) return false;
+    if (!info.isFile() || info.size > 65_536) return null;
     text = (await readArtifact(path, 65_536)).toString("utf8");
-  } catch { return false; }
+  } catch { return null; }
+  if (text.includes("/TextButler.app/Contents/MacOS/TextButler<")) return "app";
   const escaped = previousDirectory.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("'", "&apos;").replaceAll('"', "&quot;");
-  return text.includes(`${escaped}/`) || text.includes(`${previousDirectory}/`);
+  return text.includes(`${escaped}/`) || text.includes(`${previousDirectory}/`) ? "previous-version" : null;
 }
 
 if (import.meta.main) {
@@ -154,9 +155,11 @@ if (import.meta.main) {
     const distribution = from ?? (await buildTextbutler()).directory;
     const installed = await installTextbutler({ from: distribution, prefix, upgrade });
     const { manifest } = await verifyDistribution(installed.directory);
-    const staleMenu = installed.previous !== undefined && await staleMenuLoginItem(homedir(), installed.previous.directory);
+    const menu = installed.previous === undefined ? null : await menuLoginItemAfterUpgrade(homedir(), installed.previous.directory);
+    const menuDetail = menu === "previous-version" ? " The menu still starts the previous version at login: run textbutler menubar install to point it at this one."
+      : menu === "app" ? " The menu starts TextButler.app at login, which runs the version it was built from: rebuild the app from this version and install it with --upgrade." : "";
     process.stdout.write(`${JSON.stringify({ ok: true, ...installed, providerAdmission: manifest.providerAdmission, next: [installed.command, "setup"],
-      ...(staleMenu ? { menuLoginItem: { state: "previous-version", next: [installed.command, "menubar", "install"] } } : {}),
-      detail: `Local pilot installed. No daemon, menu, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission.${staleMenu ? " The menu still starts the previous version at login: run textbutler menubar install to point it at this one." : ""}` })}\n`);
+      ...(menu === "previous-version" ? { menuLoginItem: { state: menu, next: [installed.command, "menubar", "install"] } } : menu === "app" ? { menuLoginItem: { state: menu, next: ["bun", "run", "textbutler:app", "build"] } } : {}),
+      detail: `Local pilot installed. No daemon, menu, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission.${menuDetail}` })}\n`);
   } catch (error) { process.stderr.write(`${error instanceof Error ? error.message : "Textbutler installation failed."}\n`); process.exitCode = 1; }
 }

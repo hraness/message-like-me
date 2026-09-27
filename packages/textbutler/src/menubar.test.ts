@@ -430,7 +430,9 @@ describe("menu through TextButler.app (T7)", () => {
     expect(await menuApp("/data", "/cli.ts", { env: {}, read })).toBeNull();
     expect(reads).toBe(0);
     expect(await menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read })).toBe(identity);
-    expect(await menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read: async () => { throw new Error("receipt mismatch"); } })).toBeNull();
+    expect(await menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read: async () => null })).toBeNull();
+    // An app built from another version is an error, never a silent Bun login item.
+    await expect(menuApp("/data", "/cli.ts", { env: { HRANESS_LOCAL_APP: "1" }, read: async () => { throw new Error("receipt mismatch"); } })).rejects.toThrow("TextButler.app was built from a different Textbutler version");
   });
   test("with a verified app, start and login run the app's menu role with no arguments", async () => {
     expect(companionForeground("/data", "/cli.ts", { home: "/home", runtime: "/bun" }, identity))
@@ -440,8 +442,9 @@ describe("menu through TextButler.app (T7)", () => {
       handle: async (_options, invocation) => { seen.push(invocation.foreground!); return 0; } });
     expect(seen[0]!.executable).toEndWith("/TextButler.app/Contents/MacOS/TextButler");
   });
-  test("the app's own foreground run never looks up or relaunches the app", async () => {
+  test("only start and install look up the app; its own foreground run never relaunches it", async () => {
     let asked = false;
+    for (const verb of ["stop", "status"]) await runMenuBarCommand([verb], "/data", "/cli.ts", () => {}, { app: async () => { asked = true; return identity; }, handle: async () => 0 });
     await runMenuBarCommand(["--foreground"], "/data", "/cli.ts", () => {}, { app: async () => { asked = true; return identity; },
       handle: async (_options, invocation) => { expect(invocation.foreground!.args).toContain("--foreground"); return 0; }, exit: () => {} });
     expect(asked).toBe(false);
