@@ -1,0 +1,16 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`failed menu actions (T6) every failure row is short, sentence case and free of codes 1`] = `
+[
+  "Another action is still running",
+  "Couldn't start the background service",
+  "The conversation list changed",
+  "Review this reply in the terminal first",
+  "Couldn't discard the suggestion",
+  "Couldn't open the page",
+  "Couldn't find conversations",
+  "Couldn't add the conversation",
+  "Couldn't check for replies",
+  "Couldn't suggest a reply",
+]
+`;
