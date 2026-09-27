@@ -24,6 +24,7 @@ type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "run
 type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; healthy: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
 const RECONCILE_DETAIL = "A previous send needs reconciliation. Check Messages, then run `textbutler replies reconcile`.";
 const SYNC_FAILURE_THRESHOLD = 3;
+const POLL_YIELD_MS = 15_000;
 export interface ReplyLoopOptions {
   service: LoopService;
   client: GhostgetAutomationClient;
@@ -88,7 +89,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     if (!cached) { cached = ContactWorkspace.create(join(service.dataDir, "contacts", id)); cached.catch(() => workspaces.delete(id)); workspaces.set(id, cached); }
     return cached;
   };
-  let setCursor: string | null = null, lastSetKey = "";
+  let setCursor: string | null = null, lastSetKey = "", yieldingSince: number | null = null;
   const deliveredSeq = new Map<string, number>();
   const active = (id: string, revision: number) => !closed && !settings.paused && settings.contacts.some(contact => contact.id === id && contact.enabled && contact.revision === revision && contact.pausedUntil <= now());
   const shelf = options.repos ?? createRepoShelf({ dataDir: service.dataDir, now });
@@ -265,6 +266,13 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     owner = observed; changed(owner.settings);
     if (closed) return;
     if (settings.paused) { options.onStatus?.({ state: "paused", detail: "Automatic replies are paused." }); return; }
+    // A send inside the transport shares the serialized provider lane with
+    // this poll, so polling now only queues native sessions ahead of it.
+    // Yield for a bounded window: a stuck send can delay sync, never stop it.
+    if ([...contacts.values()].some(state => state.runtime.submitInFlight())) {
+      yieldingSince ??= now();
+      if (now() - yieldingSince < POLL_YIELD_MS) return;
+    } else yieldingSince = null;
     const actives: { contact: ContactSettings; binding: AutomationBinding; state: ContactLoop }[] = [];
     for (const contact of settings.contacts) {
       if (closed || !active(contact.id, contact.revision)) continue;

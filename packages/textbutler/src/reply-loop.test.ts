@@ -119,6 +119,19 @@ test("the debounce dispatch never starts a paused, fenced or not-yet-due contact
   f.journal.claim("fenced-run", "contact-1", "event:fenced", Date.parse("2026-09-11T12:00:00.000Z")); f.journal.transition("fenced-run", "running", "indeterminate", "synthetic", Date.parse("2026-09-11T12:00:00.000Z"));
   f.advance(debounceMs); f.fireArmed(); await f.loop.idle(); expect(f.sent).toHaveLength(0);
 });
+test("the poll yields the provider lane to an in-flight send, for a bounded window", async () => {
+  const f = await fixture(); await f.loop.tick();
+  let started!: () => void, finish!: () => void;
+  const dispatching = new Promise<void>(resolve => { started = resolve; }), released = new Promise<void>(resolve => { finish = resolve; });
+  f.beforeSubmit(async () => { started(); await released; });
+  f.add("butler help with this"); await f.loop.tick(); f.advance(9000); await f.loop.tick(); await dispatching;
+  const polls = f.pollSetCalls();
+  await f.loop.tick(); await f.loop.tick(); expect(f.pollSetCalls()).toBe(polls);
+  // A send stuck past the window no longer holds sync back.
+  f.advance(15_000); await f.loop.tick(); expect(f.pollSetCalls()).toBe(polls + 1);
+  finish(); await f.loop.idle(); expect(f.sent).toHaveLength(1);
+  await f.loop.tick(); expect(f.pollSetCalls()).toBe(polls + 2);
+});
 test("backfill and an active owner conversation never reach the response agent", async () => {
   const f = await fixture(); await f.loop.tick();
   f.add("butler old imported request", "incoming", 3600000); await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();

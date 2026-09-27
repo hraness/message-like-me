@@ -1,18 +1,45 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Overlap the disclosed ack with reply composition, yield the provider poll to in-flight sends, and pin the Ghostget 0.18.43 connector build that describes automation action permissions from one snapshot and reuses the dispatch poll's status.",
+  "baseCommit": "649843937498103f2cbed939c66db41ec22d6efc",
+  "motivation": {
+    "liveTimeline": "Owner self-chat probe after PR #226: claim 13.2s, ack in chat.db 34.5s, final reply 75.4s. The ack submit (~21s on the serialized provider lane) ran before composition began, and poll ticks kept queueing native sessions ahead of both sends.",
+    "connectorProfile": "Ghostget describes each operation permission through ~11 synchronous state-helper spawns (~260ms warm). A status inspection spent ~10 descriptions and a send dispatch inspected twice; hraness/ghostget#434 removes both duplications."
   },
-  "sources": {
+  "design": {
+    "ackOverlap": "The ack dispatches concurrently with composition (reply.compose hook + agent.compose). The ack submit uses a per-run dispatch signal that only a global pause, the run budget, or run end aborts; owner activity (cancelContact) aborts composition only. Every exit awaits the ack first, so no run finishes while its ack may still be dispatching. An unknown ack outcome aborts composition and finishes indeterminate (ack-dispatch-unknown); a provably unsent ack (prepare failure, refused, or dispatch-failed) is skipped and the reply proceeds; accepted ack ids are journaled before the reply's post-compose change check.",
+    "pollYield": "While any runtime has an ack or reply submit inside the transport, the poll tick skips its pollSet/events for at most POLL_YIELD_MS=15000 from the first skipped tick, then polls regardless. Settings, pause and the debounce dispatch are unaffected.",
+    "connectorPin": "imessage-setup VERSION 0.18.38 -> 0.18.43 (the connector build of hraness/ghostget#434 merged over the 0.18.43 release); 0.18.38 and 0.18.42 join the unsupported-version fixtures. The daemon itself does not check the version; the pin governs native setup."
+  },
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only. No separate agent review was performed for this change.",
+    "result": "Pending independent review."
+  },
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/imessage-setup.test.ts packages/transport/src/automation.test.ts packages/textbutler/src/control-service.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 121,
+      "failed": 0,
+      "files": 5,
+      "assertions": 1666
+    },
+    "logSha256": "a7e56f655fb2cfea0b274aa4b28c8c149ea257e90a0a608f721484e004bfc926",
+    "coverage": [
+      "composition runs while the ack dispatches and the reply waits for the ack (strict order ack-start, compose, ack-done, reply)",
+      "a run never finishes while its ack may still be dispatching (compose failure waits for the ack, which is still journaled)",
+      "owner activity during the ack cancels composition, never the ack send",
+      "an unknown ack outcome stops composition and wedges the run",
+      "a global pause aborts an in-flight ack send",
+      "the poll yields the provider lane to an in-flight send, for a bounded window",
+      "native setup accepts only the pinned 0.18.43 connector and rejects 0.18.38 and 0.18.42"
+    ]
+  },
+  "sourceInventoryCount": 43,
+  "sourceDigest": "480c78bdf7c6e0f4421fde3afa149e2d5a2df937106d39760fb5913bacd56419",
+  "sourceSha256": {
     "bun.lock": "1d8fd172a66a8a550bf8b4faaea763c9024ff7bd7245fc83720253bdc564dc87",
     "package.json": "eb819e8521cd3a33f274bda99ea4c0425448684eec50a697e66ca9abc28285a3",
     "packages/control/src/index.ts": "614f56a989dabf8f212449493399bc355ddfd812e22148bfa91cd103b553d058",
@@ -57,8 +84,21 @@
     "scripts/build-textbutler.ts": "89645b8c85058de94641de3f67291f802094e2be6b9261da5605e8a7797db272",
     "scripts/xcb-integration-admission.ts": "6d2843d10d2be3ee2bb77bcb993bda2f3b58e013f5e74edbfa9793a5bf2c69af"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/imessage-setup.test.ts packages/transport/src/automation.test.ts packages/textbutler/src/control-service.test.ts",
-    "receiptSha256": "a00991e63c30e0c64fe280eaf4ad6f896d2a05f3d89df1b497ee6c768848fa65"
-  }
+  "changedSourceSha256": {
+    "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
+    "packages/textbutler/src/reply-loop.ts": "df1bf15374e31da1562194f0206e1e325cb8f722e53696ffe9820c73e5de7f37",
+    "packages/textbutler/src/runtime.ts": "cf412f57bcbee56706d04c9fda06143ba058dd5e1dabf3c1fa5d14e21a97cba6"
+  },
+  "aggregateValidation": {
+    "status": "pending",
+    "owner": "integration owner",
+    "requiredCommand": "bun run check",
+    "note": "CI on the pull request is the aggregate record."
+  },
+  "limitations": [
+    "Composition now starts before the ack settles, so reply.compose hooks run concurrently with the ack send.",
+    "A poll yield delays other contacts' intake by at most 15s while a send is in flight.",
+    "The 0.18.42 connector build changes Ghostget's implementation identity; existing enrollments must be re-enrolled and managed permissions re-granted during deployment.",
+    "No live messaging was performed for this evidence; live verification follows deployment."
+  ]
 }
