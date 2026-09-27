@@ -10,7 +10,7 @@ import { runSetup } from "./onboarding.ts";
 import { CliUsageError, symbolsFor } from "./cli-style.ts";
 import { describeControlResult, describeMenuBarResult, describeServiceInstall } from "./tui-results.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
-import { detectBun, detectConnector, needsBun, type DetectedConnector } from "./connect-detect.ts";
+import { detectBun, detectConnector, needsBun, resolveTyped, type DetectedConnector } from "./connect-detect.ts";
 import { shellWord } from "./permission-readiness.ts";
 
 export interface TerminalSession {
@@ -77,9 +77,10 @@ export interface ConnectorHooks {
   detect?: () => Promise<DetectedConnector>;
   findBun?: () => Promise<string | undefined>;
   isScript?: (path: string) => Promise<boolean>;
+  resolve?: (path: string) => Promise<string>;
 }
 export async function chooseConnector(io: TerminalSession, hooks: ConnectorHooks = {}): Promise<{ executable: string; runtime: string } | null> {
-  const { detect = detectConnector, findBun = detectBun, isScript = needsBun } = hooks;
+  const { detect = detectConnector, findBun = detectBun, isScript = needsBun, resolve = resolveTyped } = hooks;
   const found = await detect().catch((): DetectedConnector => ({ needsRuntime: false }));
   if (found.ghostget !== undefined && !found.needsRuntime) {
     io.write(`Found Ghostget at ${found.ghostget}${found.runtime === undefined ? "" : `\nIt runs with Bun at ${found.runtime}`}\n`);
@@ -88,13 +89,17 @@ export async function chooseConnector(io: TerminalSession, hooks: ConnectorHooks
     if (!["n", "no"].includes(answer.trim().toLowerCase())) return { executable: found.ghostget, runtime: found.runtime ?? "" };
   } else if (found.ghostget !== undefined) {
     io.write(`Found Ghostget at ${found.ghostget}. It runs with Bun, which isn't in the usual folders.\n`);
+  } else if (found.unsafe?.reason === "writable") {
+    io.write(`Found Ghostget at ${found.unsafe.path}, but other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w ${shellWord(found.unsafe.path)}\n`);
   } else if (found.unsafe !== undefined) {
-    io.write(`Found Ghostget at ${found.unsafe}, but other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w ${shellWord(found.unsafe)}\n`);
+    io.write(`Found Ghostget at ${found.unsafe.path}, but another user owns that file, so Textbutler won't run it. Install your own copy: ${GHOSTGET_GUIDE}\n`);
   } else {
     io.write(`Ghostget isn't in the usual install folders. Install it first: ${GHOSTGET_GUIDE}\n`);
   }
-  const typed = found.ghostget !== undefined && found.needsRuntime ? found.ghostget : (await io.ask("Path to Ghostget (Enter to cancel): "))?.trim();
-  if (!typed) return null;
+  const answer = found.ghostget !== undefined && found.needsRuntime ? found.ghostget : (await io.ask("Path to Ghostget (Enter to cancel): "))?.trim();
+  if (!answer) return null;
+  // Setup accepts only the physical file, so resolve a symlink such as the one `which ghostget` prints.
+  const typed = await resolve(answer).catch(() => answer);
   if (!await isScript(typed).catch(() => false)) return { executable: typed, runtime: "" };
   const bun = found.runtime ?? await findBun().catch(() => undefined);
   if (bun !== undefined) { io.write(`It runs with Bun at ${bun}\n`); return { executable: typed, runtime: bun }; }

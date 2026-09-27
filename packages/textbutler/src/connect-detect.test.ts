@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { detectBun, detectConnector, needsBun } from "./connect-detect.ts";
+import { detectBun, detectConnector, needsBun, resolveTyped } from "./connect-detect.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -11,7 +11,7 @@ async function home(): Promise<string> {
   return path;
 }
 async function file(path: string, text: string, mode: number): Promise<string> { await writeFile(path, text); await chmod(path, mode); return path; }
-const uid = process.getuid?.();
+const uid = process.getuid!();
 
 test("a Bun global install resolves to its physical entrypoint and the Bun that runs it", async () => {
   const root = await home();
@@ -53,7 +53,22 @@ test("a Ghostget that other users can change is reported, never offered", async 
   const unsafe = await file(join(root, ".bun", "bin", "ghostget"), "#!/usr/bin/env bun\n", 0o777);
   const found = await detectConnector({ home: root, path: "", uid });
   expect(found.ghostget === undefined || found.ghostget !== unsafe).toBe(true);
-  if (found.ghostget === undefined) expect(found).toEqual({ needsRuntime: false, unsafe });
+  if (found.ghostget === undefined) expect(found).toEqual({ needsRuntime: false, unsafe: { path: unsafe, reason: "writable" } });
+});
+
+test("a Ghostget another user owns is reported with that reason", async () => {
+  const root = await home();
+  const owned = await file(join(root, ".local", "bin", "ghostget"), "#!/bin/sh\n", 0o755);
+  const found = await detectConnector({ home: root, path: "", uid: uid + 12345 });
+  if (found.ghostget === undefined) expect(found.unsafe).toEqual({ path: owned, reason: "owner" });
+});
+
+test("a typed symlink resolves to the physical file", async () => {
+  const root = await home();
+  const target = await file(join(root, "cli.ts"), "#!/usr/bin/env bun\n", 0o644);
+  await symlink(target, join(root, ".bun", "bin", "ghostget"));
+  expect(await resolveTyped(join(root, ".bun", "bin", "ghostget"))).toBe(target);
+  expect(await resolveTyped("/nonexistent/ghostget")).toBe("/nonexistent/ghostget");
 });
 
 test("nothing installed finds nothing, and a missing or relative home is ignored", async () => {

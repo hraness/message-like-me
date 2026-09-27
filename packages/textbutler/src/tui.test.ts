@@ -109,10 +109,10 @@ describe("connect step finds Ghostget (T10)", () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
   test("declining the found path asks for one, and a script path picks up the found Bun", async () => {
-    const output: string[] = [], prompts: string[] = [], answers = ["n", "/opt/ghostget/cli.ts"];
+    const output: string[] = [], prompts: string[] = [], answers = ["n", "/opt/bin/ghostget"];
     const io = { write: (value: string) => output.push(value), ask: async (prompt: string) => { prompts.push(prompt); return answers.shift() ?? null; } };
-    expect(await chooseConnector(io, { detect: async () => ({ ghostget: "/a/ghostget", runtime: "/a/bun", needsRuntime: false }), isScript: async () => true }))
-      .toEqual({ executable: "/opt/ghostget/cli.ts", runtime: "/a/bun" });
+    expect(await chooseConnector(io, { detect: async () => ({ ghostget: "/a/ghostget", runtime: "/a/bun", needsRuntime: false }), isScript: async path => path.endsWith(".ts"),
+      resolve: async path => path === "/opt/bin/ghostget" ? "/opt/ghostget/cli.ts" : path })).toEqual({ executable: "/opt/ghostget/cli.ts", runtime: "/a/bun" });
     expect(prompts).toEqual(["Use it? [Y/n]: ", "Path to Ghostget (Enter to cancel): "]);
   });
   test("a found script Ghostget without Bun asks only for Bun", async () => {
@@ -124,7 +124,8 @@ describe("connect step finds Ghostget (T10)", () => {
   });
   test("an unsafe Ghostget explains the fix; nothing found links the install guide; Enter cancels", async () => {
     for (const [found, expected] of [
-      [{ needsRuntime: false, unsafe: "/opt/shared/ghostget/cli.ts" }, "other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w /opt/shared/ghostget/cli.ts\n"],
+      [{ needsRuntime: false, unsafe: { path: "/opt/shared/ghostget/cli.ts", reason: "writable" } }, "other users can change that file, so Textbutler won't run it.\nFix it with: chmod go-w /opt/shared/ghostget/cli.ts\n"],
+      [{ needsRuntime: false, unsafe: { path: "/usr/local/bin/ghostget", reason: "owner" } }, "another user owns that file, so Textbutler won't run it. Install your own copy: https://ghostget.com/docs/tutorials/getting-started/\n"],
       [{ needsRuntime: false }, "Ghostget isn't in the usual install folders. Install it first: https://ghostget.com/docs/tutorials/getting-started/\n"],
     ] as const) {
       const output: string[] = [];

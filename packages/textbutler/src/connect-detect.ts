@@ -24,8 +24,8 @@ export interface DetectedConnector {
   runtime?: string;
   /** Ghostget was found but needs Bun, and no usable Bun was found. */
   needsRuntime: boolean;
-  /** A Ghostget that setup won't run because other users can change it. */
-  unsafe?: string;
+  /** A Ghostget that setup won't run: other users can change it, or another user owns it. */
+  unsafe?: { path: string; reason: "writable" | "owner" };
 }
 
 export function currentConnectorEnvironment(): ConnectorEnvironment {
@@ -44,14 +44,21 @@ function searchFolders(env: ConnectorEnvironment): string[] {
 
 /** The physical file behind `candidate`. `safe` when setup would accept it: a
  * regular file owned by this user or root, not writable by group or others. */
-async function physical(candidate: string, uid: number | undefined): Promise<{ path: string; safe: boolean } | undefined> {
+async function physical(candidate: string, uid: number | undefined): Promise<{ path: string; safe: boolean; reason?: "writable" | "owner" } | undefined> {
   try {
     await lstat(candidate);
     const path = await realpath(candidate);
     const info = await stat(path);
     if (!info.isFile()) return undefined;
-    return { path, safe: (info.mode & 0o022) === 0 && (uid === undefined || info.uid === uid || info.uid === 0) };
+    if (uid !== undefined && info.uid !== uid && info.uid !== 0) return { path, safe: false, reason: "owner" };
+    if ((info.mode & 0o022) !== 0) return { path, safe: false, reason: "writable" };
+    return { path, safe: true };
   } catch { return undefined; }
+}
+
+/** The physical file behind a path the owner typed, or the path unchanged when it can't be resolved (setup then explains). */
+export async function resolveTyped(path: string): Promise<string> {
+  try { return await realpath(path); } catch { return path; }
 }
 
 const SCRIPT = /\.(?:[cm]?[jt]s|tsx)$/u;
@@ -75,11 +82,11 @@ async function executable(path: string): Promise<boolean> {
 
 export async function detectConnector(env: ConnectorEnvironment = currentConnectorEnvironment()): Promise<DetectedConnector> {
   const folders = searchFolders(env);
-  let ghostget: string | undefined, unsafe: string | undefined;
+  let ghostget: string | undefined, unsafe: DetectedConnector["unsafe"];
   for (const folder of folders) {
     const found = await physical(join(folder, "ghostget"), env.uid);
     if (found?.safe) { ghostget = found.path; break; }
-    unsafe ??= found?.path;
+    if (found?.reason !== undefined) unsafe ??= { path: found.path, reason: found.reason };
   }
   const none: DetectedConnector = { needsRuntime: false, ...(unsafe === undefined ? {} : { unsafe }) };
   if (ghostget === undefined) return none;
