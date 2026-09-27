@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { planAutostart, validateSnapshot, type MenuItem, type Snapshot } from "@hraness/desktop-foundation";
+import { planAutostart, validateSnapshot, type CompanionOptions, type MenuItem, type Snapshot } from "@hraness/desktop-foundation";
 import { runTextbutlerCli } from "./cli.ts";
 import { startDaemon, type RunningDaemon } from "./daemon.ts";
 import { companionForeground, companionOptions, exitSoon, localAppEnabled, menuApp, menuLabel, menuTime, runMenuBarCommand, snapshotItems } from "./menubar.ts";
 import { ACTION_ERROR_MS, describeMenuFailure, MenuFailure, MenuPending } from "./menu-errors.ts";
 import { TRAY_ICON } from "./menubar-icon.ts";
 import { disconnectedSnapshot, type DesktopSnapshot } from "../../control/src/index.ts";
+/** Textbutler returns the v1 item list; 0.8 widened the snapshot type. */
+const v1 = async (options: CompanionOptions, signal: AbortSignal): Promise<readonly MenuItem[]> => (await options.snapshot(signal)) as readonly MenuItem[];
 
 const roots: string[] = [], daemons: RunningDaemon[] = [];
 afterEach(async () => { for (const daemon of daemons.splice(0)) await daemon.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -113,7 +115,7 @@ describe("snapshot menu mapping (T5)", () => {
     const options = companionOptions("/unused", async () => {}, "/unused/cli.ts", { access: async () => ({ needs: "full-disk-access" }), openSettings: async url => { opened.push(url); return true; },
       request: async () => ({ protocol: "textbutler.control.v1", ok: true, kind: "snapshot", snapshot: base(running) }) as never });
     const signal = new AbortController().signal;
-    expect(labels(await options.snapshot(signal))[0]!.startsWith("🔒︎ Needs Full Disk Access")).toBe(true);
+    expect(labels(await v1(options, signal))[0]!.startsWith("🔒︎ Needs Full Disk Access")).toBe(true);
     await options.onAction("settings.full-disk-access", signal);
     await options.onAction("settings.automation", signal);
     expect(opened).toEqual(["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"]);
@@ -225,7 +227,7 @@ describe("daemon-backed companion options", () => {
     const destinations: string[] = [];
     const options = companionOptions(dataDir, async address => { destinations.push(address); });
     const signal = new AbortController().signal;
-    const items = await options.snapshot(signal);
+    const items = await v1(options, signal);
     expect(wire(items).get("product.support")).toBe(true);
     expect(destinations).toEqual([]);
     await options.onAction("unknown.action", signal);
@@ -238,7 +240,7 @@ describe("daemon-backed companion options", () => {
     const dataDir = await root();
     const daemon = await start(dataDir);
     const options = companionOptions(dataDir);
-    const items = await options.snapshot(new AbortController().signal);
+    const items = await v1(options, new AbortController().signal);
     wire(items);
     expect(items[0]).toMatchObject({ label: "◐ Getting started" });
     expect(labels(submenu(items, "Details").items)).toContain("Updated 0s ago");
@@ -247,7 +249,7 @@ describe("daemon-backed companion options", () => {
   test("an unreachable daemon degrades to a bounded disconnected menu", async () => {
     const dataDir = await root();
     const options = companionOptions(dataDir);
-    const items = await options.snapshot(new AbortController().signal);
+    const items = await v1(options, new AbortController().signal);
     wire(items);
     expect(items[0]).toMatchObject({ label: "⊘ Textbutler isn't running" });
     expect(items.some(item => item.kind === "action" && item.id === "toggle-pause")).toBe(false);
@@ -259,14 +261,14 @@ describe("daemon-backed companion options", () => {
     const daemon = await start(dataDir);
     const options = companionOptions(dataDir);
     const signal = new AbortController().signal;
-    await options.snapshot(signal);
+    await v1(options, signal);
     expect((await daemon.service.snapshot()).settings.paused).toBe(true);
     await options.onAction("toggle-pause", signal);
     expect((await daemon.service.snapshot()).settings.paused).toBe(false);
     // A stale in-memory revision is rejected by the daemon, not retried.
     await expect(options.onAction("toggle-pause", signal)).rejects.toThrow("settings-update-conflict");
     expect((await daemon.service.snapshot()).settings.paused).toBe(false);
-    await options.snapshot(signal); // the runner re-reads state after an action
+    await v1(options, signal); // the runner re-reads state after an action
     await options.onAction("toggle-pause", signal);
     expect((await daemon.service.snapshot()).settings.paused).toBe(true);
   });
@@ -311,20 +313,20 @@ test("pending menu operations keep the job ID and a terminal failure clears the 
     if (request.command === "owner.job.read") return { protocol: "textbutler.control.v1", ok: false, code: "conflict", message: "The contact changed." };
     return { protocol: "textbutler.control.v1", ok: true, kind: "job", jobId: "job-123" };
   } });
-  await options.snapshot(signal);
+  await v1(options, signal);
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
-  const pending = await options.snapshot(signal);
+  const pending = await v1(options, signal);
   expect(action(pending, "job.refresh").label).toBe("↻ An action is still running · Check again");
   expect(JSON.stringify(pending)).not.toContain("job-123");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("previous-operation-pending");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(1);
   await options.onAction("job.refresh", signal);
-  const settled = await options.snapshot(signal);
+  const settled = await v1(options, signal);
   expect(settled.some(item => item.kind === "action" && item.id === "job.refresh")).toBe(false);
   expect(labels(settled)[1]).toBe("⚠︎ The last action didn't finish · The contact changed.");
   // The result shows once: the next action clears it.
   await options.onAction("refresh", signal);
-  expect(labels(await options.snapshot(signal))).not.toContain("⚠︎ The last action didn't finish · The contact changed.");
+  expect(labels(await v1(options, signal))).not.toContain("⚠︎ The last action didn't finish · The contact changed.");
   await expect(options.onAction("contacts.discover", signal)).rejects.toThrow("unconfirmed");
   expect(calls.filter(command => command === "conversations.list")).toHaveLength(2);
 });
@@ -342,37 +344,37 @@ describe("failed menu actions (T6)", () => {
   test("a daemon refusal shows a ⚠︎ row with its plain sentence until the next action", async () => {
     const { options } = fake(() => ({ protocol: "textbutler.control.v1", ok: false, code: "unavailable",
       message: "Textbutler can't read your Messages: macOS access is off for Textbutler." }));
-    await options.snapshot(signal);
+    await v1(options, signal);
     await expect(options.onAction("messaging.start:imessage", signal)).rejects.toThrow("messaging-connection-unconfirmed");
-    const items = await options.snapshot(signal);
+    const items = await v1(options, signal);
     wire(items);
     expect(labels(items).slice(0, 2)).toEqual(["◐ Getting started",
       "⚠︎ Couldn't connect iMessage · Textbutler can't read your Messages: macOS access is off for Textbutler."]);
     await options.onAction("refresh", signal);
-    expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
+    expect(labels(await v1(options, signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
   });
   test("the row goes away at the first refresh after thirty seconds", async () => {
     const { options, advance } = fake(() => ({ protocol: "textbutler.control.v1", ok: false, code: "unavailable", message: "No automation." }));
-    await options.snapshot(signal);
+    await v1(options, signal);
     await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
     advance(ACTION_ERROR_MS - 1);
-    expect(labels(await options.snapshot(signal))).toContain("⚠︎ Couldn't check for replies · No automation.");
+    expect(labels(await v1(options, signal))).toContain("⚠︎ Couldn't check for replies · No automation.");
     advance(1);
-    expect(labels(await options.snapshot(signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
+    expect(labels(await v1(options, signal)).some(label => label.startsWith("⚠︎"))).toBe(false);
   });
   test("a job that is still running shows the pending row, not a ⚠︎ row", async () => {
     const { options } = fake(() => ({ protocol: "textbutler.control.v1", ok: true, kind: "job", jobId: "job-9" }));
-    await options.snapshot(signal);
+    await v1(options, signal);
     await expect(options.onAction("replies.scan", signal)).rejects.toThrow("replies-scan-unconfirmed");
-    const shown = labels(await options.snapshot(signal));
+    const shown = labels(await v1(options, signal));
     expect(shown).toContain("↻ An action is still running · Check again");
     expect(shown.some(label => label.startsWith("⚠︎"))).toBe(false);
   });
   test("unexpected errors never show their own text", async () => {
     const { options } = fake(() => ({}));
-    await options.snapshot(signal);
+    await v1(options, signal);
     await expect(options.onAction("open-website", signal)).rejects.toThrow("open-failed");
-    const shown = labels(await options.snapshot(signal));
+    const shown = labels(await v1(options, signal));
     expect(shown).toContain("⚠︎ Couldn't open the page · Check your default browser, then try again.");
     expect(shown.join("\n")).not.toContain("/secret/path");
     expect(describeMenuFailure(new Error("ENOENT /var/private/x"))).toEqual({ sentence: "That didn't work",
