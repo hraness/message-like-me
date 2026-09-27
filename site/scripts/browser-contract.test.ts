@@ -180,7 +180,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     { material: null }, { headerBackdrop: 'blur(20px) saturate(1.1)' }, { wall: true }, { bodyBackgroundImage: 'url("/grain.svg")' },
     { renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }] },
     { headingWeight: '400' }, { headingFont: '"Instrument Serif", serif' }, { terminalBackground: 'rgba(0, 0, 0, 0)' },
-    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionHeights: [30, 42, 42, 42, 42] },
+    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionHeights: [32, 42, 42, 42, 42] },
     { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { gutter: '20px' }, { headerWidth: 1120 }]) {
     expect(() => assertPresentation({ ...valid, ...change }, sample)).toThrow();
   }

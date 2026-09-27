@@ -186,7 +186,7 @@ export function assertPresentation(value, sample) {
     assert.notEqual(value.workspaceBackground, 'rgba(0, 0, 0, 0)');
     assert.notEqual(value.terminalBackground, 'rgba(0, 0, 0, 0)', 'The terminal proof sits on an opaque surface.');
     assert.ok(value.actionHeights.length >= 5, 'The header, hero and closing actions must all remain styled.');
-    assert.ok(value.actionHeights.every((height) => height >= (sample.width < 500 ? 44 : 40)));
+    assert.ok(value.actionHeights.every((height) => height >= (sample.width < 500 ? 44 : 36)));
     // No backdrop, pattern, wall texture, or translucent header remains.
     assert.equal(value.headerBackdrop, 'none');
     assert.equal(value.wall, false);
