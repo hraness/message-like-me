@@ -420,7 +420,7 @@ describe("Quit Textbutler ends the menu process", () => {
 });
 
 describe("menu through TextButler.app (T7)", () => {
-  const identity = { appPath: "/Users/owner/Applications/TextButler.app" } as import("./macos-app.ts").MacosAppIdentity;
+  const identity = { appPath: "/Volumes/Owner/Applications/TextButler.app" } as import("./macos-app.ts").MacosAppIdentity;
   test("the switch is off unless HRANESS_LOCAL_APP=1", async () => {
     expect(localAppEnabled({})).toBe(false);
     expect(localAppEnabled({ HRANESS_LOCAL_APP: "true" })).toBe(false);
@@ -436,7 +436,7 @@ describe("menu through TextButler.app (T7)", () => {
   });
   test("with a verified app, start and login run the app's menu role with no arguments", async () => {
     expect(companionForeground("/data", "/cli.ts", { home: "/home", runtime: "/bun" }, identity))
-      .toEqual({ executable: "/Users/owner/Applications/TextButler.app/Contents/MacOS/TextButler", args: [] });
+      .toEqual({ executable: "/Volumes/Owner/Applications/TextButler.app/Contents/MacOS/TextButler", args: [] });
     const seen: { executable: string; args: readonly string[] }[] = [];
     await runMenuBarCommand(["install"], "/data", "/cli.ts", () => {}, { app: async () => identity,
       handle: async (_options, invocation) => { seen.push(invocation.foreground!); return 0; } });

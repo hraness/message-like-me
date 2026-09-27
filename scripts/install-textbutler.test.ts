@@ -120,7 +120,7 @@ test("an upgrade reports a menu login item that still starts the previous versio
   expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("previous-version");
   expect(await menuLoginItemAfterUpgrade(home, `${previous}0`)).toBeNull();
   // TextButler.app runs the version it was built from, so it needs a rebuild.
-  await writeFile(plist, "<plist><dict><key>ProgramArguments</key><array><string>/Users/x/Applications/TextButler.app/Contents/MacOS/TextButler</string></array></dict></plist>");
+  await writeFile(plist, "<plist><dict><key>ProgramArguments</key><array><string>/Volumes/Owner/Applications/TextButler.app/Contents/MacOS/TextButler</string></array></dict></plist>");
   expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("app");
   expect(await readFile(plist, "utf8")).toContain("TextButler.app");
 });
