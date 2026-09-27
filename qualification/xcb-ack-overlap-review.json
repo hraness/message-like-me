@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "scope": "Overlap the disclosed ack with reply composition, yield the provider poll to in-flight sends, and pin the Ghostget 0.18.43 connector build that describes automation action permissions from one snapshot and reuses the dispatch poll's status.",
+  "baseCommit": "649843937498103f2cbed939c66db41ec22d6efc",
+  "motivation": {
+    "liveTimeline": "Owner self-chat probe after PR #226: claim 13.2s, ack in chat.db 34.5s, final reply 75.4s. The ack submit (~21s on the serialized provider lane) ran before composition began, and poll ticks kept queueing native sessions ahead of both sends.",
+    "connectorProfile": "Ghostget describes each operation permission through ~11 synchronous state-helper spawns (~260ms warm). A status inspection spent ~10 descriptions and a send dispatch inspected twice; hraness/ghostget#434 removes both duplications."
+  },
+  "design": {
+    "ackOverlap": "The ack dispatches concurrently with composition (reply.compose hook + agent.compose). The ack submit uses a per-run dispatch signal that only a global pause, the run budget, or run end aborts; owner activity (cancelContact) aborts composition only. Every exit awaits the ack first, so no run finishes while its ack may still be dispatching. An unknown ack outcome aborts composition and finishes indeterminate (ack-dispatch-unknown); a provably unsent ack (prepare failure, refused, or dispatch-failed) is skipped and the reply proceeds; accepted ack ids are journaled before the reply's post-compose change check.",
+    "pollYield": "While any runtime has an ack or reply submit inside the transport, the poll tick skips its pollSet/events for at most POLL_YIELD_MS=15000 from the first skipped tick, then polls regardless. Settings, pause and the debounce dispatch are unaffected.",
+    "connectorPin": "imessage-setup VERSION 0.18.38 -> 0.18.43 (the connector build of hraness/ghostget#434 merged over the 0.18.43 release); 0.18.38 and 0.18.42 join the unsupported-version fixtures. The daemon itself does not check the version; the pin governs native setup."
+  },
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only. No separate agent review was performed for this change.",
+    "result": "Pending independent review."
+  },
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/imessage-setup.test.ts packages/transport/src/automation.test.ts packages/textbutler/src/control-service.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 121,
+      "failed": 0,
+      "files": 5,
+      "assertions": 1666
+    },
+    "logSha256": "a7e56f655fb2cfea0b274aa4b28c8c149ea257e90a0a608f721484e004bfc926",
+    "coverage": [
+      "composition runs while the ack dispatches and the reply waits for the ack (strict order ack-start, compose, ack-done, reply)",
+      "a run never finishes while its ack may still be dispatching (compose failure waits for the ack, which is still journaled)",
+      "owner activity during the ack cancels composition, never the ack send",
+      "an unknown ack outcome stops composition and wedges the run",
+      "a global pause aborts an in-flight ack send",
+      "the poll yields the provider lane to an in-flight send, for a bounded window",
+      "native setup accepts only the pinned 0.18.43 connector and rejects 0.18.38 and 0.18.42"
+    ]
+  },
+  "sourceInventoryCount": 43,
+  "sourceDigest": "480c78bdf7c6e0f4421fde3afa149e2d5a2df937106d39760fb5913bacd56419",
+  "sourceSha256": {
+    "bun.lock": "1d8fd172a66a8a550bf8b4faaea763c9024ff7bd7245fc83720253bdc564dc87",
+    "package.json": "eb819e8521cd3a33f274bda99ea4c0425448684eec50a697e66ca9abc28285a3",
+    "packages/control/src/index.ts": "614f56a989dabf8f212449493399bc355ddfd812e22148bfa91cd103b553d058",
+    "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
+    "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
+    "packages/textbutler/src/contact-habitat.ts": "522700221e904fe6fdf8036a27295278a13c081af5ac4ef58a622c8f08324ba8",
+    "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
+    "packages/textbutler/src/control-service.ts": "de25b722fad889d68c6cff65bc67924ddf9b0e9d8eed1489f32c0a4be07feb1e",
+    "packages/textbutler/src/daemon.ts": "158a15c0404de06c4b318a338ed7ba7e1727617b49f9301d095cf6406e1aa95c",
+    "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
+    "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
+    "packages/textbutler/src/habitat-agent.ts": "8f17a4f8d9171a726748d4a692a5fa42a8efeca5e431dce62724d9a5d6e57c8b",
+    "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
+    "packages/textbutler/src/habitat-program.ts": "b5dbe42fd2cd5b9e35ca092801575a461e894cc618281f395218b36ec43b9d3c",
+    "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
+    "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
+    "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
+    "packages/textbutler/src/javascript-worker-entry.ts": "26112477da6fda01af8c2d5257d191d08a7a061617ad7dcc540c60f2dc521e7d",
+    "packages/textbutler/src/journal.ts": "8c35a860e42087acdacf8ff0748096499ca35b65443463790f6a6bb32c8914e1",
+    "packages/textbutler/src/launch-agent.ts": "4dcae445ff4b0e684bb90dbde7b87d8e23175fe490b60ab98850c5bd142aead2",
+    "packages/textbutler/src/macos-app.ts": "8e2a481645ac896aa74fe01b81f2ecb98d7d785ea0dd57325a788f3eaf1a65a0",
+    "packages/textbutler/src/meme-search.ts": "ad422591ece4d981dd97d66928984fd7512d303b8773503bcf79283813914c95",
+    "packages/textbutler/src/memory-search.ts": "39036b33a3e573d1bb5f4f26d7b4520013224ee20f0a6004de09b2199867abcd",
+    "packages/textbutler/src/message-summary.ts": "75163888ce53a7535a93f23a8228853d984af7a3677a4c8d0709cf6384187523",
+    "packages/textbutler/src/messages-cli.ts": "44e5db75549e212ab2686d3673c5433908f1f9554bf133e98fd574d09255e66f",
+    "packages/textbutler/src/native-subscription.ts": "f448154b264237ac1e854f3f1a3cf8fb2d38266b71fbb2fb8ebec52cb842c91b",
+    "packages/textbutler/src/native-task.ts": "122ba7b346ba9cbaca3d1c71270c32e6d6dda37e4c59c8a34c4051c8241859f4",
+    "packages/textbutler/src/owner-cli.ts": "c21bccd7f0fa95a8659db2b2f8779765b0bf5801787588018ecf44c7f4e10d1f",
+    "packages/textbutler/src/owner-messages.ts": "337d9f057d20e2cf32dbf781d4143ecee3fbd16f2aa82d88380af99aa1c3177a",
+    "packages/textbutler/src/owner-replies.ts": "586002d4acef0b2a1fc95abb35709a78f4b79122594ce309be0c3882d9d527d6",
+    "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",
+    "packages/textbutler/src/reply-loop.ts": "df1bf15374e31da1562194f0206e1e325cb8f722e53696ffe9820c73e5de7f37",
+    "packages/textbutler/src/routed-agent.ts": "63897e366965b77ac8bcce8b1b8c08b218c20605923dd86bf468e0b9a65f22b3",
+    "packages/textbutler/src/runtime-entry.ts": "5bc336c2e6e02b801282081ea51de23e28b6f0c7a27c422797121fc45376287e",
+    "packages/textbutler/src/runtime.ts": "cf412f57bcbee56706d04c9fda06143ba058dd5e1dabf3c1fa5d14e21a97cba6",
+    "packages/textbutler/src/workspace.ts": "70b2fbec3a14c835f9ec2a4fcc1c2535e1fd2e5fde4907486cef6d6a8fc599b4",
+    "packages/textbutler/src/xcb-client.ts": "bba78d7db3ccb6df794b4e59a554b392c632042a8fd0279de614283c8fc59be3",
+    "packages/textbutler/src/xcb-host.ts": "27395d6bb942dfb297ceb852c097bfa62263d893c94e273d2fb217bda853120b",
+    "packages/textbutler/src/xcb-integration.ts": "7fbb9e8e65ac9e0920990b8bee965f2dcaeec6ad5250713ccf3adda429dc0cad",
+    "packages/transport/src/automation-contract.ts": "629e02b9dda6f913cc482a815cd3df5f54ed9aad5c67af780cfbe2c64887da18",
+    "packages/transport/src/automation-diagnostics.ts": "c3ae9b6f666a73887b53d276095ca02e0ca99b2cb19832150337fee441cbf535",
+    "scripts/build-textbutler.ts": "89645b8c85058de94641de3f67291f802094e2be6b9261da5605e8a7797db272",
+    "scripts/xcb-integration-admission.ts": "6d2843d10d2be3ee2bb77bcb993bda2f3b58e013f5e74edbfa9793a5bf2c69af"
+  },
+  "changedSourceSha256": {
+    "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
+    "packages/textbutler/src/reply-loop.ts": "df1bf15374e31da1562194f0206e1e325cb8f722e53696ffe9820c73e5de7f37",
+    "packages/textbutler/src/runtime.ts": "cf412f57bcbee56706d04c9fda06143ba058dd5e1dabf3c1fa5d14e21a97cba6"
+  },
+  "aggregateValidation": {
+    "status": "pending",
+    "owner": "integration owner",
+    "requiredCommand": "bun run check",
+    "note": "CI on the pull request is the aggregate record."
+  },
+  "limitations": [
+    "Composition now starts before the ack settles, so reply.compose hooks run concurrently with the ack send.",
+    "A poll yield delays other contacts' intake by at most 15s while a send is in flight.",
+    "The 0.18.42 connector build changes Ghostget's implementation identity; existing enrollments must be re-enrolled and managed permissions re-granted during deployment.",
+    "No live messaging was performed for this evidence; live verification follows deployment."
+  ]
+}

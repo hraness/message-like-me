@@ -56,14 +56,21 @@ function composeResult(value: unknown, contact: ContactSettings): readonly Actio
 
 export class ButlerRuntime {
   private readonly active = new Map<string, AbortController>();
+  /** Signals for sends already handed to the transport. Owner activity never
+   * aborts them; only a global pause, the run budget, or run end does. */
+  private readonly dispatches = new Map<string, AbortController>();
   private readonly dispatching = new Set<string>();
+  private submitting = 0;
   private readonly clock: () => number;
   constructor(private readonly ports: RuntimePorts) { this.clock = ports.clock ?? Date.now; }
   /** A new event cancels only pre-dispatch work. Once send intent is recorded the
    * transport's atomic context check arbitrate the send; aborting mid-dispatch
    * would only manufacture an indeterminate outcome. */
   cancelContact(id: string): void { if (!this.dispatching.has(id)) this.active.get(id)?.abort(); }
-  pause(): void { for (const controller of this.active.values()) controller.abort(); }
+  pause(): void { for (const controller of [...this.active.values(), ...this.dispatches.values()]) controller.abort(); }
+  /** True while an ack or reply send is inside the transport, so a poller can
+   * yield the shared provider lane instead of queueing ahead of the send. */
+  submitInFlight(): boolean { return this.submitting > 0; }
   private async refresh(contact: ContactSettings, event: MessageEvent): Promise<ConversationSnapshot> {
     const snapshot = await this.ports.refresh(contact, event);
     return { ...snapshot, state: { ...snapshot.state, repliesInLastHour: Math.max(snapshot.state.repliesInLastHour, this.ports.journal.repliesSince(contact.id, this.clock() - 3_600_000)) } };
@@ -102,9 +109,10 @@ export class ButlerRuntime {
     if (!grant) return { status: "blocked", reason: "contact-grant-required" };
     const runId = randomUUID();
     if (!this.ports.journal.claim(runId, contact.id, event.id, this.clock())) return { status: "duplicate-or-busy", reason: "event-or-contact-already-claimed" };
-    const controller = new AbortController();
+    const controller = new AbortController(), dispatch = new AbortController();
     this.active.set(contact.id, controller);
-    const timeout = setTimeout(() => controller.abort(), RUN_BUDGET_MS);
+    this.dispatches.set(contact.id, dispatch);
+    const timeout = setTimeout(() => { controller.abort(); dispatch.abort(); }, RUN_BUDGET_MS);
     const hook: HookContext = { contactId: contact.id, runId, eventId: event.id, signal: controller.signal };
     const request: AgentRequest = { runId, contact, event, signal: controller.signal, capabilities: capabilities.value.capabilities.filter(value => value.available).map(value => value.capability) };
     let state: RunState = "running";
@@ -120,31 +128,31 @@ export class ButlerRuntime {
         if (!classification.respond || classification.confidence < 0.85) return finish("ignored", "classifier-silent");
       }
       if (controller.signal.aborted) return finish("cancelled", "cancelled");
-      // A disclosure-wrapped ack is the fastest possible read receipt: it lands
-      // while composition still runs and its echo attributes to the butler, not
-      // the owner. It is awaited so it precedes the reply in the serialized
-      // lane and holds the dispatching guard like the reply does — aborting it
-      // mid-dispatch would only manufacture an indeterminate. A dispatch whose
-      // outcome is unknown wedges the run honestly instead of leaving an
-      // unresolved upstream run for the next reply to trip on.
+      // A disclosure-wrapped ack is the fastest possible read receipt, and its
+      // echo attributes to the butler, not the owner. It dispatches while the
+      // reply composes: the ack only has to settle before the reply is
+      // prepared. Its submit runs under the dispatch signal, which owner
+      // activity never aborts — aborting a send mid-dispatch would only
+      // manufacture an indeterminate — while composition stays cancellable.
+      // Every exit below first awaits the ack, so no run finishes while its
+      // ack may still be dispatching. An unknown ack outcome wedges the run
+      // honestly; a provably unsent ack is skipped and the reply proceeds.
       const ackIds = new Set<string>();
-      const ack = await this.ports.transport.prepare({ intentId: `${runId}:ack`, conversationId: contact.routeId, contextId: snapshot.contextId,
-        actions: [{ kind: "text", text: disclose("…", contact.disclosure) }] });
-      if (ack.ok) {
-        this.dispatching.add(contact.id);
-        const ackReceipt = await this.ports.transport.submit(ack.value, { mode: "delegated", grantId: grant }, controller.signal).catch(() => null);
-        this.dispatching.delete(contact.id);
-        // An ack that provably never dispatched is skipped, not wedged: the
-        // reply itself still proceeds. Only unknown ack outcomes block.
-        if (ackReceipt === null || (!ackReceipt.ok && ackReceipt.error.code !== "dispatch-failed") || (ackReceipt.ok && (ackReceipt.value.state === "indeterminate" || ackReceipt.value.state === "partial"))) return finish("indeterminate", "ack-dispatch-unknown");
-        if (ackReceipt.ok && ackReceipt.value.state === "submitted" && ackReceipt.value.acceptedMessageIds) {
-          this.ports.journal.recordSentMessages(contact.id, `${runId}:ack`, ackReceipt.value.acceptedMessageIds, this.clock());
-          for (const id of ackReceipt.value.acceptedMessageIds) if (id !== null) ackIds.add(id);
-        }
+      const ackSettled = this.dispatchAck(contact, runId, snapshot.contextId, grant, dispatch.signal);
+      const composing = (async () => {
+        if ((await this.ports.hooks.emit("reply.compose", hook)).veto) return null;
+        return composeResult(await this.ports.agent.compose(request), contact);
+      })();
+      composing.catch(() => {});
+      const ack = await ackSettled;
+      if (ack === "unknown") { controller.abort(); await composing.catch(() => {}); return finish("indeterminate", "ack-dispatch-unknown"); }
+      if (ack.length) {
+        this.ports.journal.recordSentMessages(contact.id, `${runId}:ack`, ack, this.clock());
+        for (const id of ack) if (id !== null) ackIds.add(id);
       }
       const acked = ackIds.size > 0;
-      if ((await this.ports.hooks.emit("reply.compose", hook)).veto) return finish("ignored", "extension-veto");
-      const actions = composeResult(await this.ports.agent.compose(request), contact);
+      const actions = await composing;
+      if (actions === null) return finish("ignored", "extension-veto");
       for (const action of actions) {
         if (!capabilities.value.capabilities.some(c => c.capability === action.kind && c.available)) return finish("failed", `unsupported-${action.kind}`);
         if (action.kind === "attachment" || action.kind === "sticker") await this.ports.validateFile(contact, action.file);
@@ -190,7 +198,8 @@ export class ButlerRuntime {
       this.ports.journal.transition(runId, "running", "dispatching", "intent-recorded", this.clock(), plan.value.digest);
       state = "dispatching";
       this.dispatching.add(contact.id);
-      const receipt = await this.ports.transport.submit(plan.value, { mode: "delegated", grantId: grant }, controller.signal);
+      this.submitting++;
+      const receipt = await this.ports.transport.submit(plan.value, { mode: "delegated", grantId: grant }, controller.signal).finally(() => { this.submitting--; });
       // A proven non-send fails the run cleanly instead of blocking the
       // contact; only an outcome the provider cannot arbitrate stays uncertain.
       if (!receipt.ok) return finish(receipt.error.code === "dispatch-failed" ? "failed" : "indeterminate", receipt.error.code === "dispatch-failed" ? "dispatch-failed" : "dispatch-result-unknown");
@@ -211,9 +220,23 @@ export class ButlerRuntime {
       return result;
     } finally {
       clearTimeout(timeout);
-      controller.abort();
+      controller.abort(); dispatch.abort();
       this.active.delete(contact.id);
+      this.dispatches.delete(contact.id);
       this.dispatching.delete(contact.id);
     }
+  }
+  /** Settles to the ack's accepted ids ([] when it provably never started or
+   * was refused) or "unknown" when its outcome cannot be proven. Never
+   * rejects, so a caller can always await it before finishing. */
+  private async dispatchAck(contact: ContactSettings, runId: string, contextId: string, grant: string, signal: AbortSignal): Promise<readonly (string | null)[] | "unknown"> {
+    let plan;
+    try { plan = await this.ports.transport.prepare({ intentId: `${runId}:ack`, conversationId: contact.routeId, contextId, actions: [{ kind: "text", text: disclose("…", contact.disclosure) }] }); }
+    catch { return []; }
+    if (!plan.ok) return [];
+    this.submitting++;
+    const receipt = await this.ports.transport.submit(plan.value, { mode: "delegated", grantId: grant }, signal).catch(() => null).finally(() => { this.submitting--; });
+    if (receipt === null || (!receipt.ok && receipt.error.code !== "dispatch-failed") || (receipt.ok && (receipt.value.state === "indeterminate" || receipt.value.state === "partial"))) return "unknown";
+    return receipt.ok && receipt.value.state === "submitted" && receipt.value.acceptedMessageIds ? receipt.value.acceptedMessageIds : [];
   }
 }
