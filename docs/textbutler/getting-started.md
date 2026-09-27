@@ -42,7 +42,7 @@ rollback, and atomically switches the command. It never replaces an unrelated
 command or changes your settings. Restart the installed daemon afterward.
 
 The terminal has numbered actions for setup, app connections, conversations,
-replies, contacts, pause and the menu bar. Enter goes back from a selection;
+replies, contacts, pause, the menu bar and macOS access. Enter goes back from a selection;
 `q` or Ctrl-C closes the terminal. It does not stop an installed background
 service. Commands below use `bun run textbutler`; the help abbreviates that
 prefix to `textbutler`. You can use `~/.local/bin/textbutler` for these commands.
@@ -131,6 +131,10 @@ permission to send a message. See [contact calculation and memory tools](javascr
 for the runtime limits and memory-search behavior.
 
 ## Give Textbutler access to iMessage
+
+In the guided terminal, **Give Textbutler access** walks you through the two
+macOS settings below in order and opens each System Settings pane when you
+press Enter or `o`. It never causes a macOS prompt itself.
 
 Use the native app when you want macOS Full Disk Access to belong to `TextButler.app`.
 The app supervises its pinned runtime and background service. Build it from an

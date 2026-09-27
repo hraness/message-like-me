@@ -6,8 +6,17 @@
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MESSAGES_AUTOMATION, recoverySentence, settingsPath, settingsUrl } from "./permission-copy.ts";
+import type { HostConfig } from "./host-config.ts";
 
 export interface PermissionStep { id: "macos-access"; title: string; status: "done" | "action-needed" | "blocked"; detail: string; command?: string; settingsUrl?: string }
+
+/** The one "iMessage is set up" rule, shared by readiness (onboarding.ts) and
+ * the guided access step: an iMessage account in the host configuration, or
+ * the running service already loading the imessage provider. */
+export function imessageConfigured(config: HostConfig | null, providers: readonly string[] | undefined): boolean {
+  return config?.ghostget?.automationAccounts?.some(account => account.provider === "imessage") === true
+    || providers?.includes("imessage") === true;
+}
 
 const TITLE = "macOS access for iMessage";
 const FDA = settingsPath("full-disk-access");
