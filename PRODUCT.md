@@ -22,7 +22,7 @@ Choose a few contacts, give each relationship a folder of context, and let a but
 
 ## Positioning
 
-The owner connects a Claude Code or Codex subscription through
+The owner connects a Claude Code, Codex, or Devin subscription through
 [xcb](https://github.com/hraness/xcb). xcb owns provider authentication,
 confinement, account custody and zero-tool generation. Ghostget owns messaging
 access. Textbutler owns contact selection, memory, disclosure, timing, response

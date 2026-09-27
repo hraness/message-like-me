@@ -12,29 +12,6 @@ import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, br
 // This gate serves only the built informational website. It never runs the CLI,
 // Mac application, messaging providers, account checks, or personal-data readers.
 
-// Reviewed design-kit source d38d13c07d7956d02ddfbca8d32aa2066d88fbd3 assets,
-// checked independently of the current build.
-async function assertWallAssets(context, background, origin) {
-  const expected = [
-    ['grain', 152319, 'b40c33a0e382c8e9d0518b4720321b5c262a929c28d40a190a902d07acd06553'],
-  ];
-  const urls = [...background.matchAll(/url\("([^"]+)"\)/gu)].map(match => new URL(match[1], origin));
-  assert.equal(urls.length, expected.length);
-  const result = [];
-  for (const [index, url] of urls.entries()) {
-    const [name, size, sha256] = expected[index];
-    assert.equal(url.origin, origin); assert.equal(url.search, ''); assert.equal(url.hash, '');
-    assert.match(url.pathname, new RegExp(`^/_next/static/media/${name}\\.[a-f0-9]+\\.svg$`, 'u'));
-    const response = await context.request.get(url.href, { timeout: 5000, maxRedirects: 0 });
-    assert.equal(response.status(), 200);
-    const bytes = await response.body();
-    assert.equal(bytes.length, size);
-    assert.equal(createHash('sha256').update(bytes).digest('hex'), sha256);
-    result.push({ name, path: url.pathname, bytes: size, sha256 });
-  }
-  return result;
-}
-
 const root = fileURLToPath(new URL('../', import.meta.url));
 const executablePath = process.env.TEXTBUTLER_BROWSER_EXECUTABLE;
 const node = process.env.TEXTBUTLER_NODE_EXECUTABLE;
@@ -247,21 +224,19 @@ try {
           .map((element) => new URL(element.getAttribute('src') || element.getAttribute('href'), document.baseURI).href)), 'Preview authored assets');
         item.previewAuthoredAssets = authoredAssets;
       }
-      await deadline(page.evaluate(async (landing) => {
+      await deadline(page.evaluate(async () => {
         for (const weight of ['400', '500', '600', '700']) await document.fonts.load(`${weight} 16px "Nebula Sans"`, 'Textbutler');
-        if (landing) await document.fonts.load('400 48px "Instrument Serif"', 'conversations');
         await document.fonts.ready;
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      }, sample.path === '/'), 'Font settlement', 15_000);
+      }), 'Font settlement', 15_000);
       const metrics = await deadline(page.evaluate(() => {
         const heading = document.querySelector('h1');
         const style = getComputedStyle(heading);
         const headerInner = document.querySelector('.hraness-marketing-header__inner');
-        const field = document.querySelector('.hraness-material-wall');
         const hero = document.querySelector('.hraness-marketing-hero');
         const summary = document.querySelector('.hraness-marketing-hero__summary');
         const workspace = document.querySelector('.workspace-example pre');
-        const frame = document.querySelector('.hraness-marketing-proof-frame');
+        const terminal = document.querySelector('.tb-terminal');
         const layers = [];
         const visit = (rules) => {
           for (const rule of rules) {
@@ -295,14 +270,14 @@ try {
           summaryLeading: summary && Number.parseFloat(getComputedStyle(summary).lineHeight),
           workspaceInk: workspace && getComputedStyle(workspace).color,
           workspaceBackground: workspace && getComputedStyle(workspace).backgroundColor,
-          frameBackground: frame && getComputedStyle(frame).backgroundColor,
+          terminalBackground: terminal && getComputedStyle(terminal).backgroundColor,
           sections: [...document.querySelectorAll('.textbutler-marketing h2')].map((element) => {
             const style = getComputedStyle(element);
             return { font: style.fontFamily, weight: style.fontWeight, size: Number.parseFloat(style.fontSize),
               leading: Number.parseFloat(style.lineHeight), tracking: Number.parseFloat(style.letterSpacing) };
           }),
-          fieldBackground: field && getComputedStyle(field).backgroundImage,
-          fieldBackgroundSize: field && getComputedStyle(field).backgroundSize,
+          wall: document.querySelector('.hraness-material-wall, [data-hraness-hero-item]') !== null,
+          bodyBackgroundImage: getComputedStyle(document.body).backgroundImage,
           material: document.querySelector('[data-hraness-material]')?.getAttribute('data-hraness-material') ?? null,
           headerBackdrop: headerInner && getComputedStyle(headerInner.closest('header')).backdropFilter,
           actionHeights: [...document.querySelectorAll('.hraness-marketing-action')].map((action) => action.getBoundingClientRect().height),
@@ -322,37 +297,24 @@ try {
       assert.equal(metrics.reducedTransparency, false);
       assertPresentation(metrics, sample);
       if (sample.path === '/') {
-        item.textures = await assertWallAssets(context, metrics.fieldBackground, origin);
         await applyMedia('reduce');
-        await page.waitForFunction(() => matchMedia('(prefers-reduced-transparency: reduce)').matches
-          && getComputedStyle(document.querySelector('.hraness-marketing-header')).backdropFilter === 'none'
-          && getComputedStyle(document.querySelector('.hraness-material-wall')).backgroundImage === 'none');
+        await page.waitForFunction(() => matchMedia('(prefers-reduced-transparency: reduce)').matches);
         item.reducedTransparency = await deadline(page.evaluate(() => ({
           matches: matchMedia('(prefers-reduced-transparency: reduce)').matches,
           headerBackdrop: getComputedStyle(document.querySelector('.hraness-marketing-header')).backdropFilter,
-          fieldBackground: getComputedStyle(document.querySelector('.hraness-material-wall')).backgroundImage,
         })), 'Reduced transparency metrics');
-        assert.deepEqual(item.reducedTransparency, { matches: true, headerBackdrop: 'none', fieldBackground: 'none' });
+        assert.deepEqual(item.reducedTransparency, { matches: true, headerBackdrop: 'none' });
         await applyMedia('no-preference');
-        await page.waitForFunction((expected) => !matchMedia('(prefers-reduced-transparency: reduce)').matches
-          && getComputedStyle(document.querySelector('.hraness-marketing-header')).backdropFilter === expected.headerBackdrop
-          && getComputedStyle(document.querySelector('.hraness-material-wall')).backgroundImage === expected.fieldBackground,
-        { headerBackdrop: metrics.headerBackdrop, fieldBackground: metrics.fieldBackground });
-        const restored = await deadline(page.evaluate(() => ({
-          matches: matchMedia('(prefers-reduced-transparency: reduce)').matches,
-          headerBackdrop: getComputedStyle(document.querySelector('.hraness-marketing-header')).backdropFilter,
-          fieldBackground: getComputedStyle(document.querySelector('.hraness-material-wall')).backgroundImage,
-        })), 'Restored transparency metrics');
-        assert.deepEqual(restored, { matches: false, headerBackdrop: metrics.headerBackdrop, fieldBackground: metrics.fieldBackground });
+        await page.waitForFunction(() => !matchMedia('(prefers-reduced-transparency: reduce)').matches);
         const summary = page.locator('.hraness-marketing-question > summary').first();
         await summary.focus();
         await summary.press('Enter');
         await page.locator('details[open]').first().waitFor({ state: 'visible' });
         await summary.press('Enter');
         assert.equal(await page.locator('details[open]').count(), 0);
-        await page.getByRole('link', { name: 'How replies stay off', exact: true }).click();
+        await page.getByRole('link', { name: 'How replies work', exact: true }).click();
         await page.waitForURL((url) => url.hash === '#replies');
-        await page.getByRole('heading', { name: 'It answers when you let it', exact: true }).waitFor({ state: 'visible' });
+        await page.getByRole('heading', { name: 'It answers only when you let it', exact: true }).waitFor({ state: 'visible' });
         item.interaction = 'Keyboard FAQ opened and closed; replies action reached its real section.';
       } else if (sample.path === '/docs') {
         const link = page.locator('.document-prose a[href^="#"]').first();

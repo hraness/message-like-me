@@ -34,7 +34,15 @@ body {
   font-synthesis: none;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  /* Short pages keep the in-flow footer at the bottom of the viewport. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
 }
+body > * { min-inline-size: 0; }
+/* Column flex does not stretch auto-margin items, so centered columns size explicitly. */
+body > :where(main, nav) { inline-size: 100%; }
+body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 .skip-link {
   background: var(--inverse);
   color: var(--inverse-foreground);
@@ -71,53 +79,111 @@ body {
 
 .mlm-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
 
-/* Only the public landing opts into the released editorial preset. Compiled
- * v0.6.3 atoms outrank the snapshot's legacy layer, so bridge its role variables
- * here without changing the immutable snapshot. Docs retain their quiet reading surfaces. */
+/* The landing keeps the released editorial preset for its sizes and rhythm,
+ * but sets headings in the sans display role, turns patterns off, and keeps
+ * the header opaque. Docs retain their quiet reading surfaces. */
 .textbutler-marketing {
   --gutter: var(--hraness-marketing-gutter);
   --measure: var(--hraness-marketing-content-measure);
+  --hraness-marketing-display-font: var(--font-text);
+  --hraness-marketing-display-weight: 550;
+  --hraness-marketing-h1-size: clamp(2.375rem, 1.6rem + 3.2vw, 4rem);
+  --hraness-marketing-h1-leading: 1.06;
+  --hraness-marketing-h1-tracking: -.03em;
+  --hraness-marketing-h2-size: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem);
+  --hraness-marketing-h2-leading: 1.12;
+  --hraness-marketing-h2-tracking: -.02em;
+  --hraness-marketing-hero-space: clamp(3.5rem, 7vw, 6rem) clamp(3.5rem, 7vw, 5.5rem);
+  --hraness-marketing-story-space: clamp(3.5rem, 7vw, 5.5rem);
 }
 .textbutler-marketing .hraness-marketing-page { line-height: 1.6; }
 .textbutler-marketing .hraness-marketing-header {
   --hraness-marketing-measure: var(--hraness-marketing-header-measure);
-  background-color: var(--hraness-material-chrome-paint);
-  -webkit-backdrop-filter: var(--hraness-material-chrome-blur);
-  backdrop-filter: var(--hraness-material-chrome-blur);
+  background-color: var(--background);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .textbutler-marketing .hraness-marketing-header__inner { min-block-size: var(--hraness-marketing-header-height); }
-.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; padding-block: var(--hraness-marketing-hero-space); }
+.textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; padding-block: var(--hraness-marketing-hero-space); background: none; }
+.textbutler-marketing .hraness-marketing-hero__copy { max-inline-size: 46rem; }
+.textbutler-marketing :where(.hraness-marketing-hero__heading, .hraness-marketing-section__heading, .hraness-marketing-questions__heading, .hraness-marketing-related__heading, .hraness-marketing-cta__heading) {
+  font-family: var(--font-text);
+  font-weight: var(--hraness-marketing-display-weight);
+  text-wrap: balance;
+}
 .textbutler-marketing .hraness-marketing-hero__heading {
+  max-inline-size: 16ch;
   font-size: var(--hraness-marketing-h1-size);
   line-height: var(--hraness-marketing-h1-leading);
   letter-spacing: var(--hraness-marketing-h1-tracking);
 }
-.textbutler-marketing :where(.hraness-marketing-section__heading, .hraness-marketing-trust__heading, .hraness-marketing-questions__heading, .hraness-marketing-cta__heading) {
+.textbutler-marketing :where(.hraness-marketing-section__heading, .hraness-marketing-questions__heading, .hraness-marketing-cta__heading) {
   font-size: var(--hraness-marketing-h2-size);
   line-height: var(--hraness-marketing-h2-leading);
   letter-spacing: var(--hraness-marketing-h2-tracking);
 }
+.textbutler-marketing :where(.hraness-marketing-section__label, .hraness-marketing-questions__label, .hraness-marketing-related__label, .hraness-marketing-hero__eyebrow) {
+  color: var(--primary);
+  font: 500 0.78rem/1.4 var(--font-mono);
+  letter-spacing: 0.02em;
+}
+.textbutler-marketing .hraness-marketing-hero__eyebrow { padding: 0; border: 0; background: none; }
+.textbutler-marketing :where(.hraness-marketing-section, .hraness-marketing-questions, .hraness-marketing-related, .hraness-marketing-cta) {
+  border-block-start: 1px solid var(--line);
+  background: none;
+}
+.textbutler-marketing .hraness-marketing-section__summary { max-inline-size: 42rem; }
+.textbutler-marketing .hraness-marketing-flow__detail { max-inline-size: 62ch; }
 .textbutler-marketing .hraness-marketing-header__brand { font-size: 1.125rem; }
 .textbutler-marketing .hraness-marketing-header__nav a { font-size: 0.875rem; }
-.textbutler-marketing .hraness-marketing-action {
+.textbutler-marketing .hraness-marketing-page .hraness-marketing-action {
   min-block-size: var(--hraness-marketing-action-height);
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
 }
+/* Primary actions are one flat accent button everywhere, header included;
+ * hero and closing secondary actions read as a text link. */
+:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"] {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  background-image: none;
+  box-shadow: none;
+  color: var(--primary-foreground);
+  -webkit-text-fill-color: currentColor;
+}
+:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"]:hover {
+  background: color-mix(in oklch, var(--primary) 86%, var(--foreground));
+}
+.textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="primary"] { padding-inline: 1.25rem; }
+.textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="secondary"] {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--primary);
+  padding-inline: 0.5rem;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
 .textbutler-marketing .hraness-marketing-hero__summary {
+  max-inline-size: 42rem;
   font-size: var(--hraness-paper-summary-size);
   line-height: var(--hraness-marketing-summary-leading);
 }
-.textbutler-marketing .hraness-marketing-hero__frame { inline-size: min(100%, 74rem); margin-inline: auto; }
-.textbutler-marketing .hraness-marketing-proof-frame { border-radius: 0.5rem; }
-.textbutler-marketing .hraness-marketing-proof-frame__caption { background: var(--surface); color: var(--muted); }
+.textbutler-marketing .hraness-marketing-hero__boundary { color: var(--muted); font-size: 0.875rem; }
+.textbutler-marketing .hraness-marketing-hero__frame { inline-size: 100%; max-inline-size: 52rem; margin-inline: 0; }
 .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 6rem; }
 @media (max-width: 760px) {
   .textbutler-marketing .hraness-marketing-hero { gap: 2rem; }
-  .textbutler-marketing .hraness-marketing-hero__summary { max-inline-size: 34ch; font-size: 1rem; }
-  .textbutler-marketing .hraness-marketing-header__actions { margin-inline-start: auto; }
-  .textbutler-marketing .hraness-marketing-action { min-block-size: 2.75rem; }
-  .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 9rem; }
+  .textbutler-marketing .hraness-marketing-hero__summary { font-size: 1.0625rem; }
+  .textbutler-marketing .hraness-marketing-page .hraness-marketing-action { min-block-size: 2.75rem; }
+  .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 8rem; }
+}
+@media (max-width: 24rem) {
+  /* The smallest phones keep brand, action, and appearance on one row. */
+  .hraness-marketing-header .hraness-marketing-header__inner { column-gap: 0.75rem; }
+  .textbutler-marketing .hraness-marketing-header__brand { font-size: 1rem; }
+  .hraness-marketing-header .hraness-marketing-action { padding-inline: 0.7rem; font-size: 0.8125rem; }
 }
 
 :where(
@@ -336,10 +402,6 @@ body {
   color: var(--muted);
   font-size: 1.05rem;
   line-height: 1.55;
-}
-
-.mlm-marketing-trust .hraness-marketing-trust-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
 
 /* Install panel commands. */
@@ -751,7 +813,6 @@ nav.message-like-me-ask-ai + footer {
   border: 1px solid var(--line);
   border-radius: 0.875rem;
   background: var(--surface);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.06), 0 24px 48px -24px oklch(0 0 0 / 0.28);
 }
 .hero-visual .terminal-card { border-left: 0; border-top: 1px solid var(--line); }
 .privacy-stamp {
@@ -798,116 +859,104 @@ nav.message-like-me-ask-ai + footer {
   html { scroll-behavior: auto; }
 }
 
-/* Textbutler pairs the shared palette with a contact workspace. */
-.textbutler-page .hraness-marketing-hero__eyebrow:empty,
-.textbutler-page .hraness-marketing-section__label:empty,
-.textbutler-page .hraness-marketing-label:empty { display: none; }
-.butler-frame { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
-.butler-context { padding: clamp(1.25rem, 3vw, 2rem); border-inline-end: 1px solid var(--line); background: var(--paper-deep); }
-.butler-context-heading { display: flex; align-items: center; gap: 0.8rem; }
-.contact-initials { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; flex: none; border-radius: 50%; background: var(--surface); color: var(--ink); font-weight: 500; }
-.butler-context-heading strong { display: block; font-size: 1.05rem; font-weight: 600; }
-.butler-context-heading div > span { display: block; margin-top: 0.1rem; color: var(--muted); font-size: 0.85rem; }
-.context-files { display: grid; gap: 0.9rem; margin: 1.75rem 0; }
-.context-files dt { font: 500 0.8rem var(--font-mono); }
-.context-files dd { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.4; }
-.butler-context > p, .butler-disclosure-note { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
-.butler-disclosure-note { margin-top: 1.25rem; max-width: 30ch; }
-.workspace-example { min-width: 0; }
-.workspace-example pre { margin: 0; padding: 1.5rem 1.75rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--surface); color: var(--ink); font: 0.9rem/1.8 var(--font-mono); overflow: auto; }
-.workspace-example p { color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
-.workspace-example a, .development-status a, .legacy-note a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.16em; }
-.architecture-rows { margin: 0; }
-.architecture-rows > div { display: grid; grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr); gap: 2rem; padding-block: 1.35rem; border-block-start: 1px solid var(--line); }
-.architecture-rows dt { font-size: 1.1rem; font-weight: 600; }
-.architecture-rows dd { margin: 0; color: var(--muted); max-width: 66ch; }
-.development-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 4rem); }
-.development-status > div { border-block-start: 1px solid var(--line); padding-block-start: 1.5rem; }
-.development-status h3 { margin: 0; font-family: var(--hraness-type-h3-font); font-size: var(--hraness-type-h3-size); font-weight: var(--hraness-type-h3-weight); }
-.development-status p { margin-block: 0.75rem 1rem; color: var(--muted); max-width: 55ch; }
-.provider-marks { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; align-items: center; }
-.development-status .provider-marks, .about-grid .provider-marks { margin: 0.4rem 0 0; color: inherit; }
-.legacy-note { margin-block: 1.5rem 0; padding-block-start: 1.5rem; border-block-start: 1px solid var(--line); color: var(--muted); font-size: 0.95rem; max-width: 75ch; }
-.document-page > .legacy-note { margin-bottom: 1.5rem; }
 ::selection { background: var(--primary); color: var(--primary-foreground); }
 html { scrollbar-color: var(--muted) var(--paper); }
+
+/* Landing proof: the guided terminal's real first screen on an opaque surface. */
+.tb-terminal {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+}
+.tb-terminal__caption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.6rem 1rem;
+  border-block-end: 1px solid var(--line);
+  color: var(--muted);
+  font: 500 0.75rem/1.4 var(--font-mono);
+}
+.tb-terminal pre {
+  margin: 0;
+  padding: 1.1rem 1.25rem 1.25rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  color: var(--ink);
+  font: 0.8125rem/1.6 var(--font-mono);
+  tab-size: 2;
+}
+.tb-terminal__prompt { color: var(--primary); }
+@media (max-width: 30rem) {
+  /* Phones wrap terminal lines instead of hiding their ends off-screen. */
+  .tb-terminal pre { padding-inline: 1rem; font-size: 0.75rem; white-space: pre-wrap; }
+}
+.tb-terminal pre:focus-visible,
+.workspace-example pre:focus-visible,
+.tb-steps pre:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* /preview keeps its inert disclosure note. */
+.butler-disclosure-note { margin: 1.25rem 0 0; max-width: 30ch; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+
+/* One disclosed reply beside the reply rules. */
+.tb-disclosure { display: grid; justify-items: start; gap: 0.75rem; margin: 0 0 1.5rem; }
+.tb-disclosure .bubble { margin: 0; max-width: min(100%, 26rem); }
+.tb-disclosure figcaption { max-width: 48ch; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+
+.workspace-example { min-width: 0; }
+.workspace-example pre {
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: 0.8125rem/1.8 var(--font-mono);
+  overflow-x: auto;
+}
+.workspace-example p { margin: 0.9rem 0 0; color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
+.workspace-example a, .tb-steps a, .legacy-note a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+
+.architecture-rows { margin: 0; border-block-end: 1px solid var(--line); }
+.architecture-rows > div { display: grid; grid-template-columns: minmax(10rem, 0.4fr) minmax(0, 1fr); gap: 2rem; padding-block: 1.25rem; border-block-start: 1px solid var(--line); }
+.architecture-rows dt { font-size: 1.05rem; font-weight: 600; }
+.architecture-rows dt a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.architecture-rows dd { margin: 0; color: var(--muted); max-width: 62ch; }
+.mlm-section-link { margin-block-start: 1.25rem; }
+
+/* The one development-status statement, set apart from the steps. */
+.tb-status { margin: 0 0 2rem; max-width: 62ch; padding-inline-start: 1rem; border-inline-start: 2px solid var(--primary); color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+
+/* Get started: numbered steps, each with its real command. */
+.tb-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: tb-step; }
+.tb-steps > li { position: relative; padding: 1.5rem 0 1.5rem 3rem; border-block-start: 1px solid var(--line); counter-increment: tb-step; min-width: 0; }
+.tb-steps > li:last-child { border-block-end: 1px solid var(--line); }
+.tb-steps > li::before { content: counter(tb-step); position: absolute; inset: 1.55rem auto auto 0; color: var(--primary); font: 500 0.85rem/1.4 var(--font-mono); }
+.tb-steps h3 { margin: 0; font-family: var(--hraness-type-h3-font); font-size: var(--hraness-type-h3-size); font-weight: var(--hraness-type-h3-weight); }
+.tb-steps p { margin: 0.6rem 0 0; color: var(--muted); max-width: 62ch; }
+.tb-steps pre { margin: 1rem 0; max-width: 40rem; padding: 0.9rem 1.1rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--surface); color: var(--ink); font: 0.8125rem/1.6 var(--font-mono); overflow-x: auto; }
+.tb-steps code { font-family: var(--font-mono); font-size: 0.9em; }
+.provider-marks { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; align-items: center; }
+.tb-steps .provider-marks, .about-grid .provider-marks { margin: 0.6rem 0 0; color: inherit; }
+.legacy-note { margin-block: 1.5rem 0; color: var(--muted); font-size: 0.95rem; max-width: 75ch; }
+.document-page > .legacy-note { margin-bottom: 1.5rem; }
+
 @media (max-width: 48rem) {
-  .butler-frame, .development-status { grid-template-columns: minmax(0, 1fr); }
-  .butler-context { border-inline-end: 0; border-block-end: 1px solid var(--line); }
-  .architecture-rows > div { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  .architecture-rows > div { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+  .tb-steps > li { padding-inline-start: 2.25rem; }
 }
 
-/* Lantern adds material to the public landing. The shared palette owns color and the
- * existing message bubbles; documents and the inert preview remain unchanged. */
-.textbutler-marketing .hraness-material-wall > .hraness-marketing-hero {
-  padding-inline: var(--hraness-marketing-gutter);
-}
-.textbutler-marketing .hraness-material-chrome {
-  border-block-end-color: var(--hraness-material-seam);
-}
-.textbutler-marketing .hraness-marketing-proof-frame.hraness-material-pane {
-  background-color: var(--hraness-material-plane);
-  border-color: var(--hraness-material-seam);
-  box-shadow: var(--hraness-material-lift);
-}
-.textbutler-marketing .hraness-marketing-question[open] > summary {
-  background-color: var(--hraness-material-warm-plane);
-  color: var(--hraness-material-ink);
-}
-
-/* Decorative topic icons (agent-generated line art, public/icons/). */
-.textbutler-topic-icon { display: block; width: 88px; height: 88px; margin: 0 0 18px; }
-
-/* A warm notebook treatment carries through reference and product surfaces. */
-:where(.readme-prose, .workspace-example, .hero-visual, .butler-frame, .butler-context, .message-stage) { min-inline-size: 0; }
-:where(.readme-prose, .workspace-example) pre { max-inline-size: 100%; overscroll-behavior-inline: contain; }
+/* Reference pages keep a plain reading surface. */
+:where(.readme-prose, .workspace-example, .hero-visual, .message-stage) { min-inline-size: 0; }
+.readme-prose pre { max-inline-size: 100%; overscroll-behavior-inline: contain; }
 .readme-prose { max-inline-size: 70ch; line-height: 1.75; }
 .readme-prose :is(h1, h2, h3) { text-wrap: balance; line-height: 1.2; }
 .readme-prose :is(p, li) { text-wrap: pretty; }
 .readme-prose h2 { border: 0; padding-block-start: 0.5rem; }
-.readme-prose pre, .workspace-example pre { border: 0; border-radius: var(--radius-md); box-shadow: var(--hraness-material-inset); }
 .readme-prose :not(pre) > code { overflow-wrap: anywhere; }
-.butler-context { border: 0; background: var(--hraness-material-warm-plane); box-shadow: var(--hraness-material-inset); }
-.contact-initials { box-shadow: var(--hraness-material-lift); }
-.hero-visual, .workflow-callout { border: 0; box-shadow: var(--hraness-material-lift); }
-.architecture-rows > div, .development-status > div { border: 0; }
-.development-status > div { padding: clamp(1.25rem, 3vw, 2rem); border-radius: var(--radius-lg); background: var(--hraness-material-plane); box-shadow: var(--hraness-material-lift); }
 @media (forced-colors: active) {
-  .readme-prose pre, .workspace-example pre, .hero-visual, .workflow-callout, .development-status > div { border: 1px solid CanvasText; box-shadow: none; }
+  .tb-terminal, .tb-steps pre, .workspace-example pre { border: 1px solid CanvasText; }
 }
-
-/* The hero is a desk of conversations, with a clear reading well at its center. */
-.conversation-field { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
-.conversation-field::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 48% 64% at 50% 38%, var(--background), color-mix(in srgb, var(--background) 86%, transparent) 58%, transparent 100%);
-}
-.conversation-slip {
-  position: absolute;
-  inline-size: clamp(9rem, 18vw, 14rem);
-  padding: 1.1rem 1.25rem;
-  border-radius: var(--radius-lg);
-  background: var(--hraness-material-plane);
-  box-shadow: var(--hraness-material-lift);
-  color: var(--foreground);
-  opacity: calc(0.24 + var(--hraness-hero-proximity, 0) * 0.48);
-  transform: translate(var(--hraness-hero-drift-x, 0px), var(--hraness-hero-drift-y, 0px));
-}
-.conversation-slip > span { color: var(--muted); display: block; font: 500 0.65rem/1.5 var(--font-mono); letter-spacing: 0.03em; margin-block-end: 0.65rem; }
-.conversation-slip strong { font: 500 1rem/1.25 var(--font-text); }
-.conversation-slip p { font-size: 0.85rem; line-height: 1.5; margin: 0.65rem 0 0; }
-.conversation-slip i { color: var(--muted); display: block; font-size: 0.68rem; font-style: normal; margin-block-start: 0.8rem; }
-.conversation-slip--message { border-end-start-radius: 0.35rem; background: var(--hraness-material-warm-plane); }
-.conversation-slip:nth-child(1) { inset: 8% auto auto 2%; rotate: -7deg; }
-.conversation-slip:nth-child(2) { inset: 6% 2% auto auto; rotate: 6deg; }
-.conversation-slip:nth-child(3) { inset: 36% auto auto -4%; rotate: 3deg; }
-.conversation-slip:nth-child(4) { inset: 36% -3% auto auto; rotate: -4deg; }
-.conversation-slip:nth-child(5) { inset: auto auto 9% 5%; rotate: -4deg; }
-.conversation-slip:nth-child(6) { inset: auto 4% 7% auto; rotate: 5deg; }
-@media (width < 45rem) {
-  .conversation-slip { inline-size: 10rem; opacity: 0.18; }
-  .conversation-slip:nth-child(n + 5) { display: none; }
-}
-@media (forced-colors: active), print { .conversation-field { display: none; } }
