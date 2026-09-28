@@ -14,7 +14,7 @@ const GHOSTREPLY_PRIVACY_URL = 'https://ghostreply.lol/privacy.html';
 const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-safe.html';
 
 const description =
-  'GhostReply answers iMessages in your texting style on a $4.99 license. Textbutler replies as a marked assistant on your own AI subscription.';
+  'GhostReply answers iMessages in your texting style for $4.99. Textbutler replies as a marked assistant on your own AI key or subscription.';
 
 export const metadata = pageMetadata({
   title: 'GhostReply alternative: Textbutler compared',
@@ -41,7 +41,7 @@ const questions = [
   {
     question: 'Where does my message history go?',
     answer:
-      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. Textbutler keeps a folder of notes per contact locally, and the provider account you connect through xcb sees the context a reply needs. Neither is fully offline once AI replies are on.',
+      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. Textbutler keeps a folder of notes per contact locally, and the AI provider you connect sees the context a reply needs. Neither is fully offline once AI replies are on.',
   },
 ] as const;
 
@@ -68,10 +68,10 @@ export default function CompareGhostReplyPage() {
           <p className="eyebrow">Compare</p>
           <h1>Textbutler compared with GhostReply</h1>
           <p>
-            GhostReply and Textbutler both watch the iMessage conversations you choose on a Mac
-            and can answer them without you typing. GhostReply writes replies that read as yours;
-            Textbutler marks its replies as an assistant’s and runs them on your own AI
-            subscription.
+            GhostReply and Textbutler both answer the iMessage conversations you choose on a Mac.
+            Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick Textbutler
+            if you want replies marked as an assistant’s, WhatsApp and Beeper as well as iMessage,
+            and notes on each person you can edit, and you are comfortable running it from source.
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
@@ -114,10 +114,10 @@ export default function CompareGhostReplyPage() {
             <code>{'🤖{ hello this is my response }'}</code>. The three symbols are configurable
             per contact. By default the butler answers only messages that contain a keyword
             you choose; smart mode lets it decide which messages need an answer. A draft you review sends only in the
-            version you approved. AI replies run on your own Claude Code,
-            Codex, or Devin subscription through <a href="https://github.com/hraness/xcb">xcb</a> from the
-            local install; an optional fast-reply mode can use a Qwen model through Vercel AI
-            Gateway or a model server on your Mac.
+            version you approved. AI replies use Qwen 3.5 Flash through your own Vercel AI Gateway
+            key by default, or your Claude Code, Codex, or Devin subscription through{' '}
+            <a href="https://github.com/hraness/xcb">xcb</a>; a model server on your Mac also works.
+            Each route needs the local install.
           </p>
 
           <h2>How they compare</h2>
@@ -171,7 +171,7 @@ export default function CompareGhostReplyPage() {
           <p>
             GhostReply fits if you want a finished, paid Mac app whose replies pass as yours and
             you accept reply context going through its hosted backend. Textbutler fits if you want
-            each reply marked as an assistant’s, want the model to run on a subscription you
+            each reply marked as an assistant’s, want to use your own AI key or a subscription you
             already pay for, want to inspect and edit what it remembers about each person, or want
             WhatsApp and Beeper in scope alongside iMessage.
           </p>

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
-export const SITE_TITLE = 'Textbutler | Your AI butler replies in the chats you choose.';
+export const SITE_TITLE = 'Textbutler: AI replies for iMessage and WhatsApp on your Mac';
 export const SITE_DESCRIPTION =
   'Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose. It runs on your Mac and answers as a clearly marked assistant.';
 // The one development-status statement. Pages render it where they state the

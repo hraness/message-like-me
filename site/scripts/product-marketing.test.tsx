@@ -65,8 +65,8 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html.split(SITE_STATUS)).toHaveLength(2);
   expect(html).toContain('New installations start paused');
   expect(html).toContain('iMessage and WhatsApp');
-  expect(html).toContain('Claude Code, Codex, or Devin, through your own subscription and xcb');
-  expect(html).toContain('billed separately from a Claude Code subscription');
+  expect(html).toContain('By default, Qwen 3.5 Flash through your own Vercel AI Gateway key, capped at $1 a day.');
+  expect(html).not.toContain('optional fast-reply mode');
   expect(html).toContain('Vercel AI Gateway');
   expect(html).toContain('no AI account');
   expect(html).toContain('Running from source never writes AI replies.');
