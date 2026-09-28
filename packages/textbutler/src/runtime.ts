@@ -28,6 +28,8 @@ export type RuntimePorts = Readonly<{
   validateFile: (contact: ContactSettings, path: string) => Promise<void>;
   clock?: () => number;
   onSubmitted?: (reply: SubmittedReply) => void;
+  /** Test seam for the bounded wait between self-chat echo checks. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }>;
 export type ProcessOutcome = Readonly<{ status: "ignored" | "deferred" | "blocked" | "duplicate-or-busy" | RunState; reason: string; runId?: string }>;
 /** One run covers intake refresh, qualification, ack, compose and dispatch:
@@ -38,6 +40,9 @@ const RUN_BUDGET_MS = 600_000;
  * ignored run as evidence. Ordinary silence (keyword-absent, owner activity,
  * rate limits, cooldowns) stays unjournaled. */
 const AUDITED_INTAKE_DROPS = new Set(["stale-event", "superseded", "invalid-event-or-state", "route-mismatch"]);
+/** A self-chat echo usually lands about two seconds after its send. */
+const ACK_ECHO_CHECKS = 24, ACK_ECHO_INTERVAL_MS = 250;
+const hasEcho = (snapshot: ConversationSnapshot, ackId: string): boolean => snapshot.messageIds.some(id => snapshot.relatedMessageIds.get(id) === ackId);
 
 function composeResult(value: unknown, contact: ContactSettings): readonly ActionIntent[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid response");
@@ -71,6 +76,20 @@ export class ButlerRuntime {
   /** True while an ack or reply send is inside the transport, so a poller can
    * yield the shared provider lane instead of queueing ahead of the send. */
   submitInFlight(): boolean { return this.submitting > 0; }
+  /** Re-reads the conversation until every ack has its self-chat echo, for at
+   * most ACK_ECHO_CHECKS intervals; a missing echo returns the latest read. */
+  private async awaitAckEchoes(contact: ContactSettings, event: MessageEvent, current: ConversationSnapshot, ackIds: ReadonlySet<string>, signal: AbortSignal): Promise<ConversationSnapshot> {
+    const sleep = this.ports.sleep ?? ((ms: number, abort: AbortSignal) => new Promise<void>(resolve => {
+      const timer = setTimeout(done, ms); abort.addEventListener("abort", done, { once: true });
+      function done() { clearTimeout(timer); abort.removeEventListener("abort", done); resolve(); }
+    }));
+    let latest = current;
+    for (let check = 0; check < ACK_ECHO_CHECKS && !signal.aborted && [...ackIds].some(id => !hasEcho(latest, id)); check++) {
+      await sleep(ACK_ECHO_INTERVAL_MS, signal);
+      if (!signal.aborted) latest = await this.refresh(contact, event);
+    }
+    return latest;
+  }
   private async refresh(contact: ContactSettings, event: MessageEvent): Promise<ConversationSnapshot> {
     const snapshot = await this.ports.refresh(contact, event);
     return { ...snapshot, state: { ...snapshot.state, repliesInLastHour: Math.max(snapshot.state.repliesInLastHour, this.ports.journal.repliesSince(contact.id, this.clock() - 3_600_000)) } };
@@ -185,7 +204,19 @@ export class ButlerRuntime {
         ? refreshed.messageIds.some(id => !snapshot.messageIds.includes(id) && !ackIds.has(id) && !isAckEcho(id))
         : refreshed.state.latestRevision !== snapshot.state.latestRevision || refreshed.contextId !== snapshot.contextId);
       if (controller.signal.aborted || !stillReply || changed) return finish("cancelled", "conversation-changed");
-      const plan = await this.ports.transport.prepare({ intentId: runId, conversationId: contact.routeId, contextId: refreshed.contextId, actions });
+      // In a self-chat every send also lands as an incoming echo about two
+      // seconds later, and the transport refuses a send while an unread
+      // message is pending. A reply composed faster than that lets the ack's
+      // echo land and be read first; anything other than the ack and its echo
+      // still cancels. The wait is bounded and a missing echo proceeds.
+      let latest = refreshed;
+      if (acked && currentContact.selfChat && event.pinned !== true) {
+        latest = await this.awaitAckEchoes(currentContact, event, refreshed, ackIds, controller.signal);
+        if (controller.signal.aborted) return finish("cancelled", "cancelled");
+        const isEcho = (id: string) => { const related = latest.relatedMessageIds.get(id); return related !== undefined && ackIds.has(related); };
+        if (latest.messageIds.some(id => !snapshot.messageIds.includes(id) && !ackIds.has(id) && !isEcho(id))) return finish("cancelled", "conversation-changed");
+      }
+      const plan = await this.ports.transport.prepare({ intentId: runId, conversationId: contact.routeId, contextId: latest.contextId, actions });
       if (!plan.ok) return finish("failed", plan.error.code);
       if (controller.signal.aborted) return finish("cancelled", "cancelled");
       // Recheck mutable permission after preparation. The transport must atomically bind

@@ -175,6 +175,29 @@ test("a self-chat ack echo under a fresh id does not cancel the reply", async ()
   };
   expect((await raced.runtime.process(event)).status).toBe("cancelled");
 });
+test("a fast self-chat reply waits for its ack's echo before preparing, and still cancels on anything else", async () => {
+  const state = (latestRevision: string) => ({ latestRevision, lastOwnerAt: null, ownerTyping: false, synchronizedAt: now, repliesInLastHour: 0 });
+  const selfChat = (fixture: ReturnType<typeof setup>) => fixture.setSettings(parseSettings({ ...fixture.getSettings(), contacts: fixture.getSettings().contacts.map(value => ({ ...value, selfChat: true })) }));
+  // The echo lands on the third re-read; the reply is prepared against that context.
+  let reads = 0, sleeps = 0; const contexts: string[] = [];
+  const echoing = setup({ sleep: async () => { sleeps++; }, refresh: async () => { reads++; return reads >= 4 ? { contextId: "ctx-echo", messageIds: ["m1", "echo-of-ack"], relatedMessageIds: new Map([["echo-of-ack", "accepted:p1:0"]]), state: state("v3") } : { contextId: "ctx1", messageIds: ["m1"], relatedMessageIds: new Map(), state: state("v1") }; } });
+  selfChat(echoing);
+  const prepare = echoing.transport.prepare; echoing.transport.prepare = async request => { if (!request.intentId.endsWith(":ack")) contexts.push(request.contextId); return prepare(request); };
+  expect((await echoing.runtime.process(event)).status).toBe("submitted");
+  expect(contexts).toEqual(["ctx-echo"]); expect(sleeps).toBe(2);
+  // A missing echo is bounded and the reply still proceeds.
+  let waited = 0;
+  const silent = setup({ sleep: async () => { waited++; } }); selfChat(silent);
+  expect((await silent.runtime.process(event)).status).toBe("submitted"); expect(waited).toBe(24);
+  // Another message arriving while waiting still cancels the reply.
+  let raceReads = 0;
+  const raced = setup({ sleep: async () => {}, refresh: async () => (++raceReads >= 4 ? { contextId: "ctx2", messageIds: ["m1", "m9"], relatedMessageIds: new Map(), state: state("v2") } : { contextId: "ctx1", messageIds: ["m1"], relatedMessageIds: new Map(), state: state("v1") }) }); selfChat(raced);
+  expect((await raced.runtime.process(event)).status).toBe("cancelled"); expect(raced.submitted).toHaveLength(0);
+  // An ordinary contact never waits for an echo.
+  let ordinarySleeps = 0;
+  const ordinary = setup({ sleep: async () => { ordinarySleeps++; } });
+  expect((await ordinary.runtime.process(event)).status).toBe("submitted"); expect(ordinarySleeps).toBe(0);
+});
 test("nontext intent gets a disclosed companion before the action", async () => {
   const fixture = setup();
   fixture.ports.agent.compose = async () => ({ summary: "I like that idea.", actions: [{ kind: "reaction", messageId: "m1", emoji: "👍", action: "add" }] });

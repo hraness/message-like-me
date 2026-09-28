@@ -43,7 +43,18 @@ async function fixture(fast = false) {
       return { events: events.slice(Number(params.cursor ?? 0)), nextCursor: String(events.length), caughtUp: true }; }
     if (method === "status") return { identity, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) };
     if (method === "prepare") { const body = { ...params, bindingDigest: binding.bindingDigest, expiresAt: new Date(time + 120000).toISOString() }, digest = automationHash(body), plan = { ...body, digest, id: `plan:${digest}` } as AutomationPlan; plans.set(plan.id, plan); return plan; }
-    if (method === "submit") { const plan = plans.get(String(params.planId))!; if (!plan.intentId.endsWith(":ack")) await beforeSubmit?.(); (plan.intentId.endsWith(":ack") ? mutableAcks : mutableSent).push([...plan.actions]); return { id: `run:${sent.length + acks.length}`, planId: plan.id, intentId: plan.intentId, enrollmentId: binding.enrollmentId, state: "accepted", accepted: plan.actions.map((_action, index) => ({ messageId: `sent:${sent.length + acks.length}:${index}`, providerReceiptId: null })), totalActions: plan.actions.length, reason: null, retryable: false }; }
+    if (method === "submit") {
+      const plan = plans.get(String(params.planId))!; if (!plan.intentId.endsWith(":ack")) await beforeSubmit?.(); (plan.intentId.endsWith(":ack") ? mutableAcks : mutableSent).push([...plan.actions]);
+      const accepted = plan.actions.map((_action, index) => ({ messageId: `sent:${sent.length + acks.length}:${index}`, providerReceiptId: null }));
+      // Like iMessage, a self-chat send also lands as an incoming echo that
+      // points back at the accepted message.
+      if (settings.contacts.some(contact => contact.selfChat)) for (const [index, receipt] of accepted.entries()) {
+        const action = plan.actions[index] as { text?: string };
+        revision++; const echo: AutomationMessage = { id: `echo:${receipt.messageId}`, coordinate: conversation.coordinate, direction: "incoming", occurredAt: new Date(time).toISOString(), text: action.text ?? null, kind: "message", relatedMessageId: receipt.messageId, attachments: [] };
+        messages.push(echo); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message: echo });
+      }
+      return { id: `run:${sent.length + acks.length}`, planId: plan.id, intentId: plan.intentId, enrollmentId: binding.enrollmentId, state: "accepted", accepted, totalActions: plan.actions.length, reason: null, retryable: false };
+    }
     if (method === "run.by-intent") return { run: intentRuns.get(String(params.intentId)) ?? null };
     throw new Error(`Unexpected fixture operation ${method}`);
   }, () => time);
