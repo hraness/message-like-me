@@ -33,7 +33,10 @@ export const metadata: Metadata = {
   keywords: ['Textbutler', 'AI butler', 'Mac message assistant', 'contact memory', 'Ghostget', 'iMessage', 'WhatsApp', 'Beeper'],
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: [{ url: '/icon.png', type: 'image/png' }],
+    icon: [
+      { url: '/icon.png', type: 'image/png', sizes: '32x32' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+    ],
     shortcut: '/icon.png',
   },
   robots: {
@@ -91,8 +94,10 @@ const structuredData = {
       '@type': 'Organization',
       '@id': organizationId,
       name: 'Hraness',
-      url: 'https://hraness.com',
-      sameAs: ['https://github.com/hraness'],
+      alternateName: 'HRNSS',
+      url: 'https://hraness.com/',
+      logo: 'https://hraness.com/icon.png',
+      sameAs: ['https://www.linkedin.com/company/hraness', 'https://github.com/hraness'],
     },
     {
       '@type': 'WebSite',
@@ -113,6 +118,7 @@ const structuredData = {
       operatingSystem: 'macOS',
       sameAs: GITHUB_URL,
       author: { '@id': organizationId },
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       featureList: [
         'Headless macOS daemon with CLI and guided terminal controls',
         'Contact-specific guidance and editable memory',

@@ -16,16 +16,29 @@ function blogEntries(): MetadataRoute.Sitemap {
   }));
 }
 
+// Each page carries the date its content last changed materially. Set these by
+// hand: Vercel builds from shallow clones, so Git history is not available.
+const PAGE_LAST_MODIFIED = {
+  '/': '2026-09-28',
+  '/sources': '2026-09-11',
+  '/docs': '2026-09-28',
+  '/methodology': '2026-09-11',
+  '/research': '2026-09-11',
+  '/about': '2026-09-28',
+  '/compare/ghostreply': '2026-09-28',
+} as const;
+
+const lastModified = (path: keyof typeof PAGE_LAST_MODIFIED): Date => new Date(`${PAGE_LAST_MODIFIED[path]}T00:00:00Z`);
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const rebrandDate = new Date('2026-09-11T00:00:00Z');
   return [
-    { url: absoluteUrl('/'), lastModified: rebrandDate, changeFrequency: 'weekly', priority: 1 },
-    { url: absoluteUrl('/sources'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
-    { url: absoluteUrl('/docs'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.9 },
-    { url: absoluteUrl('/methodology'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
-    { url: absoluteUrl('/research'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.6 },
-    { url: absoluteUrl('/about'), lastModified: rebrandDate, changeFrequency: 'monthly', priority: 0.7 },
-    { url: absoluteUrl('/compare/ghostreply'), lastModified: new Date('2026-09-26T00:00:00Z'), changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/'), lastModified: lastModified('/'), changeFrequency: 'weekly', priority: 1 },
+    { url: absoluteUrl('/sources'), lastModified: lastModified('/sources'), changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/docs'), lastModified: lastModified('/docs'), changeFrequency: 'monthly', priority: 0.9 },
+    { url: absoluteUrl('/methodology'), lastModified: lastModified('/methodology'), changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/research'), lastModified: lastModified('/research'), changeFrequency: 'monthly', priority: 0.6 },
+    { url: absoluteUrl('/about'), lastModified: lastModified('/about'), changeFrequency: 'monthly', priority: 0.7 },
+    { url: absoluteUrl('/compare/ghostreply'), lastModified: lastModified('/compare/ghostreply'), changeFrequency: 'monthly', priority: 0.6 },
     ...blogEntries(),
   ];
 }

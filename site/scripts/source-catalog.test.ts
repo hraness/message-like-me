@@ -23,7 +23,7 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
-  test('dates all routes changed by the Textbutler rebrand', () => {
+  test('dates each static route by its last material change', () => {
     // Blog entries carry their own dates; scripts/blog.test.tsx covers them.
     const routeDates = sitemap().filter(({ url }) => !new URL(url).pathname.startsWith('/blog')).map(({ lastModified, url }) => {
       if (!(lastModified instanceof Date)) {
@@ -33,13 +33,13 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-11T00:00:00.000Z'],
+      ['/', '2026-09-28T00:00:00.000Z'],
       ['/sources', '2026-09-11T00:00:00.000Z'],
-      ['/docs', '2026-09-11T00:00:00.000Z'],
+      ['/docs', '2026-09-28T00:00:00.000Z'],
       ['/methodology', '2026-09-11T00:00:00.000Z'],
       ['/research', '2026-09-11T00:00:00.000Z'],
-      ['/about', '2026-09-11T00:00:00.000Z'],
-      ['/compare/ghostreply', '2026-09-26T00:00:00.000Z'],
+      ['/about', '2026-09-28T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-09-28T00:00:00.000Z'],
     ]);
   });
 
