@@ -26,8 +26,8 @@ const CARD_THEMES = {
 } as const;
 
 /**
- * The 1200 × 630 card: the headline beside the same hero phone, rising from
- * the bottom edge. `og` is the link preview; `readme-*` head the README.
+ * The 1200 × 630 README hero: the headline beside the same hero phone, rising
+ * from the bottom edge. Link previews come from app/_lib/social.ts instead.
  */
 function SocialCard({ capture, theme }: Readonly<{ capture: string; theme: keyof typeof CARD_THEMES }>) {
   const OG = CARD_THEMES[theme];
@@ -69,14 +69,13 @@ const THEMES: readonly Exclude<PhoneTheme, 'auto'>[] = ['light', 'dark'];
  * Capture sheet for launch media: every synthetic phone scene in both
  * appearances, static and script-free. `bun run stills` screenshots each
  * `[data-still]` into public/launch/ for the README and film, and the
- * `[data-card]` captures into public/og.png (link previews) and
- * public/launch/readme-hero-*.png (the README's opening image).
+ * `[data-card]` captures into public/launch/readme-hero-*.png (the README's
+ * opening image).
  * Not linked from the site and not indexed.
  */
 export default function StillsPage() {
   return (
     <main id="main-content" style={{ display: 'flex', flexWrap: 'wrap', gap: 24, padding: 24 }}>
-      <SocialCard capture="og" theme="light" />
       <SocialCard capture="readme-hero-light" theme="light" />
       <SocialCard capture="readme-hero-dark" theme="dark" />
       {SCENES.flatMap(scene => THEMES.map(theme => (

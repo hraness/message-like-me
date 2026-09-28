@@ -12,10 +12,13 @@ import {
   BLOG_SITE,
   BLOG_TITLE,
   blogIndexItems,
+  BLOG_INDEX_SOCIAL_PAGE,
   indexableBlogPosts,
 } from '../_lib/blog';
-import { absoluteUrl, SITE_NAME, SOCIAL_IMAGE_ALT } from '../_lib/site';
+import { absoluteUrl, SITE_NAME } from '../_lib/site';
+import { socialImageAltFor } from '../_lib/social';
 
+const socialImage = { url: absoluteUrl(`${BLOG_PATH}/opengraph-image`), alt: socialImageAltFor(BLOG_INDEX_SOCIAL_PAGE) };
 const hasPosts = indexableBlogPosts().length > 0;
 
 export const metadata: Metadata = {
@@ -33,13 +36,13 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: `Blog | ${SITE_NAME}`,
     description: BLOG_DESCRIPTION,
-    images: [{ url: absoluteUrl('/og.png'), width: 1200, height: 630, type: 'image/png', alt: SOCIAL_IMAGE_ALT }],
+    images: [{ ...socialImage, width: 1200, height: 630, type: 'image/png' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: `Blog | ${SITE_NAME}`,
     description: BLOG_DESCRIPTION,
-    images: [{ url: absoluteUrl('/og.png'), alt: SOCIAL_IMAGE_ALT }],
+    images: [socialImage],
   },
 };
 

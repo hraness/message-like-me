@@ -7,6 +7,7 @@ import {
   type ArticleProvenanceRecord,
 } from '@hraness/design-kit';
 import { relatedFor, type PortfolioRelatedItem } from '@hraness/design-kit/portfolio';
+import type { SocialImagePage } from '@hraness/web-discovery/social-image/card';
 import {
   createAtomFeed,
   type ArticleDiscovery,
@@ -27,7 +28,8 @@ import {
   isoTimestamp,
   type BlogPost,
 } from './blog-posts';
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TITLE, SOCIAL_IMAGE_ALT } from './site';
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TITLE } from './site';
+import { socialImageAltFor } from './social';
 
 export * from './blog-posts';
 
@@ -77,6 +79,17 @@ export function bodyFor(post: BlogPost) {
   return body;
 }
 
+// Share-card copy: the card itself comes from the site's one social declaration.
+export const BLOG_INDEX_SOCIAL_PAGE: SocialImagePage = {
+  eyebrow: 'Blog',
+  headline: BLOG_TITLE,
+  description: BLOG_DESCRIPTION,
+};
+
+export function socialPageFor(post: BlogPost): SocialImagePage {
+  return { eyebrow: post.eyebrow, headline: post.title, description: post.dek };
+}
+
 export function articleDiscovery(post: BlogPost): ArticleDiscovery {
   return {
     type: 'BlogPosting',
@@ -85,8 +98,8 @@ export function articleDiscovery(post: BlogPost): ArticleDiscovery {
     title: post.title,
     description: post.dek,
     image: {
-      path: '/og.png',
-      alt: SOCIAL_IMAGE_ALT,
+      path: `${blogPostPath(post)}/opengraph-image`,
+      alt: socialImageAltFor(socialPageFor(post)),
       contentType: 'image/png',
       width: 1200,
       height: 630,

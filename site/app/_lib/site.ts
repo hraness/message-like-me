@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 
+import { SOCIAL_IMAGE_ALT } from './social';
+
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
 export const SITE_TITLE = 'Textbutler: AI in your iMessage and WhatsApp chats on Mac';
@@ -20,7 +22,7 @@ export const REPLY_WRITERS_SENTENCE =
   'Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
 export const REPLY_WRITERS_PRECEDENCE =
   'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins, and with no key saved, an Ollama server already serving the pinned model is picked up when the background service starts. When a Gateway key is saved, the butler can also search the web for the people you turn on (in your own chat, only when you ask), using your key even when a local model writes the replies. It refuses any search that reuses words from your private messages, and you can turn search off for one person from the command line.';
-export const SOCIAL_IMAGE_ALT = 'The words “AI in your messages” beside an iPhone Messages chat: a friend asks “Butler, what time did Sam say?”, and the answer arrives marked 🤖{ }.';
+export { SOCIAL_IMAGE_ALT };
 // The prompt a reader pastes into Claude Code, Codex, or Devin. It follows the
 // written guide; there is no Textbutler setup skill or one-line installer yet.
 export const AGENT_SETUP_PROMPT = [
