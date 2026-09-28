@@ -1,18 +1,33 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Let a fast self-chat reply wait (bounded) for its ack's echo before preparing, so Ghostget's pre-send change check does not refuse it.",
+  "baseCommit": "d63e68b461162bf23167afe004dc6a46452607e8",
+  "motivation": "After the persistent-helper and activity deployments, a live owner self-chat run (ae26f5ae) had its ack accepted but its reply refused by Ghostget with 'Conversation changed before the next action.': the ack's self-chat echo (an incoming row ~2.3s after the send) landed between the dispatch poll and the pre-send events check. Slower pipelines always absorbed the echo during composition.",
+  "design": "Only for acked self-chat runs, after the existing change check: re-read the conversation every 250ms, at most 24 times, until every accepted ack id has an echo (a message whose relatedMessageId is the ack id). Any other new message id still cancels with conversation-changed; a missing echo proceeds after the bound; the reply is prepared against the latest context. Ordinary contacts, unacked and pinned runs are unchanged. The wait honors the run's cancellation signal.",
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only.",
+    "result": "Pending independent review."
   },
-  "sources": {
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/messages-activity.test.ts packages/transport/src/automation.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 73,
+      "failed": 0,
+      "files": 4,
+      "assertions": 528
+    },
+    "logSha256": "0974c418c8d4bb5f7c9da66c34e6bab3ea9db64ead7a0e551a365715ce53ab29",
+    "coverage": [
+      "a fast self-chat reply waits for its ack's echo before preparing, and still cancels on anything else (bounded wait, foreign message, ordinary contact)",
+      "the reply-loop self-chat fixture now emits an incoming echo related to each accepted send, as live iMessage does (verified on the live Ghostget store: echo E1417BED... relates to ack B2E7CE21...)"
+    ]
+  },
+  "sourceInventoryCount": 45,
+  "sourceDigest": "5ffdd9ef0222f48b747e9141b615eec11163ba86a37016a09e9bd8f32528dd57",
+  "sourceSha256": {
     "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
     "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
     "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
@@ -59,8 +74,17 @@
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/runtime.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/messages-activity.test.ts packages/transport/src/automation.test.ts",
-    "receiptSha256": "1a05e72f92a132c4d16a4c3b7a40b5b7ae634422c33462c533c9599d54bd9b86"
-  }
+  "changedSourceSha256": {
+    "packages/textbutler/src/runtime.ts": "1be7308c0bc6496a9e2dfa2a595fa2ae51872d52d6d09de930d3961a035d0b71"
+  },
+  "aggregateValidation": {
+    "status": "pending",
+    "owner": "integration owner",
+    "requiredCommand": "bun run check",
+    "note": "CI on the pull request is the aggregate record."
+  },
+  "limitations": [
+    "Adds up to ~6s to a self-chat reply only when its echo never appears.",
+    "Live verification follows deployment."
+  ]
 }
