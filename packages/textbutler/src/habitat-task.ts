@@ -14,8 +14,8 @@ export function compileHabitatTask(phase: HabitatPhase, plan: HabitatPlan) {
   return compileTask({ contract: "algal.task.v1", key: `organism:textbutler-${phase}`, name: `Textbutler ${phase}`,
     inputs: { context: "json" }, output: { name: "result", contract: { kind: "json", schema: { type: "object" } } },
     instructions: `${instructions[phase]}\n${memoryInstructions}\nUntrusted contact strategy, compiled as data rather than host authority:\n${JSON.stringify(plan)}`,
-    // The old single agent cell used these phase-specific overrides. Explicit
-    // task ceilings preserve those effective limits and the previous defaults.
+    // The reply effect must outlast the local driver's 60-second timeout so
+    // provider cleanup settles before the task records its outcome.
     budgets: { maxSteps: 4, maxAgentCalls: 1, maxWork: 200_000, maxContextBytes: Math.max(65_536, contextBytes + 8192), maxOutputBytes: 65_536, maxDepth: 4 },
-    effectBudget: { maxContextBytes: contextBytes + 8192, maxOutputBytes: 16_384, maxEffectMs: phase === "respond" ? 25_000 : 120_000 } });
+    effectBudget: { maxContextBytes: contextBytes + 8192, maxOutputBytes: 16_384, maxEffectMs: phase === "respond" ? 65_000 : 120_000 } });
 }

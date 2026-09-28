@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { MemoryStore, manifestToJson, verifyReceipt, type JsonValue } from "@hraness/algal";
 import { DEFAULT_HABITAT_PLAN } from "./contact-habitat.ts";
+import { FAST_DRIVER_LIMITS } from "./fast-driver.ts";
 import { executeHabitatProgram } from "./habitat-program.ts";
 
 test("the contact driver executes a real bounded Algal organism with replayable evidence", async () => {
@@ -67,7 +68,8 @@ for (const phase of ["respond", "reflect", "judge"] as const) test(`${phase} bin
   expect(result.manifest.budgets).toMatchObject({ maxSteps: 4, maxAgentCalls: 1, maxWork: 200_000, maxOutputBytes: 65_536, maxDepth: 4 });
   const cell = result.manifest.cells.find(cell => cell.id === "task");
   if (cell?.kind !== "agent") throw Error("Expected task agent");
-  expect(cell.budget?.maxEffectMs).toBe(phase === "respond" ? 25_000 : 120_000);
+  expect(cell.budget?.maxEffectMs).toBe(phase === "respond" ? 65_000 : 120_000);
+  if (phase === "respond") expect(cell.budget?.maxEffectMs).toBeGreaterThan(FAST_DRIVER_LIMITS.localTimeoutMs);
   expect(result.output).toEqual({ phase });
   expect((await verifyReceipt(result.receipt as unknown as JsonValue, manifestToJson(result.manifest), new MemoryStore(), new Map())).ok).toBe(true);
   expect(calls).toBe(1);
