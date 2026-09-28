@@ -61,8 +61,10 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
       >
         <p>AI in your messages · Mac only · MIT source · in development</p>
       </MarketingSiteFooter>
-      {/* No support link until textbutler is registered in the account support catalog. */}
-      <HranessSiteFooter mailingList={{ kind: "none" }} />
+      <HranessSiteFooter
+        mailingList={{ kind: "none" }}
+        support={{ id: "textbutler", name: "Textbutler", updates: false, valueProposition: "Support ongoing development of Textbutler." }}
+      />
     </>
   );
 }
