@@ -2,7 +2,7 @@
 // here traces to source (config.ts contact defaults, decision.ts, the default
 // reply model); keep latency, test counts, and user counts off these pages.
 
-export type SupportChip = 'Works today' | 'Lightly tested' | 'Text only' | 'In testing' | 'Not supported' | 'Coming' | 'Becoming the default · in testing' | 'Default today';
+export type SupportChip = 'Works today' | 'Not yet tested live' | 'Text only' | 'In testing' | 'Not supported' | 'Coming';
 
 export type MessagingApp = Readonly<{
   name: string;
@@ -21,7 +21,7 @@ export const MESSAGING_APPS: readonly MessagingApp[] = [
   },
   {
     name: 'WhatsApp',
-    chip: 'Lightly tested',
+    chip: 'Not yet tested live',
     gets: 'Replies in one-to-one chats, through a linked device.',
     limits: 'You pair it once yourself. It uses an unofficial client, so try it on your own account before you rely on it.',
   },
@@ -55,16 +55,16 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
     id: 'local',
     name: 'A local model on your Mac',
     short: 'Ollama',
-    chip: 'Becoming the default · in testing',
+    chip: 'In testing',
     command: 'ollama pull qwen3:4b-instruct-2507-q4_K_M\ntextbutler providers local',
-    leaves: 'Nothing, for writing the reply.',
-    note: 'About 2.5 GB. Textbutler never downloads a model for you.',
+    leaves: 'Nothing. The reply is written on your Mac.',
+    note: 'About 2.5 GB. Textbutler never downloads a model for you. This is where the default is heading.',
   },
   {
     id: 'key',
     name: 'Qwen 3.5 Flash with your own Vercel AI Gateway key',
     short: 'Your key',
-    chip: 'Default today',
+    chip: 'Works today',
     command: 'pbpaste | textbutler providers gateway-key',
     leaves: 'The conversation context goes to Vercel AI Gateway.',
     note: 'Spending stops at $1 a day.',
@@ -76,18 +76,18 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
     chip: 'Works today',
     command: 'textbutler providers check ACCOUNT',
     leaves: 'The conversation context goes through xcb to that account.',
-    note: 'Connect xcb first. The model gets no tools of its own, and xcb keeps your sign-in.',
+    note: 'Connect xcb first, then use your xcb account name for ACCOUNT. The model can’t run commands on your Mac, and xcb keeps your sign-in.',
   },
 ];
 
 export const HOW_IT_WORKS_STEPS = [
   { label: 'Someone texts you.', detail: 'They write in a one-to-one chat you’ve turned on. Ghostget passes the message to Textbutler, running in the background on your Mac.' },
-  { label: 'It checks before it speaks.', detail: 'Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Have you stayed out of the chat for 5 minutes? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.' },
+  { label: 'It checks before it speaks.', detail: 'Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Has it been 5 minutes since you last wrote here? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.' },
   { label: '👀, right away.', detail: 'It sends 🤖{ 👀 } so they know it’s on it.' },
-  { label: 'It reads the room.', detail: 'It reads the notes you keep for this person (how you talk, what matters, what’s off-limits), up to 64 remembered notes, and the recent conversation. It can search your full history with this person.' },
-  { label: 'Your chosen model writes the reply.', detail: 'That’s a local model, Qwen through your key, or your subscription. Web search is off unless you turn it on, and it never searches with your private wording.' },
+  { label: 'It reads the room.', detail: 'It reads the notes you keep for this person (how you talk, what matters, what’s off-limits) and the recent conversation. In your own chat it can also search your full history; for other people that’s off unless you turn it on.' },
+  { label: 'Your chosen model writes the reply.', detail: 'That’s a local model, Qwen through your key, or your subscription. It can search the web only when a Gateway key is saved, and it refuses any search that reuses words from your private messages.' },
   { label: 'Marked, then sent.', detail: 'The reply arrives as 🤖{ … }, so nobody mistakes it for you. If it can’t tell whether a send went through, it doesn’t send it again.' },
-  { label: 'You’re always in charge.', detail: 'Write in the chat yourself and it stays out of it. Pause everything with one command. Or ask for a draft to review before anything is sent. Drafts expire after 15 minutes.' },
+  { label: 'You can step in anytime.', detail: 'Write in the chat yourself and it stays out of it. Pause everything with one command. Or ask for a draft to review before anything is sent. Drafts expire after 15 minutes.' },
 ] as const;
 
 export const REPLY_MODES = [
@@ -98,6 +98,6 @@ export const REPLY_MODES = [
 
 export const SETUP_STEPS = [
   { label: 'Ask your agent.', detail: 'Paste the prompt below into Claude Code, Codex, or Devin. It clones the repo, installs it, connects your messaging apps, and runs textbutler doctor until only your steps are left.' },
-  { label: 'Say yes to your Mac.', detail: 'For iMessage, turn on Full Disk Access for the TextButler helper and allow the Messages prompt. For WhatsApp or Beeper, pair once. Then choose what writes replies: pull the local model, paste a Gateway key, or sign in through xcb.' },
-  { label: 'Turn on one person.', detail: 'Everyone starts off. Turn on one chat and resume the butler. When that person says “butler”, your butler answers.' },
+  { label: 'Say yes to your Mac.', detail: 'For iMessage, turn on Full Disk Access for the TextButler helper, then allow the Messages prompt when your agent re-runs setup. For WhatsApp or Beeper, pair once. Then choose what writes replies: pull the local model, paste a Gateway key, or sign in through xcb.' },
+  { label: 'Turn on one person.', detail: 'Everyone starts off, and the butler starts paused. Turn on one chat, then run textbutler resume. When that person says “butler”, your butler answers.' },
 ] as const;

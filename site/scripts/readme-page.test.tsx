@@ -34,8 +34,8 @@ test('leads with the agent setup prompt, then the guided terminal and complete d
   expect(text(html)).toContain(SITE_STATUS.replace(/\s+/gu, ' '));
   expect(html).toContain('bun run textbutler:install');
   expect(html).toContain('href="https://github.com/hraness/xcb"');
-  expect(text(html)).toContain('Running from source never writes AI replies');
-  expect(text(html)).toContain('match the reviewed record in qualification/');
+  expect(text(html)).toContain('~/.local/bin/textbutler');
+  expect(text(html)).toContain('The installer refuses to build if the code doesn’t match the last reviewed version.');
   expect(html).toContain('bun run textbutler replies show DRAFT');
   expect(html).toContain('bun run textbutler replies send DRAFT DIGEST');
   expect(html.indexOf('id="set-it-up-with-your-agent"')).toBeLessThan(html.indexOf('id="open-the-guided-terminal"'));

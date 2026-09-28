@@ -167,6 +167,8 @@
   --nav-h: calc(124 * var(--pt));
   --composer-h: calc(86 * var(--pt));
 }
+/* The “via Beeper” line under the name needs a taller bar. */
+.messages[data-via] { --nav-h: calc(138 * var(--pt)); }
 
 .navBar {
   position: absolute;
@@ -238,10 +240,13 @@
   position: absolute;
   inset: 0 0 var(--composer-h);
   display: flex;
-  flex-direction: column;
+  /* Like Messages: a short thread sits at the top under the nav bar. Column-reverse
+   * plus `safe` keeps the newest bubble in view once the thread overflows. */
+  flex-direction: column-reverse;
   justify-content: flex-end;
+  justify-content: safe flex-end;
   overflow: hidden;
-  padding-block: calc(var(--nav-h) + calc(6 * var(--pt))) calc(8 * var(--pt));
+  padding-block: calc(var(--nav-h) + calc(10 * var(--pt))) calc(8 * var(--pt));
 }
 .threadInner {
   display: flex;

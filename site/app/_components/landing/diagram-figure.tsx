@@ -22,7 +22,6 @@ function Picture({ files, alt, className }: Readonly<{ files: Variant; alt: stri
   return (
     <picture className={className}>
       {files.narrow === undefined || narrow === undefined ? null : <source height={narrow.height} media="(max-width: 899px)" srcSet={`/${files.narrow}`} width={narrow.width} />}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img alt={alt} aria-hidden={alt === '' ? true : undefined} className="tb-diagram__img" decoding="async" height={wide.height} loading="lazy" src={`/${files.wide}`} width={wide.width} />
     </picture>
   );
@@ -33,12 +32,12 @@ function Picture({ files, alt, className }: Readonly<{ files: Variant; alt: stri
  * page's Paper appearance. Renders nothing until the files exist, because the
  * surrounding copy already carries the same steps.
  */
-export function DiagramFigure({ name, alt, caption }: Readonly<{ name: string; alt: string; caption?: string }>) {
+export function DiagramFigure({ name, alt, caption, className }: Readonly<{ name: string; alt: string; caption?: string; className?: string }>) {
   const light = variant(name, 'light');
   const dark = variant(name, 'dark');
   if (light === undefined) return null;
   return (
-    <figure className="tb-diagram">
+    <figure className={className === undefined ? 'tb-diagram' : `tb-diagram ${className}`}>
       {dark === undefined ? (
         <Picture alt={alt} className="tb-diagram__picture" files={light} />
       ) : (

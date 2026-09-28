@@ -1,6 +1,7 @@
-// Captures the code-drawn phone scenes on /stills as transparent PNGs in
-// public/launch/ (README hero, launch film) and the social card as
-// public/og.png (1200 × 630, served at /opengraph-image too).
+// Captures the README hero cards into public/launch/ and the social card as
+// public/og.png (1200 × 630, served at /opengraph-image too). Set
+// STILLS_PHONE_DIR to also export each /stills phone scene as a transparent
+// PNG there (for decks or the film); they are not served by the site.
 //
 //   bun run dev            # in another terminal, or set STILLS_BASE_URL
 //   bun run stills         # every scene at 2x and 3x
@@ -13,6 +14,7 @@ import { chromium } from 'playwright-core';
 
 const siteRoot = resolve(import.meta.dir, '..');
 const outDir = join(siteRoot, 'public', 'launch');
+const phoneDir = process.env.STILLS_PHONE_DIR;
 const base = process.env.STILLS_BASE_URL ?? 'http://localhost:3217';
 const executablePath =
   process.env.TEXTBUTLER_BROWSER_EXECUTABLE ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -30,10 +32,13 @@ try {
     await page.addStyleTag({ content: 'html, body, main { background: transparent !important; } body > :not(main) { display: none !important; }' });
     await page.evaluate(() => document.fonts.ready);
     const ids = await page.locator('[data-still]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-still') ?? ''));
-    for (const id of ids) {
-      const path = join(outDir, `phone-${id}@${scale}x.png`);
-      await page.locator(`[data-still="${id}"]`).screenshot({ path, omitBackground: true });
-      console.log(path);
+    if (phoneDir !== undefined) {
+      await mkdir(phoneDir, { recursive: true });
+      for (const id of ids) {
+        const path = join(phoneDir, `phone-${id}@${scale}x.png`);
+        await page.locator(`[data-still="${id}"]`).screenshot({ path, omitBackground: true });
+        console.log(path);
+      }
     }
     if (scale === 2) {
       // Link previews are 1200 × 630 at 1x; render at 2x and downsample for crisp edges.

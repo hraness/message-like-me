@@ -113,7 +113,7 @@ export const heroConversation: Conversation = {
       text: marked('On Monday Sam said Friday at 6:30 at the gym, and that he’d bring the spare harness for you. Nothing here has changed since.'),
       waitMs: 1400,
     },
-    { kind: 'message', id: 'm7', from: 'contact', text: 'perfect, thanks butler 🙏', waitMs: 1300 },
+    { kind: 'message', id: 'm7', from: 'contact', text: 'perfect, thank you 🙏', waitMs: 1300 },
   ],
 };
 

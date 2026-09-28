@@ -22,7 +22,7 @@ bun run textbutler setup \
   --xcb-model FULL_MODEL_KEY
 ```
 
-Use `codex:ACCOUNT_ID` or `devin:ACCOUNT_ID` to add a Codex or Devin account the same way. Then run `textbutler providers check` to confirm the account passes. Setup records a fingerprint of the xcb program and the account you chose. It does not copy your subscription login, and it does not switch on any contact.
+Use `codex:ACCOUNT_ID` or `devin:ACCOUNT_ID` to add a Codex or Devin account the same way. Then run `textbutler providers check` with the same account, for example `textbutler providers check claude:ACCOUNT_ID`, to confirm it passes. Setup records a fingerprint of the xcb program and the account you chose. It does not copy your subscription login, and it does not switch on any contact.
 
 Every reply then follows the same loop:
 
@@ -39,7 +39,7 @@ AI replies work only in a local build of Textbutler, made with `bun run textbutl
 
 - **Replies on the plan you have.** Replies and drafts are written by the subscription account you connected.
 - **Your login stays with xcb.** Textbutler's contact folders never hold subscription credentials.
-- **Textbutler decides what is sent.** Automatic replies go only to people you turned on, only when they say “butler” by default, and always wrapped in 🤖{ }. A draft is only text until you read it with `replies show` and approve it with `replies send`. Trusted Textbutler code adds the marker, checks that the conversation has not moved on, and records the send.
+- **Textbutler decides what is sent.** Automatic replies go only to people you turned on, only when they say “butler” by default, and wrapped in 🤖{ } by default. A draft is only text until you read it with `replies show` and approve it with `replies send`. Trusted Textbutler code adds the marker, checks that the conversation has not moved on, and records the send.
 - **No quiet switch to paid API use.** If the subscription route is unavailable, busy, or out of date, Textbutler reports that and waits. It does not try another account or the Claude API.
 
 ## Not the Claude API

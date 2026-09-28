@@ -125,7 +125,7 @@ describe('blog pages', () => {
       expect(html.match(/<h1\b/gu), post.slug).toHaveLength(1);
       expect(html, post.slug).toContain('By <a href="https://hraness.com" rel="author">Hraness</a>');
       const sentence = articleProvenanceSentence(provenanceFor(post));
-      expect(sentence).toBe('Drafted with AI from the source code and reviewed by Claude Opus 5.5 (claude-opus-5-5) editorial review.');
+      expect(sentence).toMatch(/^Drafted with AI from the source code and reviewed by Claude Opus 5\.5 \(claude-opus-5-5\) [a-z ]*review\.$/u);
       expect(html, post.slug).toContain(sentence);
       expect(html, post.slug).not.toMatch(/human/iu);
       expect(html, post.slug).toContain('"@type":"BlogPosting"');

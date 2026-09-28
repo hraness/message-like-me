@@ -71,10 +71,11 @@ export default function CompareGhostReplyPage() {
           <p className="eyebrow">Compare</p>
           <h1>Textbutler compared with GhostReply</h1>
           <p>
-            GhostReply and Textbutler both watch the iMessage conversations you choose on a Mac
-            and can answer them without you typing. GhostReply writes replies that read as yours;
-            Textbutler marks its replies as an assistant’s, answers when someone says “butler”, and
-            lets you pick what writes them.
+            GhostReply and Textbutler both answer the iMessage conversations you choose on a Mac.
+            Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick Textbutler
+            if you want replies marked as an assistant’s, answers only when someone says “butler”,
+            WhatsApp and Beeper as well as iMessage, and a choice of what writes the replies, and
+            you are comfortable building it from source (your coding agent can do that for you).
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
@@ -119,7 +120,7 @@ export default function CompareGhostReplyPage() {
             default the butler answers only messages that contain the word “butler”; smart mode
             lets it decide when a reply is clearly wanted. A draft you review sends only in the
             version you approved. {REPLY_WRITERS_SENTENCE} Through <a href={XCB_URL}>xcb</a>, the
-            model gets no tools of its own.
+            model can’t run commands on your Mac.
           </p>
 
           <h2>How they compare</h2>

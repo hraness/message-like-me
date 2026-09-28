@@ -4,7 +4,7 @@
   "name": "d2-words-key-narrow",
   "canvas": {
     "width": 400,
-    "height": 1056,
+    "height": 984,
     "padding": 0
   },
   "shapes": [
@@ -35,7 +35,7 @@
       "type": "text",
       "x": 80,
       "y": 68,
-      "text": "off unless you turn it on\nprivacy-checked",
+      "text": "only with your key\nprivacy-checked",
       "fontSize": 13,
       "weight": 400,
       "tone": "orange",
@@ -241,68 +241,10 @@
       "width": 132
     },
     {
-      "id": "seg-track",
-      "type": "rect",
-      "x": 20,
-      "y": 904,
-      "width": 359,
-      "height": 48,
-      "radius": 24,
-      "tone": "yellow",
-      "strokeWidth": 0
-    },
-    {
-      "id": "seg-0",
-      "type": "text",
-      "x": 24,
-      "y": 920,
-      "text": "Local",
-      "fontSize": 12,
-      "weight": 400,
-      "tone": "neutral",
-      "align": "middle",
-      "width": 117
-    },
-    {
-      "id": "seg-active",
-      "type": "rect",
-      "x": 141,
-      "y": 908,
-      "width": 117,
-      "height": 40,
-      "radius": 20,
-      "tone": "purple",
-      "strokeWidth": 0
-    },
-    {
-      "id": "seg-1",
-      "type": "text",
-      "x": 141,
-      "y": 920,
-      "text": "Your key",
-      "fontSize": 12,
-      "weight": 700,
-      "tone": "purple",
-      "align": "middle",
-      "width": 117
-    },
-    {
-      "id": "seg-2",
-      "type": "text",
-      "x": 258,
-      "y": 920,
-      "text": "Your subscription",
-      "fontSize": 12,
-      "weight": 400,
-      "tone": "neutral",
-      "align": "middle",
-      "width": 117
-    },
-    {
       "id": "sentence",
       "type": "text",
       "x": 20,
-      "y": 976,
+      "y": 904,
       "text": "The conversation context goes to Vercel AI Gateway. Capped at $1 a day.",
       "fontSize": 16,
       "weight": 500,

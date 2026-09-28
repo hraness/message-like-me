@@ -1,9 +1,9 @@
 import { DocumentPage } from '../_components/document-page';
-import { GITHUB_URL, pageMetadata } from '../_lib/site';
+import { GITHUB_URL, PAGE_LAST_MODIFIED, pageMetadata } from '../_lib/site';
 import { readmeHtml } from '../readme.generated';
 
 const description =
-  'Set up Textbutler with your coding agent, connect iMessage, WhatsApp, or Beeper, pick what writes replies, and turn the butler on for one person.';
+  'Set up Textbutler on your Mac, connect iMessage, WhatsApp, or Beeper, and turn the butler on for one person. The legacy Message Like Me tools have their own section.';
 
 export const metadata = pageMetadata({
   title: 'Documentation',
@@ -20,7 +20,7 @@ export default function DocsPage() {
       path="/docs"
       html={readmeHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/README.md`}
-      dateModified="2026-09-28"
+      dateModified={PAGE_LAST_MODIFIED['/docs']}
       sourceOwnsHeading
     />
   );

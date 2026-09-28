@@ -4,7 +4,7 @@ That’s the whole idea. You don’t open an app to talk to it, and neither do y
 
 ## The moment
 
-Your friend Maya is double-checking plans for tomorrow. You’re out, your phone is in your bag, and she wants an answer now:
+Say you’re Sam. Your friend Maya is double-checking plans for tomorrow. You’re out, your phone is in your bag, and she wants an answer now:
 
 > **Maya:** are we still on for climbing tomorrow?
 >
@@ -14,11 +14,11 @@ Your friend Maya is double-checking plans for tomorrow. You’re out, your phone
 >
 > **Sam’s Mac:** 🤖{ On Monday Sam said Friday at 6:30 at the gym, and that he’d bring the spare harness for you. Nothing here has changed since. }
 >
-> **Maya:** perfect, thanks butler 🙏
+> **Maya:** perfect, thank you 🙏
 
 *An example conversation. The people are made up.*
 
-Her first message gets no answer, because it doesn’t say “butler”. Her second one does. The butler sends 🤖{ 👀 } right away so she knows it’s on it, then answers from what you actually wrote to her on Monday. It doesn’t guess where you are or invent plans, and the 🤖{ } around each message tells her exactly who’s talking. Neither of you installed anything new.
+Her first message gets no answer, because it doesn’t say “butler”. Her second one does. The butler sends 🤖{ 👀 } right away so she knows it’s on it, then answers from what you actually wrote to her on Monday. It doesn’t guess where you are or invent plans, and the 🤖{ } around each message tells her exactly who’s talking. Maya didn’t install anything.
 
 ## What it is
 
@@ -34,16 +34,16 @@ Textbutler replaced Message Like Me, and messagelikeme.com redirects here.
 
 One message, start to finish:
 
-![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](/diagrams/d1-one-message-wide.light@2x.png#gh-light-mode-only)
-![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](/diagrams/d1-one-message-wide.dark@2x.png#gh-dark-mode-only)
+![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](/diagrams/d1-one-message-narrow.light@2x.png#gh-light-mode-only)
+![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](/diagrams/d1-one-message-narrow.dark@2x.png#gh-dark-mode-only)
 
 1. **Someone texts you.** They write in a one-to-one chat you’ve turned on, and Ghostget passes the message to Textbutler.
-2. **It checks before it speaks.** Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Have you stayed out of the chat for 5 minutes? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.
+2. **It checks before it speaks.** Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Has it been 5 minutes since you last wrote here? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.
 3. **👀, right away.** It sends 🤖{ 👀 } as an ordinary text message. Tapbacks aren’t available on a normal Mac, so it doesn’t pretend to use them.
-4. **It reads the room.** It reads the notes you keep for this person (how you talk, what matters, what’s off-limits), up to 64 remembered notes, and the recent conversation. It can search your full history with this person, and only this person.
+4. **It reads the room.** It reads the notes you keep for this person (how you talk, what matters, what’s off-limits) and the recent conversation. In your own chat it can also search your full history; for other people that’s off unless you turn it on.
 5. **Your chosen model writes the reply.** More on that choice below.
 6. **Marked, then sent.** The reply arrives as 🤖{ … }. If Textbutler can’t tell whether a send went through, it doesn’t send it again.
-7. **You’re always in charge.** Write in the chat yourself and it stays out of it. Pause everything with one command, or ask for a draft to review first.
+7. **You can step in anytime.** Write in the chat yourself and it stays out of it. Pause everything with one command, or ask for a draft to review first.
 
 “Butler” matches in any capitalization, as a whole word, so the “Butler,” your phone capitalizes still counts. You can ask it things too: say “butler” in any chat you’ve turned on, including your own notes-to-self chat, and it answers you.
 
@@ -51,18 +51,18 @@ One message, start to finish:
 
 Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.
 
-![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](/diagrams/d2-words-local-wide.light@2x.png#gh-light-mode-only)
-![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](/diagrams/d2-words-local-wide.dark@2x.png#gh-dark-mode-only)
+![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](/diagrams/d2-words-local-narrow.light@2x.png#gh-light-mode-only)
+![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](/diagrams/d2-words-local-narrow.dark@2x.png#gh-dark-mode-only)
 
 | Option | One command | What leaves your Mac |
 |---|---|---|
-| A local model on your Mac (in testing) | `ollama pull qwen3:4b-instruct-2507-q4_K_M`, then `textbutler providers local` | Nothing, for writing the reply |
+| A local model on your Mac (in testing) | `ollama pull qwen3:4b-instruct-2507-q4_K_M`, then `textbutler providers local` | Nothing. The reply is written on your Mac |
 | Qwen 3.5 Flash with your own Vercel AI Gateway key | `pbpaste \| textbutler providers gateway-key` | The conversation context, to Vercel AI Gateway. Spending stops at $1 a day |
-| Your Claude Code, Codex, or Devin subscription | `textbutler providers check ACCOUNT` after connecting xcb | The conversation context, through xcb to that account. The model gets no tools of its own |
+| Your Claude Code, Codex, or Devin subscription | `textbutler providers check ACCOUNT` after connecting xcb | The conversation context, through xcb to that account. The model can’t run commands on your Mac |
 
-The local model is where Textbutler is heading. Your messages already live on your Mac, and with a local model the reply gets written there too. It’s about 2.5 GB, and Textbutler never downloads it for you: you pull it with Ollama, and Textbutler finds it. We’re still testing it before it becomes the default.
+The local model is where Textbutler is heading. Your messages already live on your Mac, and with a local model the reply gets written there too. It’s about 2.5 GB, and Textbutler never downloads it for you: you pull it with Ollama, then choose it with `textbutler providers local`. If no Gateway key is saved, Textbutler also picks it up on its own when its background service starts. We’re still testing it before it becomes the default.
 
-Which one wins when you have more than one? If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins over a local model. Web search is off by default. When you turn it on, it uses your Gateway key, even when a local model writes the replies, and it refuses any search that reuses your private wording.
+Which one wins when you have more than one? If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins over a local model. When a Gateway key is saved, the butler can also search the web for the people you turn on (in your own chat, only when you ask), using your key even when a local model writes the replies. It refuses any search that reuses words from your private messages, and you can turn search off for one person with `habitats configure`.
 
 Subscriptions go through [xcb](https://xcb.sh), which keeps your sign-in. [How Textbutler uses xcb](/blog/how-textbutler-uses-xcb) has the details.
 
@@ -89,7 +89,7 @@ Here’s what staying out of it looks like on WhatsApp:
 
 *An example conversation. The people are made up.*
 
-No reply. Jordan’s first message didn’t ask, and by the time he did, you had just written.
+No reply. Jordan’s first message didn’t ask, and by the time he did, Sam had just written.
 
 ## Your agent sets it up
 
@@ -100,14 +100,14 @@ Set up Textbutler on this Mac: https://github.com/hraness/textbutler
 Follow docs/textbutler/getting-started.md step by step.
 If Ghostget isn't installed, set it up first: https://ghostget.com/docs/tutorials/getting-started
 Connect my iMessage, and WhatsApp or Beeper if I use them.
-For replies, use a local Ollama model if one is running; otherwise ask me which option I want.
+For replies, if Ollama is running with qwen3:4b-instruct-2507-q4_K_M, choose it with `textbutler providers local`; otherwise ask me which option I want.
 Run `textbutler doctor` after each step and do what it says.
 Stop and tell me whenever macOS asks for a permission, a pairing, or a key.
-Leave every contact turned off and don't send any messages.
+Leave every chat turned off and don't send any messages.
 ```
 
-![Who does what: your agent clones, installs, connects your apps, and runs textbutler doctor; you flip the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper, pick what writes replies, and turn on one person](/diagrams/d3-who-does-what-wide.light@2x.png#gh-light-mode-only)
-![Who does what: your agent clones, installs, connects your apps, and runs textbutler doctor; you flip the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper, pick what writes replies, and turn on one person](/diagrams/d3-who-does-what-wide.dark@2x.png#gh-dark-mode-only)
+![Who does what: your agent clones, installs, connects your apps, and runs textbutler doctor; you turn on Full Disk Access, allow Messages, pair WhatsApp or Beeper, pick what writes replies, and turn on one person](/diagrams/d3-who-does-what-narrow.light@2x.png#gh-light-mode-only)
+![Who does what: your agent clones, installs, connects your apps, and runs textbutler doctor; you turn on Full Disk Access, allow Messages, pair WhatsApp or Beeper, pick what writes replies, and turn on one person](/diagrams/d3-who-does-what-narrow.dark@2x.png#gh-dark-mode-only)
 
 Your agent clones the repository, installs it, connects your messaging apps, and runs `textbutler doctor` until only your steps are left. Those steps are yours because macOS and your accounts require a person: turning on Full Disk Access for the TextButler helper, allowing the Messages prompt, pairing WhatsApp or Beeper once, and pasting a key or signing in. Then you turn on one person and resume the butler.
 
@@ -119,13 +119,13 @@ Every message the butler sends is wrapped in 🤖{ }, including the 👀. The ma
 
 New installs start paused and everyone starts off. Setup, choosing contacts, and importing history never send a message. `textbutler pause` stops everything at once, and `textbutler contacts disable` turns one person off.
 
-When you’d rather read first, ask for a draft instead: `replies suggest` writes one, `replies show` prints every word and who it goes to, and `replies send` with the draft’s review code sends exactly what you read. Drafts expire after 15 minutes. When a messaging app reports a send as submitted, that means the app accepted it, not that it was delivered.
+When you’d rather read first, ask for a draft instead: `textbutler replies suggest` writes one, `textbutler replies show` prints every word and who it goes to, and `textbutler replies send` with the draft’s review code sends exactly what you read. Drafts expire after 15 minutes. When a messaging app reports a send as submitted, that means the app accepted it, not that it was delivered.
 
 ## Each person gets their own folder
 
-Each person you turn on gets a folder of plain files on your Mac: your notes about how you talk with them, what matters, and what’s off-limits, the tone it has learned for that chat, and up to 64 remembered notes with where each one came from. You can open and edit every file. Your settings and sign-ins live elsewhere, where the butler can’t change them.
+Each person you turn on gets a folder of plain files on your Mac: your notes about how you talk with them, what matters, and what’s off-limits. You can open and edit every file. Your settings and sign-ins live elsewhere, where the butler can’t change them.
 
-That’s also how each chat gets better over time: the butler tries a new plan for one chat, and keeps it only if it does better on that chat’s own past replies. [How Textbutler uses ALGAL](/blog/how-textbutler-uses-algal) explains how.
+Learning is optional and off by default; today it needs a Claude Code subscription through xcb. When it’s on, the butler tries a new way of replying in one chat, and keeps it only if it does better on that chat’s own past replies. It can also remember up to 64 notes, each with where it came from. `textbutler habitats show` lists them and `textbutler habitats memory-clear` removes them. [How Textbutler uses ALGAL](/blog/how-textbutler-uses-algal) explains how.
 
 ## Where it stands
 
@@ -134,8 +134,8 @@ That’s also how each chat gets better over time: the butler tries a new plan f
 **Works today**
 
 - Marked automatic replies over iMessage, end to end in our testing.
-- WhatsApp and Beeper text connections through Ghostget.
-- All three reply writers: a local model, your Gateway key, or your subscription.
+- WhatsApp and Beeper text connections through Ghostget. Automatic replies over them aren’t tested live yet.
+- Three reply writers: your Gateway key, your subscription, and a local model (in testing).
 - Drafts you review before sending, and the guided terminal.
 - The JSON command line for agents.
 
@@ -143,12 +143,13 @@ That’s also how each chat gets better over time: the butler tries a new plan f
 
 - The local model as the default.
 - A Textbutler setup skill for agents, and an easier install.
-- More live testing of automatic replies on WhatsApp and Beeper.
+- Live testing of automatic replies on WhatsApp and Beeper.
+- Learning that’s easier to turn on.
 
 Group chats and SMS aren’t planned right now.
 
 ## Try it
 
-Start with one person who knows you’re trying it. Paste the prompt above into your coding agent, flip the two switches your Mac asks for, and turn that one chat on. Everyone else stays off until you say so.
+Start with one person who knows you’re trying it. Paste the prompt above into your coding agent, approve the macOS prompts, pick what writes replies, turn that one chat on, and resume. Everyone else stays off until you say so.
 
 For the full step-by-step path, see the [Textbutler home page](https://textbutler.app). Messages move through [Ghostget](https://ghostget.com/blog/built-on-ghostget), and subscriptions through [xcb](https://xcb.sh/blog/introducing-xcb).

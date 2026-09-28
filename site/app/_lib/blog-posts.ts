@@ -26,9 +26,10 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   {
     slug: 'introducing-textbutler',
     title: 'Introducing Textbutler',
-    dek: 'AI in your messages. Say “butler” in a chat you’ve turned on, and a clearly marked assistant answers from your Mac. Your coding agent can set it up.',
+    dek: 'AI in your messages. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you.',
     eyebrow: 'Launch',
-    published: '2026-09-28',
+    published: '2026-09-24',
+    updated: '2026-09-28',
     tags: ['textbutler', 'messaging', 'imessage', 'local-models', 'ollama', 'macos', 'coding-agents', 'xcb'],
     relationIds: [
       'contract:wrench:message-like-me:exports-private-bundles',
@@ -51,6 +52,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     dek: 'A Textbutler habitat replaces a contact\'s reply plan only after a blinded ALGAL replay scores the new plan no lower on any case and higher on average.',
     eyebrow: 'Integration',
     published: '2026-09-24',
+    updated: '2026-09-28',
     tags: ['textbutler', 'algal', 'habitats', 'drafts', 'messaging', 'local-first'],
     relationIds: [],
   },

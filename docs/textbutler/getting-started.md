@@ -20,9 +20,11 @@ AI replies need a local build of Textbutler and something to write them.
 Replies can be written by a local model through Ollama (in testing), by Qwen 3.5
 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or
 Devin subscription through xcb. If you choose one with a command, that choice
-wins. Otherwise a saved Gateway key wins over a local model. Web search is off
-by default. When you turn it on, it uses your Gateway key, even when a local
-model writes the replies. Installing doesn't turn replies on, and you should
+wins. Otherwise a saved Gateway key wins over a local model. When a Gateway key
+is saved, the butler can also search the web for the people you turn on (in
+your own chat, only when you ask), using your key even when a local model
+writes the replies. It refuses any search that reuses words from your private
+messages; turn search off for one person with `habitats configure`. Installing doesn't turn replies on, and you should
 test live messaging with a recipient you trust. The Claude API route needs a
 separately reviewed runtime that neither the source checkout nor the local build
 supplies.

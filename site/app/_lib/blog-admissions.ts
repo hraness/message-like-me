@@ -12,11 +12,12 @@ const REVIEW = {
   reviewerType: 'ai',
   reviewedOn: REVIEWED_ON,
 } as const;
-// The launch rewrite of the introduction was reviewed on its own date.
+// The launch rewrite was reviewed on its own date by claims and clarity
+// reviewer runs separate from the drafting run (launch workflow, 2026-09-28).
 const LAUNCH_REVIEWED_ON: ArticleIsoDate = '2026-09-28';
 const LAUNCH_REASSESS_ON: ArticleIsoDate = '2026-11-09';
 const LAUNCH_REVIEW = {
-  reviewer: 'Claude Opus 5.5 (claude-opus-5-5) editorial review',
+  reviewer: 'Claude Opus 5.5 (claude-opus-5-5) independent claims and clarity review',
   reviewerType: 'ai',
   reviewedOn: LAUNCH_REVIEWED_ON,
 } as const;
@@ -38,7 +39,7 @@ export const BLOG_ADMISSIONS = [
     href: '/blog/introducing-textbutler',
     lifecycle: 'indexable',
     readerJob: 'Understand what Textbutler does in my chats, what writes its replies and what leaves my Mac, how much setup my coding agent can do for me, and what works today.',
-    nonObviousAnswer: 'It answers only when someone says “butler” (whole word, any capitalization) in a one-to-one chat you turned on, sends 🤖{ 👀 } first as a plain text message because tapbacks are unavailable on a stock Mac, skips rather than queues a request that arrives within 5 minutes of your own message, and searches only the current chat’s history; with a local Ollama model the reply is written on the Mac, but a saved Gateway key still wins unless you choose local explicitly, and web search always uses the Gateway key.',
+    nonObviousAnswer: 'It answers only when someone says “butler” (whole word, any capitalization) in a one-to-one chat you turned on, sends 🤖{ 👀 } first as a plain text message because tapbacks are unavailable on a stock Mac, skips rather than queues a request that arrives within 5 minutes of your own message, and searches chat history only in the owner’s own chat unless the owner enables it for another person; with a local Ollama model the reply is written on the Mac, but a saved Gateway key still wins unless you choose local explicitly, and web search needs a saved Gateway key and is on for turned-on people once one is saved.',
     originalContribution: 'Explains the trigger, checks, acknowledgment, reply-writer precedence and privacy map, and the split between what an agent can set up and what macOS makes a person do, from the source code.',
     hostFit: 'The product launch post on the product host. It links the xcb and ALGAL integration posts and the Ghostget and xcb hubs along registered relations.',
     nearestUrls: [
@@ -60,7 +61,8 @@ export const BLOG_ADMISSIONS = [
     observations: [
       'The acknowledgment is the marked text 🤖{ 👀 }, not a tapback, and a request inside the 5-minute owner cooldown is skipped rather than deferred.',
       'Local Ollama auto-detection applies only when no Gateway key is saved; the post keeps the local route tagged as in testing until it becomes the default on main.',
-      'History search pages only through the current conversation, so the examples answer only from messages visible in the same chat.',
+      'History search is on in the owner’s own chat and off for other contacts unless the plan enables it; the examples answer only from messages visible in the same chat.',
+      'Learning (habitat evolution) and its 64-entry memory run only when an evolution model is configured, which no default sets; the post presents it as optional and off by default.',
     ],
     scores: { readerUtility: 2, originalEvidence: 2, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
@@ -111,9 +113,9 @@ export const BLOG_ADMISSIONS = [
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: REVIEW,
+    review: LAUNCH_REVIEW,
     humanReview: null,
-    reassessOn: REASSESS_ON,
+    reassessOn: LAUNCH_REASSESS_ON,
     harmIfWrong: 'A reader could assume a failed subscription call falls back to paid API use, or that xcb gives the model file or messaging tools.',
     refreshTriggers: [
       'Change to XCB_LIMITS, stdin input, duplicate-key parsing or verifyXcbExecutable in packages/textbutler/src/xcb-client.ts',
@@ -133,7 +135,7 @@ export const BLOG_ADMISSIONS = [
     // portfolio facts since @hraness/design-kit v0.18.2.
     href: '/blog/how-textbutler-uses-algal',
     lifecycle: 'indexable',
-    readerJob: 'Decide whether to turn on Textbutler\'s per-contact habitats, and know what the learning can change, what it cannot, and how to undo it.',
+    readerJob: 'Understand Textbutler\'s per-contact habitats, decide whether to turn on their learning step, and know what the learning can change, what it cannot, and how to undo it.',
     nonObviousAnswer: 'The plan schema has no field for recipient, provider, permissions or disclosure, so no learned plan can express a change to them; a candidate plan wins only if a blinded judge marks it safe on both replayed cases, scores it no lower on either, and finds an average gain of at least 0.1, and replays run no tools, so tool choice is never measured.',
     originalContribution: 'Lays out the habitat plan schema, run limits, and promotion rule from Textbutler source, and states what the replay does not measure.',
     hostFit: 'A "How Textbutler uses ALGAL" post on the consumer host. The registered runtime:message-like-me:algal:runs-reply-habitats-on relation carries the detail sentence this post explains.',
@@ -143,9 +145,10 @@ export const BLOG_ADMISSIONS = [
     ],
     sources: [
       source('Habitat programs: respond, reflect and judge phases run as ALGAL organisms with fixed budgets', 'textbutler', 'packages/textbutler/src/habitat-program.ts'),
-      source('Contact habitats: opt-in via host.json, per-conversation isolation, promotion rule, owner controls', 'textbutler', 'docs/textbutler/architecture.md'),
+      source('Contact habitats: default reply route, opt-in evolution via host.json, per-conversation isolation, promotion rule, owner controls', 'textbutler', 'docs/textbutler/architecture.md'),
       source('Habitat plan schema, default plan and promotion checks', 'textbutler', 'packages/textbutler/src/contact-habitat.ts'),
       source('Habitat host configuration (habitat.enabled)', 'textbutler', 'packages/textbutler/src/host-config.ts'),
+      source('Default habitat config: enabled with evolutionModel null', 'textbutler', 'packages/textbutler/src/default-reply-model.ts', '2026-09-28'),
       source('Tool-free, non-replayable evolution call', 'textbutler', 'packages/textbutler/src/habitat-evolution.ts'),
       source('Live reply runs, blinded replay, judge and run records', 'textbutler', 'packages/textbutler/src/habitat-agent.ts'),
       source('habitats CLI and the pause requirement', 'textbutler', 'packages/textbutler/src/owner-cli.ts'),
@@ -160,9 +163,9 @@ export const BLOG_ADMISSIONS = [
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 1, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: REVIEW,
+    review: LAUNCH_REVIEW,
     humanReview: null,
-    reassessOn: REASSESS_ON,
+    reassessOn: LAUNCH_REASSESS_ON,
     harmIfWrong: 'A reader could believe learned plans can change who receives messages or which tools run, or that the replay proves replies got better.',
     refreshTriggers: [
       '@hraness/algal pin change in package.json or ALGAL README change to how organisms, budgets or the open question are described',

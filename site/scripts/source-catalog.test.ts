@@ -23,7 +23,7 @@ async function source(path: string): Promise<string> {
 }
 
 describe('supported source presentation', () => {
-  test('dates all routes changed by the Textbutler rebrand', () => {
+  test('dates each static route by its last material change', () => {
     // Blog entries carry their own dates; scripts/blog.test.tsx covers them.
     const routeDates = sitemap().filter(({ url }) => !new URL(url).pathname.startsWith('/blog')).map(({ lastModified, url }) => {
       if (!(lastModified instanceof Date)) {

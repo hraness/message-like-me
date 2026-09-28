@@ -72,18 +72,18 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('new installs start paused');
   expect(html).toContain('iMessage, WhatsApp, and Beeper');
   expect(html).toContain(REPLY_WRITERS_SENTENCE);
-  expect(html).toContain('Becoming the default · in testing');
+  expect(html).toContain('In testing');
   expect(html).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
   expect(html).toContain('pbpaste | textbutler providers gateway-key');
   expect(html).toContain('Spending stops at $1 a day.');
   expect(html).toContain('If you choose one with a command, that choice wins.');
-  expect(html).toContain('running from source never writes AI replies.');
-  expect(html).toContain('no tools of its own');
+  expect(html).toContain('That copy writes the AI replies');
+  expect(html).toContain('can’t run commands on your Mac');
   expect(html).toContain('MIT licensed');
   expect(html).toContain('Telegram’s terms limit AI use of message content, so ask the person first.');
-  expect(html).toContain('No app to download');
+  expect(html).toContain('Built on your Mac');
   expect(html).toContain('Setup builds a small helper app on your Mac so macOS can grant iMessage access.');
-  expect(html).toContain('For 5 minutes after you write in a chat, requests there are skipped');
+  expect(html).toContain('It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.');
   expect(html).not.toContain(`Textbutler v${SOFTWARE_VERSION}`);
   expect(html).toContain('Installing them doesn’t install Textbutler or turn on automatic replies.');
   expect(html).toContain('No. textbutler.app is informational');
@@ -134,7 +134,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   // The marker is literal text with one space inside each brace.
   expect(html).toContain('🤖{ 👀 }');
-  expect(html).toContain('Example conversation. The people are made up.');
+  expect(html).toContain('Textbutler runs on Sam’s Mac; the people are made up.');
   expect(html).not.toContain('Happy to help');
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
@@ -145,7 +145,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   // The agent prompt is shown verbatim, copied by a button, never submitted.
   expect(html).toContain('Copy prompt');
   for (const line of AGENT_SETUP_PROMPT.split('\n')) expect(html).toContain(line.replaceAll("'", '&#x27;'));
-  expect(html).toContain('Leave every contact turned off and don&#x27;t send any messages.');
+  expect(html).toContain('Leave every chat turned off and don&#x27;t send any messages.');
 });
 
 test('binds Design Kit v0.24.0 to the portable Paper palette', async () => {
@@ -222,8 +222,8 @@ test('offers guided source setup without implying a released AI engine or a menu
     expect(content).toContain(GETTING_STARTED_URL);
     expect(content).toContain('bun run textbutler:install');
     expect(content).toMatch(/last reviewed version/u);
-    expect(content).toMatch(/running from source never writes AI replies/iu);
-    expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
+    expect(content).toMatch(/That copy writes the AI replies|AI replies come only from the local install/u);
+    if (content !== home) expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
     expect(content).toContain('https://github.com/hraness/xcb');
     expect(content).toContain('no window');
     expect(content).not.toMatch(/menu bar companion|menubar|prebuilt runner/iu);

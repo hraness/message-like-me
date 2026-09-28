@@ -44,7 +44,7 @@
   pointer-events: none;
 }
 .tb-hero-stage > * { position: relative; z-index: 1; }
-.tb-hero-stage__device { inline-size: min(100%, 24rem); }
+.tb-hero-stage__device { display: grid; gap: 0.75rem; inline-size: min(100%, 24rem); }
 .tb-callouts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -122,7 +122,16 @@
 .tb-fine code, .tb-pillars code, .tb-setup-extra code { font-family: var(--font-mono); font-size: 0.9em; }
 
 /* Diagrams exported by the diagram lane, swapped by theme. */
-.tb-diagram { margin: 0 0 2rem; }
+.tb-diagram { max-inline-size: 1040px; margin: 0 auto 2rem; }
+/* On phones the numbered steps right below already tell this story. */
+@media (max-width: 599px) { .tb-diagram--wide-only { display: none; } }
+.tb-switch { display: grid; gap: 1rem; margin-block-start: 1rem; }
+.tb-switch__buttons { display: inline-flex; justify-self: center; gap: 0.25rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.tb-switch__buttons button { padding: 0.45rem 1rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 500 0.875rem/1.2 var(--font-text); cursor: pointer; }
+.tb-switch__buttons button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.tb-switch__buttons button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tb-switch .tb-diagram { margin-block-end: 0; }
+.tb-switch__caption { margin: 0; color: var(--muted); font-size: 0.875rem; text-align: center; }
 .tb-diagram__picture { display: block; }
 .tb-diagram__img { display: block; inline-size: 100%; block-size: auto; border-radius: 16px; box-shadow: 0 0 0 1px var(--line); }
 .tb-diagram figcaption { margin-block-start: 0.75rem; color: var(--muted); font-size: 0.875rem; }
@@ -239,7 +248,7 @@
 .tb-setup-extra { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); margin-block-start: 2.5rem; }
 .tb-setup-extra h3 { margin: 0 0 0.4rem; font-size: 1.0625rem; font-weight: 600; }
 .tb-setup-extra > div > p { margin: 0 0 1rem; color: var(--muted); }
-.tb-tile { display: grid; align-content: start; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--hraness-marketing-radius, 0.625rem); background: var(--surface); }
+.tb-tile { align-self: start; display: grid; align-content: start; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--hraness-marketing-radius, 0.625rem); background: var(--surface); }
 .tb-tile p { margin: 0 !important; }
 
 /* Control. */
@@ -248,13 +257,17 @@
 .tb-pillars h3 { margin: 0; font-size: 1.125rem; font-weight: 600; }
 .tb-pillars p { margin: 0; line-height: 1.55; }
 .tb-proof { padding-inline-start: 0.85rem; border-inline-start: 2px solid var(--line); color: var(--muted); font-size: 0.875rem; }
-.tb-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin-block-start: 3rem; align-items: start; }
+.tb-examples { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 1.5rem; margin-block-start: 3rem; align-items: start; }
 .tb-example { display: grid; gap: 0.85rem; margin: 0; min-inline-size: 0; }
 .tb-example figcaption { display: grid; justify-items: start; gap: 0.5rem; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
 .tb-example figcaption strong { color: var(--foreground); }
 .tb-example--folder .workspace-example { margin: 0; }
-/* The folder tree sits in a narrow column; a smaller mono size keeps each comment on screen. */
-.tb-example--folder .workspace-example pre { padding: 0.9rem 0.75rem; font-size: 0.625rem; line-height: 1.75; }
+.tb-example--folder .workspace-example pre { padding: 0.9rem 0.75rem; font-size: 0.75rem; line-height: 1.7; white-space: pre-wrap; }
+/* Supporting phones keep a real iPhone's proportions and crop the empty bottom of the screen. */
+.tb-phone-crop { inline-size: min(100%, var(--crop-max, 22rem)); margin-inline: auto; aspect-ratio: 412 / var(--crop-h); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
+.tb-pause { justify-self: center; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font: 500 0.8125rem/1.2 var(--font-text); cursor: pointer; }
+.tb-pause:hover { color: var(--foreground); }
+.tb-pause:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .tb-example--solo { justify-items: center; }
 .tb-example--solo > :first-child { inline-size: min(100%, 22rem); }
 

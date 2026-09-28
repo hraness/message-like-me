@@ -1,35 +1,35 @@
 {
   "d1-one-message-wide": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. Textbutler sends 🤖{ 👀 } back to the phone right away, reads the room (your notes, 64 remembered notes, the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back to the phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. Textbutler sends 🤖{ 👀 } back through Ghostget right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through Ghostget to the phone."
   },
   "d1-one-message-narrow": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back to their phone, it reads the room (your notes, 64 remembered notes, the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back to their phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through Ghostget, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through Ghostget to their phone."
   },
   "d2-words-local-wide": {
     "title": "Where your words go: a local model",
-    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With Local selected, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. Becoming the default, in testing. Vercel AI Gateway, xcb and web search sit outside; web search is off unless you turn it on."
+    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
   },
   "d2-words-local-narrow": {
     "title": "Where your words go: a local model",
-    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With Local selected, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. Becoming the default, in testing. Vercel AI Gateway, xcb and web search sit outside; web search is off unless you turn it on."
+    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
   },
   "d2-words-key-wide": {
     "title": "Where your words go: your Gateway key",
-    "desc": "With Your key selected, Qwen 3.5 Flash writes the reply and one arrow leaves your Mac for Vercel AI Gateway. The conversation context goes to Vercel AI Gateway. Capped at $1 a day. Web search stays off unless you turn it on."
+    "desc": "With your key, Qwen 3.5 Flash writes the reply and one arrow leaves your Mac for Vercel AI Gateway. The conversation context goes to Vercel AI Gateway. Capped at $1 a day. Web search is used only with your key."
   },
   "d2-words-key-narrow": {
     "title": "Where your words go: your Gateway key",
-    "desc": "With Your key selected, Qwen 3.5 Flash writes the reply and one arrow leaves your Mac for Vercel AI Gateway. The conversation context goes to Vercel AI Gateway. Capped at $1 a day. Web search stays off unless you turn it on."
+    "desc": "With your key, Qwen 3.5 Flash writes the reply and one arrow leaves your Mac for Vercel AI Gateway. The conversation context goes to Vercel AI Gateway. Capped at $1 a day. Web search is used only with your key."
   },
   "d2-words-subscription-wide": {
     "title": "Where your words go: your subscription",
-    "desc": "With Your subscription selected, your Claude Code, Codex, or Devin account writes the reply and one arrow leaves your Mac through xcb. The conversation context goes to that account. The model gets no tools. Web search stays off unless you turn it on."
+    "desc": "With your subscription, your Claude Code, Codex, or Devin account writes the reply and one arrow leaves your Mac through xcb. The conversation context goes to that account. The model gets no tools. Web search is used only with your key."
   },
   "d2-words-subscription-narrow": {
     "title": "Where your words go: your subscription",
-    "desc": "With Your subscription selected, your Claude Code, Codex, or Devin account writes the reply and one arrow leaves your Mac through xcb. The conversation context goes to that account. The model gets no tools. Web search stays off unless you turn it on."
+    "desc": "With your subscription, your Claude Code, Codex, or Devin account writes the reply and one arrow leaves your Mac through xcb. The conversation context goes to that account. The model gets no tools. Web search is used only with your key."
   },
   "d3-who-does-what-wide": {
     "title": "Who does what",

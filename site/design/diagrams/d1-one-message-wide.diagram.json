@@ -61,7 +61,7 @@
       "width": 164,
       "height": 40,
       "radius": 20,
-      "tone": "purple",
+      "tone": "yellow",
       "strokeWidth": 0,
       "label": "Butler, what time…",
       "labelFontSize": 13,
@@ -283,18 +283,6 @@
       "type": "text",
       "x": 940,
       "y": 322,
-      "text": "64 remembered",
-      "fontSize": 14,
-      "weight": 400,
-      "tone": "orange",
-      "align": "start",
-      "width": 160
-    },
-    {
-      "id": "reads-2",
-      "type": "text",
-      "x": 940,
-      "y": 346,
       "text": "recent chat",
       "fontSize": 14,
       "weight": 400,
@@ -435,11 +423,10 @@
     {
       "id": "thin-eyes-back",
       "from": "eyes",
-      "to": "phone",
+      "to": "ghostget",
       "tone": "blue",
       "start": "left",
-      "end": "top",
-      "bend": 90
+      "end": "top"
     },
     {
       "id": "in-checks",
@@ -470,11 +457,20 @@
     {
       "id": "in-reply",
       "from": "reply",
+      "to": "ghostget",
+      "tone": "blue",
+      "start": "left",
+      "end": "bottom"
+    },
+    {
+      "id": "out-ghostget",
+      "from": "ghostget",
       "to": "phone",
       "tone": "blue",
       "start": "left",
       "end": "right",
-      "endPosition": 0.92
+      "startPosition": 0.78,
+      "endPosition": 0.7
     }
   ]
 }

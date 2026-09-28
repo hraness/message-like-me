@@ -62,7 +62,7 @@ export function MessagesScreen({
   const playing = phase === 'playing';
 
   return (
-    <div className={styles.messages} data-app={app} data-phase={phase}>
+    <div className={styles.messages} data-app={app} data-phase={phase} data-via={conversation.via ? true : undefined}>
       <div className={styles.thread}>
         <div className={styles.threadInner}>
           {rows.map(({ item, index, typing }, rowIndex) => {

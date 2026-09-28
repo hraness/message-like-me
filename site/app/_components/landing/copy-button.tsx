@@ -18,11 +18,16 @@ export function CopyButton({ text, label = 'Copy' }: Readonly<{ text: string; la
       className="tb-copy"
       data-state={state}
       onClick={() => {
+        // Insecure pages and some in-app browsers have no clipboard API.
+        if (typeof navigator.clipboard?.writeText !== 'function') {
+          setState('failed');
+          return;
+        }
         void navigator.clipboard.writeText(text).then(() => setState('copied'), () => setState('failed'));
       }}
       type="button"
     >
-      <span aria-hidden="true" className="tb-copy__glyph">{state === 'copied' ? '✓' : '⧉'}</span>
+      <svg aria-hidden="true" className="tb-copy__glyph" height="14" viewBox="0 0 14 14" width="14">{state === 'copied' ? <path d="m2.5 7.5 3 3 6-7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" /> : <><rect fill="none" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" width="8" x="4.5" y="4.5" /><path d="M9.5 2.5h-6a1 1 0 0 0-1 1v6" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" /></>}</svg>
       <span>{state === 'copied' ? 'Copied' : state === 'failed' ? 'Select and copy' : label}</span>
       <span aria-live="polite" className="tb-visually-hidden">{state === 'copied' ? 'Prompt copied to the clipboard.' : ''}</span>
     </button>

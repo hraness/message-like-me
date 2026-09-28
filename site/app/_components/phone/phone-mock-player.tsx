@@ -11,6 +11,8 @@ export interface PhoneMockPlayerProps extends Omit<PhoneMockProps, 'visibleCount
   readonly holdMs?: number;
   /** Play once and stay on the final frame instead of looping. */
   readonly once?: boolean;
+  /** Render a Pause/Play button under the phone (WCAG 2.2.2). */
+  readonly controls?: boolean;
 }
 
 interface PlaybackState {
@@ -52,10 +54,11 @@ export function playbackSteps(conversation: Conversation, perspective: Perspecti
  * and play the messages in with iOS-like timing. Under `prefers-reduced-motion`
  * it never plays and shows the final frame. The phone's size never changes.
  */
-export function PhoneMockPlayer({ holdMs = 2500, once = false, ...props }: PhoneMockPlayerProps) {
+export function PhoneMockPlayer({ holdMs = 2500, once = false, controls = false, ...props }: PhoneMockPlayerProps) {
   const { conversation, perspective = 'owner' } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<PlaybackState>({ phase: 'final' });
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     const node = ref.current;
@@ -106,13 +109,13 @@ export function PhoneMockPlayer({ holdMs = 2500, once = false, ...props }: Phone
       });
     }
     const start = () => {
-      if (running || motion.matches || !visible || document.hidden) return;
+      if (running || paused || motion.matches || !visible || document.hidden) return;
       running = true;
       // The finished conversation is already on screen: hold it briefly, then loop.
       later(Math.min(holdMs, 1600), cycle);
     };
     const sync = () => {
-      if (motion.matches || !visible || document.hidden) {
+      if (paused || motion.matches || !visible || document.hidden) {
         if (running) stop();
       } else start();
     };
@@ -125,6 +128,7 @@ export function PhoneMockPlayer({ holdMs = 2500, once = false, ...props }: Phone
       { threshold: 0.45 },
     );
     observer.observe(node);
+    if (paused) stop();
     motion.addEventListener('change', sync);
     document.addEventListener('visibilitychange', sync);
     return () => {
@@ -134,7 +138,16 @@ export function PhoneMockPlayer({ holdMs = 2500, once = false, ...props }: Phone
       running = false;
       if (timer) clearTimeout(timer);
     };
-  }, [conversation, perspective, holdMs, once]);
+  }, [conversation, perspective, holdMs, once, paused]);
 
-  return <PhoneMock {...props} ref={ref} visibleCount={state.visibleCount} typingId={state.typingId} phase={state.phase} />;
+  const phone = <PhoneMock {...props} ref={ref} visibleCount={state.visibleCount} typingId={state.typingId} phase={state.phase} />;
+  if (!controls) return phone;
+  return (
+    <>
+      {phone}
+      <button aria-pressed={paused} className="tb-pause" onClick={() => setPaused((value) => !value)} type="button">
+        Pause animation
+      </button>
+    </>
+  );
 }

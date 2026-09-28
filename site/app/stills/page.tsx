@@ -50,7 +50,7 @@ function SocialCard({ capture, theme }: Readonly<{ capture: string; theme: keyof
       </div>
       <div style={{ position: 'absolute', insetBlockStart: 168, insetInlineStart: 80, inlineSize: 620 }}>
         <p style={{ margin: 0, fontSize: 104, fontWeight: 600, lineHeight: 0.98, letterSpacing: '-0.035em' }}>AI in your messages.</p>
-        <p style={{ margin: '28px 0 0', color: OG.muted, fontSize: 27, lineHeight: 1.38, maxInlineSize: 580, textWrap: 'balance' }}>Say “butler” in a chat you’ve turned on. A clearly marked assistant answers.</p>
+        <p style={{ margin: '28px 0 0', color: OG.muted, fontSize: 27, lineHeight: 1.38, maxInlineSize: 580, textWrap: 'balance' }}>When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you.</p>
       </div>
       <div style={{ position: 'absolute', insetBlockEnd: 56, insetInlineStart: 80, display: 'flex', gap: 28, color: OG.muted, fontSize: 22 }}>
         <span style={{ color: OG.accent, fontWeight: 600 }}>textbutler.app</span>

@@ -13,6 +13,7 @@ import Link from 'next/link';
 
 import { CopyButton } from './_components/landing/copy-button';
 import { DiagramFigure } from './_components/landing/diagram-figure';
+import { DiagramSwitch } from './_components/landing/diagram-switch';
 import { LaunchVideo } from './_components/landing/launch-video';
 import { PhoneSlot } from './_components/landing/phone-slot';
 import { DIAGRAMS, LAUNCH_ASSETS, LAUNCH_FILM_SECONDS, launchFilmSources, publicAssetExists } from './_components/landing/public-assets';
@@ -78,7 +79,9 @@ const related = (id: PortfolioProductId, name: string) => {
 
 const HERO_BOUNDARY = `${SITE_STATUS_LABEL} · macOS · iMessage, WhatsApp, and Beeper · runs from source · new installs start paused`;
 
-const HOME_QUESTIONS = [
+type HomeQuestion = Readonly<{ question: string; answer: string; link?: Readonly<{ href: string; label: string }> }>;
+
+const HOME_QUESTIONS: readonly HomeQuestion[] = [
   {
     question: 'Does it read all my messages?',
     answer: 'It acts only in the one-to-one chats you turn on, and only when asked. Your notes about each person are plain files on your Mac. With a local model, the reply is written on your Mac too.',
@@ -89,11 +92,15 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'Which AI writes the replies?',
-    answer: `${REPLY_WRITERS_SENTENCE} ${REPLY_WRITERS_PRECEDENCE} Through xcb, the model gets no tools of its own. The Claude API route isn’t available in any build of this repository.`,
+    answer: `${REPLY_WRITERS_SENTENCE} ${REPLY_WRITERS_PRECEDENCE} Through xcb, the model can’t run commands on your Mac.`,
+  },
+  {
+    question: 'What does it cost?',
+    answer: 'Textbutler is free and open source. A local model costs nothing to run. With a Gateway key, Vercel bills you, and Textbutler stops spending at $1 a day. With a subscription, it uses the plan you already pay for.',
   },
   {
     question: 'Do I need Ollama?',
-    answer: 'No. Ollama is one of three options. If you already run it with qwen3:4b-instruct-2507-q4_K_M pulled, Textbutler finds it on its own. Otherwise paste a Vercel AI Gateway key or connect your Claude Code, Codex, or Devin subscription through xcb.',
+    answer: 'No. Ollama is one of three options. If you already run it with qwen3:4b-instruct-2507-q4_K_M pulled and no Gateway key is saved, Textbutler picks it up when its background service starts, or you can choose it with textbutler providers local. Otherwise paste a Vercel AI Gateway key or connect your Claude Code, Codex, or Devin subscription through xcb.',
   },
   {
     question: 'Does it work on my iPhone?',
@@ -105,7 +112,12 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'Can I read a reply before it goes out?',
-    answer: 'Yes. Ask for a draft instead of an automatic reply: replies suggest writes one, replies show prints every word and who it goes to, and replies send DRAFT DIGEST sends exactly what you read. Drafts expire after 15 minutes. You can also type your own reply from the guided terminal.',
+    answer: 'Yes. Ask for a draft instead of an automatic reply. The draft shows every word and who it goes to, and it sends exactly that only when you confirm it with its review code. Drafts expire after 15 minutes. You can also type your own reply from the guided terminal.',
+  },
+  {
+    question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
+    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. Textbutler answers only the people you turn on, when they ask, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands on your Mac. If you only want suggestions, the built-in features are simpler.',
+    link: { href: '/compare/ghostreply', label: 'Textbutler compared with GhostReply' },
   },
   {
     question: 'What about Telegram and Signal?',
@@ -119,10 +131,10 @@ const HOME_QUESTIONS = [
     question: 'What happened to Message Like Me?',
     answer: 'Textbutler replaced it. Its history readers and methodology are still available as legacy tools on the legacy history page. Installing them doesn’t install Textbutler or turn on automatic replies.',
   },
-] as const;
+];
 
 function Chip({ children }: Readonly<{ children: SupportChip }>) {
-  const tone = children === 'Works today' || children === 'Default today'
+  const tone = children === 'Works today'
     ? 'ok'
     : children === 'Not supported' ? 'off' : 'caution';
   return <span className="tb-chip" data-tone={tone}>{children}</span>;
@@ -146,13 +158,13 @@ function HeroStage() {
       <div className="tb-hero-stage__device">
         <PhoneSlot conversation={heroConversation} maxWidth={380} play />
       </div>
-      <ol aria-label="What the example shows" className="tb-callouts">
-        <li><span aria-hidden="true">1</span>“butler” asks for it</li>
-        <li><span aria-hidden="true">2</span>🤖{'{ 👀 }'} means it’s on it</li>
-        <li><span aria-hidden="true">3</span>Answered from your chat history</li>
-        <li><span aria-hidden="true">4</span>Always marked</li>
-      </ol>
-      <figcaption className="tb-caption">Example conversation. The people are made up.</figcaption>
+      <ul aria-label="What the example shows" className="tb-callouts">
+        <li>Maya says “butler”</li>
+        <li>🤖{'{ 👀 }'} means it’s on it</li>
+        <li>The answer comes from this chat</li>
+        <li>Every butler message is marked</li>
+      </ul>
+      <figcaption className="tb-caption">Example conversation on Sam’s iPhone. Textbutler runs on Sam’s Mac; the people are made up.</figcaption>
     </figure>
   );
 }
@@ -188,7 +200,7 @@ export default function Home() {
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
             name="Textbutler"
-            summary="Say “butler” in a chat you’ve turned on, and a clearly marked assistant answers from your Mac. Your coding agent can set it up."
+            summary="When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you."
           />
 
           <section aria-labelledby="status-title" className="tb-status-band" id="status">
@@ -197,7 +209,7 @@ export default function Home() {
           </section>
 
           <MarketingSection heading="From “butler” to a marked reply." headingId="how-title" id="how-it-works" label="How it works" summary="Most of the time, it does nothing. When someone you’ve turned on asks for it, it says so right away, reads your notes and your chat, and answers in a bubble nobody could mistake for you.">
-            <DiagramFigure alt="One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." name={DIAGRAMS.oneMessage} />
+            <DiagramFigure alt="One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." className="tb-diagram--wide-only" name={DIAGRAMS.oneMessage} />
             <MarketingFlow ariaLabel="What happens to one message" steps={HOW_IT_WORKS_STEPS} />
             <dl className="tb-modes" aria-label="When it answers">
               {REPLY_MODES.map((mode) => (
@@ -231,7 +243,7 @@ export default function Home() {
                 <h3>Your Mac</h3>
                 <ul className="tb-support__list">
                   <li><div className="tb-support__head"><strong>Mac only</strong></div><p>It runs quietly in the background, with no window and no menu bar icon. There’s no iPhone, Windows, or Linux version.</p></li>
-                  <li><div className="tb-support__head"><strong>No app to download</strong></div><p>Setup builds a small helper app on your Mac so macOS can grant iMessage access. The helper has no window.</p></li>
+                  <li><div className="tb-support__head"><strong>Built on your Mac</strong></div><p>Setup builds a small helper app on your Mac so macOS can grant iMessage access. The helper has no window.</p></li>
                   <li><div className="tb-support__head"><strong>Open source</strong></div><p>MIT licensed, and it runs from source with Bun.</p></li>
                   <li><div className="tb-support__head"><strong>Nothing sent to this site</strong></div><p>This website never receives your messages.</p></li>
                 </ul>
@@ -257,11 +269,15 @@ export default function Home() {
                 </li>
               ))}
             </ol>
-            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} AI replies come from the local copy that <code>bun run textbutler:install</code> builds. It checks its own source against the last reviewed version first, and running from source never writes AI replies. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
-            <DiagramFigure alt="Where your words go, with a local model selected: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Outside, Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only if you turn it on." name={DIAGRAMS.whereWordsGo} />
+            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} Setup installs a local copy of Textbutler on your Mac (<code>bun run textbutler:install</code>). That copy writes the AI replies, and it refuses to build if its code doesn’t match the last reviewed version. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
+            <DiagramSwitch label="Show where your words go with" options={[
+              { label: 'Local', caption: 'Local model: the reply is written on your Mac. In testing.', panel: <DiagramFigure alt="Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only with your key." name={DIAGRAMS.whereWordsGo} /> },
+              { label: 'Your key', caption: 'Your Gateway key: the conversation context goes to Vercel AI Gateway, and spending stops at $1 a day.', panel: <DiagramFigure alt="Where your words go with your Vercel AI Gateway key: Qwen 3.5 Flash writes the reply, and one arrow leaves your Mac for Vercel AI Gateway." name={DIAGRAMS.whereWordsGoKey} /> },
+              { label: 'Your subscription', caption: 'Your subscription: the conversation context goes through xcb to your Claude Code, Codex, or Devin account.', panel: <DiagramFigure alt="Where your words go with your subscription: your Claude Code, Codex, or Devin account writes the reply, and one arrow leaves your Mac through xcb." name={DIAGRAMS.whereWordsGoSubscription} /> },
+            ]} />
           </MarketingSection>
 
-          <MarketingSection heading="Your agent does the setup. You flip two switches." headingId="setup-title" id="setup" label="Setup" summary="Textbutler has no installer and no app store page. Paste one prompt into the coding agent you already use. It follows the setup guide and runs the checks, and it stops for the few things macOS makes you do yourself.">
+          <MarketingSection heading="Your agent does the setup. You approve what only you can." headingId="setup-title" id="setup" label="Setup" summary="Textbutler has no installer and no app store page. Paste one prompt into the coding agent you already use. It follows the setup guide and runs the checks, and it stops for the few things macOS makes you do yourself.">
             <ol className="tb-setup-steps">
               {SETUP_STEPS.map((step) => (
                 <li key={step.label}><h3>{step.label}</h3><p>{step.detail}</p></li>
@@ -301,34 +317,34 @@ export default function Home() {
               <article>
                 <h3>It never pretends to be you.</h3>
                 <p>Everything it sends is wrapped in <code>{'🤖{ }'}</code>, including the 👀.</p>
-                <p className="tb-proof">The marker is on by default. You can remove it only per person, and never in your own chat. New installs start paused, every person starts off, and setup never sends a message. <code>pause</code> stops everything, and <code>contacts disable</code> turns one person off.</p>
+                <p className="tb-proof">The marker is on by default. You can remove it only per person, and never in your own chat. New installs start paused, every person starts off, and setup never sends a message. <code>textbutler pause</code> stops everything, and <code>textbutler contacts disable</code> turns one person off.</p>
               </article>
               <article>
                 <h3>It runs on your Mac.</h3>
                 <p>No server of ours sits in the middle. Your notes about each person are plain files you can read and edit. With a local model, the reply is written on your Mac too (in testing).</p>
-                <p className="tb-proof">Gateway spending stops at $1 a day. Web search is off by default and blocks queries that reuse your private wording. Through <a href={XCB_URL}>xcb</a>, the model gets no tools of its own.</p>
+                <p className="tb-proof">Gateway spending stops at $1 a day. Web search needs a saved Gateway key, and it refuses any search that reuses words from your private messages. Through <a href={XCB_URL}>xcb</a>, the model can’t run commands on your Mac.</p>
               </article>
             </div>
             <div className="tb-examples">
               <figure className="tb-example">
-                <PhoneSlot conversation={staysOutConversation} screenHeight={540} />
+                <PhoneSlot conversation={staysOutConversation} crop={560} />
                 <figcaption>
-                  <span className="tb-chip" data-tone="caution">WhatsApp · lightly tested</span>
-                  <span>Jordan asks for the butler right after Sam wrote, so it stays out of it. For 5 minutes after you write in a chat, requests there are skipped, not saved for later.</span>
+                  <span className="tb-chip" data-tone="caution">WhatsApp · not yet tested live</span>
+                  <span>Jordan asks right after Sam wrote, so the butler stays out of it. It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.</span>
                 </figcaption>
               </figure>
               <figure className="tb-example">
-                <PhoneSlot conversation={boundariesConversation} screenHeight={540} />
+                <PhoneSlot conversation={boundariesConversation} crop={560} />
                 <figcaption>
                   <span className="tb-chip" data-tone="caution">via Beeper · text only</span>
                   <span>You set what’s off-limits for each person. It keeps to it.</span>
                 </figcaption>
               </figure>
               <figure className="tb-example tb-example--folder">
-                <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md     your standing instructions\n├── ABOUT.md      what matters in this relationship\n├── MEMORY.md     dated notes, with sources\n├── STYLE.md      how it talks in this chat\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre></div>
+                <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md   standing instructions\n├── ABOUT.md    what matters here\n├── MEMORY.md   dated, sourced notes\n├── STYLE.md    how it talks here\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre></div>
                 <figcaption>
                   <strong>Each person gets their own folder.</strong>
-                  <span>How you talk, what matters, what’s off-limits, and up to 64 remembered notes, in files you can open. Your settings and sign-ins live elsewhere, where the butler can’t edit them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></span>
+                  <span>Your notes on how you talk, what matters, and what’s off-limits, in plain files you can edit. Your settings and sign-ins live elsewhere, where the butler can’t edit them. Optional learning (off by default; it needs a Claude Code subscription through xcb) can remember up to 64 sourced notes and adjust tone per chat; <code>habitats show</code> lists them and <code>habitats memory-clear</code> removes them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></span>
                 </figcaption>
               </figure>
             </div>
@@ -336,12 +352,12 @@ export default function Home() {
 
           <MarketingSection heading="Ask it yourself" headingId="self-title" id="ask-yourself" label="Your own chat" layout="split" summary="Say “butler” in your own chat and it works for you, searching that chat’s history. The marker can’t be turned off here.">
             <figure className="tb-example tb-example--solo">
-              <PhoneSlot conversation={askYourselfConversation} maxWidth={340} screenHeight={600} />
+              <PhoneSlot conversation={askYourselfConversation} crop={640} maxWidth={340} />
               <figcaption className="tb-caption">Example conversation. The details are made up.</figcaption>
             </figure>
           </MarketingSection>
 
-          <MarketingQuestionList className="mlm-marketing-questions" heading="Questions" headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, question }) => ({ answer: <p>{answer}</p>, question }))} />
+          <MarketingQuestionList className="mlm-marketing-questions" heading="Questions" headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, link, question }) => ({ answer: link ? <><p>{answer}</p><p><Link href={link.href}>{link.label}</Link></p></> : <p>{answer}</p>, question }))} />
           <MarketingRelated heading="From the same workshop" headingId="related-title" label="Related" summary="More Hraness tools that work on your Mac and keep the agent’s access limited." groups={[
             {
               heading: 'The personal apps',
@@ -355,7 +371,7 @@ export default function Home() {
               items: [related('wrench', 'Ghostget'), related('xcb', 'xcb'), related('aicharts', 'AI Charts')],
             },
           ]} />
-          <MarketingCallToAction actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading="Start with one person" headingId="closing-title" id="closing" summary="Paste the prompt, flip the two switches, and turn on someone who knows you’re trying it. Everyone else stays off." />
+          <MarketingCallToAction actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading="Start with one person" headingId="closing-title" id="closing" summary="Paste the prompt, approve what your Mac asks for, and turn on someone who knows you’re trying it. Everyone else stays off." />
           <p className="legacy-note">Looking for the Message Like Me history tools? <Link href="/sources">View legacy history sources.</Link></p>
         </MarketingPage>
       </main>
