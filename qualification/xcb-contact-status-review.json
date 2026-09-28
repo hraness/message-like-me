@@ -1,0 +1,36 @@
+{
+ "version": 1,
+ "scope": "Owner-facing contact status projection for paused, uncertain and stale shadow artifacts. The habitat.read owner view carries a digest-bound algal.host-lifecycle.v1 record per contact plus a separate shadow staleness field; the projection is strictly read-only and cannot reach a send path.",
+ "baseCommit": "cd4e8b8532e44c0f79ebc8fde826a017b395bae3",
+ "motivation": "Wave 3 host-contract adoption: give the owner one honest per-contact status record that reports suspended lanes, unresolved journaled send intents and stale staged artifacts in the shared lifecycle vocabulary, without adding send, retry or mutation authority.",
+ "design": {
+  "projection": "contact-status.ts: projectContactStatus reads contact settings, the journaled habitat snapshot and the run journal to build an algal.host-lifecycle.v1 record via buildHostLifecycle. Open send intents or uncertain habitat checkpoints map to uncertain with a retained pendingIntent (the journaled plan digest, else a canonical digest of the journaled intent); paused or disabled lanes map to suspended; the latest terminal run maps to settled or failed; retained work maps to running, else ready.",
+  "staleness": "The shared vocabulary has no stale state, so shadow staleness is reported beside the lifecycle record: shadow.status, shadow.stale, artifact/archive/previous digests, staged and current owner revisions and denied count. activeForReplies stays false; staged artifacts remain inert.",
+  "authority": "permittedOperatorActions lists only what the owner can already do through existing control surfaces: inspect, suspend or resume, reconcile only while a journaled send intent is open, rollback only with a retained shadow artifact or ancestor, stop only while the contact is enabled. The record grants no authority and an uncertain record means reconcile, never retry.",
+  "surface": "control-service adds the projection to the habitat.read view (textbutler habitats show CONTACT). No new command, transport or storage surface; journal and habitat state are only read.",
+  "dependency": "@hraness/algal moves to the frozen host-contract commit 9922202a2da45bb1f7e0db82c0be5a1c6770c21b; contact-status.ts is bundled but out of the reviewed inventory, like the preceding lanes."
+ },
+ "independentReview": {
+  "reviewer": "none",
+  "method": "Implementer self-review of the full diff only.",
+  "result": "Pending independent review."
+ },
+ "focusedValidation": {
+  "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/contact-status.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/owner-cli.test.ts packages/textbutler/src/cli-golden.test.ts scripts/xcb-integration-admission.test.ts",
+  "toolchain": "Bun 1.3.14",
+  "result": {
+   "exitCode": 0,
+   "passed": 81,
+   "failed": 0,
+   "files": 6,
+   "snapshots": 3,
+   "assertions": 1355
+  },
+  "logSha256": "3b43e2f0dde29d6b9144bc2287a023c31d5a87c0844b058302eb1efeec77b51b"
+ },
+ "limitations": [
+  "The status record is a read-only projection: it cannot send, retry, mutate journal or habitat state, or grant authority; reconcile remains the only resolution of an uncertain record.",
+  "Stale shadow artifacts stay inert for reply selection; staleness is reported as metadata beside the lifecycle record because the shared vocabulary has no stale state.",
+  "This is reviewed source composition with focused synthetic regression evidence, not a live provider qualification, release signature or proof of message delivery."
+ ]
+}
