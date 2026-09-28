@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "scope": "support-foundation 0.6.0 adoption: devDependency pin \u2192 8bb514d (v0.6.0) in package.json/bun.lock; support-runtime-policy.ts digests and rebuilt dist/support-runtime.js rebound; docs/support-foundation-notice.md names the new version/commit; help wiring \u2014 supportAdvancedHelp() block under textbutler help advanced, one-line supportHelpLine() in root help (packages/textbutler/src/cli-help.ts), and the standalone messagelikeme HELP collapse in src/command-input.ts.",
+  "scope": "Textbutler 0.8.22 version bump: package.json version field (receipt-covered) alongside site/package.json, src/version.ts, site/app/_lib/site.ts, README install line, regenerated site/app/readme.generated.ts, and the new CHANGELOG.md section. No product-behavior change.",
   "toolchain": "Bun 1.3.14",
   "command": "bun run check",
   "result": {
     "exitCode": 0,
-    "evidence": "Post-rebind bun run check captured in xcb-textbutler-v1-current-check.log exits 0 \u2014 aggregate phase 492/492 across 55 files and Textbutler phase 754/754 across 58 files, including the isolated-installation admission test against this rebound receipt. The earlier pre-rebind run stopped at the documented admission gate only (491/492). check:standalone exits 0 against the new pin, reviewed dist digests and rebuilt support-runtime bundle; cli-golden snapshots regenerated for the advanced topic's new Support for agents block; support.test.ts passes unchanged; live entrypoint smoke: protocol --json returns the unchanged v1 contract, status --json returns JSON, bare status returns the human line. Required CI on the PR head is the final gate."
+    "evidence": "Post-rebind bun run check captured in xcb-textbutler-v1-current-check.log exits 0 \u2014 aggregate phase 493/493 across 55 files and Textbutler phase 754/754 across 58 files, including the isolated-installation admission test against this rebound receipt. The earlier pre-rebind run stopped at the documented admission gate plus one 5s-timeout load flake in the workflow-control-epoch suite (passes standalone and in this run). changelogSection() parses the new 0.8.22 section; site bun run test passes 69/69 including the release-identity and source-catalog pins updated for 0.8.22. Required CI on the PR head is the final gate."
   },
   "sourceInventoryCount": 43,
-  "sourceDigest": "0360812e372cfc81218f5db0b14a31022f061396c2b6795e6317b6295e11fb22",
+  "sourceDigest": "dc4190f005400b6329291b8852ea6330fb79855f257697d74e992b2fbeb701f2",
   "sourceSha256": {
     "bun.lock": "fc621e46e59a6ccd0b34c619c0d02888d347a78d3d2b1555fd53bc108dbc03f4",
-    "package.json": "c032f1bc1cdfdb9bb42c1d68c3af09e28c1b1d93cf7573e4be8488c867c2bcb7",
+    "package.json": "aaeb707f644466ee2fa48949dd85a538c405094a3a19f7b1354c73f9d7a447a0",
     "packages/control/src/index.ts": "4947b0af05a5f7129a55187b4c8b49d939712b24fc4c4c2b2c2245d62c768c90",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
