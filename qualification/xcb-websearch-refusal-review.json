@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "scope": "Return a privacy-refused public web search to the model as a bounded tool result instead of failing the reply run, so the model can retry with fresh wording.",
+ "baseCommit": "cd4e8b8",
+ "motivation": "Live verification found both web-search probes failed after the disclosure acknowledgment: the model naturally copies topical words from the triggering message (\"top nasa headline\", \"space news this week\"), admitPublicQuery correctly refused the shared n-grams, and the thrown error ended the run. A refused query never left the machine, but the person got an ack then silence.",
+ "design": {
+  "feedback": "admitPublicQuery remains the mechanical egress gate; a refused query is now a tool result {error:\"query-not-admitted\"} fed back to the model inside the same reply run, which may compose a fresh public query.",
+  "budget": "Only executed searches consume the one-search inventory: web-search stays listed until an admitted query actually calls the provider; the dispatch loop and its two-tool bound are unchanged.",
+  "guidance": "The model-facing rule now states the mechanical constraint (no shared two- or three-word span with any private conversation text) and that a refusal returns query-not-admitted for a fresh phrasing.",
+  "failures": "A disabled plan still throws Web search is disabled; an unavailable tool kind still throws; a model that never settles still exhausts the existing dispatch bound."
+ },
+ "independentReview": {
+  "reviewer": "none",
+  "method": "Implementer self-review of the full diff only.",
+  "result": "Pending independent review."
+ },
+ "focusedValidation": {
+  "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/habitat-agent.test.ts",
+  "toolchain": "Bun 1.3.14",
+  "result": {
+   "exitCode": 0,
+   "passed": 43,
+   "failed": 0,
+   "files": 1,
+   "assertions": 345
+  },
+  "logSha256": "24cdd6eebdef84064209ee81b1bf6062504b2bd84f554c5534768e4bf28ae32a"
+ }
+}

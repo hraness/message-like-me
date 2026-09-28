@@ -186,13 +186,14 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     const exposedMemory = new Map<string, string>();
     const files = (await workspace.list()).filter(file => /^(?:outbox|attachments)\//u.test(file.path)).map(file => file.path).slice(-32);
     const privateCorpus = [request.event.text, plan.guidance, ...Object.values(plan.soulCore ?? {}), ...(state.memory ?? []).map(entry => entry.text), ...Object.values(guidance), ...history.map(message => message.text)].join("\n");
+    let executedSearches = 0;
     for (let step = 0; step < 3; step++) {
       assertCurrent();
       const availableTools = step === 2 ? [] : [
         ...(plan.memorySearch !== false ? ["memory-search"] : []),
         ...(plan.javascript === true ? ["javascript"] : []),
         ...(plan.repoAccess === true && ports.repos !== undefined ? ["repo-sync", "repo-read", "repo-search"] : []),
-        ...(plan.webSearch && ports.driver.config.kind === "gateway" && !tools.some(tool => tool.kind === "web-search") ? ["web-search"] : []),
+        ...(plan.webSearch && ports.driver.config.kind === "gateway" && executedSearches === 0 ? ["web-search"] : []),
         ...(plan.memeSearch ? ["meme-search", ...(admittedMemes.size && capabilities.includes("attachment") ? ["meme-image"] : [])] : []),
         // Older plans carry no flag: history search defaults on for the
         // owner's self chat and off for everyone else.
@@ -201,7 +202,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       const context = { guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), invocation: request.invocation ?? "inferred", capabilities: [...capabilities], files, repos, results, outputContract,
         allowedActions: actionContract.filter(action => capabilities.includes(action.kind)),
         tools: availableTools,
-        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's full history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers or copied private messages.` };
+        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's full history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers and must share no two- or three-word span with any private conversation text; a refused query returns query-not-admitted, so compose the public search in fresh words.` };
       fitMemory(context, plan, 32_768);
       memory.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
       const run = await executeHabitatProgram({ phase: "respond", plan, context: context as JsonValue, executor: ports.driver.executor(`${request.runId}-driver-${step}`), signal });
@@ -231,8 +232,16 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
           found.matches.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
           results.push({ tool: tool.kind, ...found });
         } else if (tool.kind === "web-search") {
-          if (!plan.webSearch || !admitPublicQuery(tool.query, privateCorpus)) throw Error("Public search query is not admitted");
-          results.push({ tool: tool.kind, result: await ports.driver.search(`${request.runId}-search-${step}`, tool.query, signal) });
+          if (!plan.webSearch) throw Error("Web search is disabled for this plan");
+          if (admitPublicQuery(tool.query, privateCorpus)) {
+            executedSearches++;
+            results.push({ tool: tool.kind, result: await ports.driver.search(`${request.runId}-search-${step}`, tool.query, signal) });
+          } else {
+            // A refused query never left the machine, so it does not consume
+            // the one-search bound: return the refusal and let the model try
+            // a fresh public phrasing within the same tool budget.
+            results.push({ tool: tool.kind, result: { error: "query-not-admitted", detail: "The query shares words or identifier shapes with private conversation text. Compose the public search in fresh words." } });
+          }
         } else {
           if (!plan.memeSearch) throw Error("Meme tools are disabled for this plan");
           if (tool.kind === "meme-search") {
