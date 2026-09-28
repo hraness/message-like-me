@@ -1,4 +1,8 @@
+import { supportAdvancedHelp, supportHelpLine } from "@hraness/support-foundation/node";
 import { TEXTBUTLER_VERSION } from "./version.ts";
+
+/** UTF-8 pins the shared support copy the way the rest of static help reads. */
+const HELP_ENV = { LANG: "en_US.UTF-8" } as const;
 
 /** Registry one-line description (portfolio registry, packages/textbutler/package.json). */
 export const TEXTBUTLER_DESCRIPTION = "Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats\nyou choose.";
@@ -58,7 +62,7 @@ Options
 Topics: setup, contacts, replies, messaging, providers, daemon, menubar,
 permissions, advanced. Most commands print JSON so agents can read them.
 
-Optional support: textbutler support · Turn off: HRANESS_SUPPORT=off`;
+${supportHelpLine({ command: ["textbutler"], env: HELP_ENV })}`;
 
 interface Topic { usage: string; summary: string; body?: string; example?: string }
 
@@ -183,7 +187,9 @@ textbutler doctor to check both.` },
   habitats <command>         A chat's reply style, memory and budget
   messages <command>         JSON commands for agents (help messages)
   daemon run                 Run the service in this terminal
-  support                    Optional ways to support Textbutler` },
+  support                    Optional ways to support Textbutler
+
+${supportAdvancedHelp({ command: ["textbutler"], env: HELP_ENV })}` },
 };
 TOPICS.suggest = TOPICS.replies!;
 TOPICS.version = { usage: "textbutler --version", summary: "Show the version." };

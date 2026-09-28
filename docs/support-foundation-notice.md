@@ -1,7 +1,7 @@
 # Shared support protocol notice
 
-The CLI includes `@hraness/support-foundation` 0.3.0 from reviewed commit
-`2d034b357680353574411217d68b02b6755b07ed` of
+The CLI includes `@hraness/support-foundation` 0.6.0 from reviewed commit
+`8bb514d24b79dc3f305390700ae312cab88e7ad2` of
 [Hraness Support Foundation](https://github.com/hraness/support-foundation).
 Its code is bundled only for the command-line support flow; public SDK exports do not include it.
 
