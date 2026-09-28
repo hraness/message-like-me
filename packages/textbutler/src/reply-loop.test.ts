@@ -132,6 +132,28 @@ test("the poll yields the provider lane to an in-flight send, for a bounded wind
   finish(); await f.loop.idle(); expect(f.sent).toHaveLength(1);
   await f.loop.tick(); expect(f.pollSetCalls()).toBe(polls + 2);
 });
+test("messages activity wakes automatic polling immediately; a quiet database waits for the heartbeat", async () => {
+  let wake!: (changed: boolean) => void;
+  const waits: number[] = [];
+  const client = createGhostgetAutomationClient(async method => {
+    if (method === "pollSet") return { results: [] };
+    throw new Error(`Unexpected fixture operation ${method}`);
+  });
+  const journal = RunJournal.memory(), root = await realpath(await mkdtemp(join(tmpdir(), "butler-activity-")));
+  const settings: Settings = { schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [] };
+  const loop = await createDaemonReplyLoop({ client, hooks: new Hooks(), agent: { async qualified() { return true; }, async classify() { return {}; }, async compose() { return {}; } },
+    activity: { wait: ms => { waits.push(ms); return new Promise<boolean>(resolve => { wake = resolve; }); } },
+    service: { dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: {}, grants: {} }), runJournal: () => journal,
+      delegatedGrant: async () => null, onSettingsChanged: () => () => {}, onHabitatChanged: () => () => {}, notePending() {}, async allowContactRepo() { return "added" as const; }, async notifySelfChat() {} } });
+  try {
+    expect(waits).toEqual([3_000]);
+    const before = performance.now(); wake(true);
+    for (let i = 0; i < 50 && waits.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 20));
+    // The woken tick ran after only the short spacing floor, not a one-second timer.
+    expect(performance.now() - before).toBeLessThan(800);
+    expect(waits).toEqual([3_000, 3_000]);
+  } finally { await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); }
+});
 test("backfill and an active owner conversation never reach the response agent", async () => {
   const f = await fixture(); await f.loop.tick();
   f.add("butler old imported request", "incoming", 3600000); await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();

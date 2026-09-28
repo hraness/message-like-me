@@ -19,12 +19,14 @@ import type { FastDriver } from "./fast-driver.ts";
 import { createRepoShelf, type RepoShelf } from "./contact-repos.ts";
 import { parseRepoUrl } from "./config.ts";
 import type { JsonValue } from "@hraness/algal";
+import type { MessagesActivity } from "./messages-activity.ts";
 
 type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { setReplyAgent?: (agent: ButlerAgent) => void; observeHabitatOperations?: TextbutlerControlService["observeHabitatOperations"] };
 type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; healthy: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
 const RECONCILE_DETAIL = "A previous send needs reconciliation. Check Messages, then run `textbutler replies reconcile`.";
 const SYNC_FAILURE_THRESHOLD = 3;
 const POLL_YIELD_MS = 15_000;
+const ACTIVITY_HEARTBEAT_MS = 3_000, ACTIVITY_MIN_SPACING_MS = 100;
 export interface ReplyLoopOptions {
   service: LoopService;
   client: GhostgetAutomationClient;
@@ -40,6 +42,8 @@ export interface ReplyLoopOptions {
   /** Arms the dispatch that follows an elapsed debounce and returns its
    * disarm. Automatic loops use a timer; synthetic tests fire it directly. */
   scheduleDispatch?: (fire: () => void, delayMs: number) => () => void;
+  /** Wakes automatic polling on Messages database activity (see messages-activity.ts). */
+  activity?: Pick<MessagesActivity, "wait">;
 }
 
 /** Self-chat owner intents resolve repo requests without the driver: the model
@@ -397,7 +401,18 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     ticking ??= tickOnce().catch(() => { for (const state of contacts.values()) { state.initialized = false; state.healthy = false; state.lastEnrollment = null; } options.onStatus?.({ state: "unavailable", detail: "Owner settings or messaging state could not be verified." }); }).finally(() => { ticking = undefined; });
     return ticking;
   };
-  const schedule = () => { if (!closed) timer = setTimeout(() => { void tick().finally(schedule); }, 1000); };
+  // With Messages activity the next poll runs as soon as the database changes
+  // (a short floor keeps a burst from spinning) and otherwise on a heartbeat
+  // that catches anything the watcher missed; without it, every second.
+  const activity = options.activity;
+  const schedule = () => {
+    if (closed) return;
+    if (activity === undefined) { timer = setTimeout(() => { void tick().finally(schedule); }, 1000); return; }
+    const troubled = [...contacts.values()].some(state => state.syncFailures > 0);
+    void activity.wait(troubled ? 1000 : ACTIVITY_HEARTBEAT_MS).then(() => {
+      if (!closed) timer = setTimeout(() => { void tick().finally(schedule); }, ACTIVITY_MIN_SPACING_MS);
+    });
+  };
   if (options.automatic !== false) schedule();
   return { tick, async idle() { await ticking; await Promise.allSettled([...work]); }, async close() {
     if (closed) return; closed = true; if (timer) clearTimeout(timer); disarmDebounce?.(); unsubscribe(); unsubscribeHabitat();
