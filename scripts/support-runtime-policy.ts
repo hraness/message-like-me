@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const supportFoundationPin = "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed";
+export const supportFoundationPin = "github:hraness/support-foundation#8bb514d24b79dc3f305390700ae312cab88e7ad2";
 const reviewedInputs: Readonly<Record<string, string>> = {
-  "dist/node.js": "e5867b56351d8ebdf3d6a8de3dd8a992dd59aedfde930d1cc96adc806962de95",
-  "dist/index.js": "8c80132d2eaa0fcbf91fe9db2a4ece735ced307e629bd411030c8e2d6f9fa3c5",
+  "dist/node.js": "af3ecd5fd24c5634c75b5285254ac2ffead0388c3c91eba48da089340885b9c3",
+  "dist/index.js": "2ccf18fdc6f1ddbe8c957dd3060447b5f61a498928dd3d18e0e74c3dd2868981",
   "LICENSE": "74b69bf37c8f340c9c2a54d431a15218738d9c463d0e014fa6a8bb8edce4e539"
 };
 // Bun 1.3.14 output of src/support-runtime.ts, admitted independently with this change.
-const reviewedBundleSha256 = "6510a8046a611d4e47d1e220869bce4ae308ac59587944d3fdf10883eb3fd63e";
+const reviewedBundleSha256 = "5cec914f62fb7c4c719a994171f9768015553f63d61f00f351df6692be131118";
 const sha256 = (source: string | Uint8Array): string => createHash("sha256").update(source).digest("hex");
 
 export function isReviewedSupportRuntime(path: string, source: string): boolean {

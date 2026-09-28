@@ -8,8 +8,8 @@ import { MESSAGE_LIKE_ME_VERSION } from "./version.ts";
 export const HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 
 Usage:
-  messagelikeme support [protocol --json|offer --json|shown ID|release ID|dismiss|snooze|enable|status --json]
-    Optional support; agents use support protocol --json at closeout.
+  messagelikeme support [--json]
+    Optional ways to support Message Like Me.
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
   messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH
@@ -53,6 +53,8 @@ Message Like Me reads caller-owned macOS Messages, official X archives,
 optional Contacts data, and strict private local message bundles, then stores
 private analysis locally. It has no network, account, AI-provider, or
 message-sending surface.
+
+Optional support: messagelikeme support · Turn off: HRANESS_SUPPORT=off
 `;
 
 export function metricOptions(parsed: ParsedArguments): Readonly<{

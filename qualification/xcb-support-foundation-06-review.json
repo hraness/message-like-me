@@ -1,0 +1,35 @@
+{
+  "kind": "independent-ai-source-review",
+  "scope": "support-foundation 0.6.0 adoption (devin/support-foundation-06): devDependency pin 2d034b3 → 8bb514d (v0.6.0), matching reviewed-input digests and the rebuilt dist/support-runtime.js bundle hash in scripts/support-runtime-policy.ts, the notice bump in docs/support-foundation-notice.md, X-7 help wiring — `supportAdvancedHelp()` block under the textbutler `help advanced` topic and the one-line `supportHelpLine()` root line in packages/textbutler/src/cli-help.ts — and the standalone messagelikeme HELP collapse in src/command-input.ts (agent verbs out of top-level help). package.json and bun.lock are receipt-covered; the rest ride along as reviewed collateral.",
+  "rounds": [
+    {
+      "round": 1,
+      "design": "Bump the pin, refresh the policy digests, and call the new helpers everywhere the support line or verbs appear.",
+      "verdict": "blockers",
+      "blockers": [
+        "Importing @hraness/support-foundation/node directly in src/command-input.ts would break the standalone artifact: scripts/build-dist.ts keeps package imports external and admits the support library only through the reviewed dist/support-runtime.js bundle (isReviewedSupportRuntime), while the checked-support-runtime plugin throws on any importer of ./support-runtime.js other than src/support.ts. dist/cli.js would carry an unresolvable external specifier — the dep is a devDependency, never shipped. Fixed: src/command-input.ts keeps a literal line byte-identical to supportHelpLine({command:[\"messagelikeme\"]}) output; only packages/textbutler (fully bundled by build-textbutler.ts, which rejects external imports) calls the helpers directly.",
+        "supportHelpLine/supportAdvancedHelp apply env-dependent ASCII substitution (HRANESS_ASCII/TERM=dumb/missing UTF-8 locale). Help bodies are module-level consts evaluated once at import, so ambient env would flip · to - nondeterministically against the golden snapshots. Fixed: both callsites pass env: { LANG: \"en_US.UTF-8\" }, pinning the UTF-8 form that every other static help line already uses.",
+        "0.6.0 silently changes support-surface behavior: `support --help` now exits 0 with human copy, and dismiss/snooze/enable/status take a bare human form while --json and detected agents keep JSON. Verified: textbutler cli.ts intercepts `support --help`/`-h` to its own topic before runSupportCommand, protocol --json output is byte-stable (hraness-support-protocol-v1, same command array), and src/support.test.ts passes unchanged.",
+        "The bundled dist/node.js now inlines detectAudience from desktop-foundation 0.8 — confirmed self-contained (only node: imports; no external specifier) so the reviewed-inputs digests remain a complete integrity statement."
+      ]
+    },
+    {
+      "round": 2,
+      "design": "Helpers wired only where bundling is total (cli-help.ts), static literal for the standalone surface, env pinned to UTF-8, digests and notice rebound to the new tree.",
+      "verdict": "blockers-fixed",
+      "blockers": [
+        "src/command-input.ts carries no @hraness import; check-standalone passes (opacity, credential, banned-import and reviewed-bundle scans all clean on the new dist).",
+        "Golden snapshot diff shows exactly the intended delta: the Support for agents block added to the advanced topic, root help's single support line byte-identical.",
+        "Live smoke: `textbutler support protocol --json` returns the unchanged v1 protocol; `support status --json` returns JSON; bare `support status` returns the human line — the documented 0.6.0 split.",
+        "bun.lock resolves the new pin; reviewedInputs digests recomputed from the installed tree (dist/node.js af3ecd5…, dist/index.js 2ccf18f…, LICENSE unchanged); docs/support-foundation-notice.md names 0.6.0 + 8bb514d as assertSupportFoundationInputs requires."
+      ],
+      "acceptedNits": [
+        "help advanced keeps its `support` summary row above the Support for agents block — the row points at the human command, the block lists the agent verbs; both fit ≤80 columns.",
+        "messagelikeme has no `help advanced` topic; its agent verbs remain reachable via `messagelikeme support protocol --json` and are published in skills/message-like-me/references/support.md, matching the kit's documented fallback for products without an advanced surface.",
+        "The audit's apple-foundation 0.2.0 adoption is already satisfied in-tree: the @hraness/algal pin (ac68f096) vendors crates/algal/Cargo.toml with apple-foundation tag v0.2.0 — verified in the installed package's own manifest and lockfile."
+      ],
+      "verification": "bun install resolves support-foundation 0.6.0 at 8bb514d. bun run check:standalone exits 0 against the new pin, digests and rebuilt bundle hash. cli-golden.test.ts: 12/12 after snapshot regeneration (advanced topic only). Live entrypoint output above. Full bun run check evidence lands in xcb-textbutler-v1-current-check.log."
+    }
+  ],
+  "result": "Ship. The bump stays inside the reviewed-bundle seam, help surfaces follow the X-7 split, and agent-visible protocol JSON is unchanged."
+}

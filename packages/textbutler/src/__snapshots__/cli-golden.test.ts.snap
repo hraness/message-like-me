@@ -75,7 +75,13 @@ Commands
   habitats <command>         A chat's reply style, memory and budget
   messages <command>         JSON commands for agents (help messages)
   daemon run                 Run the service in this terminal
-  support                    Optional ways to support Textbutler"
+  support                    Optional ways to support Textbutler
+
+Support for agents
+  textbutler support protocol --json   How an agent offers optional support
+  textbutler support offer --json      Reserve an invitation that is due
+  textbutler support shown <id>        Record that it was shown
+  textbutler support release <id>      Cancel one that wasn't shown"
 ,
   "contacts": 
 "Usage: textbutler contacts <command>

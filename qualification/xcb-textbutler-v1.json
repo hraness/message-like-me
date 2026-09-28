@@ -13,8 +13,8 @@
     }
   },
   "sources": {
-    "bun.lock": "38775b47adf4f0a8e167aa2c43e87a1a839d555a1c5d347aee6a0d527b06d833",
-    "package.json": "0b9950e406b5dc214fc1a848efe6ab752674cfcfa954fb55738dd99e2614feb8",
+    "bun.lock": "fc621e46e59a6ccd0b34c619c0d02888d347a78d3d2b1555fd53bc108dbc03f4",
+    "package.json": "c032f1bc1cdfdb9bb42c1d68c3af09e28c1b1d93cf7573e4be8488c867c2bcb7",
     "packages/control/src/index.ts": "4947b0af05a5f7129a55187b4c8b49d939712b24fc4c4c2b2c2245d62c768c90",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
@@ -59,6 +59,6 @@
   },
   "validation": {
     "command": "bun run check",
-    "receiptSha256": "6d9bbd3921c1c4935017f3f651c212a34577717d689cf4b21e8a54e70655728c"
+    "receiptSha256": "e26f339d6cf92ae4e11fbc44684c53e2970206a945e42384535640cd71dc9a04"
   }
 }
