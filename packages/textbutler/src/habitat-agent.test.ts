@@ -425,7 +425,7 @@ test("gateway search rejects private names and phrases found only in owner plan 
       return replyOutput;
     });
     new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "Ryaan coordinates our confidential project", webSearch: true });
-    f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+    f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 }; f.driver.canSearch = true;
     f.driver.search = async () => { searches++; return {}; };
     await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
     expect(searches).toBe(0); expect(f.calls()).toBe(2);
@@ -445,7 +445,7 @@ test("a refused public query stays inside the search budget and a fresh phrasing
     return replyOutput;
   });
   new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "Ryaan coordinates our confidential project", webSearch: true });
-  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 }; f.driver.canSearch = true;
   f.driver.search = async () => { searches++; return { excerpt: "Synthetic public result" }; };
   await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
   expect(f.calls()).toBe(3); expect(searches).toBe(1);
@@ -458,7 +458,7 @@ test("one web search exhausts the reply's search inventory and dispatch budget",
     return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "public news" } };
   });
   new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
-  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 }; f.driver.canSearch = true;
   f.driver.search = async () => { searches++; return { excerpt: "Synthetic public result" }; };
   await expect(f.habitat.agent.compose(f.request)).rejects.toThrow("Tool is not available");
   expect(f.calls()).toBe(2); expect(searches).toBe(1);
@@ -516,7 +516,7 @@ test("remembered private names cannot escape through gateway search", async () =
     return replyOutput;
   });
   const state = seedMemory(f, ["Ryaan prefers tea"]); state.configure(state.snapshot().revision, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
-  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 }; f.driver.canSearch = true;
   f.driver.search = async () => { searches++; return {}; };
   await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
   expect(searches).toBe(0);
@@ -530,7 +530,7 @@ test("owner-authored soul details are included in public-search privacy checks",
   });
   const state = new ContactHabitat(f.journal, f.request.contact.id);
   state.configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true, soulCore: { voice: "Zelphora is the private project name", relationshipContext: "", sharedContext: "", boundaries: "" } });
-  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 }; f.driver.canSearch = true;
   f.driver.search = async () => { throw Error("Private query must not escape"); };
   await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
 });

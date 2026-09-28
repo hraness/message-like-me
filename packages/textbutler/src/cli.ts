@@ -14,7 +14,12 @@ import { BARE_INTRO, COMMANDS, HELP_TOPICS, ROOT_HELP, topicHelp } from "./cli-h
 import { CliUsageError, closest, detectAudience, jsonError, quoteInput, renderError, symbolsFor, type Audience } from "./cli-style.ts";
 import { TEXTBUTLER_VERSION } from "./version.ts";
 import { readProtectedStdin } from "@hraness/local-custody/protected-input";
-import { DEFAULT_REPLY_MODEL, saveGatewayKey } from "./default-reply-model.ts";
+import { publishPrivateFile } from "@hraness/local-custody/atomic-publish";
+import { join } from "node:path";
+import { acquireOwnerDatabase } from "./daemon-custody.ts";
+import { loadHostConfig, parseHostConfig } from "./host-config.ts";
+import { parseFastDriverConfig } from "./fast-driver.ts";
+import { DEFAULT_REPLY_MODEL, localSearchCredential, saveGatewayKey } from "./default-reply-model.ts";
 
 type CliOptions = { launchAgent?: LaunchAgentLifecycle; entrypoint?: string; providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"];
   supportEnv?: Readonly<Record<string, string | undefined>>; audience?: Audience; env?: Readonly<Record<string, string | undefined>>;
@@ -105,7 +110,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     ? { contact: args[2]!, resolution: args[3] === "--sent" ? "sent" as const : args[3] === "--failed" ? "failed" as const : undefined } : undefined;
   const replies = inbox || repliesSuggest !== undefined || repliesShow !== undefined || repliesSendDraft !== undefined || repliesSendText !== undefined || repliesDiscard !== undefined || repliesReconcile !== undefined;
   if (args[0] === "replies" && !replies) throw usage(args);
-  if (!["init", "doctor", "providers list", "providers gateway-key", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies) throw usage(args);
+  if (!["init", "doctor", "providers list", "providers gateway-key", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies && !(args[0] === "providers" && args[1] === "local")) throw usage(args);
   /** Job-backed control call: poll until the stored result arrives. */
   const job = (input: ControlRequest): Promise<ControlResponse> => awaitOwnerJob(input, request);
   const unresolved = (response: ControlResponse): void => { print(response.ok && response.kind === "job" ? pendingJobOutput(response) : response); };
@@ -170,6 +175,32 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     try { await saveGatewayKey(dataDir, raw); }
     catch (error) { if (error instanceof Error && /key/u.test(error.message)) throw new CliUsageError(error.message, "textbutler help providers"); throw error; }
     print({ ok: true, status: "saved", model: DEFAULT_REPLY_MODEL.id, detail: `Saved your ${DEFAULT_REPLY_MODEL.via} key. Automatic replies will be written by ${DEFAULT_REPLY_MODEL.label} after the background service restarts (textbutler daemon uninstall, then textbutler daemon install). An explicit habitat setting in host.json still takes precedence.` });
+    return 0;
+  }
+  if (args[0] === "providers" && args[1] === "local") {
+    // Writes a loopback OpenAI-compatible reply driver into host.json. Like
+    // setup, the service must be stopped so the custody lock can be taken.
+    const rest = args.slice(2), baseUrlIndex = rest.indexOf("--base-url");
+    const baseUrl = baseUrlIndex >= 0 ? rest[baseUrlIndex + 1] : "http://127.0.0.1:11434/v1";
+    const free = rest.filter((_, index) => baseUrlIndex === -1 || (index !== baseUrlIndex && index !== baseUrlIndex + 1));
+    const model = free.length === 1 ? free[0]! : "qwen3:4b-instruct-2507-q4_K_M";
+    if (baseUrl === undefined || free.length > 1 || !/^[A-Za-z0-9][A-Za-z0-9/:._-]*$/u.test(model)) throw usage(args);
+    let driver: unknown;
+    const searchCredentialFile = await localSearchCredential(dataDir);
+    try { driver = parseFastDriverConfig({ kind: "local", model, baseUrl, ...(searchCredentialFile === undefined ? {} : { searchCredentialFile }) }); }
+    catch { throw new CliUsageError("The local server address must be exactly http://127.0.0.1:<port>/v1.", "textbutler help providers"); }
+    const before = await loadHostConfig(dataDir);
+    const habitat = { enabled: true, driver, evolutionModel: before.habitat?.evolutionModel ?? null, debounceMs: before.habitat?.debounceMs ?? 1500 };
+    let lock;
+    try { lock = await acquireOwnerDatabase(dataDir, "daemon-custody"); }
+    catch { throw new OwnerCliError("Stop the Textbutler service before changing the reply model: use daemon uninstall for a login service, or Ctrl-C in its foreground terminal. Then repeat this command and start the service again."); }
+    try {
+      const current = await loadHostConfig(dataDir), merged = parseHostConfig({ ...current, habitat });
+      await publishPrivateFile(join(dataDir, "state"), "host.json", `${JSON.stringify(merged, null, 2)}\n`, { beforeCommit: async () => {
+        if (JSON.stringify(await loadHostConfig(dataDir)) !== JSON.stringify(current)) throw new OwnerCliError("Configuration changed during setup. The reply model was not applied; inspect current settings before continuing.");
+      } });
+    } finally { lock.close(); }
+    print({ ok: true, status: "saved", model, detail: `Replies will use ${model} on ${baseUrl} after the background service restarts (textbutler daemon install). Web search keeps working when a gateway key is saved.` });
     return 0;
   }
   if (command === "init") {

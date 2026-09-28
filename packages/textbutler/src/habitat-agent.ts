@@ -193,7 +193,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         ...(plan.memorySearch !== false ? ["memory-search"] : []),
         ...(plan.javascript === true ? ["javascript"] : []),
         ...(plan.repoAccess === true && ports.repos !== undefined ? ["repo-sync", "repo-read", "repo-search"] : []),
-        ...(plan.webSearch && ports.driver.config.kind === "gateway" && executedSearches === 0 ? ["web-search"] : []),
+        ...(plan.webSearch && ports.driver.canSearch && executedSearches === 0 ? ["web-search"] : []),
         ...(plan.memeSearch ? ["meme-search", ...(admittedMemes.size && capabilities.includes("attachment") ? ["meme-image"] : [])] : []),
         // Older plans carry no flag: history search defaults on for the
         // owner's self chat and off for everyone else.

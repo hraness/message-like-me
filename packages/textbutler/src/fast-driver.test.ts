@@ -65,6 +65,27 @@ test("a bare object response is accepted and a non-object value still fails clos
   } finally { journal.close(); }
 });
 
+test("a local driver searches through a named gateway credential; without one search stays off", async () => {
+  const journal = RunJournal.memory();
+  try {
+    const signal = new AbortController().signal;
+    const bare = createFastDriver({ kind: "local", model: "qwen", baseUrl: "http://127.0.0.1:11434/v1" }, { journal, now: () => now });
+    expect(bare.canSearch).toBe(false);
+    await expect(bare.search("op-bare", "query", signal)).rejects.toThrow("Gateway account");
+    const driver = createFastDriver({ kind: "local", model: "qwen-local-tag", baseUrl: "http://127.0.0.1:11434/v1", searchCredentialFile: "search-key" }, { journal, now: () => now, credential: async () => "synthetic-search-key",
+      fetch: async (url, init) => {
+        expect(String(url)).toBe("https://ai-gateway.vercel.sh/v4/ai/language-model");
+        // The local tag never reaches the gateway: search runs a gateway model.
+        expect((init?.headers as Record<string, string>)["ai-language-model-id"]).toBe("alibaba/qwen3.5-flash");
+        return Response.json({ content: [
+          { type: "tool-call", toolName: "exa_search", providerExecuted: true },
+          { type: "tool-result", toolName: "exa_search", result: { requestId: "req-1", results: [{ title: "T", url: "https://example.com", text: "excerpt" }] } } ] });
+      } });
+    expect(driver.canSearch).toBe(true);
+    expect(await driver.search("op-local", "public query", signal)).toMatchObject({ requestId: "req-1", sources: [{ title: "T" }] });
+  } finally { journal.close(); }
+});
+
 test("truncated output, redirects, malformed usage and unapproved local destinations fail closed", async () => {
   expect(() => parseFastDriverConfig({ ...config, model: "unapproved/model" })).toThrow();
   expect(() => parseFastDriverConfig({ ...config, dailyBudgetUsd: 0 })).toThrow();
