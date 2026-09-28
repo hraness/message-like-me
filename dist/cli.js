@@ -15453,7 +15453,7 @@ function commandFailure(cause3) {
 function translateIMessageError(error) {
   const code = error.code;
   if (code === "EACCES" || code === "EPERM" || code === "permission") {
-    throw new CliError("permission", "Messages data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.", { cause: error });
+    throw new CliError("permission", "Message Like Me can't read your Messages data: macOS access is off for the app running this command. Turn on your terminal or agent app in System Settings \u203A Privacy & Security \u203A Full Disk Access (x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles), then retry.", { cause: error });
   }
   if (code === "ENOENT") {
     throw new CliError("not-found", "The selected Messages database does not exist", { cause: error });
@@ -15463,7 +15463,7 @@ function translateIMessageError(error) {
 function translateContactsError(error) {
   const code = error.code;
   if (code === "EACCES" || code === "EPERM") {
-    throw new CliError("permission", "Contacts data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.", { cause: error });
+    throw new CliError("permission", "Message Like Me can't read your Contacts data: macOS access is off for the app running this command. Turn on your terminal or agent app in System Settings \u203A Privacy & Security \u203A Full Disk Access (x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles), then retry.", { cause: error });
   }
   if (code === "ENOENT") {
     throw new CliError("not-found", "The selected AddressBook source does not exist", { cause: error });
@@ -25088,14 +25088,14 @@ function commandPlatformLive(io, cleanupFailure) {
 import { isAbsolute as isAbsolute7, resolve as resolve8 } from "path";
 
 // src/version.ts
-var MESSAGE_LIKE_ME_VERSION = "0.8.21";
+var MESSAGE_LIKE_ME_VERSION = "0.8.22";
 
 // src/command-input.ts
 var HELP = `Message Like Me ${MESSAGE_LIKE_ME_VERSION}
 
 Usage:
-  messagelikeme support [protocol --json|offer --json|shown ID|release ID|dismiss|snooze|enable|status --json]
-    Optional support; agents use support protocol --json at closeout.
+  messagelikeme support [--json]
+    Optional ways to support Message Like Me.
   messagelikeme [--data-dir PATH] init [--json]
   messagelikeme [--data-dir PATH] ingest imessage [--database PATH] [--json]
   messagelikeme [--data-dir PATH] ingest bundle --input ABS_PATH
@@ -25139,6 +25139,8 @@ Message Like Me reads caller-owned macOS Messages, official X archives,
 optional Contacts data, and strict private local message bundles, then stores
 private analysis locally. It has no network, account, AI-provider, or
 message-sending surface.
+
+Optional support: messagelikeme support \xB7 Turn off: HRANESS_SUPPORT=off
 `;
 function metricOptions(parsed) {
   return {
@@ -27844,19 +27846,6 @@ function runClosed(effect2) {
   return exports_Effect.runPromise(effect2);
 }
 
-// src/cli-intro.ts
-function terminalIntro(terminal) {
-  if (terminal.isTTY !== true || terminal.term === "dumb" || (terminal.columns ?? 80) < 48)
-    return "";
-  return `   _|_
- .----- .   textbutler
- | o o |   A little help in your conversations.
- | === |
- '-----'
-
-`;
-}
-
 // src/io.ts
 var processIo = {
   stdout: (text3) => process.stdout.write(text3),
@@ -27880,12 +27869,7 @@ async function main(argv, io = processIo, supportEnv) {
   try {
     if (argv[0] === "support")
       return await runProductSupportCommand(argv.slice(1), io, supportEnv === undefined ? {} : { env: supportEnv });
-    const rootHelp = argv.length === 0 || argv.length === 1 && argv[0] === "--help";
-    const output = rootHelp && io === processIo ? {
-      ...io,
-      stdout: (text3) => io.stdout((text3 === HELP ? terminalIntro({ isTTY: process.stdout.isTTY, columns: process.stdout.columns, term: process.env.TERM }) : "") + text3)
-    } : io;
-    await runCommand(argv, output);
+    await runCommand(argv, io);
     return 0;
   } catch (error) {
     io.stderr(`${errorMessage(error)}

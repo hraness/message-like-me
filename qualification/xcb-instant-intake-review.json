@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "Wake the automatic poll loop on Messages database activity instead of a fixed one-second timer, with a heartbeat fallback.",
-  "baseCommit": "f07996183247f676c1a3fbb31302e0490c01c38d",
+  "baseCommit": "7f792f2d7b5f3335ab4c381629ba1e4ecc447815",
   "motivation": "With the persistent Ghostget helper, a poll costs tens of milliseconds, so intake latency is dominated by the timer between polls; polling continuously while idle also spends helper CPU for nothing.",
   "design": {
     "activity": "createMessagesActivity watches the Messages store's chat.db-wal and chat.db files (non-persistent fs watchers) and re-arms when a file's device/inode changes. It carries no message data: an event only resolves the loop's wait. An unwatchable or absent store falls back to the heartbeat.",
@@ -23,7 +23,7 @@
       "files": 4,
       "assertions": 243
     },
-    "logSha256": "bac8170b5d064a984eaaa2d0e477a8506a509d6d3742c2295a45cbff928aa830",
+    "logSha256": "2a45f29b6644a40979db9b67258d35aa6d1ea6a3875af252c10180b8d5cbef5e",
     "coverage": [
       "a database write wakes the waiter well before its heartbeat",
       "activity between waits is remembered, and a quiet database times out",
@@ -32,16 +32,16 @@
     ]
   },
   "sourceInventoryCount": 43,
-  "sourceDigest": "86dfe621366ae833f23202b3c39bd2f42619d131473bb23154827d01dd6bd0d8",
+  "sourceDigest": "f9815d497ac34581ea0cc29f503a28fa3429c74ee460f02758d1adb2a0dcaafa",
   "sourceSha256": {
-    "bun.lock": "38775b47adf4f0a8e167aa2c43e87a1a839d555a1c5d347aee6a0d527b06d833",
-    "package.json": "0b9950e406b5dc214fc1a848efe6ab752674cfcfa954fb55738dd99e2614feb8",
-    "packages/control/src/index.ts": "614f56a989dabf8f212449493399bc355ddfd812e22148bfa91cd103b553d058",
+    "bun.lock": "fc621e46e59a6ccd0b34c619c0d02888d347a78d3d2b1555fd53bc108dbc03f4",
+    "package.json": "aaeb707f644466ee2fa48949dd85a538c405094a3a19f7b1354c73f9d7a447a0",
+    "packages/control/src/index.ts": "4947b0af05a5f7129a55187b4c8b49d939712b24fc4c4c2b2c2245d62c768c90",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
     "packages/textbutler/src/contact-habitat.ts": "522700221e904fe6fdf8036a27295278a13c081af5ac4ef58a622c8f08324ba8",
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
-    "packages/textbutler/src/control-service.ts": "de25b722fad889d68c6cff65bc67924ddf9b0e9d8eed1489f32c0a4be07feb1e",
+    "packages/textbutler/src/control-service.ts": "bb77db8fa6cd444882f5db9897b4613f6cae832d6596a88aaaa44774d1e5931e",
     "packages/textbutler/src/daemon.ts": "0c4ec3383048fc4d8724bc426ef0ed2979c5ec35b3c53b043e33fcea05c1825c",
     "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
@@ -61,7 +61,7 @@
     "packages/textbutler/src/messages-cli.ts": "44e5db75549e212ab2686d3673c5433908f1f9554bf133e98fd574d09255e66f",
     "packages/textbutler/src/native-subscription.ts": "f448154b264237ac1e854f3f1a3cf8fb2d38266b71fbb2fb8ebec52cb842c91b",
     "packages/textbutler/src/native-task.ts": "122ba7b346ba9cbaca3d1c71270c32e6d6dda37e4c59c8a34c4051c8241859f4",
-    "packages/textbutler/src/owner-cli.ts": "c21bccd7f0fa95a8659db2b2f8779765b0bf5801787588018ecf44c7f4e10d1f",
+    "packages/textbutler/src/owner-cli.ts": "8e123913e0eec22514f296a2dc1a91a096428f17db196d82bfdc41e877657837",
     "packages/textbutler/src/owner-messages.ts": "337d9f057d20e2cf32dbf781d4143ecee3fbd16f2aa82d88380af99aa1c3177a",
     "packages/textbutler/src/owner-replies.ts": "586002d4acef0b2a1fc95abb35709a78f4b79122594ce309be0c3882d9d527d6",
     "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",

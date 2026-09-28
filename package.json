@@ -1,6 +1,6 @@
 {
   "name": "@hraness/message-like-me",
-  "version": "0.8.21",
+  "version": "0.8.22",
   "description": "A local-first CLI and Agent Skill for studying private messaging history and drafting messages that sound like you.",
   "license": "MIT",
   "type": "module",
@@ -98,7 +98,7 @@
     "@hraness/algal": "github:hraness/algal#ac68f096d2e10e1824b9ee4d6fe031b4846094da",
     "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
     "@hraness/local-custody": "github:hraness/local-custody#v0.4.0",
-    "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
+    "@hraness/support-foundation": "github:hraness/support-foundation#8bb514d24b79dc3f305390700ae312cab88e7ad2",
     "@jitl/quickjs-singlefile-browser-release-sync": "0.32.0",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@types/bun": "1.3.14",
