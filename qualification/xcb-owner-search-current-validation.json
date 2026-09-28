@@ -1,18 +1,17 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Textbutler owner self-chat public web search admission and local reply recovery at the merged reply-budget main base.",
+  "toolchain": "Bun 1.3.14",
+  "command": "/Users/benguo/.bun/bin/host-run --mode=exclusive --label=textbutler-owner-search-final-check-v2 -- /Users/benguo/.bun/bin/bun run check",
+  "result": {
+    "exitCode": 0,
+    "aggregateTests": 493,
+    "textbutlerTests": 767,
+    "failed": 0
   },
-  "sources": {
+  "sourceInventoryCount": 45,
+  "sourceDigest": "e384b576c2ea93c913ab5d9486c600d19bf9f75fafc34e6a95f28fcf06534b09",
+  "sourceSha256": {
     "bun.lock": "933c5cf676d427c94c9a63c69284d7dcd64835ab6117c0c858d18c7f639d2475",
     "package.json": "0d43bed5cb2c6b3aab79bb6bbe44b58038ed367914905ae6c49f39084a4b8680",
     "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
@@ -59,8 +58,12 @@
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/host-run --mode=shared --label=textbutler-owner-search-focused-final -- /Users/benguo/.bun/bin/bun test packages/textbutler/src/habitat-agent.test.ts",
-    "receiptSha256": "e7e97f7fbeef3bf9acfd252f0b196c322e95f57b6c14d3933c8bc97ee19f197e"
-  }
+  "admissionReceipt": "qualification/xcb-textbutler-v1.json",
+  "admissionValidationSha256": "e7e97f7fbeef3bf9acfd252f0b196c322e95f57b6c14d3933c8bc97ee19f197e",
+  "focusedValidation": "qualification/xcb-owner-search-validation.json",
+  "focusedValidationSha256": "e7e97f7fbeef3bf9acfd252f0b196c322e95f57b6c14d3933c8bc97ee19f197e",
+  "independentReview": "qualification/xcb-owner-search-review.json",
+  "independentReviewSha256": "b7822192aae05670c1c4092dd153ef90e100ea21c41cdb781b7dbb5af018d0d0",
+  "log": "qualification/xcb-owner-search-current-check.log",
+  "logSha256": "4ea4de8fd4d06a9366d232c1419a162411361aef89ccc5c6d41864fa4e40d35e"
 }

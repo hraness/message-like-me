@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "scope": "Explicit owner self-chat web search admission, private-query subset, cancellation handling, and truthful fallback.",
+  "reviewer": "Independent AI subagent /root/search_recovery_review",
+  "method": "Read-only independent review of the final source and test bytes against merged main, with confirmation that the final test tuple typing change preserves runtime cases and assertions; no edits or tests by the reviewer.",
+  "result": "No material blocking findings. Self-chat web dispatch requires a direct positive request without detected cancellation or constraints; any reduced query passes the existing privacy gate and uses words from the owner request. A requested search with no result receives a truthful fallback.",
+  "reviewedSha256": {
+    "packages/textbutler/src/habitat-agent.ts": "264b657f498aac0f83b71ee187aaae255e6b93b01af7d29ccc50fde475c58362",
+    "packages/textbutler/src/habitat-agent.test.ts": "21def4c9bececc8d434c9aad2b16da384fdd8c04f605844d5afe3aa6e47ba9ea"
+  },
+  "remainingLimit": "Lexical consent checks can reject some valid topics and cannot parse every natural-language reversal. Focused tests use synthetic provider results; live provider verification follows the merged release."
+}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "scope": "Verify the owner self-chat search repair and cancellation guard.",
+  "toolchain": "Bun 1.3.14",
+  "command": "/Users/benguo/.bun/bin/host-run --mode=shared --label=textbutler-owner-search-focused-final -- /Users/benguo/.bun/bin/bun test packages/textbutler/src/habitat-agent.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 54,
+    "failed": 0,
+    "files": 1,
+    "assertions": 415
+  },
+  "typecheck": {
+    "command": "/Users/benguo/.bun/bin/host-run --mode=heavy --label=textbutler-owner-search-package-typecheck -- /Users/benguo/Documents/textbutler-txt-rollout-20260928/node_modules/.bin/tsc --noEmit -p packages/textbutler/tsconfig.json",
+    "exitCode": 0,
+    "log": "qualification/xcb-owner-search-typecheck.log",
+    "logSha256": "bed6bd921879d16846f9214647ab90966e9314cda31b8393d8688142a7e37eda"
+  },
+  "sourceSha256": {
+    "packages/textbutler/src/habitat-agent.ts": "264b657f498aac0f83b71ee187aaae255e6b93b01af7d29ccc50fde475c58362",
+    "packages/textbutler/src/habitat-agent.test.ts": "21def4c9bececc8d434c9aad2b16da384fdd8c04f605844d5afe3aa6e47ba9ea"
+  },
+  "review": "qualification/xcb-owner-search-review.json",
+  "reviewSha256": "b7822192aae05670c1c4092dd153ef90e100ea21c41cdb781b7dbb5af018d0d0",
+  "log": "qualification/xcb-owner-search-focused.log",
+  "logSha256": "f0193d6dc31f563607a617f578291885753efdc44082f22273c5dd6531a0b1ec"
+}

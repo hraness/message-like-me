@@ -470,6 +470,101 @@ test("repeated private query wording yields specific feedback and a final safe r
   expect(f.calls()).toBe(3); expect(searches).toBe(0);
 });
 
+test("an explicit owner self-chat search uses only an admitted subset of the requested public topic", async () => {
+  let searches = 0;
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "latest NASA mission headline" } };
+    const evidence = driverEvidence(body);
+    expect(evidence.results[0]).toMatchObject({ tool: "web-search", publicQuery: "NASA headline", result: { sources: [{ url: "https://www.nasa.gov" }] } });
+    expect(evidence.tools).not.toContain("web-search");
+    return { ...replyOutput, actions: [{ kind: "text", text: "Source: https://www.nasa.gov" }] };
+  });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
+  f.driver.canSearch = true;
+  f.driver.search = async (_operationId, query) => {
+    expect(query).toBe("NASA headline");
+    expect(admitPublicQuery(query, "butler, search the web for the latest NASA mission headline")).toBe(true);
+    searches++;
+    return { sources: [{ title: "Agency update", url: "https://www.nasa.gov", excerpt: "A public update" }] };
+  };
+  const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+    event: { ...f.request.event, text: "butler, search the web for the latest NASA mission headline" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: "Source: https://www.nasa.gov" }] });
+  expect(f.calls()).toBe(2); expect(searches).toBe(1);
+});
+
+test("an explicit owner search with no safe subset replies without a third model call or web request", async () => {
+  for (const [message, query, guidance, expected] of [
+    ["butler, search the web for Ryaan Ahmed github", "Ryaan Ahmed github", "Ryaan Ahmed is a private contact", "safe web query"],
+    ["butler, search the web for San Juan weather", "San Juan weather", "The owner lives in San Juan", "safe web query"],
+    ["butler, search the web for contact ryaan@example.com", "contact ryaan@example.com", "A private contact", "safe web query"],
+  ] as const) {
+    const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query } });
+    new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance, webSearch: true });
+    f.driver.canSearch = true;
+    f.driver.search = async () => { throw Error("Private query escaped"); };
+    const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+      event: { ...f.request.event, text: message } };
+    await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining(expected) }] });
+    expect(f.calls()).toBe(1);
+  }
+});
+
+test("an owner prohibition blocks web dispatch even when the model proposes an otherwise admitted query", async () => {
+  for (const message of [
+    "butler, do not search the web for the latest NASA mission headline",
+    "butler, don't search online for the latest NASA mission headline",
+    "butler, never browse the web for the latest NASA mission headline",
+    "butler, search the web for the latest NASA mission headline—actually don't",
+    "butler, search the web for the latest NASA mission headline, scratch that",
+  ] as const) {
+    const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query: "NASA headline" } });
+    f.driver.canSearch = true;
+    f.driver.search = async () => { throw Error("Owner prohibition escaped"); };
+    const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+      event: { ...f.request.event, text: message } };
+    await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: "I won't search the web." }] });
+    expect(f.calls()).toBe(1);
+  }
+});
+
+test("a negated or conditional owner search cannot be shortened into the opposite request", async () => {
+  for (const [message, query] of [
+    ["butler, search the web for flights not cancelled today", "flights cancelled"],
+    ["butler, search the web for NASA updates if a launch occurred", "NASA updates"],
+    ["butler, search the web for NASA missions after the next launch", "NASA missions"],
+  ] as const) {
+    const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query } });
+    f.driver.canSearch = true;
+    f.driver.search = async () => { throw Error("Owner constraint escaped"); };
+    const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+      event: { ...f.request.event, text: message } };
+    await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("search constraints") }] });
+    expect(f.calls()).toBe(1);
+  }
+});
+
+test("a quoted search phrase is not treated as an owner search directive", async () => {
+  const f = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "latest NASA mission headline" } }
+    : replyOutput);
+  f.driver.canSearch = true;
+  f.driver.search = async () => { throw Error("Quoted search escaped"); };
+  const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+    event: { ...f.request.event, text: "butler, say 'search the web for the latest NASA mission headline'" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("didn't search") }] });
+  expect(f.calls()).toBe(1);
+});
+
+test("a direct owner search cannot claim current facts without executing its search", async () => {
+  const f = await fixture({ ...replyOutput, actions: [{ kind: "text", text: "A current NASA headline" }] });
+  f.driver.canSearch = true;
+  const request = { ...f.request, contact: { ...f.request.contact, selfChat: true }, invocation: "keyword" as const,
+    event: { ...f.request.event, text: "butler, search the web for the latest NASA mission headline" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("couldn't complete a web search") }] });
+  expect(f.calls()).toBe(1);
+});
+
 test("an inferred reply cannot present current facts after a refused query echoing its trigger", async () => {
   let searches = 0;
   const f = await fixture((_body: string, call: number) => call === 1
