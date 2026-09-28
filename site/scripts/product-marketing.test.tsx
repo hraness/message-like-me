@@ -133,7 +133,7 @@ test('shows the real first terminal screen, synthetic contact context, and discl
   expect(html).toContain('under its own data policies');
 });
 
-test('binds Design Kit v0.23.0 to the portable Paper palette', async () => {
+test('binds Design Kit v0.24.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -145,7 +145,7 @@ test('binds Design Kit v0.23.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.23.0');
+    .toBe('github:hraness/design-kit#v0.24.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
