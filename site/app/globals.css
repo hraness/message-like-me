@@ -104,6 +104,14 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   backdrop-filter: none;
 }
 .textbutler-marketing .hraness-marketing-header__inner { min-block-size: var(--hraness-marketing-header-height); }
+.textbutler-marketing .hraness-marketing-header :is(a, button, summary),
+.textbutler-marketing .hraness-marketing-header .hraness-design-palette-menu > summary {
+  min-inline-size: max(2.75rem, var(--interactive-target-compact, 2.75rem));
+  min-block-size: max(2.75rem, var(--interactive-target-compact, 2.75rem));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .textbutler-marketing .hraness-marketing-hero { gap: 2.5rem; padding-block: var(--hraness-marketing-hero-space); background: none; }
 .textbutler-marketing .hraness-marketing-hero__copy { max-inline-size: 46rem; }
 .textbutler-marketing :where(.hraness-marketing-hero__heading, .hraness-marketing-section__heading, .hraness-marketing-questions__heading, .hraness-marketing-related__heading, .hraness-marketing-cta__heading) {
@@ -179,11 +187,19 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   .textbutler-marketing .hraness-marketing-page .hraness-marketing-action { min-block-size: 2.75rem; }
   .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 8rem; }
 }
+@media (max-width: 48rem) {
+  /* Short nav labels keep a 44px touch box on phones and small tablets. */
+  .hraness-marketing-header .hraness-marketing-header__nav a {
+    min-inline-size: 2.75rem;
+    justify-content: center;
+  }
+}
 @media (max-width: 24rem) {
   /* The smallest phones keep brand, action, and appearance on one row. */
-  .hraness-marketing-header .hraness-marketing-header__inner { column-gap: 0.75rem; }
+  .hraness-marketing-header { --hraness-marketing-gutter: 1rem; }
+  .hraness-marketing-header .hraness-marketing-header__inner { column-gap: 0.5rem; }
   .textbutler-marketing .hraness-marketing-header__brand { font-size: 1rem; }
-  .hraness-marketing-header .hraness-marketing-action { padding-inline: 0.7rem; font-size: 0.8125rem; }
+  .hraness-marketing-header .hraness-marketing-action { padding-inline: 0.625rem; font-size: 0.8125rem; }
 }
 
 :where(

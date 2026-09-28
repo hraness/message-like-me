@@ -19,6 +19,7 @@ import { parseActionIntent } from "../../transport/src/index.ts";
 import { Hooks } from "./hooks.ts";
 import type { ButlerAgent } from "./runtime.ts";
 import { ContactHabitat, inspectHabitatOperations, parseHabitatPlan, type HabitatLiveOperation } from "./contact-habitat.ts";
+import { inspectHabitatTaskShadow, SHADOW_LIMITS } from "./habitat-task-shadow.ts";
 import type { HabitatHostConfig } from "./host-config.ts";
 
 export const TEXTBUTLER_CONTROL_PROTOCOL = "textbutler.control.v1" as const;
@@ -90,6 +91,12 @@ export function parseControlRequest(value: unknown): ControlRequest {
     if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u.test(loginId)) fail("invalid-request", "Invalid provider sign-in identity.");
     return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, accountId: contactId(item.accountId), loginId };
   }
+  if (item.command === "habitat.task.stage") {
+    exact(item, ["protocol", "command", "contactId", "expectedRevision", "artifact", "archive"]);
+    record(item.artifact); record(item.archive);
+    if (Buffer.byteLength(JSON.stringify(item.artifact)) > SHADOW_LIMITS.artifactBytes || Buffer.byteLength(JSON.stringify(item.archive)) > SHADOW_LIMITS.archiveBytes) fail("capacity", "Task shadow evidence exceeds the contact limit.");
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId), expectedRevision: integer(item.expectedRevision), artifact: item.artifact, archive: item.archive };
+  }
   if (item.command === "habitat.configure") {
     exact(item, ["protocol", "command", "contactId", "expectedRevision", "plan"]);
     const plan = record(item.plan);
@@ -99,7 +106,7 @@ export function parseControlRequest(value: unknown): ControlRequest {
         expectedRevision: integer(item.expectedRevision), plan: parseHabitatPlan(plan) };
     } catch { fail("invalid-request", "Invalid contact habitat plan or revision."); }
   }
-  if (item.command === "habitat.read" || item.command === "habitat.rollback" || item.command === "habitat.memory.clear") {
+  if (item.command === "habitat.read" || item.command === "habitat.rollback" || item.command === "habitat.memory.clear" || item.command === "habitat.task.rollback") {
     exact(item, ["protocol", "command", "contactId", ...(item.command === "habitat.read" ? [] : ["expectedRevision"])]);
     return item.command === "habitat.read" ? { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId) }
       : { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId), expectedRevision: integer(item.expectedRevision) };
@@ -637,12 +644,18 @@ export class TextbutlerControlService {
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
       });
     }
-    if (request.command === "habitat.read" || request.command === "habitat.configure" || request.command === "habitat.rollback" || request.command === "habitat.memory.clear") {
+    if (request.command === "habitat.read" || request.command === "habitat.configure" || request.command === "habitat.rollback" || request.command === "habitat.memory.clear" || request.command === "habitat.task.stage" || request.command === "habitat.task.rollback") {
       if (!current.state.settings.contacts.some(contact => contact.id === request.contactId)) fail("invalid-request", "Unknown contact habitat.");
       const habitat = new ContactHabitat(this.journal, request.contactId);
       if (request.command !== "habitat.read") {
         if (!current.state.settings.paused) fail("conflict", "Pause automatic replies before changing a habitat.");
-        if (request.command === "habitat.configure") {
+        if (request.command === "habitat.task.stage") {
+          try { await habitat.stageTaskArtifact(request.expectedRevision, request.artifact, request.archive); }
+          catch { fail("conflict", "Task shadow admission requires current host limits and replayable evaluation evidence."); }
+        } else if (request.command === "habitat.task.rollback") {
+          try { habitat.rollbackTaskArtifact(request.expectedRevision); }
+          catch { fail("conflict", "Read the current habitat before rolling back its shadow artifact."); }
+        } else if (request.command === "habitat.configure") {
           try { habitat.configure(request.expectedRevision, request.plan); } catch { fail("conflict", "The habitat changed. Read it before saving a plan."); }
         } else if (request.command === "habitat.memory.clear") {
           try { habitat.clearMemory(request.expectedRevision, Date.now()); } catch { fail("conflict", "The habitat changed. Read it before clearing learned memory."); }
@@ -654,6 +667,7 @@ export class TextbutlerControlService {
       const state = habitat.snapshot(), config = this.habitatConfig;
       const view = { enabled: config?.enabled ?? false, driver: config?.driver.kind ?? null, model: config?.driver.model ?? null,
         evolutionModel: config?.evolutionModel ?? null, dailyBudgetUsd: config?.driver.kind === "gateway" ? config.driver.dailyBudgetUsd : 0,
+        taskShadow: inspectHabitatTaskShadow(state.taskShadow, state.champion, state.ownerRevision ?? 0),
         plan: state.champion, memory: state.memory ?? [], memoryCutoff: state.memoryCutoff ?? null,
         operations: inspectHabitatOperations(state, Date.now(), this.habitatOperation?.(request.contactId)),
         episodes: state.episodes.length, evaluations: [...state.evaluations], lineage: [...state.lineage],

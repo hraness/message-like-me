@@ -13,20 +13,22 @@
     }
   },
   "sources": {
-    "bun.lock": "fc621e46e59a6ccd0b34c619c0d02888d347a78d3d2b1555fd53bc108dbc03f4",
-    "package.json": "aaeb707f644466ee2fa48949dd85a538c405094a3a19f7b1354c73f9d7a447a0",
-    "packages/control/src/index.ts": "4947b0af05a5f7129a55187b4c8b49d939712b24fc4c4c2b2c2245d62c768c90",
+    "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
+    "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
+    "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
-    "packages/textbutler/src/contact-habitat.ts": "522700221e904fe6fdf8036a27295278a13c081af5ac4ef58a622c8f08324ba8",
+    "packages/textbutler/src/contact-habitat.ts": "39b75edf593ec7152c74a5db9b4b8ee0b35186da0c6361fa8073ce11ec1dbf5d",
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
-    "packages/textbutler/src/control-service.ts": "bb77db8fa6cd444882f5db9897b4613f6cae832d6596a88aaaa44774d1e5931e",
+    "packages/textbutler/src/control-service.ts": "61d28a25b5090f15f546435351607041dd13931408b3cd72eefdf734d976b689",
     "packages/textbutler/src/daemon.ts": "0c4ec3383048fc4d8724bc426ef0ed2979c5ec35b3c53b043e33fcea05c1825c",
     "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
     "packages/textbutler/src/habitat-agent.ts": "8f17a4f8d9171a726748d4a692a5fa42a8efeca5e431dce62724d9a5d6e57c8b",
     "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
-    "packages/textbutler/src/habitat-program.ts": "b5dbe42fd2cd5b9e35ca092801575a461e894cc618281f395218b36ec43b9d3c",
+    "packages/textbutler/src/habitat-program.ts": "b5a7f4cd70e2c67a84842d431162136d034203e6e382337697ac704f96dd7e32",
+    "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
+    "packages/textbutler/src/habitat-task.ts": "98238fe5abc47b7a4c354052d70b647eac2194ae8b2a04bd829fe3709e10ac7d",
     "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
     "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
     "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
@@ -40,7 +42,7 @@
     "packages/textbutler/src/messages-cli.ts": "44e5db75549e212ab2686d3673c5433908f1f9554bf133e98fd574d09255e66f",
     "packages/textbutler/src/native-subscription.ts": "f448154b264237ac1e854f3f1a3cf8fb2d38266b71fbb2fb8ebec52cb842c91b",
     "packages/textbutler/src/native-task.ts": "122ba7b346ba9cbaca3d1c71270c32e6d6dda37e4c59c8a34c4051c8241859f4",
-    "packages/textbutler/src/owner-cli.ts": "8e123913e0eec22514f296a2dc1a91a096428f17db196d82bfdc41e877657837",
+    "packages/textbutler/src/owner-cli.ts": "0a4221298c8a605070b43bc8f20075f81aa6a8f1370ea2c3e8cfdcf32ec5afe6",
     "packages/textbutler/src/owner-messages.ts": "337d9f057d20e2cf32dbf781d4143ecee3fbd16f2aa82d88380af99aa1c3177a",
     "packages/textbutler/src/owner-replies.ts": "586002d4acef0b2a1fc95abb35709a78f4b79122594ce309be0c3882d9d527d6",
     "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",
@@ -55,10 +57,10 @@
     "packages/transport/src/automation-contract.ts": "629e02b9dda6f913cc482a815cd3df5f54ed9aad5c67af780cfbe2c64887da18",
     "packages/transport/src/automation-diagnostics.ts": "c3ae9b6f666a73887b53d276095ca02e0ca99b2cb19832150337fee441cbf535",
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
-    "scripts/xcb-integration-admission.ts": "6d2843d10d2be3ee2bb77bcb993bda2f3b58e013f5e74edbfa9793a5bf2c69af"
+    "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "validation": {
     "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/messages-activity.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/runtime.test.ts packages/textbutler/src/daemon.test.ts",
-    "receiptSha256": "6906776f16e56318dadcfff27be2dd70cc6f735d6df102d4a172b3744834a9fc"
+    "receiptSha256": "68d243d547e511a8511839538b1fc31c592259b4b10f62a06bb861cf013b4271"
   }
 }

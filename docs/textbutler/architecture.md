@@ -120,6 +120,35 @@ Evolution runs in the background when the contact is idle. It reviews the reply'
 
 The reply, reflection and judge programs use Algal's task authoring API and compile to ordinary replayable organisms. Their prompts, input and output checks, provider deadlines and one-call limits remain host-controlled. Cancellation waits for provider cleanup; an uncertain attempt is never repeated automatically.
 
+An owner may stage a portable `algal.evaluated-task.v1` response task for explicit
+shadow evaluation with `textbutler habitats task-stage CONTACT REVISION FILE`
+while automatic replies are paused. The private JSON file contains `artifact`
+and its complete `archive`. Admission replays that archive without a provider,
+binds its selected task and dataset, and requires the current host task's exact
+base identity, inputs, output contract, routes and budgets. Evaluation references
+alone are insufficient. The contact retains at most two 64 KiB artifacts under
+its existing state limit; staging fails rather than evicting reply episodes.
+Archives must fit the 768 KiB admission limit and remain in the owner's private
+study directory for later audit.
+
+`habitats show` reports the artifact and archive digests, readiness and the
+explicit `activeForReplies: false` status. The ordinary reply driver continues
+using its current host task. The separate `executeHabitatShadow` host entrypoint
+returns output and a receipt without a messaging operation. It is never invoked
+automatically by staging. Owner plan changes make a staged artifact stale;
+conditional `habitats task-rollback CONTACT REVISION` restores its predecessor
+and records a bounded rollback tombstone. None of these commands changes a
+contact's permissions, provider, disclosure, memory or live champion. Receipt
+replay establishes recorded execution, not annotation truth or improved quality.
+
+The explicit source command `bun scripts/export-textbutler-study.ts --journal
+ABSOLUTE_PRIVATE_JOURNAL --out NEW_PRIVATE_FILE` captures up to 128 retained
+response inferences for the Algal Lab importer. It opens the existing journal
+read-only, includes source digests and complete replay evidence, omits records
+without a current habitat base, and reports omissions. It does not read provider
+credentials or infer labels from recorded model decisions. Independent annotation
+and conversation-group freezing are required before any effectiveness comparison.
+
 `textbutler habitats show CONTACT` includes an `operations` list. It shows eligible or waiting checkpoints, live evaluations, retained or promoted outcomes, reasons and available receipt IDs. A claimed checkpoint without a live evaluator is marked `uncertain`; that does not establish whether its provider call completed. Cancellation is shown as `requested` only while the current evaluator reports an aborted signal. It is `unknown` in other cases, including after the live observation is gone. This view reads existing state and does not authorize retries. The response reports omitted entries if its size limit requires trimming.
 
 Learning can change personality, guidance, context size, reply length and humor. The owner controls the plan's `webSearch`, `memeSearch` and `javascript` flags; evolution cannot change them. JavaScript is disabled by default. When enabled, each call uses a fresh QuickJS WebAssembly runtime, receives copied JSON only, and has no host functions, module loader, filesystem, network, timers or contact objects. Code, input, output, heap, stack and CPU are bounded; tool evidence retains only a SHA-256 code digest and a bounded JSON result. Its purpose is pure data transformation, not messaging or memory mutation. `memorySearch` is a local read-only tool scoped to this contact. Owner edits and rollback invalidate pending replies and learning for that contact. Already-started sends finish through the normal send journal. `habitats rollback CONTACT REVISION` restores a learned ancestor from the current owner configuration while automation is paused.
@@ -219,3 +248,5 @@ One narrow native command accepts the versioned control request. It connects to 
 - [Claude Agent SDK permissions](https://platform.claude.com/docs/en/agent-sdk/permissions): tool permission controls.
 - [Linq messages](https://docs.linqapp.com/channel/imessage/api/resources/chats/subresources/messages/): transport-specific rich message behavior.
 - [Linq reactions](https://docs.linqapp.com/channel/imessage/api/resources/messages/methods/add_reaction/): emoji and sticker reactions.
+
+Imported shadow tasks must contain no conversation examples. Labeled research artifacts stay private and cannot be installed into a contact habitat until the host can verify every example belongs to that contact. Explicit shadow evaluation enforces the same rule before calling an executor.

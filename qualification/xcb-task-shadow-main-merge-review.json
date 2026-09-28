@@ -1,38 +1,58 @@
 {
   "version": 1,
-  "scope": "Wake the automatic poll loop on Messages database activity instead of a fixed one-second timer, with a heartbeat fallback.",
-  "baseCommit": "db90687e637cc98341d635cbad332d0cc40aeb2f",
-  "motivation": "With the persistent Ghostget helper, a poll costs tens of milliseconds, so intake latency is dominated by the timer between polls; polling continuously while idle also spends helper CPU for nothing.",
-  "design": {
-    "activity": "createMessagesActivity watches the Messages store's chat.db-wal and chat.db files (non-persistent fs watchers) and drops a watcher that reports rename (deleted or moved) and re-arms whenever a file's device/inode changes, so a recreated WAL is watched even when its inode number is reused. It carries no message data: an event only resolves the loop's wait. An unwatchable or absent store falls back to the heartbeat.",
-    "schedule": "Automatic loops given an activity source wait for activity or a 3s heartbeat (1s while any contact has sync failures), then tick after a 100ms floor. Activity during a tick is remembered, so a change is never missed between ticks. Without an activity source the loop keeps its one-second timer; tests with automatic:false are unaffected.",
-    "unchanged": "Poll, drain, debounce, claim, dispatch, grant and reconciliation logic are unchanged; only when the next poll starts changes."
+  "scope": "Source composition evidence for merging Textbutler main into evaluated-task shadow adoption. Owner contact labels, the upstream release/dependency updates, and instructions-only task shadow adoption are retained together.",
+  "parents": {
+    "task": "13223b20ae7e5223bd05ea97ae4c13f66d0659c8",
+    "main": "7f792f2d7b5f3335ab4c381629ba1e4ecc447815"
+  },
+  "dependencyPins": {
+    "@hraness/algal": "github:hraness/algal#47fb53d5cf96747477e7079b1d789a8d96c82225",
+    "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
+    "@hraness/support-foundation": "github:hraness/support-foundation#8bb514d24b79dc3f305390700ae312cab88e7ad2"
   },
   "independentReview": {
-    "reviewer": "none",
-    "method": "Implementer self-review of the full diff only. No separate agent review was performed for this change.",
-    "result": "Pending independent review."
+    "reviewer": "Independent Cloud implementation agent, separate from the Textbutler merge implementer",
+    "sourceReportSha256": "eaa29be0c6b253ce6c18e001b0ffcb402161ca90f0b729da2c12c81d42a3f35f",
+    "frozenInputsSha256": "e344999f7a158388ed93b7ce04e72055ce7dcd20e67bd61c5895d8e2a5b0322f",
+    "method": "Independent read-only semantic review of the normal Textbutler PR232 merge resolution",
+    "result": "No blocking source finding.",
+    "observations": [
+      "All 45 frozen source hashes and seven test hashes match the reviewed working tree.",
+      "Contact capability/profile modules, contact habitat/repositories, task compiler/shadow privacy guards and strict source-admission validator retain the already reviewed PR bytes.",
+      "Control protocol, parser and handler retain contact.label.update and habitat.task.stage/task.rollback. Labels remain revision-checked settings metadata; task staging stays contact-bound, bounded, paused, and owner-revision checked.",
+      "Owner CLI retains unambiguous contact resolution, all label commands, both task commands, and private-file evidence loading.",
+      "Upstream release 0.8.22, desktop-foundation 0.8.0 and support-foundation 8bb514d are retained together with ALGAL47fb53d. Lock entries and build/support-policy pins correspond to those choices.",
+      "Upstream support help/display changes preserve the task command branches; no new provider route or private corpus authority was introduced."
+    ],
+    "qualification": "Source review only; no live provider, private corpus, aggregate, release or deployment qualification claimed."
   },
   "focusedValidation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/messages-activity.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/runtime.test.ts packages/textbutler/src/daemon.test.ts",
+    "command": "bun test packages/textbutler/src/owner-cli.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/menubar.test.ts scripts/xcb-integration-admission.test.ts",
     "toolchain": "Bun 1.3.14",
+    "scheduler": "host-run shared compute, label textbutler-main-merge-focused",
     "result": {
       "exitCode": 0,
-      "passed": 65,
+      "passed": 115,
       "failed": 0,
-      "files": 4,
-      "assertions": 243
+      "files": 7,
+      "snapshots": 4,
+      "assertions": 1548
     },
-    "logSha256": "0142625ff790e5cfc5d77ac61973086c9f3c37f97ec8a9606468542a616981f2",
-    "coverage": [
-      "a database write wakes the waiter well before its heartbeat",
-      "activity between waits is remembered, and a quiet database times out",
-      "a replaced WAL is watched again, and a missing store only falls back to the heartbeat",
-      "messages activity wakes automatic polling immediately; a quiet database waits for the heartbeat"
-    ]
+    "log": "qualification/xcb-task-shadow-main-merge-check.log",
+    "logSha256": "273f01a7c05bce6c3a7ccf76c5a4ababce1d8f5def0e9ec941871ed0e43fdfb4",
+    "logScope": "Complete unedited stdout and stderr from the successful focused command. No aggregate check, live provider invocation or messaging result is claimed.",
+    "testSourceSha256": {
+      "packages/textbutler/src/owner-cli.test.ts": "03ab88b933d5137f8d1c38468af6f26ca43e1aa6c859697d67bf0fbdf7ccd35c",
+      "packages/textbutler/src/control-service.test.ts": "4b8b8e9476b3f69bb5bc13379117c6e86e55b15ea4b9478f7289617cbfcd3928",
+      "packages/textbutler/src/habitat-task-shadow.test.ts": "e9a8fdd0e4ec5b9580baede47a9d5442ccd376fcf5aa1875a7bf5cae2f69d1ed",
+      "packages/textbutler/src/habitat-program.test.ts": "598e9687d68ef976d9d4caff14806f10054a89fa035b8d145993c31197a673d6",
+      "packages/textbutler/src/cli-golden.test.ts": "2d32ef444708834b4d470c724e78f14e9b5209817002f0699c4b9f791b7dba3d",
+      "packages/textbutler/src/menubar.test.ts": "325d1e7cf8e75cd6780fac6d49af1b34fd740e7608c625444f0d900bec5a2538",
+      "scripts/xcb-integration-admission.test.ts": "e567b1e06d2900b15e37cc8ba634cdb14dc35948dee8d01c63992626f87234ee"
+    }
   },
   "sourceInventoryCount": 45,
-  "sourceDigest": "1402ebbc15bc7d922066cd074946dc4e13c40f473b66a7774f50e30538722033",
+  "sourceDigest": "ce136490a28279de66c68856814f632b13ac00972b30596a7a78c7058fafd3cc",
   "sourceSha256": {
     "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
     "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
@@ -42,7 +62,7 @@
     "packages/textbutler/src/contact-habitat.ts": "39b75edf593ec7152c74a5db9b4b8ee0b35186da0c6361fa8073ce11ec1dbf5d",
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
     "packages/textbutler/src/control-service.ts": "61d28a25b5090f15f546435351607041dd13931408b3cd72eefdf734d976b689",
-    "packages/textbutler/src/daemon.ts": "0c4ec3383048fc4d8724bc426ef0ed2979c5ec35b3c53b043e33fcea05c1825c",
+    "packages/textbutler/src/daemon.ts": "158a15c0404de06c4b318a338ed7ba7e1727617b49f9301d095cf6406e1aa95c",
     "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
     "packages/textbutler/src/habitat-agent.ts": "8f17a4f8d9171a726748d4a692a5fa42a8efeca5e431dce62724d9a5d6e57c8b",
@@ -67,7 +87,7 @@
     "packages/textbutler/src/owner-messages.ts": "337d9f057d20e2cf32dbf781d4143ecee3fbd16f2aa82d88380af99aa1c3177a",
     "packages/textbutler/src/owner-replies.ts": "586002d4acef0b2a1fc95abb35709a78f4b79122594ce309be0c3882d9d527d6",
     "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",
-    "packages/textbutler/src/reply-loop.ts": "3797f80b0ce99a1cd4e0883cb0f5c5befab6e54942f034e839971af9b7d36109",
+    "packages/textbutler/src/reply-loop.ts": "df1bf15374e31da1562194f0206e1e325cb8f722e53696ffe9820c73e5de7f37",
     "packages/textbutler/src/routed-agent.ts": "63897e366965b77ac8bcce8b1b8c08b218c20605923dd86bf468e0b9a65f22b3",
     "packages/textbutler/src/runtime-entry.ts": "5bc336c2e6e02b801282081ea51de23e28b6f0c7a27c422797121fc45376287e",
     "packages/textbutler/src/runtime.ts": "cf412f57bcbee56706d04c9fda06143ba058dd5e1dabf3c1fa5d14e21a97cba6",
@@ -80,21 +100,13 @@
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "changedSourceSha256": {
-    "packages/textbutler/src/daemon.ts": "0c4ec3383048fc4d8724bc426ef0ed2979c5ec35b3c53b043e33fcea05c1825c",
-    "packages/textbutler/src/reply-loop.ts": "3797f80b0ce99a1cd4e0883cb0f5c5befab6e54942f034e839971af9b7d36109"
-  },
-  "outOfInventoryChanges": {
-    "packages/textbutler/src/messages-activity.ts": "1eba1b3e8623cac3371d1732ce3532b09da10de4dad2269ae60682502dc8c46d"
-  },
-  "aggregateValidation": {
-    "status": "pending",
-    "owner": "integration owner",
-    "requiredCommand": "bun run check",
-    "note": "CI on the pull request is the aggregate record."
+  "parentAdmissionSha256": {
+    "head": "d4c8f32d58d105083cf9d719a776dfad36bea7b2333210e288ffb382e9eaaac3",
+    "main": "4574420e8423c3325485de8ad1fa0a45d06950c3fe88db2176e97219ecccf08a"
   },
   "limitations": [
-    "File watching depends on the daemon's Full Disk Access to the Messages store; without it intake falls back to the 3s heartbeat.",
-    "No live messaging was performed for this evidence."
+    "This is reviewed source composition with focused synthetic regression evidence, not a live provider qualification, release signature or proof of message delivery.",
+    "Automatic replies retain the host task. Evaluated-task examples remain rejected at staging and explicit shadow execution; provider readiness and contact grants are unchanged.",
+    "The integration owner must still run the required aggregate check and delivery gates."
   ]
 }
