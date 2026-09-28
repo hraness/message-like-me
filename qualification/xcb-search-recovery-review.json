@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "scope": "Recovery when a local reply model proposes web queries that the private-corpus gate refuses.",
+  "reviewer": "Independent AI subagent /root/search_recovery_review",
+  "method": "Read-only review of the final implementation and regression-test diff; no edits or tests by the reviewer.",
+  "result": "No blocking findings. Refused queries stay local. Specific bounded pair feedback allows fresh wording within the two-tool budget. After all searches are refused, an unsupported current answer is replaced with a truthful fallback, including when guidance supplied the location. Standalone butler help, deliberate silence, and later non-search tool answers remain available.",
+  "reviewedSha256": {
+    "packages/textbutler/src/habitat-agent.ts": "db681c6d399b2a4b58e9d58b1cab15d1f8f0cfa25db1562eaac6c5040440a31d",
+    "packages/textbutler/src/habitat-agent.test.ts": "f5a116480badfc7e782c888c3ffc918393ea78cc5119cebc0c916e6e5e46a4d8"
+  },
+  "remainingLimit": "The standalone-help exception is narrow; another non-current request can receive a generic search-failure reply after an unnecessary refused search. Focused tests are synthetic and do not exercise a configured local model or search credential."
+}

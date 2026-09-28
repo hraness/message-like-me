@@ -89,15 +89,24 @@ const PRIVATE_SHAPE = /(?:[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d\s().-]{7,}\d|http
 /** A public query must not contain identifier shapes, any private 2-3 word span, or a
  * proper-noun token seen in private context. Fully paraphrased private facts remain a
  * residual risk, so web search stays plan-gated and owner-visible rather than default-on. */
-export function admitPublicQuery(query: string, corpus: string): boolean {
-  if (PRIVATE_SHAPE.test(query)) return false;
+function publicQueryRefusal(query: string, corpus: string): string | null {
+  if (PRIVATE_SHAPE.test(query)) return "The query contains an identifier. Use fresh public wording without it.";
   const words = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter(word => word.length >= 2);
   const q = words(query), corpusWords = words(corpus), grams = new Set<string>();
   for (const size of [2, 3]) for (let index = 0; index + size <= corpusWords.length; index++) grams.add(corpusWords.slice(index, index + size).join(" "));
-  for (const size of [2, 3]) for (let index = 0; index + size <= q.length; index++) if (grams.has(q.slice(index, index + size).join(" "))) return false;
+  const repeatedPairs = [...new Set(q.slice(0, -1).map((word, index) => `${word} ${q[index + 1]}`).filter(pair => grams.has(pair)))].slice(0, 4);
+  if (repeatedPairs.length) return `Avoid these adjacent word pairs from your query: ${repeatedPairs.map(pair => `"${clip(pair, 80)}"`).join(", ")}. Use fresh public wording; changing case is insufficient.`;
   const properNouns = (value: string) => new Set((value.match(/\b[A-Z][a-z]{3,}\b/gu) ?? []).map(word => word.toLowerCase()));
   const corpusNouns = properNouns(corpus);
-  return !q.some(word => corpusNouns.has(word));
+  return q.some(word => corpusNouns.has(word)) ? "The query repeats a private proper name. Use fresh public wording without names from the conversation." : null;
+}
+export function admitPublicQuery(query: string, corpus: string): boolean { return publicQueryRefusal(query, corpus) === null; }
+
+// A standalone request for this assistant's help can be answered from its
+// local context even when the model needlessly tried a web search first.
+// Broader requests may need the refused result, so they receive a safe reply.
+function isStandaloneButlerHelp(text: string): boolean {
+  return /^(?:(?:textbutler|butler)[,\s]+help(?:\s+(?:me|please))?|(?:what can you do|how do i use (?:textbutler|butler)))[.!?]?$/iu.test(text.trim());
 }
 
 export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDriver; getWorkspace(id: string): Promise<ContactWorkspace>;
@@ -186,7 +195,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     const exposedMemory = new Map<string, string>();
     const files = (await workspace.list()).filter(file => /^(?:outbox|attachments)\//u.test(file.path)).map(file => file.path).slice(-32);
     const privateCorpus = [request.event.text, plan.guidance, ...Object.values(plan.soulCore ?? {}), ...(state.memory ?? []).map(entry => entry.text), ...Object.values(guidance), ...history.map(message => message.text)].join("\n");
-    let executedSearches = 0;
+    let executedSearches = 0, refusedSearches = 0;
     for (let step = 0; step < 3; step++) {
       assertCurrent();
       const availableTools = step === 2 ? [] : [
@@ -202,7 +211,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       const context = { guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), invocation: request.invocation ?? "inferred", capabilities: [...capabilities], files, repos, results, outputContract,
         allowedActions: actionContract.filter(action => capabilities.includes(action.kind)),
         tools: availableTools,
-        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's full history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers and must share no two- or three-word span with any private conversation text; a refused query returns query-not-admitted, so compose the public search in fresh words.` };
+        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's full history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers and must share no two- or three-word span with any private conversation text; query-not-admitted may list forbidden adjacent pairs. Avoid each listed pair, including case changes, and use fresh public wording. If every search attempt is refused, say you could not search instead of inventing current results.` };
       fitMemory(context, plan, 32_768);
       memory.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
       const run = await executeHabitatProgram({ phase: "respond", plan, context: context as JsonValue, executor: ports.driver.executor(`${request.runId}-driver-${step}`), signal });
@@ -210,6 +219,13 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       ports.journal.recordHabitatEvidence(request.contact.id, run.receipt.digest, JSON.stringify(run), now());
       let result = salvageToolRequest(outputSchema.parse(run.output));
       if (!result.respond || result.confidence < 0.85) result = { ...result, respond: false, actions: [], tool: null };
+      const onlyRefusedSearches = results.every(item => item !== null && typeof item === "object" && !Array.isArray(item) && item.tool === "web-search");
+      // A refused search supplies no current facts. Preserve deliberate
+      // silence, other-tool answers and narrow local help requests.
+      if (result.respond && refusedSearches > 0 && executedSearches === 0 &&
+        (result.tool?.kind === "web-search" && step >= 2 || result.tool === null && onlyRefusedSearches && !isStandaloneButlerHelp(request.event.text))) {
+        result = { respond: true, confidence: 1, reason: "requested", summary: "Public search query remained private", actions: [{ kind: "text", text: "I couldn't form a safe web query. Please rephrase the public topic." }], tool: null };
+      }
       if (result.tool) {
         // Small models often send a text action alongside the tool request
         // despite the contract. The tool wins; stray proposed actions are
@@ -233,14 +249,16 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
           results.push({ tool: tool.kind, ...found });
         } else if (tool.kind === "web-search") {
           if (!plan.webSearch) throw Error("Web search is disabled for this plan");
-          if (admitPublicQuery(tool.query, privateCorpus)) {
+          const refusal = publicQueryRefusal(tool.query, privateCorpus);
+          if (refusal === null) {
             executedSearches++;
             results.push({ tool: tool.kind, result: await ports.driver.search(`${request.runId}-search-${step}`, tool.query, signal) });
           } else {
             // A refused query never left the machine, so it does not consume
             // the one-search bound: return the refusal and let the model try
             // a fresh public phrasing within the same tool budget.
-            results.push({ tool: tool.kind, result: { error: "query-not-admitted", detail: "The query shares words or identifier shapes with private conversation text. Compose the public search in fresh words." } });
+            refusedSearches++;
+            results.push({ tool: tool.kind, result: { error: "query-not-admitted", detail: refusal } });
           }
         } else {
           if (!plan.memeSearch) throw Error("Meme tools are disabled for this plan");
