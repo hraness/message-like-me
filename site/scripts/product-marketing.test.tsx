@@ -83,7 +83,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('Telegram’s terms limit AI use of message content, so ask the person first.');
   expect(html).toContain('No app to download');
   expect(html).toContain('Setup builds a small helper app on your Mac so macOS can grant iMessage access.');
-  expect(html).toContain('waits 5 minutes after you last wrote');
+  expect(html).toContain('For 5 minutes after you write in a chat, requests there are skipped');
   expect(html).not.toContain(`Textbutler v${SOFTWARE_VERSION}`);
   expect(html).toContain('Installing them doesn’t install Textbutler or turn on automatic replies.');
   expect(html).toContain('No. textbutler.app is informational');
