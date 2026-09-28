@@ -111,25 +111,31 @@ try {
               .map(element => ({ label: element.getAttribute('aria-label') || element.textContent.trim(), ...rect(element) })) };
         });
         const label = `${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-').replace(/-$/u, '')}-${width}-${theme}`;
-        let metrics;
-        let screenshot;
-        const captureSamples = [];
-        const settleDeadline = Date.now() + 5_000;
-        do {
-          const before = await measure();
-          await page.screenshot({ path: resolve(artifacts, `${label}-viewport.png`), animations: 'disabled' });
-          const viewport = await measure();
-          screenshot = await page.screenshot({ path: resolve(artifacts, `${label}.png`), fullPage: true, animations: 'disabled' });
-          const full = await measure();
-          captureSamples.push({ before, viewport, full });
-          if (JSON.stringify(before) === JSON.stringify(viewport) && JSON.stringify(viewport) === JSON.stringify(full)) {
-            metrics = full;
-            break;
-          }
-        } while (Date.now() < settleDeadline);
-        report.records.push({ path, width, theme, metrics, captureSamples, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
-        assert.ok(metrics, `${label}: layout and pointer media must settle across both captures`);
-        assert.equal(screenshot.readUInt32BE(16), width, `${label}: uncropped full-page width`);
+        // Chromium's captureBeyondViewport can reset touch emulation. Capture
+        // overlapping viewport tiles instead, checking real phone media at each tile.
+        const metrics = await measure();
+        const captures = [];
+        const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+        const step = Math.max(1, Math.floor(metrics.viewportHeight * 0.8));
+        assert.ok(Math.ceil(pageHeight / step) <= 100, `${label}: bounded screenshot count`);
+        for (let offset = 0, index = 0; offset < pageHeight; offset += step, index++) {
+          await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), offset);
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          const file = `${label}${index ? `-tile-${index}` : ''}.png`;
+          const screenshot = await page.screenshot({ path: resolve(artifacts, file), animations: 'disabled' });
+          const capture = await page.evaluate(() => ({ y: scrollY, coarse: matchMedia('(pointer: coarse)').matches,
+            width: innerWidth, height: innerHeight }));
+          captures.push({ file, ...capture });
+          assert.equal(capture.coarse, mobile, `${label}: phone media preserved in tile ${index}`);
+          assert.equal(screenshot.readUInt32BE(16), width, `${label}: uncropped viewport width`);
+          assert.equal(screenshot.readUInt32BE(20), metrics.viewportHeight, `${label}: viewport height`);
+          if (capture.y + capture.height >= pageHeight) break;
+        }
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const afterCapture = await measure();
+        report.records.push({ path, width, theme, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        assert.deepEqual(afterCapture, metrics, `${label}: layout and pointer media preserved through captures`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);
         assert.match(metrics.bodyFont, /Nebula Sans/u, `${label}: sans typography`);
@@ -169,7 +175,7 @@ try {
       await page.locator(`main a[href="${href}"]`).first().click();
       assert.equal((await navigation).status(), 200, 'Primary setup action reaches the public guide');
     } catch (error) {
-      if (page && !page.isClosed()) await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }).catch(() => {});
+      if (page && !page.isClosed()) await page.screenshot({ path: resolve(artifacts, 'failure.png'), }).catch(() => {});
       throw error;
     } finally { await context.close(); }
   }
@@ -177,7 +183,7 @@ try {
   report.passed = true;
 } catch (error) {
   report.failure ??= String(error);
-  if (page && !page.isClosed()) await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }).catch(() => {});
+  if (page && !page.isClosed()) await page.screenshot({ path: resolve(artifacts, 'failure.png'), }).catch(() => {});
   process.exitCode = 1;
 } finally {
   await finalize();
