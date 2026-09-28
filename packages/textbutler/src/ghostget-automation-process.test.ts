@@ -253,6 +253,14 @@ test("the group CPU probe observes real process-group work", async () => {
     expect(later).toBeGreaterThan(first!);
   } finally { try { process.kill(-burner.pid!, "SIGKILL"); } catch { /* test cleanup only */ } }
 });
+test("a same-group helper that exits just after a clean close still releases custody promptly", async () => {
+  const config = await options("draining-sibling");
+  const process = await createGhostgetAutomationProcess(config);
+  const started = performance.now();
+  await process.close();
+  expect(performance.now() - started).toBeLessThan(5_000);
+  await expect(lstat(join(config.custodyDirectory, AUTOMATION_CUSTODY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
+});
 test("a same-group survivor of a closed child meets SIGKILL escalation and is never orphaned", async () => {
   const config = await options("leave-sibling");
   const process = await createGhostgetAutomationProcess(config, { cleanupGraceMs: 60 });

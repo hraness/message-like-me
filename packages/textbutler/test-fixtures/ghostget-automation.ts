@@ -75,6 +75,9 @@ process.stdin.on("data", (chunk: string) => {
       // A same-group sibling that ignores SIGTERM must still meet the SIGKILL
       // escalation after this child exits; it must never be left orphaned.
       if (mode === "leave-sibling") spawn(process.execPath, ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"], { detached: false, stdio: "ignore" }).unref();
+      // A same-group helper that exits a moment after the leader, as a
+      // persistent state helper does once its input pipe closes.
+      if (mode === "draining-sibling") spawn(process.execPath, ["-e", "setTimeout(()=>process.exit(0),400)"], { detached: false, stdio: "ignore" }).unref();
       process.stdin.pause(); setTimeout(() => process.exit(0), 5);
     }
     else process.exit(3);
