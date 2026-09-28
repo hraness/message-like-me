@@ -65,7 +65,7 @@ The fields are:
 | Field | Meaning |
 | --- | --- |
 | `id` | Stable local account ID, up to 80 letters, digits, `_` or `-`; start with a letter or digit. |
-| `label` | The account name shown in the menu. |
+| `label` | The account name shown in the terminal and CLI. |
 | `route` | Exactly `claude-api`. |
 | `credentialFile` | The filename inside `state/provider-credentials`, with no directory components. |
 | `replyModel` | Exact model ID available to this account. |

@@ -31,7 +31,7 @@ const questions = [
   {
     question: 'Do I need my own AI account?',
     answer:
-      'Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Textbutler writes AI replies through your own Claude Code, Codex, or Devin subscription connected with xcb, though connecting chats and sending replies you type yourself need no AI account.',
+      'Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Textbutler writes AI replies with Qwen 3.5 Flash through your own Vercel AI Gateway key by default, or your Claude Code, Codex, or Devin subscription connected with xcb, though connecting chats and sending replies you type yourself need no AI account.',
   },
   {
     question: 'Can either app send without me watching?',
@@ -147,7 +147,7 @@ export default function CompareGhostReplyPage() {
               <tr>
                 <th scope="row">Where the AI runs</th>
                 <td>GhostReply’s Cloudflare backend calls Cloudflare Workers AI; there is no API key to create or choose</td>
-                <td>Your own Claude Code, Codex, or Devin subscription through xcb on your Mac; the optional fast-reply path uses a Qwen model through Vercel AI Gateway or a local model server</td>
+                <td>Qwen 3.5 Flash through your own Vercel AI Gateway key by default, or your Claude Code, Codex, or Devin subscription through xcb; a model server on your Mac also works</td>
               </tr>
               <tr>
                 <th scope="row">What it reads</th>
@@ -157,7 +157,7 @@ export default function CompareGhostReplyPage() {
               <tr>
                 <th scope="row">What you pay</th>
                 <td>10 replies free, then $4.99 once for a one-Mac personal license with hosted AI included</td>
-                <td>Nothing for the software, which is MIT licensed; AI replies use the Claude Code, Codex, or Devin subscription you already pay for</td>
+                <td>Nothing for the software, which is MIT licensed; AI replies cost your Vercel AI Gateway usage, capped at $1 a day by default, or use a Claude Code, Codex, or Devin subscription you already pay for</td>
               </tr>
               <tr>
                 <th scope="row">What ships today</th>

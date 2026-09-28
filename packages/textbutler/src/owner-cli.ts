@@ -110,7 +110,7 @@ export async function handleOwnerCommand(args: readonly string[], options: {
     print({ ok: true, providers: snapshot.messagingProviders ?? [], detail: "These connections are configured. Start a connection to check it; configuration alone does not prove it is connected.",
       capabilities: snapshot.capabilities.filter(capability => capability.id === "messages") }); return 0;
   }
-  if (contactsList) { print({ ok: true, revision: snapshot.revision, paused: snapshot.settings.paused, contacts: snapshot.contacts }); return 0; }
+  if (contactsList) { print({ ok: true, revision: snapshot.revision, paused: snapshot.settings.paused, replyModel: snapshot.habitat?.model ?? null, contacts: snapshot.contacts }); return 0; }
   if (pause) return report(await awaitOwnerJob({ protocol: CONTROL_PROTOCOL, command: "global.settings.update", expectedRevision: snapshot.revision,
     settings: { ...snapshot.settings, paused: family === "pause" } }, request));
   if (add) return report(await awaitOwnerJob({ protocol: CONTROL_PROTOCOL, command: "contact.enroll", candidateId: target!, expectedRevision: snapshot.revision,

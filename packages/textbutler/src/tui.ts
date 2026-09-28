@@ -12,6 +12,7 @@ import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, type OwnerControlClie
 import { openSettingsUrl, runAccessGuide, type AccessGuideOptions } from "./access-guide.ts";
 import { detectBun, detectConnector, needsBun, resolveTyped, type DetectedConnector } from "./connect-detect.ts";
 import { shellWord } from "./permission-readiness.ts";
+import { DEFAULT_REPLY_MODEL } from "./default-reply-model.ts";
 
 export interface TerminalSession {
   write(text: string): unknown;
@@ -30,6 +31,12 @@ export function terminalDashboard(snapshot: DesktopSnapshot | null): string {
   return ["", "TEXTBUTLER", "Your conversations, with you in control.", "", state,
     snapshot ? `${snapshot.contacts.length} conversations · ${active} with automatic replies on` : "Start with Setup & readiness.",
     "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Give Textbutler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
+}
+/** The model that writes automatic replies when the fast reply writer is on. */
+export function replyWriterLabel(snapshot: DesktopSnapshot): string | null {
+  const model = snapshot.habitat?.model;
+  if (model === undefined) return null;
+  return model === DEFAULT_REPLY_MODEL.id ? `${DEFAULT_REPLY_MODEL.label} (${DEFAULT_REPLY_MODEL.via})` : model;
 }
 export function terminalDraft(draft: ReplyDraftDetail): string {
   const field = (value: string): string => terminalText(JSON.stringify(value));
@@ -214,10 +221,12 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
           }
         }
       } else if (choice.trim() === "5") {
-        const contact = await pick(io, "Choose a contact", snapshot!.contacts, value => `${value.name} · automatic replies ${value.settings.enabled ? "on" : "off"} · ${value.messaging?.provider ?? "read only"}`);
+        const writer = replyWriterLabel(snapshot!);
+        const contact = await pick(io, "Choose a contact", snapshot!.contacts, value => `${value.name} · automatic replies ${value.settings.enabled ? "on" : "off"} · ${value.messaging?.provider ?? "read only"}${writer ? ` · replies by ${writer}` : ""}`);
         if (!contact) continue;
         const action = await io.ask("[a] Choose agent  [e] Enable automatic replies  [d] Disable  [k] Keyword mode  [Enter] Back: ");
         if (action?.trim() === "a") {
+          if (writer) io.write(`Automatic replies are written by ${writer}. The agent account you choose here is used only if that reply writer is turned off.\n`);
           const account = await pick(io, "Choose an agent account", snapshot!.providerAccounts ?? [], value => `${value.label} · ${value.status}\n     ${value.detail}`);
           if (account) await owner(["contacts", "account", contact.id, account.id], `${terminalLabel(contact.name)} now uses ${terminalLabel(account.label)}.`);
         } else if (action?.trim() === "d") await owner(["contacts", "disable", contact.id], `Automatic replies are off for ${terminalLabel(contact.name)}.`);

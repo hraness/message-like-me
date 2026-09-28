@@ -185,7 +185,9 @@ test('keeps machine-readable setup and conditional subscription admission consis
   expect(discovery).toContain('only from the local install that bun run textbutler:install builds');
   expect(discovery).toContain('both contact permission profiles match the last reviewed version');
   expect(discovery).toContain('Running from source never writes AI replies.');
-  expect(discovery).toContain('the account must pass providers check');
+  expect(discovery).toContain('A subscription account must also pass providers check.');
+  expect(discovery).toContain('Qwen 3.5 Flash through your own Vercel AI Gateway key by default');
+  expect(discovery).not.toContain('still needs an xcb account');
   expect(discovery).toContain('no app to download and no published Textbutler package');
   expect(discovery).toContain('Vercel AI Gateway');
   expect(discovery).toContain('App Clips, mini apps, and Linq integration are not supported.');

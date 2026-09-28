@@ -42,7 +42,8 @@ Chats and contacts
   contacts <command>         Add chats and choose how Textbutler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
-AI accounts
+AI replies
+  providers gateway-key      Save a Vercel AI Gateway key (replies use Qwen)
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is ready
 
@@ -224,13 +225,22 @@ iMessage access" in docs/textbutler/getting-started.md. Then run
 textbutler doctor to check both."
 ,
   "providers": 
-"Usage: textbutler providers list | check <account>
+"Usage: textbutler providers gateway-key | list | check <account>
 
-Show your AI accounts, or check that one is signed in and ready.
-Subscription accounts are native-claude-code, native-codex and native-devin.
+Set up AI replies, show your AI accounts, or check that one is ready.
+
+Commands
+  providers gateway-key      Save a Vercel AI Gateway key from a pipe
+  providers list             Show connected AI accounts
+  providers check <account>  Check that one account is signed in and ready
+
+Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key,
+capped at $1 a day. Pipe the key in so it never lands in your shell history,
+then restart the background service. Subscription accounts (native-claude-code,
+native-codex and native-devin) connect through xcb.
 
 Example
-  textbutler providers check native-codex"
+  pbpaste | textbutler providers gateway-key"
 ,
   "replies": 
 "Usage: textbutler replies <command>

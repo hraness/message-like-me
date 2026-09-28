@@ -18,6 +18,7 @@ import type { ClaudeApiAdapterOptions } from "@hraness/agentmixer";
 import { createSupervisedGhostgetAutomation } from "./ghostget-automation-process.ts";
 import { createAutomationOwnerPort } from "./automation-owner.ts";
 import { createDaemonReplyLoop } from "./reply-loop.ts";
+import { effectiveHabitat } from "./default-reply-model.ts";
 import { createMessagesActivity, type MessagesActivity } from "./messages-activity.ts";
 import { createFastDriver } from "./fast-driver.ts";
 import { bundledXcbIntegrationAdmission, validXcbIntegrationAdmission } from "./xcb-integration.ts";
@@ -94,9 +95,13 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
         ...(nativeSubscriptions === undefined ? {} : { nativeSubscriptions }) }) });
     await service.recoverInactiveGrants();
     let habitat: Parameters<typeof createDaemonReplyLoop>[0]["habitat"];
-    if (host.habitat?.enabled) {
-      if (!validXcbIntegrationAdmission(bundledXcbIntegrationAdmission())) throw Error("Habitat execution requires a reviewed, admitted Textbutler bundle");
-      const config = host.habitat;
+    // An explicit host.json habitat runs as written; otherwise the default Qwen
+    // route runs once its Vercel AI Gateway key is saved.
+    const admitted = validXcbIntegrationAdmission(bundledXcbIntegrationAdmission());
+    const selected = await effectiveHabitat(host, dataDir, admitted);
+    if (selected.state === "configured" && !admitted) throw Error("Habitat execution requires a reviewed, admitted Textbutler bundle");
+    if (selected.state === "configured" || selected.state === "default") {
+      const config = selected.config;
       const driver = createFastDriver(config.driver, { journal: service.runJournal(), ...(config.driver.kind === "gateway" ? { credential: async () => {
         const directory = join(dataDir, "state", "provider-credentials");
         await assertOwnedPath(directory, { kind: "directory", canonical: true, ownerOnly: true });

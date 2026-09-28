@@ -70,7 +70,7 @@ describe("owner CLI entrypoint", () => {
     const setup = (await run(["setup", "--help"])).lines.join("");
     expect(setup).toContain("--xcb-account <ai>:<id>");
     expect(setup).toContain("--xcb-model <ai>/<model>[/<effort>]");
-    expect((await run(["providers", "-h"])).lines.join("")).toContain("providers check native-codex");
+    expect((await run(["providers", "-h"])).lines.join("")).toContain("pbpaste | textbutler providers gateway-key");
   });
   test("contact controls and pause use the running owner daemon", async () => {
     const dataDir = await root();
@@ -92,5 +92,24 @@ describe("owner CLI entrypoint", () => {
     const result = await run(["pause", "--data-dir", dataDir]);
     expect(result.code).toBe(1);
     expect(result.json()).toMatchObject({ ok: false, status: "disconnected", detail: expect.stringContaining("before repeating") });
+  });
+});
+
+describe("default reply model setup", () => {
+  test("providers gateway-key stores a piped key owner-only and refuses a terminal or a malformed key", async () => {
+    const dataDir = await root();
+    const lines: string[] = [];
+    const code = await runTextbutlerCli(["providers", "gateway-key", "--json", "--data-dir", dataDir], { write: text => lines.push(text) }, { readSecret: () => "vck_synthetic-key\n" });
+    expect(code).toBe(0);
+    expect(JSON.parse(lines.join(""))).toMatchObject({ ok: true, status: "saved", model: "alibaba/qwen3.5-flash" });
+    expect(lines.join("")).not.toContain("vck_synthetic-key");
+    const { readFile, lstat } = await import("node:fs/promises");
+    const path = join(dataDir, "state", "provider-credentials", "vercel-ai-gateway");
+    expect(await readFile(path, "utf8")).toBe("vck_synthetic-key\n");
+    expect((await lstat(path)).mode & 0o777).toBe(0o600);
+    await expect(runTextbutlerCli(["providers", "gateway-key", "--data-dir", dataDir], { write: () => {} }, { readSecret: () => { throw new Error("Protected input does not read terminals."); } }))
+      .rejects.toThrow("pbpaste | textbutler providers gateway-key");
+    await expect(runTextbutlerCli(["providers", "gateway-key", "--data-dir", dataDir], { write: () => {} }, { readSecret: () => "two words" })).rejects.toThrow(CliUsageError);
+    expect(await readFile(path, "utf8")).toBe("vck_synthetic-key\n");
   });
 });
