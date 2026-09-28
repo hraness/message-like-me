@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "scope": "Let the butler search and page through a conversation's full message history, enable web and meme search by default for new plans, and keep history access off for non-self contacts unless explicitly enabled.",
+  "baseCommit": "914f9028fa761186ca383b265de0b9904810df78",
+  "motivation": "Owner request: the butler should be able to page through full conversation history and search by text, date and author. Web and meme search should be on by default. History search defaults on for the owner's self chat only; other contacts need an explicit plan flag.",
+  "design": {
+    "transport": "ghostget historyWindow reads a bounded dated page (before/after instants, limit<=1000) inside one enrollment, refusing malformed instants and asserting the enrollment row; Textbutler's transport client exposes it and the reply loop maps messages through the same messageAuthor attribution as recent.json.",
+    "search": "history-search.ts: newest-first scan of at most 5 pages x 200 messages per call, <=20 matches, 300-byte excerpts around the first term hit, all-words case-folded matching, owner/contact/any author filter, local-day from/to bounds, and a cursor that resumes strictly older; stuck providers are refused.",
+    "gating": "history-search is listed only when the plan enables it or (absent a flag, for older plans) the contact is the owner's self chat; it joins webSearch/memeSearch/javascript/memorySearch/repoAccess as an egress flag evolution cannot flip; results are untrusted quoted text.",
+    "defaults": "webSearch defaults true (executed only through the gateway driver, which requires the gateway credential); historySearch stays unset in the default plan so it follows the self-chat rule."
+  },
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only.",
+    "result": "Pending independent review."
+  },
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/history-search.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/runtime.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 137,
+      "failed": 0,
+      "files": 5,
+      "assertions": 1047
+    },
+    "logSha256": "fb36e86afec746a10b6cd610700ae891ce4108a89dd6a30152148e04e1cd9df0"
+  },
+  "companionChange": "hraness/ghostget PR #442 adds the bounded dated historyWindow transport operation; without it the tool stays unlisted because the history port is absent."
+}

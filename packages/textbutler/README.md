@@ -202,7 +202,7 @@ Use the returned habitat revision with `habitats configure CONTACT REVISION JSON
 The JSON replaces the full plan. For a new habitat whose reported revision is `0`:
 
 ```sh
-textbutler habitats configure CONTACT 0 '{"version":1,"guidance":"Give one useful example when explaining something.","contextMessages":12,"maxReplyCharacters":640,"humor":"light","webSearch":false,"memeSearch":true,"personality":{"tone":"warm","formality":"casual"}}'
+textbutler habitats configure CONTACT 0 '{"version":1,"guidance":"Give one useful example when explaining something.","contextMessages":12,"maxReplyCharacters":640,"humor":"light","webSearch":true,"memeSearch":true,"personality":{"tone":"warm","formality":"casual"}}'
 ```
 
 Replace `CONTACT` with an exact contact ID or a unique name. Tone accepts `neutral`,
@@ -211,10 +211,12 @@ Personality is optional. Guidance allows up to 4,096 UTF-8 bytes, context includ
 4–32 messages, reply length allows 80–1,600 characters, and humor accepts `off`,
 `light`, or `match`. The complete JSON must fit within 8,192 bytes.
 
-The owner sets `webSearch` and `memeSearch`. Learning can improve the personality
-and response guidance from observed follow-ups, but cannot change these tool
-flags. Web search also requires a gateway driver. Meme images require attachment
-support in that conversation. Changing a plan cancels that contact's unfinished
+The owner sets `webSearch`, `memeSearch` and `historySearch`. Learning can improve
+the personality and response guidance from observed follow-ups, but cannot change
+these tool flags. Web search also requires a gateway driver. History search lets
+the butler page through the conversation's full local history by text, date and
+author; it defaults on for the owner's self chat and off for other contacts. Meme
+images require attachment support in that conversation. Changing a plan cancels that contact's unfinished
 composition and evolution; a send already dispatched keeps its recorded outcome.
 It does not enable the contact or change its messaging grant.
 
