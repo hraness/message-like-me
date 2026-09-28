@@ -149,10 +149,9 @@ model is picked up when the background service starts. When a Gateway key is
 saved, the butler can also search the web for the people you turn on (in your
 own chat, only when you ask), using your key even when a local model writes the
 replies. It refuses any search that reuses words from your private messages,
-and you can turn search off for one person with `habitats configure`. Stop the
-background service before `providers local`, and restart it after changing the
-reply writer. The
-[subscription guide](docs/textbutler/native-subscription.md) covers xcb setup.
+and you can turn search off for one person with `textbutler habitats configure`.
+Stop the background service before `providers local`, and restart it after
+changing the reply writer. The [subscription guide](docs/textbutler/native-subscription.md) covers xcb setup.
 
 ## Stay in control
 
@@ -173,6 +172,10 @@ LaunchAgent on macOS). `status` shows whether it’s running, whether replies ar
 paused, and each person’s state. `pause` stops everything at once, and
 `contacts disable` turns one person off. Uninstalling with `daemon uninstall`
 keeps your settings and contact notes.
+
+For AI replies, start the service from the installed copy instead:
+`~/.local/bin/textbutler daemon install`. A service started with
+`bun run textbutler` from the checkout doesn’t write AI replies.
 
 To answer yourself, open the guided terminal, choose **Inbox & replies**, select
 a conversation, then choose **Type a reply**. Review the recipient and complete
@@ -208,8 +211,8 @@ Each person you turn on gets a folder of plain files on your Mac (`AGENTS.md`,
 matters, and what’s off-limits. Your settings and sign-ins live elsewhere, where
 the butler can’t change them. Optional learning (off by default; it needs a
 Claude Code subscription through xcb) can remember up to 64 sourced notes and
-adjust tone per chat; `habitats show` lists them and `habitats memory-clear`
-removes them.
+adjust tone per chat; `textbutler habitats show` lists them and
+`textbutler habitats memory-clear` removes them.
 
 ## For agents
 
