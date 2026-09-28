@@ -1,17 +1,31 @@
 # Start using Textbutler
 
-Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose on your Mac.
+Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 Start with its inbox and replies you write yourself. Automatic replies stay
-paused until you choose a ready agent account, turn them on for a contact, and
+paused until you choose what writes replies, turn them on for a contact, and
 resume the butler.
 
-AI replies need a local build of Textbutler and a model to write them. By
-default that's Qwen 3.5 Flash through your own Vercel AI Gateway key, capped at
-$1 a day; you can instead connect a Claude Code, Codex, or Devin subscription
-through [xcb](https://github.com/hraness/xcb). Installing doesn't turn replies
-on, and you should test live messaging with a recipient you trust. The Claude API route
-needs a separately reviewed runtime that neither the source checkout nor the
-local build supplies.
+If you're a coding agent following this guide for someone: run `textbutler
+doctor` after each step and do what it says, stop and hand over whenever macOS
+asks for a permission, a pairing, or a key, leave every contact turned off, and
+don't send any messages.
+
+You need a Mac, Bun 1.3.14, and Ghostget, a separate Mac tool that handles
+messaging sign-in and permissions. If Ghostget isn't installed, follow its
+[getting started tutorial](https://ghostget.com/docs/tutorials/getting-started)
+first.
+
+AI replies need a local build of Textbutler and something to write them.
+Replies can be written by a local model through Ollama (in testing), by Qwen 3.5
+Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or
+Devin subscription through xcb. If you choose one with a command, that choice
+wins. Otherwise a saved Gateway key wins over a local model. Web search is off
+by default. When you turn it on, it uses your Gateway key, even when a local
+model writes the replies. Installing doesn't turn replies on, and you should
+test live messaging with a recipient you trust. The Claude API route needs a
+separately reviewed runtime that neither the source checkout nor the local build
+supplies.
 
 ## Open the guided terminal
 
@@ -58,7 +72,8 @@ setup steps and whether reply generation is actually available.
 ## Connect your messaging apps
 
 Textbutler uses an existing Ghostget installation for account sign-in, permissions
-and messaging access. You need its physical executable path and the exact account
+and messaging access. [Install Ghostget](https://ghostget.com/docs/tutorials/getting-started)
+first if you haven't. You need its physical executable path and the exact account
 ID; Textbutler does not guess an identity. Native iMessage can use the app setup
 flow below. Set up other messaging accounts in Ghostget first.
 
@@ -222,7 +237,35 @@ removal. Repeating setup preserves an already linked account and its identity.
 For JSON commands to read, summarize, compose and send messages from another
 agent, see the [agent CLI guide](agent-cli.md).
 
-## Turn on AI replies with a gateway key
+## Pick what writes replies
+
+Choose one of the three options below. You can switch later.
+
+### A local model on your Mac (in testing)
+
+With a local model, the reply is written on your Mac. Install
+[Ollama](https://ollama.com), then pull the model Textbutler looks for (about
+2.5 GB; Textbutler never downloads a model for you):
+
+```sh
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+```
+
+When no Gateway key is saved, the background service finds that model on
+Ollama's local port when it starts. To choose the local model explicitly, even
+with a Gateway key saved, stop the service and run:
+
+```sh
+~/.local/bin/textbutler providers local
+```
+
+`providers local MODEL` picks another model you've pulled, and
+`--base-url http://127.0.0.1:<port>/v1` points at another OpenAI-compatible
+server on this Mac. Restart the background service afterward. `textbutler
+doctor` shows which model writes your replies. Web search on this route still
+needs a saved Gateway key.
+
+### Qwen 3.5 Flash with your own Vercel AI Gateway key
 
 Create an API key in the Vercel AI Gateway dashboard, copy it, and pipe it in so
 it never lands in your shell history:
@@ -238,7 +281,7 @@ capped at $1 a day. `textbutler doctor` shows which model writes your replies.
 A `habitat` block you write yourself in `state/host.json` takes precedence, and
 `"enabled": false` there turns this reply writer off.
 
-## Or connect your AI subscription
+### Your Claude Code, Codex, or Devin subscription
 
 Install an xcb native build with `generate` support and follow its
 [account setup](https://github.com/hraness/xcb#native-xcb). Sign in through xcb,
@@ -330,9 +373,10 @@ added it.
 
 ## Turn on automatic replies only when ready
 
-Once a qualified agent and messaging connection are ready, select the agent,
-choose the contact's response mode, enable that contact, then resume. These are
-separate choices. The readiness view must show actual engine and transport
+Once a reply writer and messaging connection are ready, choose the contact's
+response mode, enable that contact, then resume. If you use a subscription
+through xcb, also select its account for the contact. These are separate
+choices. The readiness view must show actual engine and transport
 availability; successful setup alone is insufficient.
 
 ```sh

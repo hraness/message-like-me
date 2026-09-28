@@ -33,13 +33,13 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-11T00:00:00.000Z'],
+      ['/', '2026-09-28T00:00:00.000Z'],
       ['/sources', '2026-09-11T00:00:00.000Z'],
-      ['/docs', '2026-09-11T00:00:00.000Z'],
+      ['/docs', '2026-09-28T00:00:00.000Z'],
       ['/methodology', '2026-09-11T00:00:00.000Z'],
       ['/research', '2026-09-11T00:00:00.000Z'],
-      ['/about', '2026-09-11T00:00:00.000Z'],
-      ['/compare/ghostreply', '2026-09-26T00:00:00.000Z'],
+      ['/about', '2026-09-28T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-09-28T00:00:00.000Z'],
     ]);
   });
 
@@ -198,7 +198,7 @@ describe('supported source presentation', () => {
         source('site/app/_components/site-chrome.tsx'),
         source('site/app/sitemap.ts'),
         source('site/app/llms.txt/route.ts'),
-        source('README.md'),
+        source('docs/message-like-me.md'), // legacy reference moved out of README.md
         source('CHANGELOG.md'),
         source('docs/local-message-bundle-v1.md'),
         source('docs/local-message-bundle-v2.md'),
@@ -207,7 +207,7 @@ describe('supported source presentation', () => {
       ]);
 
     expect(home).toContain('<ProductHero');
-    expect(home).toContain("{ href: '#replies', label: 'How replies work', emphasis: 'secondary' }");
+    expect(home).toContain("{ href: '#how-it-works', label: 'See how it works', emphasis: 'secondary' }");
     expect(renderedHomePage).toContain('data-hraness-marketing="hero"');
     expect(renderedHomePage).toContain('View legacy history sources.');
     expect(renderedHomePage).not.toContain('messagelikeme ingest');
@@ -401,12 +401,13 @@ describe('supported source presentation', () => {
   });
 
   test('keeps icons decorative and rejects overclaiming copy', async () => {
-    const [icons, home, sourcesPage, about, readme, llms, layout] = await Promise.all([
+    const [icons, home, sourcesPage, about, readme, legacyDocs, llms, layout] = await Promise.all([
       source('site/app/_components/source-icon.tsx'),
       source('site/app/page.tsx'),
       source('site/app/sources/page.tsx'),
       source('site/app/about/page.tsx'),
       source('README.md'),
+      source('docs/message-like-me.md'),
       source('site/app/llms.txt/route.ts'),
       source('site/app/layout.tsx'),
     ]);
@@ -430,6 +431,7 @@ describe('supported source presentation', () => {
       sourcesPage,
       about,
       readme,
+      legacyDocs,
       llms,
       layout,
     ].join('\n').toLowerCase();

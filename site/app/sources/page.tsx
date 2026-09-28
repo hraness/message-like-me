@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { SiteFooter, SiteHeader } from '../_components/site-chrome';
 import { SourceCard } from '../_components/source-card';
 import {
@@ -14,6 +12,8 @@ import {
   pageMetadata,
   SOFTWARE_VERSION,
 } from '../_lib/site';
+
+const LEGACY_DOCS_URL = `${GITHUB_URL}/blob/main/docs/message-like-me.md`;
 
 export const metadata = pageMetadata({
   title: 'Legacy history sources',
@@ -51,7 +51,7 @@ export default function SourcesPage() {
       <main className="document-page sources-page" id="main-content" tabIndex={-1}>
         <header className="document-hero sources-hero">
           <h1>Legacy history sources</h1>
-          <p className="legacy-note">These are the published Message Like Me history readers. They only import old messages and are separate from Textbutler’s live iMessage, WhatsApp, and Beeper connections, which the <a href={GETTING_STARTED_URL}>setup guide</a> covers.</p>
+          <p className="legacy-note">These are the published Message Like Me history readers. They only import old messages and are separate from Textbutler’s live iMessage, WhatsApp, and Beeper connections, which the <a href={GETTING_STARTED_URL}>setup guide</a> covers. The full legacy documentation lives in <a href={LEGACY_DOCS_URL}>docs/message-like-me.md</a>.</p>
           <p>
             Message Like Me supports {MESSAGING_HISTORY_SOURCES.length} messaging-history
             inputs and one optional Contacts enrichment source. The messaging inputs
@@ -122,7 +122,7 @@ export default function SourcesPage() {
           <div className="source-links">
             <a href="https://ghostget.com/providers/beeper/">Inspect Ghostget’s Beeper surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v1.md`}>Read the versioned bundle contract ↗</a>
-            <Link href="/docs">Open the project docs →</Link>
+            <a href={LEGACY_DOCS_URL}>Read the legacy tool docs ↗</a>
           </div>
         </section>
 
@@ -170,7 +170,7 @@ export default function SourcesPage() {
           <div className="source-links">
             <a href="https://ghostget.com/providers/whatsapp/">Inspect Ghostget’s WhatsApp surface ↗</a>
             <a href={`${GITHUB_URL}/blob/v${SOFTWARE_VERSION}/docs/local-message-bundle-v2.md`}>Read the native bundle contract ↗</a>
-            <Link href="/docs">Open the project docs →</Link>
+            <a href={LEGACY_DOCS_URL}>Read the legacy tool docs ↗</a>
           </div>
         </section>
 
