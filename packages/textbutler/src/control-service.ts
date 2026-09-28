@@ -20,6 +20,7 @@ import { Hooks } from "./hooks.ts";
 import type { ButlerAgent } from "./runtime.ts";
 import { ContactHabitat, inspectHabitatOperations, parseHabitatPlan, type HabitatLiveOperation } from "./contact-habitat.ts";
 import { inspectHabitatTaskShadow, SHADOW_LIMITS } from "./habitat-task-shadow.ts";
+import { projectContactStatus } from "./contact-status.ts";
 import type { HabitatHostConfig } from "./host-config.ts";
 
 export const TEXTBUTLER_CONTROL_PROTOCOL = "textbutler.control.v1" as const;
@@ -668,8 +669,13 @@ export class TextbutlerControlService {
         this.notifyHabitat(request.contactId);
       }
       const state = habitat.snapshot(), config = this.habitatConfig;
+      const configured = current.state.settings.contacts.find(contact => contact.id === request.contactId)!;
       const view = { enabled: config?.enabled ?? false, driver: config?.driver.kind ?? null, model: config?.driver.model ?? null,
         evolutionModel: config?.evolutionModel ?? null, dailyBudgetUsd: config?.driver.kind === "gateway" ? config.driver.dailyBudgetUsd : 0,
+        status: projectContactStatus(configured, state, this.journal, {
+          paused: current.state.settings.paused, scopedGrant: current.state.grants[request.contactId] !== undefined,
+          live: this.habitatOperation?.(request.contactId), now: Date.now(),
+        }),
         taskShadow: inspectHabitatTaskShadow(state.taskShadow, state.champion, state.ownerRevision ?? 0),
         plan: state.champion, memory: state.memory ?? [], memoryCutoff: state.memoryCutoff ?? null,
         operations: inspectHabitatOperations(state, Date.now(), this.habitatOperation?.(request.contactId)),

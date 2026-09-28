@@ -13,14 +13,14 @@
   }
  },
  "sources": {
-  "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
-  "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
+  "bun.lock": "933c5cf676d427c94c9a63c69284d7dcd64835ab6117c0c858d18c7f639d2475",
+  "package.json": "0d43bed5cb2c6b3aab79bb6bbe44b58038ed367914905ae6c49f39084a4b8680",
   "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
   "packages/textbutler/src/cli.ts": "8f84d52aa3c36e23f5f9c826cd8f60380e1ea8bc80a25d98b632c96096da13bd",
   "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
   "packages/textbutler/src/contact-habitat.ts": "8401a8114287cb4961aec53650d2175836675a43215af445b773f82b6fd09a33",
   "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
-  "packages/textbutler/src/control-service.ts": "77bf9c221047c14eabb64e77d1ae2a5b2d2d5ef86630629384a653ff08ed0f84",
+  "packages/textbutler/src/control-service.ts": "aec7e9fd9fea90619516be03bdb4e0d6256ba10cdab97b268be1ffa75ef476f0",
   "packages/textbutler/src/daemon.ts": "8bf7f509a95ebacf1bf35d3cb9ad5569ba48647e71f6d7b4024cce59fee31345",
   "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
   "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",

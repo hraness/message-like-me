@@ -141,6 +141,13 @@ and records a bounded rollback tombstone. None of these commands changes a
 contact's permissions, provider, disclosure, memory or live champion. Receipt
 replay establishes recorded execution, not annotation truth or improved quality.
 
+`habitats show` also carries a `status` record in the shared
+`algal.host-lifecycle.v1` vocabulary: a paused lane reads `suspended`, an
+unresolved send reads `uncertain` with its journaled intent retained, and a
+staged artifact a newer owner plan superseded is marked `stale` beside the
+record. The record is read-only evidence. It never sends, retries or changes
+anything; `uncertain` asks the owner to reconcile, never to retry.
+
 The explicit source command `bun scripts/export-textbutler-study.ts --journal
 ABSOLUTE_PRIVATE_JOURNAL --out NEW_PRIVATE_FILE` captures up to 128 retained
 response inferences for the Algal Lab importer. It opens the existing journal
