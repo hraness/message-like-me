@@ -5,11 +5,11 @@ import { TEXTBUTLER_VERSION } from "./version.ts";
 const HELP_ENV = { LANG: "en_US.UTF-8" } as const;
 
 /** Registry one-line description (portfolio registry, packages/textbutler/package.json). */
-export const TEXTBUTLER_DESCRIPTION = "Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats\nyou choose.";
+export const TEXTBUTLER_DESCRIPTION = "Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and\nBeeper chats you choose on your Mac, and it answers when someone says \u201cbutler\u201d.";
 
 /** Bare invocation without a terminal: at most 25 lines (SPEC § D2). */
 export const BARE_INTRO = `${TEXTBUTLER_DESCRIPTION}
-It runs on your Mac and answers as a clearly marked assistant.
+New installs start paused, and everyone starts off.
 
 Start here
   textbutler setup           Create private settings, paused
@@ -136,12 +136,17 @@ Choosing an account never turns a chat on, and resume never does either.`,
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is signed in and ready
 
-Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key,
-capped at $1 a day. Pipe the key in so it never lands in your shell history,
-then restart the background service. Subscription accounts (native-claude-code,
-native-codex and native-devin) connect through xcb. providers local switches
-replies to an OpenAI-compatible server on this Mac (Ollama by default);
-stop the service first. A saved gateway key still powers web search.`,
+Replies can be written by a local model through Ollama (in testing), by Qwen
+3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex,
+or Devin subscription through xcb.
+
+A command choice wins. Otherwise a saved gateway key (capped at $1 a day) wins
+over a local model. Pipe the key in so it never lands in your shell history,
+then restart the background service. providers local switches replies to an
+OpenAI-compatible server on this Mac (Ollama by default; pull
+qwen3:4b-instruct-2507-q4_K_M first); stop the service first. Subscription
+accounts (native-claude-code, native-codex and native-devin) connect through
+xcb. A saved gateway key still powers web search.`,
     example: "pbpaste | textbutler providers gateway-key" },
   daemon: { usage: "textbutler daemon install | uninstall | status | run", summary: "Manage the background service that watches your chats.",
     body: `Commands

@@ -1,9 +1,9 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`Textbutler CLI style contract bare invocation off a terminal is a short, runnable intro 1`] = `
-"Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats
-you choose.
-It runs on your Mac and answers as a clearly marked assistant.
+"Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+Beeper chats you choose on your Mac, and it answers when someone says “butler”.
+New installs start paused, and everyone starts off.
 
 Start here
   textbutler setup           Create private settings, paused
@@ -21,8 +21,8 @@ textbutler 0.1.0-alpha.1
 `;
 
 exports[`Textbutler CLI style contract root help is grouped, at most 60 lines, and hides internal commands 1`] = `
-"Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats
-you choose.
+"Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 
 Usage: textbutler <command> [options]
 
@@ -237,12 +237,17 @@ Commands
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is signed in and ready
 
-Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key,
-capped at $1 a day. Pipe the key in so it never lands in your shell history,
-then restart the background service. Subscription accounts (native-claude-code,
-native-codex and native-devin) connect through xcb. providers local switches
-replies to an OpenAI-compatible server on this Mac (Ollama by default);
-stop the service first. A saved gateway key still powers web search.
+Replies can be written by a local model through Ollama (in testing), by Qwen
+3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex,
+or Devin subscription through xcb.
+
+A command choice wins. Otherwise a saved gateway key (capped at $1 a day) wins
+over a local model. Pipe the key in so it never lands in your shell history,
+then restart the background service. providers local switches replies to an
+OpenAI-compatible server on this Mac (Ollama by default; pull
+qwen3:4b-instruct-2507-q4_K_M first); stop the service first. Subscription
+accounts (native-claude-code, native-codex and native-devin) connect through
+xcb. A saved gateway key still powers web search.
 
 Example
   pbpaste | textbutler providers gateway-key"
