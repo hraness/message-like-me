@@ -1,7 +1,7 @@
 # Textbutler
 
-![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-light@2x.png#gh-light-mode-only)
-![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-dark@2x.png#gh-dark-mode-only)
+![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-light%402x.png#gh-light-mode-only)
+![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-dark%402x.png#gh-dark-mode-only)
 
 Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
 Beeper chats you choose on your Mac, and it answers when someone says “butler”.
@@ -100,8 +100,8 @@ you trust on the messaging account you’ll use.
 
 ## How it works
 
-![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.light@2x.png#gh-light-mode-only)
-![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.dark@2x.png#gh-dark-mode-only)
+![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.light%402x.png#gh-light-mode-only)
+![One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.dark%402x.png#gh-dark-mode-only)
 
 1. **Someone texts you.** They write in a one-to-one chat you’ve turned on.
    Ghostget passes the message to Textbutler, running in the background on your
@@ -130,8 +130,8 @@ own, and it answers you.
 
 ## Pick what writes replies
 
-![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](site/public/diagrams/d2-words-local-wide.light@2x.png#gh-light-mode-only)
-![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](site/public/diagrams/d2-words-local-wide.dark@2x.png#gh-dark-mode-only)
+![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](site/public/diagrams/d2-words-local-wide.light%402x.png#gh-light-mode-only)
+![Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply](site/public/diagrams/d2-words-local-wide.dark%402x.png#gh-dark-mode-only)
 
 Replies can be written by a local model through Ollama (in testing), by Qwen 3.5
 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or
