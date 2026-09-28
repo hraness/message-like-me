@@ -17,7 +17,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "check": "bun run sync:readme && bun run test && bun run lint && bun run typecheck && bun run build",
     "build:theme": "bun scripts/build-theme-bootstrap.ts",
-    "diagrams": "bun scripts/render-diagrams.ts"
+    "diagrams": "bun scripts/render-diagrams.ts",
+    "stills": "bun scripts/render-stills.ts"
   },
   "dependencies": {
     "@hraness/design-kit": "github:hraness/design-kit#v0.24.0",

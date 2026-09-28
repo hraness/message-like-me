@@ -27,7 +27,7 @@ so their text stays readable on a 360px screen.
 ## Files
 
 - `*.diagram.json` holds the positioned Slopcamera source. Edit it directly.
-- `slopcamera.config.json` maps Slopcamera tones to Paper tokens (`styles/vendor/hraness-paper`):
+- `slopcamera.config.json` maps Slopcamera tones to the gruvbox palette tokens the site renders (`--card`, `--primary`, `--secondary`, `--line`, `--muted`):
 
   | Tone | Role | Light / dark from Paper |
   | --- | --- | --- |

@@ -1,5 +1,8 @@
 # Textbutler
 
+![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-light@2x.png#gh-light-mode-only)
+![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-dark@2x.png#gh-dark-mode-only)
+
 Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
 Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 

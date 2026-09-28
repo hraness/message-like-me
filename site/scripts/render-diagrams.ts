@@ -3,7 +3,7 @@
 //   bun run diagrams            # every source in design/diagrams
 //   bun run diagrams d1-flow    # only sources whose name starts with d1-flow
 //
-// Slopcamera owns layout, text measurement and the Paper-token theme
+// Slopcamera owns layout, text measurement and the site-palette theme
 // (design/diagrams/slopcamera.config.json). This script then applies the few
 // styling conventions Slopcamera's schema cannot express (see
 // design/diagrams/README.md), writes light and dark SVGs to public/diagrams,

@@ -21,8 +21,8 @@
     column-gap: clamp(2.5rem, 5vw, 5rem);
     align-items: center;
   }
-  .textbutler-marketing .tb-hero .hraness-marketing-hero__copy { grid-column: 1; }
-  .textbutler-marketing .tb-hero .hraness-marketing-hero__frame { grid-column: 2; grid-row: 1 / span 2; max-inline-size: none; }
+  .textbutler-marketing .tb-hero .hraness-marketing-hero__copy { grid-column: 1; grid-row: 1; align-self: center; padding-block-end: 4rem; }
+  .textbutler-marketing .tb-hero .hraness-marketing-hero__frame { grid-column: 2; grid-row: 1; max-inline-size: none; }
 }
 .textbutler-marketing .tb-hero .hraness-marketing-hero__heading { max-inline-size: 12ch; }
 .textbutler-marketing .tb-hero .hraness-marketing-hero__summary { max-inline-size: 34rem; }
@@ -34,6 +34,16 @@
   gap: 1rem;
   margin: 0;
 }
+.tb-hero-stage::before {
+  /* A soft pool of light behind the phone, from the page's own accent. */
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -6% -18% 18%;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--primary) 16%, transparent), transparent 72%);
+  pointer-events: none;
+}
+.tb-hero-stage > * { position: relative; z-index: 1; }
 .tb-hero-stage__device { inline-size: min(100%, 24rem); }
 .tb-callouts {
   display: grid;
@@ -114,7 +124,7 @@
 /* Diagrams exported by the diagram lane, swapped by theme. */
 .tb-diagram { margin: 0 0 2rem; }
 .tb-diagram__picture { display: block; }
-.tb-diagram__img { display: block; inline-size: 100%; block-size: auto; border-radius: 12px; }
+.tb-diagram__img { display: block; inline-size: 100%; block-size: auto; border-radius: 16px; box-shadow: 0 0 0 1px var(--line); }
 .tb-diagram figcaption { margin-block-start: 0.75rem; color: var(--muted); font-size: 0.875rem; }
 .tb-theme-dark { display: none; }
 @media (prefers-color-scheme: dark) {

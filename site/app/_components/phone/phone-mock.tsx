@@ -15,6 +15,11 @@ export interface PhoneMockProps {
   readonly theme?: PhoneTheme;
   /** Maximum rendered width in CSS pixels. The phone scales down to its container. */
   readonly maxWidth?: number;
+  /**
+   * Screen height in iOS points (default 844, a full iPhone). A shorter screen
+   * crops the empty top of a short thread so the device hugs the conversation.
+   */
+  readonly screenHeight?: number;
   /** Overrides the generated accessible name (a full reading of the conversation). */
   readonly label?: string;
   readonly className?: string;
@@ -37,6 +42,7 @@ export function PhoneMock({
   perspective = 'owner',
   theme = 'auto',
   maxWidth,
+  screenHeight,
   label,
   className,
   ref,
@@ -44,7 +50,10 @@ export function PhoneMock({
   typingId,
   phase,
 }: PhoneMockProps) {
-  const style = maxWidth ? ({ '--phone-max-width': `${maxWidth}px` } as CSSProperties) : undefined;
+  const vars: Record<string, string> = {};
+  if (maxWidth) vars['--phone-max-width'] = `${maxWidth}px`;
+  if (screenHeight) vars['--phone-h'] = String(screenHeight + 22);
+  const style = Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined;
   return (
     <div
       ref={ref}

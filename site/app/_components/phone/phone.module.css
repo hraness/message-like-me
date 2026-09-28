@@ -29,7 +29,7 @@
   --out-fg: #ffffff;
   --meta: light-dark(#8e8e93, #8d8d93);
   --tint: light-dark(#007aff, #0a84ff);
-  --nav-bg: light-dark(rgb(249 249 249 / 0.94), rgb(22 22 24 / 0.94));
+  --nav-bg: light-dark(rgb(249 249 249 / 0.985), rgb(22 22 24 / 0.985));
   --hairline: light-dark(rgb(60 60 67 / 0.29), rgb(84 84 88 / 0.65));
   --field-border: light-dark(#c7c7cc, #3a3a3c);
   --placeholder: light-dark(#c4c4c6, #5b5b5f);
@@ -48,7 +48,7 @@
   --pt: calc(100cqw / 412);
   position: relative;
   inline-size: 100%;
-  aspect-ratio: 412 / 866;
+  aspect-ratio: 412 / var(--phone-h, 866);
   border-radius: calc(57 * var(--pt));
   padding: calc(2.5 * var(--pt));
   background:

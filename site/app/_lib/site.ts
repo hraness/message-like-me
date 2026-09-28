@@ -20,7 +20,7 @@ export const REPLY_WRITERS_SENTENCE =
   'Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
 export const REPLY_WRITERS_PRECEDENCE =
   'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins over a local model. Web search is off by default. When you turn it on, it uses your Gateway key, even when a local model writes the replies.';
-export const SOCIAL_IMAGE_ALT = 'The Textbutler mark and the words “AI in your messages” beside a message bubble that reads 🤖{ 👀 }.';
+export const SOCIAL_IMAGE_ALT = 'The words “AI in your messages” beside an iPhone Messages chat: a friend asks “Butler, what time did Sam say?”, and the answer arrives marked 🤖{ }.';
 // The prompt a reader pastes into Claude Code, Codex, or Devin. It follows the
 // written guide; there is no Textbutler setup skill or one-line installer yet.
 export const AGENT_SETUP_PROMPT = [

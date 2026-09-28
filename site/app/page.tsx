@@ -306,14 +306,14 @@ export default function Home() {
             </div>
             <div className="tb-examples">
               <figure className="tb-example">
-                <PhoneSlot conversation={staysOutConversation} />
+                <PhoneSlot conversation={staysOutConversation} screenHeight={540} />
                 <figcaption>
                   <span className="tb-chip" data-tone="caution">WhatsApp · lightly tested</span>
                   <span>No “butler”, no reply. Then Sam writes, so the butler stays out of it: it waits 5 minutes after you last wrote, and a request in that window is skipped, not saved for later.</span>
                 </figcaption>
               </figure>
               <figure className="tb-example">
-                <PhoneSlot conversation={boundariesConversation} />
+                <PhoneSlot conversation={boundariesConversation} screenHeight={540} />
                 <figcaption>
                   <span className="tb-chip" data-tone="caution">via Beeper · text only</span>
                   <span>You set what’s off-limits for each person. It keeps to it.</span>
@@ -331,7 +331,7 @@ export default function Home() {
 
           <MarketingSection heading="Ask it yourself" headingId="self-title" id="ask-yourself" label="Your own chat" layout="split" summary="Say “butler” in your own chat and it works for you, searching that chat’s history. The marker can’t be turned off here.">
             <figure className="tb-example tb-example--solo">
-              <PhoneSlot conversation={askYourselfConversation} />
+              <PhoneSlot conversation={askYourselfConversation} maxWidth={340} screenHeight={600} />
               <figcaption className="tb-caption">Example conversation. The details are made up.</figcaption>
             </figure>
           </MarketingSection>
