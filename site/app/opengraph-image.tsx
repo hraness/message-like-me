@@ -4,7 +4,7 @@ import {
   socialImageSize as size,
 } from "@hraness/web-discovery/social-image";
 
-import { SITE_DESCRIPTION, SITE_NAME, SOCIAL_IMAGE_ALT } from "./_lib/site";
+import { SITE_DESCRIPTION, SITE_HEADLINE, SITE_NAME, SOCIAL_IMAGE_ALT } from "./_lib/site";
 
 export const alt = SOCIAL_IMAGE_ALT;
 export { contentType, size };
@@ -30,6 +30,6 @@ export default function OpenGraphImage() {
       foreground: "#393533",
       muted: "#584F48",
     },
-    title: "Your AI butler replies in the chats you choose.",
+    title: SITE_HEADLINE,
   });
 }

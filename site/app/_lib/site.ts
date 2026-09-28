@@ -2,18 +2,45 @@ import type { Metadata } from 'next';
 
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
-export const SITE_TITLE = 'Textbutler | Your AI butler replies in the chats you choose.';
+export const SITE_TITLE = 'Textbutler | AI in your messages';
+export const SITE_HEADLINE = 'AI in your messages.';
 export const SITE_DESCRIPTION =
-  'Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose. It runs on your Mac and answers as a clearly marked assistant.';
+  'An assistant for your iMessage, WhatsApp, and Beeper chats on a Mac. Say “butler” in a chat you’ve turned on and get a clearly marked reply. Your coding agent can set it up.';
+// The one-sentence "what it is": README line 5, the launch post, and the CLI
+// description use the same words.
+export const SITE_WHAT_IT_IS =
+  'Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”.';
 // The one development-status statement. Pages render it where they state the
 // status; README.md repeats it word for word and a site test keeps them equal.
 export const SITE_STATUS_LABEL = 'In development';
 export const SITE_STATUS =
-  `${SITE_STATUS_LABEL}. Textbutler runs from source on a Mac; there is no app to download and no published Textbutler package. Without an AI account you can connect iMessage, WhatsApp, and Beeper through Ghostget, check your inbox, and send replies you write yourself. AI replies also need a local build of Textbutler plus your own Vercel AI Gateway key, which uses Qwen 3.5 Flash by default, or a Claude Code, Codex, or Devin subscription connected through xcb. Automatic replies have worked end to end over iMessage in our testing. Try them on your own account, especially over WhatsApp or Beeper, before you rely on them.`;
-export const SOCIAL_IMAGE_ALT = 'The Textbutler mark and the words “Your AI butler replies in the chats you choose.” on a light card.';
+  `${SITE_STATUS_LABEL}. Textbutler runs from source on a Mac: there is no app to download and no published Textbutler package, and new installs start paused. It connects to iMessage, WhatsApp, and Beeper through Ghostget. Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb. Automatic replies have worked end to end over iMessage in our testing. Try them on your own account, especially over WhatsApp or Beeper, before you rely on them.`;
+// The canonical reply-writer sentence, reused verbatim wherever the options are named.
+export const REPLY_WRITERS_SENTENCE =
+  'Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
+export const REPLY_WRITERS_PRECEDENCE =
+  'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins over a local model. Web search is off by default. When you turn it on, it uses your Gateway key, even when a local model writes the replies.';
+export const SOCIAL_IMAGE_ALT = 'The Textbutler mark and the words “AI in your messages” beside a message bubble that reads 🤖{ 👀 }.';
+// The prompt a reader pastes into Claude Code, Codex, or Devin. It follows the
+// written guide; there is no Textbutler setup skill or one-line installer yet.
+export const AGENT_SETUP_PROMPT = [
+  'Set up Textbutler on this Mac: https://github.com/hraness/textbutler',
+  'Follow docs/textbutler/getting-started.md step by step.',
+  'If Ghostget isn\'t installed, set it up first: https://ghostget.com/docs/tutorials/getting-started',
+  'Connect my iMessage, and WhatsApp or Beeper if I use them.',
+  'For replies, use a local Ollama model if one is running; otherwise ask me which option I want.',
+  'Run `textbutler doctor` after each step and do what it says.',
+  'Stop and tell me whenever macOS asks for a permission, a pairing, or a key.',
+  'Leave every contact turned off and don\'t send any messages.',
+].join('\n');
 export const GITHUB_URL = 'https://github.com/hraness/textbutler';
 export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/architecture.md`;
 export const GETTING_STARTED_URL = `${GITHUB_URL}/blob/main/docs/textbutler/getting-started.md`;
+export const MESSAGING_APPS_URL = `${GITHUB_URL}/blob/main/docs/textbutler/messaging-apps.md`;
+export const AGENT_CLI_URL = `${GITHUB_URL}/blob/main/docs/textbutler/agent-cli.md`;
+export const SUBSCRIPTION_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`;
+export const GHOSTGET_SETUP_URL = 'https://ghostget.com/docs/tutorials/getting-started';
+export const XCB_URL = 'https://github.com/hraness/xcb';
 // The immutable legacy release coordinate; not a Textbutler app version.
 export const SOFTWARE_VERSION = '0.8.22';
 export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;

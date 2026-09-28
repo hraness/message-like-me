@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 
-import { SITE_STATUS } from '../_lib/site';
+import { SITE_HEADLINE, SITE_STATUS } from '../_lib/site';
 
 export const metadata: Metadata = { title: { absolute: 'Textbutler | Preview' }, robots: { follow: false, index: false } };
 
 export default function PreviewPage() {
   return <main id="main-content"><section className="hero" aria-labelledby="textbutler-preview-heading">
-    <div className="hero-copy"><h1 id="textbutler-preview-heading">Your AI butler replies in the chats you choose.</h1><p className="lede">Turn it on for one person on iMessage, WhatsApp, or Beeper, and it replies as a clearly marked assistant that knows your history with them. It runs in the background with no window or menu bar icon.</p><p className="lede">{SITE_STATUS}</p></div>
-    <div className="hero-visual" aria-label="Synthetic illustration of a disclosed butler reply"><div className="message-stage"><p className="stage-label">Synthetic example · no message sent</p><div className="bubble bubble-in">butler, can you help me make a packing list?</div><p className="stage-label stage-label--draft">Butler reply · illustration</p><div className="bubble bubble-out">{'🤖{ Where are you headed, and for how long? }'}</div><p className="butler-disclosure-note">The 🤖{'{ }'} wrapper marks the butler’s words.</p></div></div>
+    <div className="hero-copy"><h1 id="textbutler-preview-heading">{SITE_HEADLINE}</h1><p className="lede">Say “butler” in an iMessage, WhatsApp, or Beeper chat you’ve turned on, and a clearly marked assistant answers from your Mac. It runs in the background with no window or menu bar icon, and your coding agent can set it up.</p><p className="lede">{SITE_STATUS}</p></div>
+    <div className="hero-visual" aria-label="Synthetic example of a marked butler reply"><div className="message-stage"><p className="stage-label">Synthetic example · no message sent</p><div className="bubble bubble-in">Butler, what time did Sam say? And is he bringing the harness?</div><p className="stage-label stage-label--draft">The butler, from Sam’s Mac</p><div className="bubble bubble-out">{'🤖{ 👀 }'}</div><div className="bubble bubble-out bubble-short">{'🤖{ On Monday Sam said Friday at 6:30 at the gym, and that he’d bring the spare harness for you. Nothing here has changed since. }'}</div><p className="butler-disclosure-note">The 🤖{'{ }'} wrapper marks the butler’s words.</p></div></div>
   </section></main>;
 }

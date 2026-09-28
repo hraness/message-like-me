@@ -75,7 +75,7 @@ test('renders the in-flow content footer and one shared Hraness footer on every 
     expect(html, page.name).toContain('<footer aria-label="Textbutler"');
     expect(html, page.name).toContain('<img alt="" height="20" src="/icon.png" width="20"/>');
     expect(html, page.name).toContain('hraness-marketing-footer__name');
-    expect(html, page.name).toContain('Built for Mac · MIT source · in development');
+    expect(html, page.name).toContain('AI in your messages · Mac only · MIT source · in development');
     expect(html, page.name).toContain('aria-label="Footer navigation"');
     expect(html, page.name).toContain('href="/about"');
     expect(html, page.name).toContain('href="/sources"');
