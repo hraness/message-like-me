@@ -2,13 +2,13 @@
 
 Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose on your Mac. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through Textbutler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
 
-The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and macOS menu companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below; the companion is a CLI artifact and has no signing or notarization gate.
+The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and owner CLI with its guided terminal. Textbutler is headless: it has no desktop window or menu bar companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below.
 
 ## Ownership
 
 ```mermaid
 flowchart LR
-  Menu[Menu companion] --> Control[Owner-only control socket]
+  Cli[Owner CLI and guided terminal] --> Control[Owner-only control socket]
   Control --> Butler[Textbutler daemon]
   Butler --> Xcb[xcb zero-tool generate]
   Xcb --> Provider[Admitted subscription provider]
@@ -24,9 +24,9 @@ flowchart LR
   Ghostget --> Messages[iMessage and WhatsApp]
 ```
 
-Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. xcb owns subscription credentials, provider admission, model catalogs, confinement, cancellation and account custody. Textbutler invokes its native zero-tool generation API and interprets returned operation proposals through its own contact broker. Textbutler owns conversation policy and the durable send transaction. The menu companion changes owner settings through a small local protocol; it never gives a model arbitrary local commands.
+Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. xcb owns subscription credentials, provider admission, model catalogs, confinement, cancellation and account custody. Textbutler invokes its native zero-tool generation API and interprets returned operation proposals through its own contact broker. Textbutler owns conversation policy and the durable send transaction. The owner CLI changes settings through a small local protocol; it never gives a model arbitrary local commands.
 
-The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence is independent of the menu companion. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A minimal native TextButler.app can supervise the verified daemon so Full Disk Access belongs to the app. Its private installation receipt pins the runtime, payload, native executable and signature resources; a changed identity blocks startup. The app accepts fixed daemon, menu and iMessage setup roles, with no arbitrary command passthrough. Local builds default to an ad-hoc signature, so a rebuilt app may require a fresh macOS permission grant; building with a persistent signing identity keeps grants bound to that certificate across rebuilds.
+The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence needs no interactive app. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A minimal native TextButler.app can supervise the verified daemon so Full Disk Access belongs to the app. Its private installation receipt pins the runtime, payload, native executable and signature resources; a changed identity blocks startup. The app accepts fixed daemon and iMessage setup roles, with no arbitrary command passthrough; opening the app itself starts nothing. Local builds default to an ad-hoc signature, so a rebuilt app may require a fresh macOS permission grant; building with a persistent signing identity keeps grants bound to that certificate across rebuilds.
 
 The daemon serves owner controls, enrollment jobs and a reply loop through its own supervised Ghostget process. Startup, enablement and recovery establish a silent event boundary, refresh bounded history and admit only subsequent eligible inbound messages. A failed catch-up pauses the affected conversation. No provider work starts without explicit owner account configuration.
 
@@ -64,7 +64,7 @@ Directory names use opaque identifiers, not contact names or phone numbers. File
 
 The owner chooses one verified direct conversation from a bounded Ghostget list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
 
-The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated. There is no need to carry every previous archive/source feature into the menu companion.
+The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated.
 
 ## Reply admission
 
@@ -96,11 +96,11 @@ Before send, the runtime rechecks owner activity, conversation revision, current
 
 ## Owner reply triage
 
-The same machinery serves an explicit owner workflow that is distinct from automatic replies. `textbutler inbox` (or the menu's **Replies → Check for replies**) runs a bounded read-only pass over every enrolled conversation and reports each trailing run of unanswered inbound messages: the contact, a bounded sanitized preview, the pending count, whether a send is currently possible, and why not when it is not. The automatic loop's live observations feed the same view, so the inbox reflects what the daemon already saw between scans.
+The same machinery serves an explicit owner workflow that is distinct from automatic replies. `textbutler inbox` (or **Inbox & replies** in the guided terminal) runs a bounded read-only pass over every enrolled conversation and reports each trailing run of unanswered inbound messages: the contact, a bounded sanitized preview, the pending count, whether a send is currently possible, and why not when it is not. The automatic loop's live observations feed the same view, so the inbox reflects what the daemon already saw between scans.
 
 `textbutler replies suggest CONTACT` asks the contact's configured agent to draft a reply for that pending run. A suggestion is a bounded draft with a fifteen-minute expiry: summary, exact proposed actions, and the disclosed preview the send would carry. It never dispatches. Drafts bind the conversation revision and disclosure settings they were created against; a stale context, changed disclosure, or expired draft is rejected rather than silently sent.
 
-`textbutler replies show DRAFT` exposes every ordered disclosed action, exact recipient, attachment hash and review digest. `textbutler replies send DRAFT DIGEST` sends only that exact reviewed draft, and `textbutler replies send CONTACT TEXT...` sends literal owner text through the identical grant, plan, journal, disclosure and reconciliation discipline as an automatic reply. `textbutler replies discard DRAFT` drops a suggestion. The menu bar exposes scan, per-conversation suggestion, labeled draft previews and discard. Complete review and digest-bound sending happen in the terminal or CLI; a truncated preview cannot authorize a send.
+`textbutler replies show DRAFT` exposes every ordered disclosed action, exact recipient, attachment hash and review digest. `textbutler replies send DRAFT DIGEST` sends only that exact reviewed draft, and `textbutler replies send CONTACT TEXT...` sends literal owner text through the identical grant, plan, journal, disclosure and reconciliation discipline as an automatic reply. `textbutler replies discard DRAFT` drops a suggestion. Complete review and digest-bound sending happen in the terminal or CLI.
 
 An owner send reuses the contact's live standing grant when it covers the needed action kinds with remaining quota. Otherwise the daemon issues a tightly scoped grant: only the specific action kinds, ten-minute expiry, quota equal to the action count. The scoped grant is journaled with intent and pending state, published to the conversation, and revoked after the send when the contact is disabled. One serialized work registration covers grant issuance and dispatch together so delegated renewal and disable-revocation cannot race an in-flight send. The agent never sees this surface; it has no send authority in either direction.
 
@@ -228,17 +228,11 @@ Linq's documented iMessage API includes attachments, reactions, stickers, rich l
 
 Ghostget currently imports published Message Like Me bundle contracts. Keep that immutable package a leaf. Do not repoint it at the Textbutler runtime. Extract the neutral bundle contracts before reversing a live package dependency, or consume Ghostget's installed CLI contract without a package import in the interim. Preserve historical wire-format identifiers.
 
-## macOS menu companion
-
-The status-item companion can be launched by the CLI or the native app. It exposes daemon state, contact and account readiness, capabilities, recent activity, pause/resume, conversation selection and the reply inbox. The terminal supports complete draft review and setup. The website action opens the informational textbutler.app page. The companion is not required to run the daemon.
-
-One narrow native command accepts the versioned control request. It connects to the private user socket, bounds requests/responses, applies timeouts, and verifies same-user ownership. The companion has no generic shell, filesystem, opener, or network plugin and does not inherit access to arbitrary Ghostget operations.
-
 ## Admission still required
 
 1. This development version pins Ghostget 0.18.43 for the native `TextButler.app` iMessage setup; matching artifact admission and live conversation checks remain pending. Preserve its native helper resource bundle, protected-folder startup fix, partial discovery that excludes chats without usable participant metadata, and bounded discovery diagnostics without message bodies. Real account synchronization, recipient identity, rich actions and revocation still require a bounded owner-authorized live test; artifact admission and synthetic fixtures do not prove delivery.
 2. Use a verified Textbutler bundle with reviewed composition admission and connect an admitted native xcb build through its zero-tool generation contract. Verify the exact provider/account, both classifier and reply behavior, cancellation and uncertain-custody recovery before enabling automatic replies. The separate Claude API path retains explicit account setup and packaged-runtime admission.
-3. Publish the CLI package with its pinned desktop-foundation SDK dependency. Verify the package bytes, the verified pinned runner download, singleton behavior, and the shared autostart install/uninstall lifecycle. A source checkout or missing companion must never trigger a build at launch.
+3. Publish the CLI package with its pinned desktop-foundation SDK dependency and verify the package bytes. A source checkout must never trigger a build at launch.
 4. Keep historical repository and published package identities as compatibility and provenance anchors. The Textbutler site is assigned to `textbutler.app`; later identity migrations must preserve immutable artifacts and existing release protections.
 
 ## Sources

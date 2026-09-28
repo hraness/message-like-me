@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { installTextbutler, menuLoginItemAfterUpgrade } from "./install-textbutler.ts";
+import { installTextbutler, retireMenuLoginItem } from "./install-textbutler.ts";
 import { DISTRIBUTION_FILES, publishArtifact, renderLauncher, sha256, validateBun, verifyDistribution, type DistributionFile, type DistributionManifest } from "./textbutler-distribution.ts";
 
 const roots: string[] = [];
@@ -109,18 +109,25 @@ test("upgrade preserves an unrelated existing launcher backup", async () => {
   expect(await readFile(backup, "utf8")).toBe("owner backup sentinel");
 });
 
-test("an upgrade reports a menu login item that still starts the previous version or the app, and never edits it", async () => {
+test("an upgrade retires the removed menu companion's login item and leaves anything else alone", async () => {
   const home = await mkdtemp(join(await realpath("/tmp"), "tb-menu-login-")); roots.push(home);
-  const previous = join(home, "owner's prefix", "share/textbutler/versions", "a".repeat(64));
-  expect(await menuLoginItemAfterUpgrade(home, previous)).toBeNull();
-  await mkdir(join(home, "Library", "LaunchAgents"), { recursive: true });
-  const plist = join(home, "Library", "LaunchAgents", "app.hraness.companion.textbutler.plist");
-  const render = (directory: string) => `<plist><dict><key>ProgramArguments</key><array><string>/opt/bun</string><string>${directory.replaceAll("'", "&apos;")}/textbutler.mjs</string><string>menubar</string></array></dict></plist>`;
-  await writeFile(plist, render(previous), { mode: 0o644 });
-  expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("previous-version");
-  expect(await menuLoginItemAfterUpgrade(home, `${previous}0`)).toBeNull();
-  // TextButler.app runs the version it was built from, so it needs a rebuild.
+  const booted: string[] = []; const bootout = async (label: string) => { booted.push(label); };
+  expect(await retireMenuLoginItem(home, bootout)).toBeNull();
+  const agents = join(home, "Library", "LaunchAgents"); await mkdir(agents, { recursive: true });
+  const plist = join(agents, "app.hraness.companion.textbutler.plist");
+  // A foreign login item under the same name is never touched.
+  await writeFile(plist, "<plist><dict><key>ProgramArguments</key><array><string>/usr/bin/true</string></array></dict></plist>", { mode: 0o644 });
+  expect(await retireMenuLoginItem(home, bootout)).toBeNull();
+  expect(booted).toEqual([]); expect(await readFile(plist, "utf8")).toContain("/usr/bin/true");
+  // The version-pinned menubar role is booted out and renamed aside, never deleted.
+  const menu = `<plist><dict><key>ProgramArguments</key><array><string>/opt/bun</string><string>/owner/share/textbutler/versions/${"a".repeat(64)}/textbutler.mjs</string><string>menubar</string><string>--foreground</string></array></dict></plist>`;
+  await writeFile(plist, menu, { mode: 0o644 });
+  expect(await retireMenuLoginItem(home, bootout)).toBe("retired");
+  expect(booted).toEqual(["app.hraness.companion.textbutler"]);
+  await expect(readFile(plist)).rejects.toMatchObject({ code: "ENOENT" });
+  const aside = (await readdir(agents)).filter(name => name.startsWith("app.hraness.companion.textbutler.plist.retired-"));
+  expect(aside).toHaveLength(1); expect(await readFile(join(agents, aside[0]!), "utf8")).toBe(menu);
+  // A login item that opened TextButler.app is retired too.
   await writeFile(plist, "<plist><dict><key>ProgramArguments</key><array><string>/Volumes/Owner/Applications/TextButler.app/Contents/MacOS/TextButler</string></array></dict></plist>");
-  expect(await menuLoginItemAfterUpgrade(home, previous)).toBe("app");
-  expect(await readFile(plist, "utf8")).toContain("TextButler.app");
+  expect(await retireMenuLoginItem(home, bootout)).toBe("retired");
 });

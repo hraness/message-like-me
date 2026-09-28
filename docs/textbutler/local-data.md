@@ -63,7 +63,7 @@ changes accounts, permissions or messages. It refuses other failure types.
 
 ## Remove Textbutler data
 
-Use `textbutler daemon uninstall` and stop the menu companion before removing
+Use `textbutler daemon uninstall` before removing
 local data. Confirm that Textbutler and its connector operations have stopped.
 If an operation has an uncertain outcome, reconcile it and retain the evidence
 needed to settle that operation first.

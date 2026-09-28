@@ -43,7 +43,7 @@ const HERO_FOOTNOTE = `${SITE_STATUS_LABEL} · macOS · iMessage, WhatsApp, and 
 const HOME_QUESTIONS = [
   {
     question: 'Can I use Textbutler today?',
-    answer: 'Yes, from source on a Mac. The guided terminal helps you connect your messaging apps through Ghostget, add a conversation, check your inbox, and send replies you write yourself. That needs no AI account, and new installations start paused. A local build with a connected AI account adds the butler: it reads the conversations you turn on, drafts replies, and can send them on its own. There is no app to download; you start the menu bar companion from the terminal.',
+    answer: 'Yes, from source on a Mac. The guided terminal helps you connect your messaging apps through Ghostget, add a conversation, check your inbox, and send replies you write yourself. That needs no AI account, and new installations start paused. A local build with a connected AI account adds the butler: it reads the conversations you turn on, drafts replies, and can send them on its own. There is no app to download or window to open; you control it from the terminal.',
   },
   {
     question: 'Can it answer messages for me?',
@@ -149,8 +149,9 @@ export default function Home() {
                 <a href={`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`}>Read the subscription guide</a>
               </li>
               <li>
-                <h3>Keep an eye on it from the menu bar</h3>
-                <p>The optional menu bar companion shows status and lets you pause replies. Start it from the terminal; it downloads a prebuilt runner, so there is nothing extra to build.</p>
+                <h3>Leave it running in the background</h3>
+                <p>Textbutler has no window or menu bar icon. Install the background service once and it starts again each time you sign in. <code>status</code> shows what it’s doing, and <code>pause</code> stops every reply at once.</p>
+                <pre tabIndex={0}><code>{'bun run textbutler daemon install\nbun run textbutler status'}</code></pre>
               </li>
             </ol>
             <p className="legacy-note">Looking for the original history tools? The legacy history package is still published with the <a href={RELEASE_URL}>Textbutler v{SOFTWARE_VERSION}</a> release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>

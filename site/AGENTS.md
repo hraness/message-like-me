@@ -3,8 +3,9 @@
 The owner authorized replacing the unused Message Like Me product with
 Textbutler at `textbutler.app`. The current rebrand overrides historical product
 name, description, and drafts-only marketing instructions below. Describe the
-new menu companion, daemon, contact-scoped memory, selected coding agent, and disclosed
-responses. State the development status once, near the top, by rendering
+headless daemon and its CLI and guided terminal, contact-scoped memory,
+selected coding agent, and disclosed responses. Textbutler has no menu bar
+companion or desktop window. State the development status once, near the top, by rendering
 `SITE_STATUS` from `app/_lib/site.ts`; put each other limit beside the feature it
 limits, in the reader's terms, and keep qualification, admission, composition and
 custody vocabulary off the pages. Do not advertise live

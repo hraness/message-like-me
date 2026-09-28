@@ -42,7 +42,7 @@ rollback, and atomically switches the command. It never replaces an unrelated
 command or changes your settings. Restart the installed daemon afterward.
 
 The terminal has numbered actions for setup, app connections, conversations,
-replies, contacts, pause, the menu bar and macOS access. Enter goes back from a selection;
+replies, contacts, pause and macOS access. Enter goes back from a selection;
 `q` or Ctrl-C closes the terminal. It does not stop an installed background
 service. Commands below use `bun run textbutler`; the help abbreviates that
 prefix to `textbutler`. You can use `~/.local/bin/textbutler` for these commands.
@@ -289,41 +289,27 @@ A pending command prints a job ID. Use `jobs show JOB_ID` with the same data
 directory. Do not repeat an uncertain send or grant operation. Recovery fences
 remain until the operation can be reconciled; restarting does not erase them.
 
-## Use the menu bar
+## Check on it from the terminal
 
-Choose **Menu bar companion** in the terminal, or run:
+Textbutler has no window or menu bar icon. The background service keeps working
+after you close the terminal, and you check on it with:
 
 ```sh
-bun run textbutler menubar start
-bun run textbutler menubar install
+bun run textbutler status
+bun run textbutler inbox
+bun run textbutler pause
 ```
 
-`start` opens it now; `install` registers login startup. The first start retrieves
-and verifies the pinned shared native companion. No local Rust build is needed.
+`status` shows whether the service is running, whether replies are paused and
+each contact's state. `inbox` lists chats waiting for your reply. `pause` and
+`resume` stop and restart every automatic reply at once. `daemon uninstall`
+unregisters the background service and keeps your data.
 
-The menu starts with one status line, then the one thing to do next: start
-Textbutler, open the macOS setting iMessage still needs, read the setup guide,
-or check for replies. **Conversations** holds per-contact replies and agent
-choice, conversation search and app connections; **Pause automatic replies**
-and **Resume automatic replies** sit at the top level. **Details** keeps
-activity, agent accounts and capabilities out of the way. When an action
-doesn't work, a ⚠︎ line under the status says why. Suggestions show a preview
-only: use the terminal to review complete outgoing actions before sending. The
-menu cannot send hidden or truncated draft content.
-
-If you installed `TextButler.app`, you can have it run the menu too, so macOS
-lists Textbutler rather than Bun under Login Items. This is off by default while
-the local app identity is checked on a clean macOS account. To try it, use the
-installed command the app was built from:
-`HRANESS_LOCAL_APP=1 ~/.local/bin/textbutler menubar install`. If the app was
-built from another version, the command stops and says so. After
-`bun run textbutler:install --upgrade`, the installer tells you when the menu
-still starts the previous version: run `textbutler menubar install` again, or
-rebuild and upgrade the app when the menu runs through it.
-
-Menu startup and daemon startup are separate. Quitting the menu leaves the
-installed daemon running. `menubar stop` closes the menu; `daemon uninstall`
-unregisters the background service and retains your data.
+If you open `TextButler.app` itself, it starts nothing and exits: the app exists
+so macOS can grant iMessage access to Textbutler, and launchd runs its
+background roles. Upgrading with `bun run textbutler:install --upgrade` removes
+the retired menu bar companion from your login items if an earlier version
+added it.
 
 ## Turn on automatic replies only when ready
 

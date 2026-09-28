@@ -107,15 +107,15 @@ describe("guided access step (T3)", () => {
     expect(await openSettingsUrl("https://example.com")).toBe(false);
     expect(await openSettingsUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")).toBe(false);
   });
-  test("the terminal offers the step as 9 and reads only Textbutler's own records", async () => {
+  test("the terminal offers the step as 8 and reads only Textbutler's own records", async () => {
     const root = await mkdtemp(join(await realpath("/tmp"), "textbutler-access-"));
     try {
       await mkdir(join(root, "state"), { recursive: true, mode: 0o700 });
       await writeFile(join(root, "state", "host.json"), "{}", { mode: 0o600 });
-      const output: string[] = [], answers = ["9", "q"];
+      const output: string[] = [], answers = ["8", "q"];
       await runTerminalSession(root, { write: text => output.push(text), ask: async () => answers.shift() ?? null },
         async () => ({ protocol: CONTROL_PROTOCOL, ok: false, code: "unavailable", message: "Disconnected" }), { access: { platform: "darwin", imessageConfigured: async () => false } });
-      expect(output.join("")).toContain("  9  Give Textbutler access");
+      expect(output.join("")).toContain("  8  Give Textbutler access");
       expect(output.join("")).toContain("Connect iMessage first");
     } finally { await rm(root, { recursive: true, force: true }); }
   });

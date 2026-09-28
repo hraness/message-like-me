@@ -48,7 +48,6 @@ AI accounts
 
 Background service
   daemon install | status    Start at login, or see whether it's running
-  menubar [start | install]  Show Textbutler in the menu bar
 
 Options
   -h, --help                 Show help (also: textbutler help <topic>)
@@ -56,7 +55,7 @@ Options
   --json                     Print machine-readable output
   --data-dir <path>          Use another private data folder (absolute path)
 
-Topics: setup, contacts, replies, messaging, providers, daemon, menubar,
+Topics: setup, contacts, replies, messaging, providers, daemon,
 permissions, advanced. Most commands print JSON so agents can read them.
 
 Optional support: textbutler support · Turn off: HRANESS_SUPPORT=off"
@@ -171,17 +170,6 @@ Create private settings, paused, without the readiness checklist."
 
 Read the result of a long operation that was still running. Don't repeat
 the original command: it may already have happened."
-,
-  "menubar": 
-"Usage: textbutler menubar [start | stop | status | install | uninstall]
-
-Show Textbutler in the menu bar. Quitting the menu doesn't stop replies.
-
-Commands
-  menubar start              Open the menu now
-  menubar install            Open it at login too
-  menubar stop | uninstall   Close it, or remove it from login
-  menubar status | doctor    Check the menu helper"
 ,
   "messages": 
 "Usage: textbutler messages <command>

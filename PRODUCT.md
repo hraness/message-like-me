@@ -6,9 +6,9 @@
 
 web
 
-The product is a macOS-only CLI with a separate user-session daemon and a
-native menu-bar companion. A locally built TextButler.app supervises the verified
-runtime so macOS can grant iMessage access to the app. It has no desktop window.
+The product is a headless macOS CLI with a separate user-session daemon. It
+has no desktop window or menu bar icon. A locally built TextButler.app
+supervises the verified runtime so macOS can grant iMessage access to the app.
 This platform marker does not imply Windows, Linux, iOS, or browser-hosted
 messaging support. The public website is informational.
 
@@ -32,7 +32,7 @@ developers building on xcb's native application API.
 
 ## Operating Context
 
-The Mac must be awake and signed in for local messaging. Quitting the menu companion leaves the separately installed user agent running. A global pause is always available. Contacts are selected explicitly; keyword response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`. Each field may be cleared individually or together; cleared fields remove the visible wrap while the daemon still attributes butler output through its send journal.
+The Mac must be awake and signed in for local messaging. The installed user agent runs in the background; closing the terminal doesn't stop it. A global pause is always available. Contacts are selected explicitly; keyword response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`. Each field may be cleared individually or together; cleared fields remove the visible wrap while the daemon still attributes butler output through its send journal.
 
 ## Capabilities and Constraints
 
@@ -66,8 +66,8 @@ Textbutler runtime, provider-independent transport and external xcb connection.
 Automated fixtures are synthetic. They are not evidence of live provider
 qualification or actual message delivery. The optional native app is built and
 ad-hoc or owner-certificate signed on the owner's Mac; it is not a notarized public distribution.
-The CLI and menu-bar companion remain the user interfaces.
+The CLI and its guided terminal are the user interfaces.
 
 ## Open Decisions and Working Defaults
 
-The user delegated implementation judgment. The initial activation limit is five contacts, configurable from one to fifty. Smart response uses an eight-second message-burst delay, five-minute owner cooldown, twelve responses per contact per hour, and a classifier confidence threshold of 0.85. These are tunable initial defaults, not measured ideal values. A compact native menu and explicit CLI commands are the working interface direction. Optional Linq transport remains a proposed extension; Ghostget is the required primary boundary.
+The user delegated implementation judgment. The initial activation limit is five contacts, configurable from one to fifty. Smart response uses an eight-second message-burst delay, five-minute owner cooldown, twelve responses per contact per hour, and a classifier confidence threshold of 0.85. These are tunable initial defaults, not measured ideal values. Explicit CLI commands and the guided terminal are the interface; there is no menu bar companion. Optional Linq transport remains a proposed extension; Ghostget is the required primary boundary.

@@ -1,10 +1,8 @@
 import { runProductSupportCommand } from "../../../src/support.ts";
-import { fileURLToPath } from "node:url";
 
 import { initializeOwnerState, TEXTBUTLER_CONTROL_PROTOCOL } from "./control-service.ts";
 import { defaultDataDirectory, requestDaemon, startDaemon } from "./daemon.ts";
 import { createLaunchAgentLifecycle, defaultLaunchAgentHost, type LaunchAgentLifecycle } from "./launch-agent.ts";
-import { runMenuBarCommand } from "./menubar.ts";
 import type { ClaudeApiAdapterOptions } from "@hraness/agentmixer";
 import type { ControlRequest, ControlResponse } from "../../control/src/index.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, pendingJobOutput, resolveOwnerContact } from "./owner-cli.ts";
@@ -22,7 +20,7 @@ type CliOptions = { launchAgent?: LaunchAgentLifecycle; entrypoint?: string; pro
 /** A malformed form of a known command points at that command's help. */
 function usage(args: readonly string[]): CliUsageError {
   const family = args[0] ?? "";
-  const shown = args.slice(0, family === "replies" || family === "daemon" || family === "providers" || family === "menubar" ? 2 : 1).filter(word => /^[a-z-]{1,24}$/u.test(word)).join(" ");
+  const shown = args.slice(0, family === "replies" || family === "daemon" || family === "providers" ? 2 : 1).filter(word => /^[a-z-]{1,24}$/u.test(word)).join(" ");
   return new CliUsageError(`Missing or invalid arguments for "${shown || family}".`, `textbutler help ${topicHelp(family) ? family : ""}`.trim());
 }
 
@@ -92,7 +90,6 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     print({ ok: false, status: "disconnected", detail: "The control request could not be confirmed. Run textbutler doctor. Check status before repeating a change; it may already have taken effect." }); return 1;
   }
   const checkAccount = args.length === 3 && args[0] === "providers" && args[1] === "check" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(args[2]!) ? args[2] : undefined;
-  const menuBar = args[0] === "menubar" && (args.length === 1 || args.length === 2 && ["start", "stop", "status", "doctor", "install", "uninstall", "--foreground"].includes(args[1]!));
   const inbox = command === "inbox";
   const repliesSuggest = args[0] === "replies" && args[1] === "suggest" && args.length === 3 ? args[2]! : undefined;
   const repliesShow = args[0] === "replies" && args[1] === "show" && args.length === 3 && args[2]!.startsWith("draft:") ? args[2]! : undefined;
@@ -104,7 +101,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     ? { contact: args[2]!, resolution: args[3] === "--sent" ? "sent" as const : args[3] === "--failed" ? "failed" as const : undefined } : undefined;
   const replies = inbox || repliesSuggest !== undefined || repliesShow !== undefined || repliesSendDraft !== undefined || repliesSendText !== undefined || repliesDiscard !== undefined || repliesReconcile !== undefined;
   if (args[0] === "replies" && !replies) throw usage(args);
-  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !menuBar && !checkAccount && !replies) throw usage(args);
+  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies) throw usage(args);
   /** Job-backed control call: poll until the stored result arrives. */
   const job = (input: ControlRequest): Promise<ControlResponse> => awaitOwnerJob(input, request);
   const unresolved = (response: ControlResponse): void => { print(response.ok && response.kind === "job" ? pendingJobOutput(response) : response); };
@@ -182,12 +179,6 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     print({ ok: daemon?.ok ?? false, daemon: daemon ?? { ok: false, status: "disconnected" }, launchAgent,
       automaticReplies: daemon?.ok && daemon.kind === "snapshot" ? daemon.snapshot.automation?.state ?? "unavailable" : "unavailable" });
     return daemon?.ok ? 0 : 1;
-  }
-  if (menuBar) {
-    // The shared desktop-foundation lifecycle owns start/stop/status/doctor,
-    // login startup and the private --foreground owner branch. The daemon
-    // remains the authority for state and mutations.
-    return await runMenuBarCommand(args.slice(1), dataDir, options.entrypoint ?? fileURLToPath(new URL("cli.ts", import.meta.url)), print);
   }
   if (process.platform !== "darwin") throw new Error("The Textbutler foreground daemon is supported on macOS only.");
   const daemon = await startDaemon({ dataDir, ...(options.providerArtifact === undefined ? {} : { providerArtifact: options.providerArtifact }) });

@@ -64,7 +64,7 @@ export async function verifyTextbutlerMacosApp(): Promise<void> {
     process.stderr.write("native-check: fixed roles\n");
     const executable = macosAppExecutable(built.identity), generation = "12345678-1234-1234-1234-123456789abc";
     const run = (args: readonly string[], stopOnReady = false, program = executable, onReady?: () => Promise<void>) => new Promise<{ code: number | null; stdout: string; stderr: string; pid: number | undefined }>((resolve, reject) => {
-      process.stderr.write(`native-check: execute ${args.join(" ") || "menu"}\n`);
+      process.stderr.write(`native-check: execute ${args.join(" ") || "(no role)"}\n`);
       const child = spawn(program, [...args], { cwd: dataDir, env: { HOME: "/untrusted", PATH: "/untrusted", TB_INJECTED: "inherited", BUN_OPTIONS: "--preload=/unknown-file", TEXTBUTLER_LAUNCH_AGENT_GENERATION: generation }, stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "", stderr = "", timedOut = false, stopped = false, probeError: unknown, probe: Promise<void> | undefined;
       const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, 15_000);
@@ -74,7 +74,10 @@ export async function verifyTextbutlerMacosApp(): Promise<void> {
       child.once("error", error => { clearTimeout(timer); clearTimeout(hardTimer); reject(error); });
       child.once("close", code => { clearTimeout(timer); clearTimeout(hardTimer); void (async () => { await probe; if (probeError) reject(probeError); else if (timedOut) reject(new Error(`Native fixture timed out: ${args.join(" ")}; ${stderr}`)); else resolve({ code, stdout, stderr, pid: child.pid }); })(); });
     });
-    for (const [flags, role] of [[[], ["menubar", "--foreground"]], [["--daemon"], ["daemon", "run"]], [["--imessage-setup"], ["app", "imessage-setup"]]] as const) {
+    // Headless: opening the app itself starts nothing and says why.
+    const opened = await run([]);
+    assert.equal(opened.code, 0); assert.equal(opened.stdout, ""); assert.match(opened.stderr, /runs in the background and has no window/u);
+    for (const [flags, role] of [[["--daemon"], ["daemon", "run"]], [["--imessage-setup"], ["app", "imessage-setup"]]] as const) {
       const result = await run(flags); assert.equal(result.code, 0, result.stderr); assert.deepEqual(JSON.parse(result.stdout), { args: [...role, "--data-dir", dataDir], parent: result.pid, home, cwd: "/", ...(flags[0] === "--daemon" || flags[0] === "--imessage-setup" ? { generation } : {}), ...(flags[0] === "--imessage-setup" ? { automation: "allowed" } : {}) });
     }
     assert.notEqual((await run(["--daemon", "--eval", "unexpected"])).code, 0);

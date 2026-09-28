@@ -18,6 +18,7 @@ startup and the local installer do not supply its trusted runtime attestation.
 See [provider setup](PROVIDERS.md) before enabling a contact. Source and synthetic
 tests do not attest live delivery on a particular account. A minimal native
 TextButler.app hosts the verified runtime for app-specific macOS permissions.
+Opening the app itself starts nothing; launchd runs its daemon and setup roles.
 Local builds use an ad-hoc or persistent owner certificate signature; they are not notarized public releases.
 
 ## First use
@@ -25,7 +26,8 @@ Local builds use an ad-hoc or persistent owner certificate signature; they are n
 Start with the [guided setup](../../docs/textbutler/getting-started.md) and
 [messaging app support](../../docs/textbutler/messaging-apps.md). Run
 `bun run textbutler tui` for setup, connections, contact selection and inbox review.
-The menu companion uses the shared Rust runner; no local Rust build is needed.
+Textbutler is headless: it has no window or menu bar icon, and the terminal is
+its interface.
 
 ## Modules
 
@@ -96,22 +98,7 @@ development, run `bun run textbutler daemon run`; closing that terminal stops
 the process. The source daemon supports the manual pilot but cannot perform
 subscription inference. For AI replies, install the verified bundle with
 `bun run textbutler:install` and use `~/.local/bin/textbutler daemon run` or
-`~/.local/bin/textbutler daemon install`. The menu companion is the shared desktop-foundation runner,
-fetched and verified as a pinned release binary on first start:
-
-```sh
-bun run textbutler menubar
-bun run textbutler menubar status
-bun run textbutler menubar stop
-```
-
-The command never compiles source and enforces one running companion per
-user. Register login startup only when it is wanted:
-
-```sh
-bun run textbutler menubar install
-bun run textbutler menubar uninstall
-```
+`~/.local/bin/textbutler daemon install`.
 
 For an explicitly installed background service:
 
@@ -156,7 +143,7 @@ complete that setup in Ghostget. Restart Textbutler after editing host settings.
 The owner control protocol supports listing up to 200 recent Messages
 conversations and enrolling one direct contact, optionally importing at most 200
 recent text messages. Enrollment rechecks account incarnation and participant
-identity and creates a disabled contact. Attachments are not imported. Use the terminal or menu to select a conversation, or run
+identity and creates a disabled contact. Attachments are not imported. Use the terminal to select a conversation, or run
 `conversations list` followed by `contacts add CANDIDATE [--history]`. The native Contacts directory remains unavailable
 through the current Ghostget contract.
 
@@ -179,7 +166,7 @@ have at most 48 characters. Keep the legacy `authId` for compatibility.
 
 Provider configuration alone does not start WhatsApp synchronization. The owner
 control protocol has separate connection, enrollment and activation operations.
-Use `messaging start PROVIDER`, the guided terminal, or the menu. New contacts
+Use `messaging start PROVIDER` or the guided terminal. New contacts
 remain disabled until a ready agent account and messaging grant have been
 selected. Connection checks alone do not enable replies.
 

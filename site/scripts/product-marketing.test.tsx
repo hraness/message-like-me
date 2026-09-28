@@ -192,7 +192,7 @@ test('keeps machine-readable setup and conditional subscription admission consis
   expect(discovery).toContain('Test inference and delivery on your own account');
 });
 
-test('offers guided source setup without implying a released AI engine or menu send approval', async () => {
+test('offers guided source setup without implying a released AI engine or a menu bar app', async () => {
   const home = renderToStaticMarkup(<Home />);
   const about = renderToStaticMarkup(<About />);
   const discovery = await getDiscoveryText().text();
@@ -204,7 +204,8 @@ test('offers guided source setup without implying a released AI engine or menu s
     expect(content).toMatch(/running from source never writes AI replies/iu);
     expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
     expect(content).toContain('https://github.com/hraness/xcb');
-    expect(content).toContain('prebuilt');
+    expect(content).toContain('no window');
+    expect(content).not.toMatch(/menu bar companion|menubar|prebuilt runner/iu);
     expect(content).not.toContain('Claude API is available after setup');
     expect(content).not.toContain(`${GITHUB_URL}/tree/main/apps/macos`);
   }
@@ -213,5 +214,4 @@ test('offers guided source setup without implying a released AI engine or menu s
   expect(home).toContain('Clearing all three sends plain text');
   expect(discovery).toContain('replies show DRAFT');
   expect(discovery).toContain('replies send DRAFT DIGEST');
-  expect(discovery).toContain('A menu preview cannot send a draft.');
 });

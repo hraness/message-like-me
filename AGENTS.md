@@ -1,15 +1,16 @@
 # Textbutler redesign scope
 
 The owner has authorized replacing the unused Message Like Me product with
-Textbutler, a macOS message-butler daemon and menu companion at `textbutler.app`.
+Textbutler, a headless macOS message-butler daemon at `textbutler.app`.
 `PRODUCT.md` and `docs/textbutler/architecture.md` define the new product.
 The historical constraints below continue to govern the legacy `src/`, `dist/`,
 published message contracts, and their existing release machinery. They do not
-prohibit the explicitly requested new runtime in `packages/` and the menu
-companion adapter that drives the shared desktop-foundation runner. The owner
-also authorized a minimal native TextButler.app supervisor so macOS can grant
-Messages access to TextButler itself. Its fixed roles launch only the verified
-runtime, daemon, menu companion, or owner-invoked iMessage setup. Preserve exact
+prohibit the explicitly requested new runtime in `packages/`. The owner removed
+the menu bar companion: Textbutler is controlled through its CLI and guided
+terminal only. The owner also authorized a minimal native TextButler.app
+supervisor so macOS can grant Messages access to TextButler itself. Its fixed
+roles launch only the verified runtime's daemon or owner-invoked iMessage setup;
+opening the app itself starts nothing. Preserve exact
 payload and lifecycle identity checks. Public Developer ID signing and
 notarization remain outside this local installation scope.
 
@@ -27,8 +28,7 @@ notarization remain outside this local installation scope.
 - Unqualified provider restrictions and unsupported transport operations must
   remain unavailable. Synthetic tests do not prove live delivery or sandboxing.
 - Run `bun run check:textbutler` for the new source packages as well as the
-  existing required aggregate. Native menu-companion builds are gated by the
-  shared desktop-foundation release, not this repository.
+  existing required aggregate.
 - Repository/package rename and website deployment must use a reviewed identity
   migration that preserves the existing release and production protections.
 - Informational site changes may use the explicit site-source promotion path in
