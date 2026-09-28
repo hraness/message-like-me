@@ -99,7 +99,7 @@ describe("Textbutler CLI style contract", () => {
       "Textbutler readiness", "",
       "⚠ Private settings", "  Create your private settings. Automatic replies start paused.",
       "⚠ Messaging apps", "  Connect iMessage, WhatsApp, or Beeper (for Signal, Telegram and more). Sign in to each app with Ghostget. iMessage also needs macOS access for Textbutler.",
-      "⚠ Background service", "  Start the background service. It keeps running after you close the terminal or menu.",
+      "⚠ Background service", "  Start the background service. It keeps running after you close the terminal.",
       "⚠ Choose conversations",
     ].join("\n"));
     expect(text.text.trimEnd().split("\n").slice(-2)).toEqual(["6 steps left.", "→ textbutler setup"]);

@@ -19,6 +19,7 @@ import { contactCapabilityIdentity } from "./contact-capabilities.ts";
 import { ContactHabitat, DEFAULT_HABITAT_PLAN } from "./contact-habitat.ts";
 import { createHabitatAgent } from "./habitat-agent.ts";
 import { createFastDriver } from "./fast-driver.ts";
+import { defaultHabitatConfig } from "./default-reply-model.ts";
 
 const roots: string[] = [], services: TextbutlerControlService[] = [];
 afterEach(async () => { for (const service of services.splice(0)) await service.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -350,7 +351,7 @@ describe("persistent owner control service", () => {
 });
 
 describe("owner reply triage through the control surface", () => {
-  async function replySetup(options: { afterGrant?: () => Promise<void>; afterRevoke?: () => Promise<void>; failRevoke?: boolean; enabled?: boolean } = {}) {
+  async function replySetup(options: { afterGrant?: () => Promise<void>; afterRevoke?: () => Promise<void>; failRevoke?: boolean; enabled?: boolean; noReadyAccount?: boolean } = {}) {
     const REPLY_NOW = Date.now();
     const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-replies-")); roots.push(dataDir);
     const contact = { ...newContact("synthetic-a", "Synthetic A", "enrollment:fixture"), enabled: options.enabled ?? true };
@@ -383,11 +384,11 @@ describe("owner reply triage through the control surface", () => {
     const adapter: AgentAdapter = { provider: "codex", qualification, async run() { return { output: { summary: "Suggestion", actions: [{ kind: "text", text: "On it." }] }, processStopped: true }; } };
     const db = new Database(":memory:");
     const providers = { router: new AgentMixer({ adapters: [adapter], leases: new SqliteAccountLeases(db), now: () => REPLY_NOW }),
-      accounts: () => [{ id: "account-one", status: "ready", route: "codex-cli", detail: null }],
+      accounts: () => [{ id: "account-one", status: options.noReadyAccount ? "setup-required" : "ready", route: "codex-cli", detail: null }],
       check: async () => { throw new Error("not used"); }, startLogin: async () => { throw new Error("not used"); },
       cancelLogin: async () => { throw new Error("not used"); }, logout: async () => { throw new Error("not used"); },
       runManagedTask: async () => { throw new Error("not used"); },
-      selection: async () => ({ qualification, modelCatalog, defaultReplyModel: "reply-pinned" }),
+      selection: async () => { if (options.noReadyAccount) throw new Error("No ready agent account"); return { qualification, modelCatalog, defaultReplyModel: "reply-pinned" }; },
       validateAccountChange: () => {}, close: async () => { db.close(); } } as unknown as ProviderHost;
     // Persist the messaging binding so the reopened service sees an exact enrollment.
     const settingsPath = join(dataDir, "state", "settings.json");
@@ -537,6 +538,22 @@ describe("owner reply triage through the control surface", () => {
     const current = await service.snapshot();
     expect(await run({ command: "replies.send", contactId: "synthetic-a", text: "Reviewed reply", expectedRevision: current.revision })).toMatchObject({ ok: true, kind: "reply-sent", state: "submitted" });
     expect(sent).toEqual([[{ kind: "text", text: "🤖{ Reviewed reply }" }]]);
+  });
+  test("the default reply writer lets a contact turn on without an agent subscription", async () => {
+    const enable = async (fixture: Awaited<ReturnType<typeof replySetup>>) => {
+      const snapshot = await fixture.service.snapshot();
+      return fixture.run({ command: "contact.settings.update", contactId: "synthetic-a", expectedRevision: snapshot.revision, settings: { ...snapshot.contacts[0]!.settings, enabled: true } });
+    };
+    const without = await replySetup({ enabled: false, noReadyAccount: true });
+    expect((await without.service.snapshot()).capabilities.find(item => item.id === "agent")?.status).toBe("setup-required");
+    expect(await enable(without)).toMatchObject({ ok: false });
+    expect(without.grantStore.size).toBe(0);
+    const withWriter = await replySetup({ enabled: false, noReadyAccount: true });
+    withWriter.service.setHabitatConfig(defaultHabitatConfig());
+    expect((await withWriter.service.snapshot()).capabilities.find(item => item.id === "agent")).toMatchObject({ status: "available" });
+    expect(await enable(withWriter)).toMatchObject({ ok: true });
+    expect((await withWriter.service.settings()).contacts[0]?.enabled).toBe(true);
+    expect(withWriter.grantStore.size).toBe(1);
   });
   test("shutdown cannot acknowledge an unpublished grant or erase uncertain revocation", async () => {
     let arrived!: () => void, release!: () => void;

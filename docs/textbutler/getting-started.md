@@ -5,10 +5,11 @@ Start with its inbox and replies you write yourself. Automatic replies stay
 paused until you choose a ready agent account, turn them on for a contact, and
 resume the butler.
 
-AI replies need a local build of Textbutler and a Claude Code, Codex, or Devin
-subscription connected through [xcb](https://github.com/hraness/xcb). The account
-also has to pass `providers check`. Installing doesn't turn replies on, and you
-should test live messaging with a recipient you trust. The Claude API route
+AI replies need a local build of Textbutler and a model to write them. By
+default that's Qwen 3.5 Flash through your own Vercel AI Gateway key, capped at
+$1 a day; you can instead connect a Claude Code, Codex, or Devin subscription
+through [xcb](https://github.com/hraness/xcb). Installing doesn't turn replies
+on, and you should test live messaging with a recipient you trust. The Claude API route
 needs a separately reviewed runtime that neither the source checkout nor the
 local build supplies.
 
@@ -221,7 +222,23 @@ removal. Repeating setup preserves an already linked account and its identity.
 For JSON commands to read, summarize, compose and send messages from another
 agent, see the [agent CLI guide](agent-cli.md).
 
-## Connect your AI subscription
+## Turn on AI replies with a gateway key
+
+Create an API key in the Vercel AI Gateway dashboard, copy it, and pipe it in so
+it never lands in your shell history:
+
+```sh
+pbpaste | ~/.local/bin/textbutler providers gateway-key
+```
+
+Textbutler stores it owner-only under `state/provider-credentials` in your data
+folder. Restart the background service (`daemon uninstall`, then
+`daemon install`) and replies are written by Qwen 3.5 Flash, with spending
+capped at $1 a day. `textbutler doctor` shows which model writes your replies.
+A `habitat` block you write yourself in `state/host.json` takes precedence, and
+`"enabled": false` there turns this reply writer off.
+
+## Or connect your AI subscription
 
 Install an xcb native build with `generate` support and follow its
 [account setup](https://github.com/hraness/xcb#native-xcb). Sign in through xcb,

@@ -10,7 +10,8 @@ marked assistant that knows your history with them.
 app to download and no published Textbutler package. Without an AI account you
 can connect iMessage, WhatsApp, and Beeper through Ghostget, check your inbox,
 and send replies you write yourself. AI replies also need a local build of
-Textbutler and a Claude Code, Codex, or Devin subscription connected through
+Textbutler plus your own Vercel AI Gateway key, which uses Qwen 3.5 Flash by
+default, or a Claude Code, Codex, or Devin subscription connected through
 [xcb](https://github.com/hraness/xcb). Automatic replies have worked end to end
 over iMessage in our testing. Try them on your own account,
 especially over WhatsApp or Beeper, before you rely on them.

@@ -13,6 +13,8 @@ import { loadHostConfig, parseHostConfig, type HostConfig } from "./host-config.
 import { nativeSubscriptionAccount } from "./native-subscription.ts";
 import { CliUsageError, symbolsFor, type Symbols } from "./cli-style.ts";
 import { imessageConfigured, macosAccessStep } from "./permission-readiness.ts";
+import { DEFAULT_REPLY_MODEL, gatewayKeyPresent } from "./default-reply-model.ts";
+import { bundledXcbIntegrationAdmission, validXcbIntegrationAdmission } from "./xcb-integration.ts";
 
 /** "skipped" marks a step that doesn't apply or that the owner left off on purpose. */
 export interface SetupStep { id: string; title: string; status: "done" | "action-needed" | "blocked" | "skipped"; detail: string; command?: string; settingsUrl?: string }
@@ -54,7 +56,7 @@ export async function readReadiness(dataDir: string): Promise<Readiness> {
   const access = await macosAccessStep({ dataDir, imessageConfigured: imessageConfigured(config, connected) });
   if (access) steps.push(access);
   steps.push({ id: "daemon", title: "Background service", status: snapshot ? "done" : "action-needed",
-    detail: snapshot ? "Running." : "Start the background service. It keeps running after you close the terminal or menu.",
+    detail: snapshot ? "Running." : "Start the background service. It keeps running after you close the terminal.",
     ...(!snapshot ? { command: "textbutler daemon install" } : {}) });
   const contacts = snapshot?.contacts ?? [];
   steps.push({ id: "contacts", title: "Choose conversations", status: contacts.length > 0 ? "done" : "action-needed",
@@ -66,14 +68,27 @@ export async function readReadiness(dataDir: string): Promise<Readiness> {
   const selected = contacts.some(contact => ready.some(account => account.id === contact.settings.accountId && account.provider === contact.settings.provider));
   const xcbAccounts = config?.xcb?.accounts ?? [];
   const nextAccount = ready[0]?.id ?? (xcbAccounts[0] ? nativeSubscriptionAccount(xcbAccounts[0].provider) : "native-codex");
-  steps.push({ id: "agent", title: "Reply suggestions", status: selected ? "done" : ready.length ? "action-needed" : "blocked",
-    detail: selected ? "A ready AI account is chosen for at least one chat. Nothing is sent until you send it or turn on automatic replies."
-      : ready.length ? "Choose a ready AI account for the chat you want help with."
-      : xcbAccounts.length ? "Your xcb accounts are set up. Start the background service, then check an account. It must be signed in with model access before Textbutler can suggest replies."
-      : "Connect your Claude, Codex, or Devin subscription through xcb. Sign in with xcb first; Textbutler keeps only references. You can review your inbox and send your own replies without one.",
-    command: ready.length ? `textbutler contacts account <contact> ${nextAccount}`
-      : xcbAccounts.length ? `textbutler providers check ${nextAccount}`
-      : "textbutler help setup" });
+  const writer = snapshot?.habitat;
+  const keySaved = await gatewayKeyPresent(dataDir);
+  const disabled = config?.habitat?.enabled === false;
+  const admitted = validXcbIntegrationAdmission(bundledXcbIntegrationAdmission());
+  const replyModel = (id: string): string => id === DEFAULT_REPLY_MODEL.id ? `${DEFAULT_REPLY_MODEL.label} through your ${DEFAULT_REPLY_MODEL.via} key` : id;
+  steps.push(writer
+    ? { id: "agent", title: "AI replies", status: "done", detail: `Replies are written by ${replyModel(writer.model)}.` }
+    : selected
+      ? { id: "agent", title: "AI replies", status: "done", detail: "A ready AI account is chosen for at least one chat. Nothing is sent until you send it or turn on automatic replies." }
+      : keySaved && !disabled && config?.habitat === undefined
+        ? { id: "agent", title: "AI replies", status: "action-needed",
+          detail: admitted ? `Your ${DEFAULT_REPLY_MODEL.via} key is saved. Restart the background service so replies use ${DEFAULT_REPLY_MODEL.label}.`
+            : `Your ${DEFAULT_REPLY_MODEL.via} key is saved. AI replies need the verified local build: install it, then run the installed textbutler.`,
+          command: admitted ? "textbutler daemon install" : "bun run textbutler:install" }
+        : ready.length
+          ? { id: "agent", title: "AI replies", status: "action-needed", detail: "Choose a ready AI account for the chat you want help with.", command: `textbutler contacts account <contact> ${nextAccount}` }
+          : xcbAccounts.length
+            ? { id: "agent", title: "AI replies", status: "blocked", detail: "Your xcb accounts are set up. Start the background service, then check an account. It must be signed in with model access before Textbutler can suggest replies.", command: `textbutler providers check ${nextAccount}` }
+          : { id: "agent", title: "AI replies", status: "action-needed",
+            detail: `Add a ${DEFAULT_REPLY_MODEL.via} key and replies use ${DEFAULT_REPLY_MODEL.label}, capped at $1 a day. You can also connect a Claude, Codex, or Devin subscription through xcb. Without either you can still review your inbox and send your own replies.`,
+            command: "pbpaste | textbutler providers gateway-key" });
   const automaticReplies = snapshot?.automation?.state ?? "unavailable";
   const paused = automaticReplies !== "running" && snapshot?.settings.paused === true;
   steps.push({ id: "automation", title: "Automatic replies", status: automaticReplies === "running" ? "done" : paused ? "skipped" : "action-needed",
@@ -83,7 +98,7 @@ export async function readReadiness(dataDir: string): Promise<Readiness> {
     command: automaticReplies === "running" ? "textbutler pause" : paused ? "textbutler resume" : "textbutler help contacts" });
   return { ok: config !== null && snapshot !== null && process.platform === "darwin", platform: process.platform, dataDir, initialized,
     daemonConnected: snapshot !== null, automaticReplies, canReviewInbox: snapshot?.replies !== undefined && contacts.length > 0,
-    canGenerateReplies: selected, steps, snapshot };
+    canGenerateReplies: selected || writer !== undefined, steps, snapshot };
 }
 
 /** Human readiness report (SPEC § D7): one symbol per step, detail only where
@@ -98,7 +113,7 @@ export function readinessText(value: Readiness, options: { symbols?: Symbols; ne
   }
   const open = value.steps.filter(step => step.status === "action-needed" || step.status === "blocked");
   const next = open.find(step => step.command !== undefined)?.command;
-  lines.push("", "Replies need your Mac awake and signed in. Quitting the menu doesn't stop them.", "",
+  lines.push("", "Replies need your Mac awake and signed in. Closing the terminal doesn't stop them.", "",
     open.length === 0 ? "Everything is ready." : `${open.length} step${open.length === 1 ? "" : "s"} left.`);
   if (next !== undefined && options.next !== false) lines.push(`${symbols.next} ${next}`);
   return `${lines.join("\n")}\n`;

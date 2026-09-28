@@ -13,9 +13,13 @@ import { handleMessagesCommand } from "./messages-cli.ts";
 import { BARE_INTRO, COMMANDS, HELP_TOPICS, ROOT_HELP, topicHelp } from "./cli-help.ts";
 import { CliUsageError, closest, detectAudience, jsonError, quoteInput, renderError, symbolsFor, type Audience } from "./cli-style.ts";
 import { TEXTBUTLER_VERSION } from "./version.ts";
+import { readProtectedStdin } from "@hraness/local-custody/protected-input";
+import { DEFAULT_REPLY_MODEL, saveGatewayKey } from "./default-reply-model.ts";
 
 type CliOptions = { launchAgent?: LaunchAgentLifecycle; entrypoint?: string; providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"];
-  supportEnv?: Readonly<Record<string, string | undefined>>; audience?: Audience; env?: Readonly<Record<string, string | undefined>> };
+  supportEnv?: Readonly<Record<string, string | undefined>>; audience?: Audience; env?: Readonly<Record<string, string | undefined>>;
+  /** Test seam for piped secret input; production reads descriptor 0 and refuses a terminal. */
+  readSecret?: () => string };
 
 /** A malformed form of a known command points at that command's help. */
 function usage(args: readonly string[]): CliUsageError {
@@ -101,7 +105,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     ? { contact: args[2]!, resolution: args[3] === "--sent" ? "sent" as const : args[3] === "--failed" ? "failed" as const : undefined } : undefined;
   const replies = inbox || repliesSuggest !== undefined || repliesShow !== undefined || repliesSendDraft !== undefined || repliesSendText !== undefined || repliesDiscard !== undefined || repliesReconcile !== undefined;
   if (args[0] === "replies" && !replies) throw usage(args);
-  if (!["init", "doctor", "providers list", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies) throw usage(args);
+  if (!["init", "doctor", "providers list", "providers gateway-key", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies) throw usage(args);
   /** Job-backed control call: poll until the stored result arrives. */
   const job = (input: ControlRequest): Promise<ControlResponse> => awaitOwnerJob(input, request);
   const unresolved = (response: ControlResponse): void => { print(response.ok && response.kind === "job" ? pendingJobOutput(response) : response); };
@@ -157,6 +161,16 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
       : { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" });
     if (response.ok && response.kind === "snapshot") { print({ ok: true, accounts: response.snapshot.providerAccounts ?? [] }); return 0; }
     unresolved(response); return 1;
+  }
+  if (command === "providers gateway-key") {
+    // The key arrives on a pipe or private file, never argv, the environment or a terminal echo.
+    let raw: string;
+    try { raw = (options.readSecret ?? (() => readProtectedStdin({ maximumBytes: 8192 })))(); }
+    catch { throw new CliUsageError("Pipe the key in, for example: pbpaste | textbutler providers gateway-key", "textbutler help providers"); }
+    try { await saveGatewayKey(dataDir, raw); }
+    catch (error) { if (error instanceof Error && /key/u.test(error.message)) throw new CliUsageError(error.message, "textbutler help providers"); throw error; }
+    print({ ok: true, status: "saved", model: DEFAULT_REPLY_MODEL.id, detail: `Saved your ${DEFAULT_REPLY_MODEL.via} key. Automatic replies will be written by ${DEFAULT_REPLY_MODEL.label} after the background service restarts (textbutler daemon uninstall, then textbutler daemon install). An explicit habitat setting in host.json still takes precedence.` });
+    return 0;
   }
   if (command === "init") {
     const state = await initializeOwnerState(dataDir);

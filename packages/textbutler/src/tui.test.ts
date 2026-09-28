@@ -134,3 +134,11 @@ describe("connect step finds Ghostget (T10)", () => {
     }
   });
 });
+
+test("contacts name the model that writes automatic replies", async () => {
+  const { replyWriterLabel } = await import("./tui.ts");
+  const base = { protocol: "textbutler.control/1" } as never;
+  expect(replyWriterLabel({ ...(base as object), habitat: { driver: "gateway", model: "alibaba/qwen3.5-flash", evolutionModel: null, debounceMs: 1500, dailyBudgetMicroUsd: 1_000_000 } } as never)).toBe("Qwen 3.5 Flash (Vercel AI Gateway)");
+  expect(replyWriterLabel({ ...(base as object), habitat: { driver: "local", model: "local/other", evolutionModel: null, debounceMs: 1500, dailyBudgetMicroUsd: 0 } } as never)).toBe("local/other");
+  expect(replyWriterLabel(base)).toBeNull();
+});

@@ -47,7 +47,7 @@ const HOME_QUESTIONS = [
   },
   {
     question: 'Can it answer messages for me?',
-    answer: 'Yes, with some setup. With a local build and a Claude Code, Codex, or Devin subscription connected through xcb, the butler writes and sends replies, marked by default, to the contacts you turn on, once you resume it. It can also suggest replies for you to review. Without an AI account, you draft each reply yourself in the guided inbox, read the complete text, and choose when to send. Running from source never writes AI replies.',
+    answer: 'Yes, with some setup. With a local build and either your own Vercel AI Gateway key, which uses Qwen 3.5 Flash by default, or a Claude Code, Codex, or Devin subscription connected through xcb, the butler writes and sends replies, marked by default, to the contacts you turn on, once you resume it. It can also suggest replies for you to review. Without an AI account, you draft each reply yourself in the guided inbox, read the complete text, and choose when to send. Running from source never writes AI replies.',
   },
   {
     question: 'Can my agent use it directly?',
@@ -142,10 +142,10 @@ export default function Home() {
                 <a href={GETTING_STARTED_URL}>Follow the setup guide</a>
               </li>
               <li>
-                <h3>Connect AI through xcb</h3>
+                <h3>Turn on AI replies</h3>
                 <p className="provider-marks"><ProviderMarkChip mark="claudecode" size={20} /><ProviderMarkChip mark="codex" size={20} /><ProviderMarkChip mark="devin" size={20} /></p>
-                <p>Build a local copy. It refuses to build if the source files it checks differ from the last reviewed version. Then connect xcb, choose a Claude Code, Codex, or Devin account, and run <code>providers check</code>. Running from source never writes AI replies. A finished setup doesn’t show that replies work, so test delivery and rich actions on your own account before you rely on them.</p>
-                <pre tabIndex={0}><code>{'bun run textbutler:install'}</code></pre>
+                <p>Build a local copy. It refuses to build if the source files it checks differ from the last reviewed version. Then pipe in your own Vercel AI Gateway key, and replies are written by Qwen 3.5 Flash, capped at $1 a day. You can connect a Claude Code, Codex, or Devin subscription through xcb instead and run <code>providers check</code>. Running from source never writes AI replies. A finished setup doesn’t show that replies work, so test delivery and rich actions on your own account before you rely on them.</p>
+                <pre tabIndex={0}><code>{'bun run textbutler:install\npbpaste | ~/.local/bin/textbutler providers gateway-key'}</code></pre>
                 <a href={`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`}>Read the subscription guide</a>
               </li>
               <li>

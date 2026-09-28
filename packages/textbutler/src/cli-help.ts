@@ -45,7 +45,8 @@ Chats and contacts
   contacts <command>         Add chats and choose how Textbutler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
-AI accounts
+AI replies
+  providers gateway-key      Save a Vercel AI Gateway key (replies use Qwen)
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is ready
 
@@ -126,8 +127,17 @@ Choosing an account never turns a chat on, and resume never does either.`,
   conversations: { usage: "textbutler conversations list", summary: "List recent one-to-one chats from your connected apps. Add one with\ntextbutler contacts add <candidate>. The list expires after five minutes." },
   messaging: { usage: "textbutler messaging list | start <app>", summary: "Show configured messaging apps, or connect one: imessage, whatsapp\nor beeper. Sign in to each app with Ghostget first. iMessage also\nneeds macOS access for Textbutler: see textbutler help permissions.",
     example: "textbutler messaging start imessage" },
-  providers: { usage: "textbutler providers list | check <account>", summary: "Show your AI accounts, or check that one is signed in and ready.\nSubscription accounts are native-claude-code, native-codex and native-devin.",
-    example: "textbutler providers check native-codex" },
+  providers: { usage: "textbutler providers gateway-key | list | check <account>", summary: "Set up AI replies, show your AI accounts, or check that one is ready.",
+    body: `Commands
+  providers gateway-key      Save a Vercel AI Gateway key from a pipe
+  providers list             Show connected AI accounts
+  providers check <account>  Check that one account is signed in and ready
+
+Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key,
+capped at $1 a day. Pipe the key in so it never lands in your shell history,
+then restart the background service. Subscription accounts (native-claude-code,
+native-codex and native-devin) connect through xcb.`,
+    example: "pbpaste | textbutler providers gateway-key" },
   daemon: { usage: "textbutler daemon install | uninstall | status | run", summary: "Manage the background service that watches your chats.",
     body: `Commands
   daemon install             Start it now and at login

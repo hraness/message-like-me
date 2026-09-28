@@ -21,7 +21,8 @@ test("guided setup is private, paused, repeatable and preserves owner state", as
   expect(readiness.daemonConnected).toBe(false);
   expect(readiness.canGenerateReplies).toBe(false);
   expect(readiness.automaticReplies).toBe("unavailable");
-  expect(readiness.steps.find(step => step.id === "agent")?.status).toBe("blocked");
+  // A fresh install can turn on AI replies with one piped key; it is not blocked.
+  expect(readiness.steps.find(step => step.id === "agent")).toMatchObject({ status: "action-needed", command: "pbpaste | textbutler providers gateway-key" });
 });
 test("initial connection setup supports all three providers without executing the connector", async () => {
   const root = await fixture(), executable = join(root, "ghostget");
