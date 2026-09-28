@@ -2,8 +2,6 @@
 import { parseArguments } from "./args.ts";
 import { runProductSupportCommand, showProductSupportInvitation, standaloneSupportEnvironment } from "./support.ts";
 import { runCommand } from "./commands.ts";
-import { HELP } from "./command-input.ts";
-import { terminalIntro } from "./cli-intro.ts";
 import { errorMessage, exitCodeFor } from "./errors.ts";
 import { processIo, type CommandIo } from "./io.ts";
 
@@ -19,12 +17,7 @@ export function isUsefulSupportResult(argv: readonly string[]): boolean {
 export async function main(argv: readonly string[], io: CommandIo = processIo, supportEnv?: Readonly<Record<string, string | undefined>>): Promise<number> {
   try {
     if (argv[0] === "support") return await runProductSupportCommand(argv.slice(1), io, supportEnv === undefined ? {} : { env: supportEnv });
-    const rootHelp = argv.length === 0 || (argv.length === 1 && argv[0] === "--help");
-    const output = rootHelp && io === processIo ? {
-      ...io,
-      stdout: (text: string) => io.stdout((text === HELP ? terminalIntro({ isTTY: process.stdout.isTTY, columns: process.stdout.columns, term: process.env.TERM }) : "") + text),
-    } : io;
-    await runCommand(argv, output);
+    await runCommand(argv, io);
     return 0;
   } catch (error) {
     io.stderr(`${errorMessage(error)}\n`);
