@@ -451,6 +451,75 @@ test("a refused public query stays inside the search budget and a fresh phrasing
   expect(f.calls()).toBe(3); expect(searches).toBe(1);
 });
 
+test("repeated private query wording yields specific feedback and a final safe reply", async () => {
+  let searches = 0;
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "latest NASA mission headline 2026" } };
+    const evidence = driverEvidence(body);
+    expect(evidence.results[0]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted", detail: expect.stringContaining('"nasa mission"') } });
+    if (call === 2) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "recent NASA mission launch news" } };
+    expect(evidence.results[1]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted", detail: expect.stringContaining('"nasa mission"') } });
+    expect(evidence.tools).not.toContain("web-search");
+    return { ...replyOutput, actions: [{ kind: "web-search", query: "public spaceflight news" }], tool: null };
+  });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
+  f.driver.canSearch = true;
+  f.driver.search = async () => { searches++; return {}; };
+  const request = { ...f.request, invocation: "keyword" as const, event: { ...f.request.event, text: "butler, search the web for the latest NASA mission headline" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("safe web query") }] });
+  expect(f.calls()).toBe(3); expect(searches).toBe(0);
+});
+
+test("an inferred reply cannot present current facts after a refused query echoing its trigger", async () => {
+  let searches = 0;
+  const f = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "San Juan weather" } }
+    : { ...replyOutput, actions: [{ kind: "text", text: "Sunny in San Juan now." }], tool: null });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
+  f.driver.canSearch = true; f.driver.search = async () => { searches++; return {}; };
+  const request = { ...f.request, invocation: "inferred" as const, event: { ...f.request.event, text: "What's the weather in San Juan?" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("safe web query") }] });
+  expect(f.calls()).toBe(2); expect(searches).toBe(0);
+});
+
+test("guidance-derived location cannot turn a refused search into invented weather", async () => {
+  let searches = 0;
+  const f = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "San Juan weather" } }
+    : { ...replyOutput, actions: [{ kind: "text", text: "It's 86 degrees outside." }], tool: null });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "The owner lives in San Juan.", webSearch: true });
+  f.driver.canSearch = true; f.driver.search = async () => { searches++; return {}; };
+  const request = { ...f.request, event: { ...f.request.event, text: "How hot is it outside?" } };
+  await expect(f.habitat.agent.compose(request)).resolves.toMatchObject({ actions: [{ kind: "text", text: expect.stringContaining("safe web query") }] });
+  expect(f.calls()).toBe(2); expect(searches).toBe(0);
+});
+
+test("standalone butler help remains answerable after an unnecessary refused search", async () => {
+  const f = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "confidential project updates" } }
+    : { ...replyOutput, actions: [{ kind: "text", text: "I can help you use Textbutler." }], tool: null });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "The confidential project is private", webSearch: true });
+  f.driver.canSearch = true; f.driver.search = async () => { throw Error("Private query escaped"); };
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: [{ kind: "text", text: "I can help you use Textbutler." }] });
+  expect(f.calls()).toBe(2);
+});
+
+test("refused search preserves a later tool-backed answer and deliberate silence", async () => {
+  const f = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "confidential project updates" } }
+    : call === 2 ? { ...replyOutput, actions: [], tool: { kind: "javascript", code: "return 40 + 2;" } }
+      : { ...replyOutput, actions: [{ kind: "text", text: "The answer is 42." }], tool: null });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "The confidential project is private", webSearch: true, javascript: true });
+  f.driver.canSearch = true; f.driver.search = async () => { throw Error("Private query escaped"); };
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: [{ kind: "text", text: "The answer is 42." }] });
+  const silent = await fixture((_body: string, call: number) => call === 1
+    ? { ...replyOutput, actions: [], tool: { kind: "web-search", query: "confidential project updates" } }
+    : { ...replyOutput, respond: false, confidence: 0.2, actions: [], tool: null });
+  new ContactHabitat(silent.journal, silent.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "The confidential project is private", webSearch: true });
+  silent.driver.canSearch = true; silent.driver.search = async () => { throw Error("Private query escaped"); };
+  await expect(silent.habitat.agent.compose(silent.request)).rejects.toBeInstanceOf(NoReplyNeeded);
+});
+
 test("one web search exhausts the reply's search inventory and dispatch budget", async () => {
   let searches = 0;
   const f = await fixture((body: string, call: number) => {

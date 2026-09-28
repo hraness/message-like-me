@@ -24,7 +24,7 @@
     "packages/textbutler/src/daemon.ts": "238d366f914936ad9623ed6b0686d036902cc6b7dea555acc8cbfa4f58c4901c",
     "packages/textbutler/src/fast-driver.ts": "bdea3d4c01c61bf19084965fca2c4ccb9137d0136b3e07b0864bbb66f587c0a6",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
-    "packages/textbutler/src/habitat-agent.ts": "87b845390ace450610ce5bb5ad51a9b6bb4359d840818ecdd962043f0823bdbf",
+    "packages/textbutler/src/habitat-agent.ts": "db681c6d399b2a4b58e9d58b1cab15d1f8f0cfa25db1562eaac6c5040440a31d",
     "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
     "packages/textbutler/src/habitat-program.ts": "b5a7f4cd70e2c67a84842d431162136d034203e6e382337697ac704f96dd7e32",
     "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
@@ -60,7 +60,7 @@
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/fast-driver.test.ts packages/textbutler/src/default-reply-model.test.ts packages/textbutler/src/cli.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/runtime.test.ts packages/textbutler/src/cli-golden.test.ts",
-    "receiptSha256": "701607e081ce483a0529731a9f145bcf4bea654df7a3be92e51db151f83e1cb1"
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/habitat-agent.test.ts scripts/xcb-integration-admission.test.ts",
+    "receiptSha256": "93366947698766036e84e8f8bd1e5572f13d35df481dd6a8aa26674b760ccfd3"
   }
 }
