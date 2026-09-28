@@ -1,3 +1,4 @@
+import { readPrivateFile } from "@hraness/local-custody/private-paths";
 import { CONTROL_PROTOCOL, validateContactSettings, type Contact, type ControlRequest, type ControlResponse, type DesktopSnapshot } from "../../control/src/index.ts";
 import { parseHabitatPlan } from "./contact-habitat.ts";
 import { CliUsageError } from "./cli-style.ts";
@@ -73,7 +74,7 @@ export async function handleOwnerCommand(args: readonly string[], options: {
   const job = family === "jobs" && verb === "show" && args.length === 3 && identity(target);
   const habitatRevision = /^(?:0|[1-9]\d{0,15})$/u.test(value ?? "") && Number.isSafeInteger(Number(value));
   const habitat = family === "habitats" && (verb === "show" && args.length === 3
-    || (verb === "rollback" || verb === "memory-clear") && args.length === 4 && habitatRevision || verb === "configure" && args.length === 5 && habitatRevision);
+    || (verb === "rollback" || verb === "memory-clear" || verb === "task-rollback") && args.length === 4 && habitatRevision || (verb === "configure" || verb === "task-stage") && args.length === 5 && habitatRevision);
   if (!(status || pause || messagingList || messagingStart || conversations || contactsList || add || account || activation || mode || self || job || habitat)) {
     throw new CliUsageError(`Missing or invalid arguments for "${[family, verb].filter(word => word !== undefined && /^[a-z-]{1,24}$/u.test(word)).join(" ")}".`, `textbutler help ${family}`);
   }
@@ -82,6 +83,14 @@ export async function handleOwnerCommand(args: readonly string[], options: {
     if (Buffer.byteLength(args[4]!) > 8192) throw new OwnerCliError("The habitat plan JSON exceeds 8,192 bytes.");
     try { habitatPlan = parseHabitatPlan(JSON.parse(args[4]!)); }
     catch { throw new OwnerCliError("Use a complete valid habitat plan JSON from habitats show, with only supported personality and tool fields."); }
+  }
+  let taskEvidence: { artifact: unknown; archive: unknown } | undefined;
+  if (habitat && verb === "task-stage") {
+    try {
+      const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readPrivateFile(args[4]!, 851_968)));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || Object.keys(parsed).length !== 2 || !("artifact" in parsed) || !("archive" in parsed)) throw Error("Invalid task package");
+      taskEvidence = parsed;
+    } catch { throw new OwnerCliError("Use an owned private JSON file containing the evaluated artifact and its complete bounded archive."); }
   }
   const { request, print } = options;
   const report = (response: ControlResponse): number => {
@@ -107,6 +116,8 @@ export async function handleOwnerCommand(args: readonly string[], options: {
     initializeHistory: value === "--history" }, request));
   const contact = resolveOwnerContact(snapshot, target!);
   if (habitat) return report(await request(verb === "show" ? { protocol: CONTROL_PROTOCOL, command: "habitat.read", contactId: contact.id }
+    : verb === "task-stage" ? { protocol: CONTROL_PROTOCOL, command: "habitat.task.stage", contactId: contact.id, expectedRevision: Number(value), artifact: taskEvidence!.artifact, archive: taskEvidence!.archive }
+    : verb === "task-rollback" ? { protocol: CONTROL_PROTOCOL, command: "habitat.task.rollback", contactId: contact.id, expectedRevision: Number(value) }
     : verb === "configure" ? { protocol: CONTROL_PROTOCOL, command: "habitat.configure", contactId: contact.id, expectedRevision: Number(value), plan: habitatPlan! }
       : verb === "memory-clear" ? { protocol: CONTROL_PROTOCOL, command: "habitat.memory.clear", contactId: contact.id, expectedRevision: Number(value) }
       : { protocol: CONTROL_PROTOCOL, command: "habitat.rollback", contactId: contact.id, expectedRevision: Number(value) }));

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { parseHabitatTaskShadow, qualifyHabitatTaskShadow, inspectHabitatTaskShadow } from "./habitat-task-shadow.ts";
 import type { RunJournal } from "./journal.ts";
 
 export const HABITAT_LIMITS = Object.freeze({ episodes: 16, followups: 5, windowMs: 1_800_000, quietMs: 30_000, evaluationsPerDay: 8, stateBytes: 524_288, memoryEntries: 64, memoryTextBytes: 1024, memoryBytes: 98_304, memorySnapshotEntries: 8, memorySnapshotTextBytes: 512, memoryExposureReferences: 24, memoryChanges: 8 });
@@ -48,7 +49,7 @@ const episodeSchema = z.strictObject({ reply: replySchema, followups: z.array(ob
 export type HabitatEpisode = z.infer<typeof episodeSchema>;
 const evaluationSchema = z.strictObject({ key: id, at: timestamp, phase: z.enum(["initial", "followup"]), status: z.enum(["pending", "retained", "promoted"]), reason: text(1024), receipts: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/u)).max(8).default([]), evidenceIds: z.array(id).max(40).default([]), memoryChanged: z.boolean().optional(), memoryEvicted: z.number().int().min(0).max(HABITAT_LIMITS.memoryEntries + HABITAT_LIMITS.memoryChanges).optional() });
 const lineageSchema = z.strictObject({ key: id, kind: z.enum(["promotion", "rollback", "configuration"]), from: planSchema, to: planSchema, reason: text(1024) });
-const stateSchema = z.strictObject({ version: z.literal(1), revision: timestamp, champion: planSchema, episodes: z.array(episodeSchema).max(HABITAT_LIMITS.episodes), evaluations: z.array(evaluationSchema).max(64), lineage: z.array(lineageSchema).max(16), ancestors: z.array(planSchema).max(16).default([]), denied: z.array(z.string().regex(/^[a-f0-9]{64}$/u)).max(16).default([]), ownerRevision: timestamp.optional(), memory: memoryList.optional(), memoryCutoff: timestamp.optional() });
+const stateSchema = z.strictObject({ version: z.literal(1), revision: timestamp, champion: planSchema, episodes: z.array(episodeSchema).max(HABITAT_LIMITS.episodes), evaluations: z.array(evaluationSchema).max(64), lineage: z.array(lineageSchema).max(16), ancestors: z.array(planSchema).max(16).default([]), denied: z.array(z.string().regex(/^[a-f0-9]{64}$/u)).max(16).default([]), ownerRevision: timestamp.optional(), memory: memoryList.optional(), memoryCutoff: timestamp.optional(), taskShadow: z.unknown().transform(parseHabitatTaskShadow).optional() });
 export type HabitatState = z.infer<typeof stateSchema>;
 export type HabitatCheckpoint = Readonly<{ key: string; at: number; phase: "initial" | "followup"; baseDigest: string; evidenceDigest: string; ownerRevision: number; episode: HabitatEpisode; cases: readonly HabitatEpisode[]; plan: HabitatPlan; memory: readonly HabitatMemory[]; memoryDigest: string; memoryCutoff: number | null }>;
 const assessmentSchema = z.strictObject({ candidate: planSchema.nullable(), reason: text(1024), evidenceIds: z.array(id).max(40), scores: z.array(z.strictObject({ runId: id, incumbent: z.number().min(0).max(1), candidate: z.number().min(0).max(1), safe: z.boolean() })).max(4), remember: rememberSchema.optional(), memoryUpdate: memoryUpdateSchema.optional() }).refine(value => value.remember === undefined || value.memoryUpdate === undefined);
@@ -137,11 +138,11 @@ export class ContactHabitat {
     if (state.revision !== stored.revision) throw Error("Habitat revision mismatch");
     return state;
   }
-  private save(state: HabitatState): void {
+  private save(state: HabitatState, allowEpisodeEviction = true): void {
     const expected = state.revision;
     state.revision++;
     let value = JSON.stringify(stateSchema.parse(state));
-    while (Buffer.byteLength(value) > HABITAT_LIMITS.stateBytes && state.episodes.length > 2) { state.episodes.shift(); value = JSON.stringify(state); }
+    while (allowEpisodeEviction && Buffer.byteLength(value) > HABITAT_LIMITS.stateBytes && state.episodes.length > 2) { state.episodes.shift(); value = JSON.stringify(state); }
     if (Buffer.byteLength(value) > HABITAT_LIMITS.stateBytes) throw Error("Habitat capacity reached");
     this.journal.writeHabitatState(this.contactId, expected, value);
   }
@@ -245,6 +246,24 @@ export class ContactHabitat {
     state.lineage = state.lineage.slice(-16);
     state.champion = plan; state.ancestors = [];
     this.save(state);
+  }
+  async stageTaskArtifact(expectedRevision: number, artifact: unknown, archive: unknown): Promise<void> {
+    const state = this.snapshot();
+    if (state.revision !== expectedRevision) throw Error("Habitat task revision conflict");
+    const admitted = await qualifyHabitatTaskShadow(state.champion, artifact, archive);
+    if (this.snapshot().revision !== expectedRevision) throw Error("Habitat task revision conflict");
+    const old = state.taskShadow;
+    if (old?.denied.includes(admitted.artifact.digest)) throw Error("Habitat task was rolled back");
+    if (old?.current?.artifact.digest === admitted.artifact.digest && inspectHabitatTaskShadow(old, state.champion, state.ownerRevision ?? 0).status === "ready") return;
+    state.taskShadow = { mode: "shadow-only", current: { ...admitted, ownerRevision: state.ownerRevision ?? 0 }, previous: old?.current ?? null, denied: old?.denied ?? [] };
+    this.save(state, false);
+  }
+  rollbackTaskArtifact(expectedRevision: number): void {
+    const state = this.snapshot(), shadow = state.taskShadow;
+    if (state.revision !== expectedRevision || !shadow?.current) throw Error("Habitat task rollback conflict");
+    shadow.denied = [...new Set([...shadow.denied, shadow.current.artifact.digest])].slice(-16);
+    shadow.current = shadow.previous; shadow.previous = null;
+    this.save(state, false);
   }
   rollback(expectedRevision: number): void {
     const state = this.snapshot(), previous = state.ancestors.pop();

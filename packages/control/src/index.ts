@@ -109,6 +109,8 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.read"; contactId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.configure"; contactId: string; expectedRevision: number; plan: ContactHabitatPlan }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.rollback"; contactId: string; expectedRevision: number }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.task.stage"; contactId: string; expectedRevision: number; artifact: unknown; archive: unknown }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.task.rollback"; contactId: string; expectedRevision: number }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.memory.clear"; contactId: string; expectedRevision: number }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.read"; contactId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.memory.write"; contactId: string; expectedRevision: string; content: string }

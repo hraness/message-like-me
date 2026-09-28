@@ -138,6 +138,8 @@ Commands
   habitats configure <contact> <rev> <json>   Replace it (replies paused)
   habitats rollback <contact> <rev>           Go back to revision <rev>
   habitats memory-clear <contact> <rev>       Forget learned excerpts
+  habitats task-stage <contact> <rev> <file>  Stage shadow task (paused)
+  habitats task-rollback <contact> <rev>      Roll back shadow task (paused)
 
 <rev> is the revision that habitats show prints."
 ,
