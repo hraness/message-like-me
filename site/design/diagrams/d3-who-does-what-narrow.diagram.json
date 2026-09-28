@@ -1,0 +1,403 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hraness/slopcamera/main/schema/diagram.schema.json",
+  "version": 1,
+  "name": "d3-who-does-what-narrow",
+  "canvas": {
+    "width": 400,
+    "height": 858,
+    "padding": 0
+  },
+  "shapes": [
+    {
+      "id": "lane-agent-label",
+      "type": "text",
+      "x": 20,
+      "y": 24,
+      "text": "Your agent",
+      "fontSize": 13,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 168
+    },
+    {
+      "id": "lane-you-label",
+      "type": "text",
+      "x": 196,
+      "y": 24,
+      "text": "You",
+      "fontSize": 13,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 184
+    },
+    {
+      "id": "step-0",
+      "type": "rect",
+      "x": 20,
+      "y": 68,
+      "width": 360,
+      "height": 36,
+      "radius": 18,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "1  Ask your agent",
+      "labelFontSize": 14,
+      "labelWeight": 700
+    },
+    {
+      "id": "clone",
+      "type": "rect",
+      "x": 30,
+      "y": 136,
+      "width": 148,
+      "height": 56,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "clone-text",
+      "type": "text",
+      "x": 30,
+      "y": 155.875,
+      "text": "clone + install",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 148
+    },
+    {
+      "id": "connect",
+      "type": "rect",
+      "x": 30,
+      "y": 288,
+      "width": 148,
+      "height": 56,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "connect-text",
+      "type": "text",
+      "x": 30,
+      "y": 307.875,
+      "text": "connect apps",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 148
+    },
+    {
+      "id": "step-1",
+      "type": "rect",
+      "x": 20,
+      "y": 384,
+      "width": 360,
+      "height": 36,
+      "radius": 18,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "2  Say yes to your Mac",
+      "labelFontSize": 14,
+      "labelWeight": 700
+    },
+    {
+      "id": "doctor-1",
+      "type": "rect",
+      "x": 30,
+      "y": 452,
+      "width": 148,
+      "height": 56,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "doctor-1-text",
+      "type": "text",
+      "x": 30,
+      "y": 472.5,
+      "text": "textbutler doctor ✓",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 148,
+      "fontFamily": "mono"
+    },
+    {
+      "id": "you-card",
+      "type": "rect",
+      "x": 206,
+      "y": 452,
+      "width": 164,
+      "height": 194,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "ghost-toggle-0",
+      "type": "rect",
+      "x": 218,
+      "y": 468,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-0",
+      "type": "ellipse",
+      "x": 232,
+      "y": 470,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-0",
+      "type": "text",
+      "x": 256,
+      "y": 469,
+      "text": "Full Disk Access switch",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 102
+    },
+    {
+      "id": "ghost-toggle-1",
+      "type": "rect",
+      "x": 218,
+      "y": 512,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-1",
+      "type": "ellipse",
+      "x": 232,
+      "y": 514,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-1",
+      "type": "text",
+      "x": 256,
+      "y": 513,
+      "text": "Allow Messages",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 102
+    },
+    {
+      "id": "ghost-toggle-2",
+      "type": "rect",
+      "x": 218,
+      "y": 541,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-2",
+      "type": "ellipse",
+      "x": 232,
+      "y": 543,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-2",
+      "type": "text",
+      "x": 256,
+      "y": 542,
+      "text": "pair WhatsApp or Beeper (optional)",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 102
+    },
+    {
+      "id": "ghost-toggle-3",
+      "type": "rect",
+      "x": 218,
+      "y": 600,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-3",
+      "type": "ellipse",
+      "x": 232,
+      "y": 602,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-3",
+      "type": "text",
+      "x": 256,
+      "y": 601,
+      "text": "pick what writes replies",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 102
+    },
+    {
+      "id": "step-2",
+      "type": "rect",
+      "x": 20,
+      "y": 686,
+      "width": 360,
+      "height": 36,
+      "radius": 18,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "3  Turn on one person",
+      "labelFontSize": 14,
+      "labelWeight": 700
+    },
+    {
+      "id": "doctor-2",
+      "type": "rect",
+      "x": 30,
+      "y": 754,
+      "width": 148,
+      "height": 56,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "doctor-2-text",
+      "type": "text",
+      "x": 30,
+      "y": 774.5,
+      "text": "textbutler doctor ✓",
+      "fontSize": 12,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 148,
+      "fontFamily": "mono"
+    },
+    {
+      "id": "turn-on",
+      "type": "rect",
+      "x": 206,
+      "y": 754,
+      "width": 164,
+      "height": 56,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "turn-on-text",
+      "type": "text",
+      "x": 206,
+      "y": 773.875,
+      "text": "turn on one person",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 164
+    },
+    {
+      "id": "under-lane-agent",
+      "type": "rect",
+      "x": 20,
+      "y": 52,
+      "width": 168,
+      "height": 782,
+      "radius": 16,
+      "tone": "blue",
+      "strokeWidth": 0
+    },
+    {
+      "id": "under-lane-you",
+      "type": "rect",
+      "x": 196,
+      "y": 52,
+      "width": 184,
+      "height": 782,
+      "radius": 16,
+      "tone": "yellow",
+      "strokeWidth": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "in-clone",
+      "from": "clone",
+      "to": "connect",
+      "tone": "blue",
+      "start": "bottom",
+      "end": "top"
+    },
+    {
+      "id": "in-connect",
+      "from": "connect",
+      "to": "doctor-1",
+      "tone": "blue",
+      "start": "bottom",
+      "end": "top"
+    },
+    {
+      "id": "in-doctor",
+      "from": "doctor-1",
+      "to": "doctor-2",
+      "tone": "blue",
+      "start": "bottom",
+      "end": "top"
+    },
+    {
+      "id": "handoff-1",
+      "from": "doctor-1",
+      "to": "you-card",
+      "tone": "blue",
+      "start": "right",
+      "end": "left",
+      "endPosition": 0.14432989690721648
+    },
+    {
+      "id": "handoff-2",
+      "from": "doctor-2",
+      "to": "turn-on",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    }
+  ]
+}

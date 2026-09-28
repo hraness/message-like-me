@@ -1,0 +1,293 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hraness/slopcamera/main/schema/diagram.schema.json",
+  "version": 1,
+  "name": "d2-words-subscription-wide",
+  "canvas": {
+    "width": 1200,
+    "height": 488,
+    "padding": 0
+  },
+  "shapes": [
+    {
+      "id": "dash-search",
+      "type": "rect",
+      "x": 290,
+      "y": 32,
+      "width": 300,
+      "height": 88,
+      "radius": 12,
+      "tone": "orange",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "search-title",
+      "type": "text",
+      "x": 310,
+      "y": 50,
+      "text": "Web search",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "orange",
+      "align": "start"
+    },
+    {
+      "id": "search-sub",
+      "type": "text",
+      "x": 310,
+      "y": 76,
+      "text": "only with your key\nprivacy-checked",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 268
+    },
+    {
+      "id": "dash-mac",
+      "type": "rect",
+      "x": 40,
+      "y": 168,
+      "width": 824,
+      "height": 232,
+      "radius": 28,
+      "tone": "orange",
+      "strokeWidth": 1.25,
+      "fill": false
+    },
+    {
+      "id": "mac-label",
+      "type": "text",
+      "x": 64,
+      "y": 184,
+      "text": "Your Mac",
+      "fontSize": 13,
+      "weight": 700,
+      "tone": "orange",
+      "align": "start"
+    },
+    {
+      "id": "ghostget",
+      "type": "rect",
+      "x": 80,
+      "y": 236,
+      "width": 184,
+      "height": 104,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "ghostget-title",
+      "type": "text",
+      "x": 100,
+      "y": 256,
+      "text": "Ghostget",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "ghostget-sub",
+      "type": "text",
+      "x": 100,
+      "y": 282,
+      "text": "reads and sends for your Mac",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "textbutler",
+      "type": "rect",
+      "x": 360,
+      "y": 236,
+      "width": 184,
+      "height": 104,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "textbutler-title",
+      "type": "text",
+      "x": 380,
+      "y": 256,
+      "text": "Textbutler",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "textbutler-sub",
+      "type": "text",
+      "x": 380,
+      "y": 282,
+      "text": "runs in the background",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "writer",
+      "type": "rect",
+      "x": 640,
+      "y": 236,
+      "width": 184,
+      "height": 104,
+      "radius": 12,
+      "tone": "blue",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "writer-title",
+      "type": "text",
+      "x": 660,
+      "y": 256,
+      "text": "Reply writer",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "writer-sub",
+      "type": "text",
+      "x": 660,
+      "y": 282,
+      "text": "Claude Code, Codex, or Devin",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 144
+    },
+    {
+      "id": "dash-gateway",
+      "type": "rect",
+      "x": 920,
+      "y": 176,
+      "width": 240,
+      "height": 96,
+      "radius": 12,
+      "tone": "orange",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "gateway-title",
+      "type": "text",
+      "x": 940,
+      "y": 196,
+      "text": "Vercel AI Gateway (Qwen)",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "orange",
+      "align": "start",
+      "width": 208
+    },
+    {
+      "id": "gateway-sub",
+      "type": "text",
+      "x": 940,
+      "y": 222,
+      "text": "only with your key",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 200
+    },
+    {
+      "id": "dash-xcb",
+      "type": "rect",
+      "x": 920,
+      "y": 304,
+      "width": 240,
+      "height": 104,
+      "radius": 12,
+      "tone": "blue",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "xcb-title",
+      "type": "text",
+      "x": 940,
+      "y": 324,
+      "text": "xcb",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start",
+      "width": 208
+    },
+    {
+      "id": "xcb-sub",
+      "type": "text",
+      "x": 940,
+      "y": 350,
+      "text": "→ your Claude Code, Codex, or Devin account",
+      "fontSize": 13,
+      "weight": 400,
+      "tone": "orange",
+      "align": "start",
+      "width": 200
+    },
+    {
+      "id": "sentence",
+      "type": "text",
+      "x": 40,
+      "y": 440,
+      "text": "The conversation context goes to that account. The model gets no tools.",
+      "fontSize": 16,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 1120
+    }
+  ],
+  "edges": [
+    {
+      "id": "in-ghostget",
+      "from": "ghostget",
+      "to": "textbutler",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    },
+    {
+      "id": "in-textbutler",
+      "from": "textbutler",
+      "to": "writer",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    },
+    {
+      "id": "dash-search-link",
+      "from": "textbutler",
+      "to": "dash-search",
+      "tone": "orange",
+      "start": "top",
+      "end": "bottom",
+      "endPosition": 0.54,
+      "arrowhead": "none"
+    },
+    {
+      "id": "out-xcb",
+      "from": "writer",
+      "to": "dash-xcb",
+      "tone": "blue",
+      "start": "right",
+      "end": "left",
+      "startPosition": 0.7
+    }
+  ]
+}

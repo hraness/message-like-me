@@ -1,35 +1,16 @@
-import {
-  createSocialImageResponse,
-  socialImageContentType as contentType,
-  socialImageSize as size,
-} from "@hraness/web-discovery/social-image";
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-import { SITE_DESCRIPTION, SITE_NAME, SOCIAL_IMAGE_ALT } from "./_lib/site";
+import { SOCIAL_IMAGE_ALT } from './_lib/site';
 
 export const alt = SOCIAL_IMAGE_ALT;
-export { contentType, size };
+export const size = { width: 1200, height: 630 };
+export const contentType = 'image/png';
 
-function TextbutlerMark() {
-  return (
-    <svg aria-label="Textbutler mark" fill="none" height="42" role="img" viewBox="0 0 42 42" width="42">
-      <path d="M7 8h28v21H19l-8 7v-7H7z" stroke="currentColor" strokeLinejoin="round" strokeWidth="3" />
-      <path d="M14 16h14M14 22h10" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
-    </svg>
-  );
-}
-
-export default function OpenGraphImage() {
-  return createSocialImageResponse({
-    description: SITE_DESCRIPTION,
-    domain: "textbutler.app",
-    eyebrow: SITE_NAME,
-    mark: <TextbutlerMark />,
-    theme: {
-      accent: "#065968",
-      background: "#FBF1C7",
-      foreground: "#393533",
-      muted: "#584F48",
-    },
-    title: "Your AI butler replies in the chats you choose.",
-  });
+// The card is drawn in code on /stills (the headline beside the same phone the
+// home page shows) and captured to public/og.png by `bun run stills`. This
+// route serves those bytes so every page's preview matches the site.
+export default async function OpenGraphImage() {
+  const png = await readFile(join(process.cwd(), 'public', 'og.png'));
+  return new Response(new Uint8Array(png), { headers: { 'Content-Type': contentType } });
 }

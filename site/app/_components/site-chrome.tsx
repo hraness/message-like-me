@@ -7,8 +7,6 @@ import {
   absoluteUrl,
   type SitePath,
   GITHUB_URL,
-  GETTING_STARTED_URL,
-  ARCHITECTURE_URL,
 } from '../_lib/site';
 
 // The shared footer contract pins the canonical generated icon element exactly.
@@ -20,7 +18,7 @@ export function SiteHeader() {
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <MarketingSiteHeader
-        action={{ href: GETTING_STARTED_URL, label: 'Set up' }}
+        action={{ href: '/#setup', label: 'Set up' }}
         ariaLabel="Primary navigation"
         brand="Textbutler"
         brandLabel="Textbutler home"
@@ -29,8 +27,8 @@ export function SiteHeader() {
         trailing={<ThemeMenuButton aria-label="Appearance" />}
         links={[
           { href: '/#how-it-works', label: 'How it works' },
-          { href: '/docs', label: 'Docs' },
-          { href: ARCHITECTURE_URL, label: 'Architecture' },
+          { href: '/#setup', label: 'Setup' },
+          { href: '/blog', label: 'Blog' },
           { href: GITHUB_URL, label: 'GitHub' },
         ]}
       />
@@ -62,9 +60,12 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
         ]}
         name="Textbutler"
       >
-        <p>Built for Mac · MIT source · in development</p>
+        <p>AI in your messages · Mac only · MIT source · in development</p>
       </MarketingSiteFooter>
-      <HranessSiteFooter mailingList={{ kind: "none" }} support={{"id": "message-like-me", "name": "Textbutler", "valueProposition": "Support Textbutler’s development.", "updates": false}} />
+      <HranessSiteFooter
+        mailingList={{ kind: "none" }}
+        support={{ id: "textbutler", name: "Textbutler", updates: false, valueProposition: "Support ongoing development of Textbutler." }}
+      />
     </>
   );
 }

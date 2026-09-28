@@ -8,7 +8,7 @@ export const BLOG_PATH = '/blog' as const;
 export const BLOG_FEED_PATH = '/blog/feed.xml' as const;
 export const BLOG_TITLE = 'Textbutler blog';
 export const BLOG_DESCRIPTION =
-  'Posts about how Textbutler works: what it drafts, what it sends only with your approval, and the tools it runs on.';
+  'Posts about Textbutler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
 
 export type BlogPost = Readonly<{
   slug: string;
@@ -26,11 +26,11 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   {
     slug: 'introducing-textbutler',
     title: 'Introducing Textbutler',
-    dek: 'Textbutler drafts replies as a clearly marked assistant for the Mac chats you pick, and by default each draft waits until you read and approve it.',
-    eyebrow: 'Release',
+    dek: 'AI in your messages. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you.',
+    eyebrow: 'Launch',
     published: '2026-09-24',
     updated: '2026-09-28',
-    tags: ['textbutler', 'messaging', 'drafts', 'local-first', 'macos', 'xcb', 'algal'],
+    tags: ['textbutler', 'messaging', 'imessage', 'local-models', 'ollama', 'macos', 'coding-agents', 'xcb'],
     relationIds: [
       'contract:wrench:message-like-me:exports-private-bundles',
       'contract:message-like-me:peopleblade:shared-bundle-format',
@@ -38,11 +38,12 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   },
   {
     slug: 'how-textbutler-uses-xcb',
-    title: 'How Textbutler uses xcb to draft on your own subscription',
-    dek: 'Textbutler drafts replies through xcb on the Claude Code, Codex, or Devin subscription you already pay for.',
+    title: 'How Textbutler uses xcb to reply on your own subscription',
+    dek: 'One of Textbutler’s three reply writers is the Claude Code, Codex, or Devin subscription you already pay for, reached through xcb with no tools of its own.',
     eyebrow: 'Integration',
     published: '2026-09-24',
-    tags: ['textbutler', 'xcb', 'subscriptions', 'drafts', 'claude-code', 'codex'],
+    updated: '2026-09-28',
+    tags: ['textbutler', 'xcb', 'subscriptions', 'drafts', 'claude-code', 'codex', 'devin'],
     relationIds: [],
   },
   {
@@ -51,15 +52,17 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     dek: 'A Textbutler habitat replaces a contact\'s reply plan only after a blinded ALGAL replay scores the new plan no lower on any case and higher on average.',
     eyebrow: 'Integration',
     published: '2026-09-24',
+    updated: '2026-09-28',
     tags: ['textbutler', 'algal', 'habitats', 'drafts', 'messaging', 'local-first'],
     relationIds: [],
   },
   {
     slug: 'how-textbutler-uses-ghostget',
-    title: 'How Textbutler uses Ghostget to import your message history',
-    dek: 'Textbutler imports your Beeper and WhatsApp history from a private folder that Ghostget writes in Textbutler\'s own format.',
-    eyebrow: 'Integration',
+    title: 'How the legacy history tools use Ghostget to import your message history',
+    dek: 'The legacy Message Like Me history tools import Beeper and WhatsApp history from a private folder that Ghostget writes. Live Textbutler replies take a different path.',
+    eyebrow: 'Legacy',
     published: '2026-09-24',
+    updated: '2026-09-28',
     tags: ['textbutler', 'ghostget', 'beeper', 'whatsapp', 'message-history', 'local-first'],
     relationIds: ['contract:wrench:message-like-me:exports-private-bundles'],
   },

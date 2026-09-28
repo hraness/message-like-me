@@ -1,6 +1,6 @@
 # Textbutler architecture
 
-Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose on your Mac. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through Textbutler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
+Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through Textbutler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
 
 The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and owner CLI with its guided terminal. Textbutler is headless: it has no desktop window or menu bar companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below.
 

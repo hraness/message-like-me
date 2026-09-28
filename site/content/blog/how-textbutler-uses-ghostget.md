@@ -1,4 +1,6 @@
-Textbutler can import your Beeper and WhatsApp history as context for each conversation without signing in to either service or holding a Beeper or WhatsApp password or session. Ghostget, a separate local tool, exports that history to a private folder in Textbutler's own format, and Textbutler checks the folder and imports it on your Mac. The two programs do not talk to each other during the import; the folder is the whole handoff. (Textbutler's live inbox and replies also go through Ghostget, on a separate path this post does not cover.)
+*This post covers the legacy Message Like Me history tools. Today, Textbutler reads and sends live messages through Ghostget automation on your Mac, and you bring in a chat's recent history when you add it with `textbutler contacts add CANDIDATE --history`. See [Introducing Textbutler](/blog/introducing-textbutler) for how that works.*
+
+The legacy history tools can import your Beeper and WhatsApp history without signing in to either service or holding a Beeper or WhatsApp password or session. Ghostget, a separate local tool, exports that history to a private folder in the tools' own format, and the `messagelikeme` command checks the folder and imports it on your Mac. The two programs do not talk to each other during the import; the folder is the whole handoff.
 
 ## Who this is for
 

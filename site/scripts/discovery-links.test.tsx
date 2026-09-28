@@ -26,7 +26,7 @@ function faqEntries(html: string): { name: string; text: string }[] {
 }
 
 test('names iMessage, WhatsApp, and Mac in the home title within 60 characters', () => {
-  expect(SITE_TITLE).toBe('Textbutler: AI replies for iMessage and WhatsApp on your Mac');
+  for (const fact of ['Textbutler', 'iMessage', 'WhatsApp', 'Mac']) expect(SITE_TITLE).toContain(fact);
   expect(SITE_TITLE.length).toBeLessThanOrEqual(60);
 });
 

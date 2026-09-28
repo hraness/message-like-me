@@ -5,8 +5,11 @@ import {
   GETTING_STARTED_URL,
   GITHUB_URL,
   pageMetadata,
+  REPLY_WRITERS_SENTENCE,
   serializeJsonLd,
-  SITE_STATUS,
+  SITE_STATUS_LABEL,
+  SUBSCRIPTION_GUIDE_URL,
+  XCB_URL,
 } from '../../_lib/site';
 
 const GHOSTREPLY_URL = 'https://ghostreply.lol';
@@ -14,7 +17,7 @@ const GHOSTREPLY_PRIVACY_URL = 'https://ghostreply.lol/privacy.html';
 const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-safe.html';
 
 const description =
-  'GhostReply answers iMessages in your texting style for $4.99. Textbutler replies as a marked assistant on your own AI key or subscription.';
+  'GhostReply answers iMessages in your texting style on a $4.99 license. Textbutler answers as a marked assistant when someone says “butler”, with a local model, your own key, or your subscription.';
 
 export const metadata = pageMetadata({
   title: 'GhostReply alternative: Textbutler compared',
@@ -31,17 +34,17 @@ const questions = [
   {
     question: 'Do I need my own AI account?',
     answer:
-      'Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Textbutler writes AI replies with Qwen 3.5 Flash through your own Vercel AI Gateway key by default, or your Claude Code, Codex, or Devin subscription connected with xcb, though connecting chats and sending replies you type yourself need no AI account.',
+      `Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Not necessarily for Textbutler either. ${REPLY_WRITERS_SENTENCE} A local model needs no account at all. Connecting chats and sending replies you type yourself need no AI option.`,
   },
   {
     question: 'Can either app send without me watching?',
     answer:
-      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New Textbutler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler holds back for a few minutes after you write.',
+      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New Textbutler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler waits 5 minutes after you last wrote.',
   },
   {
     question: 'Where does my message history go?',
     answer:
-      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. Textbutler keeps a folder of notes per contact locally, and the AI provider you connect sees the context a reply needs. Neither is fully offline once AI replies are on.',
+      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. Textbutler keeps a folder of notes per person locally. With a local model through Ollama (in testing), the reply is written on your Mac too; with your Gateway key or your subscription, the conversation context goes to that service.',
   },
 ] as const;
 
@@ -70,8 +73,9 @@ export default function CompareGhostReplyPage() {
           <p>
             GhostReply and Textbutler both answer the iMessage conversations you choose on a Mac.
             Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick Textbutler
-            if you want replies marked as an assistant’s, WhatsApp and Beeper as well as iMessage,
-            and notes on each person you can edit, and you are comfortable building it from source.
+            if you want replies marked as an assistant’s, answers only when someone says “butler”,
+            WhatsApp and Beeper as well as iMessage, and a choice of what writes the replies, and
+            you are comfortable building it from source (your coding agent can do that for you).
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
@@ -81,7 +85,7 @@ export default function CompareGhostReplyPage() {
             reply reads like you wrote it. Textbutler is a free, MIT-licensed butler whose replies
             announce that an assistant sent them.
           </p>
-          <p>{SITE_STATUS}</p>
+          <p>Textbutler status: {SITE_STATUS_LABEL}. <Link href="/#status">See where it stands</Link>.</p>
 
           <h2>What GhostReply does</h2>
           <p>
@@ -111,13 +115,12 @@ export default function CompareGhostReplyPage() {
           </p>
           <p>
             By default its replies carry a disclosure marker:{' '}
-            <code>{'🤖{ hello this is my response }'}</code>. The three symbols are configurable
-            per contact. By default the butler answers only messages that contain a keyword
-            you choose; smart mode lets it decide which messages need an answer. A draft you review sends only in the
-            version you approved. AI replies use Qwen 3.5 Flash through your own Vercel AI Gateway
-            key by default, or your Claude Code, Codex, or Devin subscription through{' '}
-            <a href="https://github.com/hraness/xcb">xcb</a>; a model server on your Mac also works.
-            Each route needs the local install.
+            <code>{'🤖{ … }'}</code>, and it sends <code>{'🤖{ 👀 }'}</code> first so the other person
+            knows it’s on it. You can remove the marker per person, never in your own chat. By
+            default the butler answers only messages that contain the word “butler”; smart mode
+            lets it decide when a reply is clearly wanted. A draft you review sends only in the
+            version you approved. {REPLY_WRITERS_SENTENCE} Through <a href={XCB_URL}>xcb</a>, the
+            model can’t run commands on your Mac.
           </p>
 
           <h2>How they compare</h2>
@@ -137,27 +140,27 @@ export default function CompareGhostReplyPage() {
               <tr>
                 <th scope="row">Who the reply sounds like</th>
                 <td>You: it matches your texting style, slang, length, and emojis</td>
-                <td>A marked assistant: replies start with 🤖 by default, and the marker is configurable or removable per contact</td>
+                <td>A marked assistant: replies are wrapped in 🤖{'{ }'} by default, and you can remove the marker per person</td>
               </tr>
               <tr>
                 <th scope="row">What it answers</th>
                 <td>Incoming iMessages: one chosen person or all one-to-one chats, with group chats skipped</td>
-                <td>The iMessage, WhatsApp, and Beeper conversations you turn on, plus replies you type yourself</td>
+                <td>Messages that say “butler” in the one-to-one iMessage, WhatsApp, and Beeper chats you turn on, plus replies you type yourself</td>
               </tr>
               <tr>
                 <th scope="row">Where the AI runs</th>
                 <td>GhostReply’s Cloudflare backend calls Cloudflare Workers AI; there is no API key to create or choose</td>
-                <td>Qwen 3.5 Flash through your own Vercel AI Gateway key by default, or your Claude Code, Codex, or Devin subscription through xcb; a model server on your Mac also works</td>
+                <td>Your choice: a local model on your Mac through Ollama (in testing), Qwen 3.5 Flash through your own Vercel AI Gateway key, or your Claude Code, Codex, or Devin subscription through xcb</td>
               </tr>
               <tr>
                 <th scope="row">What it reads</th>
                 <td>The local Messages database under Full Disk Access, plus Contacts for names; a learned reply profile in ~/.ghostreply</td>
-                <td>The conversations you enroll, with an optional recent-history import, and the per-contact notes folder it maintains</td>
+                <td>The chats you turn on, with an optional recent-history import, and a folder of notes for each person</td>
               </tr>
               <tr>
                 <th scope="row">What you pay</th>
                 <td>10 replies free, then $4.99 once for a one-Mac personal license with hosted AI included</td>
-                <td>Nothing for the software, which is MIT licensed; AI replies cost your Vercel AI Gateway usage, capped at $1 a day by default, or use a Claude Code, Codex, or Devin subscription you already pay for</td>
+                <td>Nothing for the software, which is MIT licensed. A local model costs nothing extra; Gateway usage stops at $1 a day; or use a Claude Code, Codex, or Devin subscription you already pay for</td>
               </tr>
               <tr>
                 <th scope="row">What ships today</th>
@@ -171,8 +174,8 @@ export default function CompareGhostReplyPage() {
           <p>
             GhostReply fits if you want a finished, paid Mac app whose replies pass as yours and
             you accept reply context going through its hosted backend. Textbutler fits if you want
-            each reply marked as an assistant’s, want to use your own AI key or a subscription you
-            already pay for, want to inspect and edit what it remembers about each person, or want
+            each reply marked as an assistant’s, want the reply written on your own Mac or on a
+            subscription you already pay for, want to inspect and edit what it remembers about each person, or want
             WhatsApp and Beeper in scope alongside iMessage.
           </p>
           <p>
@@ -197,7 +200,7 @@ export default function CompareGhostReplyPage() {
             <li><a href={GHOSTREPLY_PRIVACY_URL}>GhostReply privacy details</a> (updated August 22, 2026)</li>
             <li><a href={GHOSTREPLY_SAFETY_URL}>GhostReply’s own safety guide</a></li>
             <li><a href={GETTING_STARTED_URL}>Textbutler setup guide</a></li>
-            <li><a href={`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`}>How Textbutler connects a subscription through xcb</a></li>
+            <li><a href={SUBSCRIPTION_GUIDE_URL}>How Textbutler connects a subscription through xcb</a></li>
           </ul>
           <p>
             Descriptions of GhostReply come from its public pages; Textbutler has no affiliation

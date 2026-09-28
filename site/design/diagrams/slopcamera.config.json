@@ -1,0 +1,34 @@
+{
+  "theme": {
+    "light": {
+      "background": "#f9f5d7",
+      "foreground": "#393533",
+      "muted": "#584f48",
+      "stroke": "#bdae93",
+      "tones": {
+        "neutral": { "fill": "#fffcec", "stroke": "#d5c4a1", "text": "#393533" },
+        "blue": { "fill": "#dee0be", "stroke": "#065968", "text": "#393533" },
+        "purple": { "fill": "#065968", "stroke": "#065968", "text": "#fbf1c7" },
+        "yellow": { "fill": "#ebdbb2", "stroke": "#ebdbb2", "text": "#393533" },
+        "orange": { "fill": "#f9f5d7", "stroke": "#928374", "text": "#584f48" },
+        "green": { "fill": "#e5e3c0", "stroke": "#79740e", "text": "#393533" },
+        "red": { "fill": "#d5c4a1", "stroke": "#ebdbb2", "text": "#584f48" }
+      }
+    },
+    "dark": {
+      "background": "#1d2021",
+      "foreground": "#f0e5c7",
+      "muted": "#c7baa3",
+      "stroke": "#665c54",
+      "tones": {
+        "neutral": { "fill": "#282828", "stroke": "#504945", "text": "#f0e5c7" },
+        "blue": { "fill": "#2e3533", "stroke": "#a9c1b8", "text": "#f0e5c7" },
+        "purple": { "fill": "#a9c1b8", "stroke": "#a9c1b8", "text": "#1d2021" },
+        "yellow": { "fill": "#3c3836", "stroke": "#3c3836", "text": "#f0e5c7" },
+        "orange": { "fill": "#1d2021", "stroke": "#928374", "text": "#c7baa3" },
+        "green": { "fill": "#2b3226", "stroke": "#b8bb26", "text": "#f0e5c7" },
+        "red": { "fill": "#504945", "stroke": "#3c3836", "text": "#c7baa3" }
+      }
+    }
+  }
+}

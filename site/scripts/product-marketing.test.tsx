@@ -9,7 +9,7 @@ import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
 import { checkMarketingSnapshot } from '../styles/vendor/hraness-marketing/check.mjs';
-import { GETTING_STARTED_URL, GITHUB_URL, SITE_STATUS, SITE_STATUS_LABEL, SOFTWARE_VERSION } from '../app/_lib/site.ts';
+import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS, SITE_STATUS_LABEL, SOFTWARE_VERSION } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -49,7 +49,7 @@ function textBeforeRelated(html: string): string {
 test('renders Textbutler with the shared grammar and one development status', () => {
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('Your AI butler replies in the chats you choose.');
+  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('AI in your messages.');
   for (const role of ['header', 'hero', 'section', 'flow', 'questions', 'cta', 'footer']) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
@@ -61,21 +61,31 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(header).not.toContain('src="/icon.png"');
   expect(html).toContain('data-foil=""');
   expect(html).toContain('Textbutler');
-  expect(html).toContain('How replies work');
+  expect(html).toContain('See how it works');
+  expect(html).toContain('id="how-it-works"');
+  expect(html).toContain('id="setup"');
+  expect(html).toContain('id="models"');
+  expect(html).toContain('id="supports"');
+  // SITE_STATUS renders once, directly under the hero.
   expect(html.split(SITE_STATUS)).toHaveLength(2);
-  expect(html).toContain('New installations start paused');
-  expect(html).toContain('iMessage and WhatsApp');
-  expect(html).toContain('By default, Qwen 3.5 Flash through your own Vercel AI Gateway key, capped at $1 a day.');
-  expect(html).not.toContain('optional fast-reply mode');
-  expect(html).toContain('Vercel AI Gateway');
-  expect(html).toContain('no AI account');
-  expect(html).toContain('Running from source never writes AI replies.');
-  expect(html).toContain('no tools of its own');
+  expect(html.indexOf(SITE_STATUS)).toBeLessThan(html.indexOf('id="how-it-works"'));
+  expect(html).toContain('new installs start paused');
+  expect(html).toContain('iMessage, WhatsApp, and Beeper');
+  expect(html).toContain(REPLY_WRITERS_SENTENCE);
+  expect(html).toContain('In testing');
+  expect(html).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
+  expect(html).toContain('pbpaste | textbutler providers gateway-key');
+  expect(html).toContain('Spending stops at $1 a day.');
+  expect(html).toContain('If you choose one with a command, that choice wins.');
+  expect(html).toContain('That copy writes the AI replies');
+  expect(html).toContain('can’t run commands on your Mac');
   expect(html).toContain('MIT licensed');
-  expect(html).toContain('test delivery and rich actions on your own account');
-  expect(html).toContain('no app to download');
-  expect(html).toContain(`>Textbutler v${SOFTWARE_VERSION}</a> release.`);
-  expect(html).toContain('It does not install Textbutler or enable automatic replies.');
+  expect(html).toContain('Telegram’s terms limit AI use of message content, so ask the person first.');
+  expect(html).toContain('Built on your Mac');
+  expect(html).toContain('Setup builds a small helper app on your Mac so macOS can grant iMessage access.');
+  expect(html).toContain('It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.');
+  expect(html).not.toContain(`Textbutler v${SOFTWARE_VERSION}`);
+  expect(html).toContain('Installing them doesn’t install Textbutler or turn on automatic replies.');
   expect(html).toContain('No. textbutler.app is informational');
   expect(html).toContain('"@type":"FAQPage"');
   expect(html).not.toMatch(/<(?:form|input|textarea)\b/u);
@@ -112,9 +122,9 @@ test('keeps delivery vocabulary off the product pages', async () => {
   }
 });
 
-test('shows the real first terminal screen, synthetic contact context, and disclosure without claiming transport support', async () => {
+test('shows the real first terminal screen, synthetic conversations, and disclosure without claiming transport support', async () => {
   const html = renderToStaticMarkup(<Home />);
-  // The hero proof is the guided terminal's own first screen, not a mockup.
+  // The manual path mirrors the guided terminal's own first screen.
   const tui = await readFile(resolve(siteRoot, '../packages/textbutler/src/tui.ts'), 'utf8');
   for (const line of TERMINAL_FIRST_RUN) {
     if (line) expect(tui, line).toContain(JSON.stringify(line));
@@ -122,15 +132,20 @@ test('shows the real first terminal screen, synthetic contact context, and discl
   expect(html).toContain('$ bun run textbutler tui');
   expect(html).not.toContain('Illustration only.');
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
-  expect(html).toContain('🤖{ Where are you headed, and for how long? }');
+  // The marker is literal text with one space inside each brace.
+  expect(html).toContain('🤖{ 👀 }');
+  expect(html).toContain('Textbutler runs on Sam’s Mac; the people are made up.');
   expect(html).not.toContain('Happy to help');
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
   expect(html).toContain('the word “butler”');
-  expect(html).toContain('App Clips, mini apps, and Linq aren’t supported.');
-  expect(html).toContain('System Integrity Protection disabled');
-  expect(html).toContain('Textbutler never changes that setting.');
+  expect(html).toContain('No tapbacks or other reactions on a normal Mac.');
+  expect(html).toContain('SMS and RCS aren’t supported.');
   expect(html).toContain('under its own data policies');
+  // The agent prompt is shown verbatim, copied by a button, never submitted.
+  expect(html).toContain('Copy prompt');
+  for (const line of AGENT_SETUP_PROMPT.split('\n')) expect(html).toContain(line.replaceAll("'", '&#x27;'));
+  expect(html).toContain('Leave every chat turned off and don&#x27;t send any messages.');
 });
 
 test('binds Design Kit v0.24.0 to the portable Paper palette', async () => {
@@ -183,14 +198,15 @@ test('keeps machine-readable setup and conditional subscription admission consis
   const discovery = await getDiscoveryText().text();
   expect(discovery).toContain('New installations start paused and new contacts start disabled.');
   expect(discovery).toContain('only from the local install that bun run textbutler:install builds');
-  expect(discovery).toContain('both contact permission profiles match the last reviewed version');
+  expect(discovery).toContain('it checks its own source against the last reviewed version first');
   expect(discovery).toContain('Running from source never writes AI replies.');
-  expect(discovery).toContain('A subscription account must also pass providers check.');
-  expect(discovery).toContain('Qwen 3.5 Flash through your own Vercel AI Gateway key by default');
+  expect(discovery).toContain('A subscription account must also pass providers check');
+  expect(discovery).toContain(REPLY_WRITERS_SENTENCE);
+  expect(discovery).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
   expect(discovery).not.toContain('still needs an xcb account');
+  expect(discovery.slice(0, discovery.indexOf('## Legacy Message Like Me history tools'))).not.toContain('habitat');
   expect(discovery).toContain('no app to download and no published Textbutler package');
-  expect(discovery).toContain('Vercel AI Gateway');
-  expect(discovery).toContain('App Clips, mini apps, and Linq integration are not supported.');
+  expect(discovery).toContain(AGENT_SETUP_PROMPT);
   expect(discovery).toContain('Test inference and delivery on your own account');
 });
 
@@ -198,22 +214,25 @@ test('offers guided source setup without implying a released AI engine or a menu
   const home = renderToStaticMarkup(<Home />);
   const about = renderToStaticMarkup(<About />);
   const discovery = await getDiscoveryText().text();
+  // The full status renders on the home page and in llms.txt; About links to it.
+  for (const content of [home, discovery]) expect(content).toContain(SITE_STATUS);
+  expect(about).not.toContain(SITE_STATUS);
+  expect(about).toContain('href="/#status"');
   for (const content of [home, about, discovery]) {
     expect(content).toContain(GETTING_STARTED_URL);
-    expect(content).toContain(SITE_STATUS);
     expect(content).toContain('bun run textbutler:install');
     expect(content).toMatch(/last reviewed version/u);
-    expect(content).toMatch(/running from source never writes AI replies/iu);
-    expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
+    expect(content).toMatch(/That copy writes the AI replies|AI replies come only from the local install/u);
+    if (content !== home) expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
     expect(content).toContain('https://github.com/hraness/xcb');
     expect(content).toContain('no window');
     expect(content).not.toMatch(/menu bar companion|menubar|prebuilt runner/iu);
     expect(content).not.toContain('Claude API is available after setup');
     expect(content).not.toContain(`${GITHUB_URL}/tree/main/apps/macos`);
   }
-  expect(home).toContain('Start guided setup');
+  expect(home).toContain('Have your agent set it up');
+  expect(home).toContain('href="#setup"');
   expect(home).toContain(`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`);
-  expect(home).toContain('Clearing all three sends plain text');
   expect(discovery).toContain('replies show DRAFT');
   expect(discovery).toContain('replies send DRAFT DIGEST');
 });
