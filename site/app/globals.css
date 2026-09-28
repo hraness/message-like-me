@@ -179,6 +179,13 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   .textbutler-marketing .hraness-marketing-page .hraness-marketing-action { min-block-size: 2.75rem; }
   .textbutler-marketing :where(section[id]) { scroll-margin-block-start: 8rem; }
 }
+@media (max-width: 48rem) {
+  /* Short nav labels keep a 44px touch box on phones and small tablets. */
+  .hraness-marketing-header .hraness-marketing-header__nav a {
+    min-inline-size: 2.75rem;
+    justify-content: center;
+  }
+}
 @media (max-width: 24rem) {
   /* The smallest phones keep brand, action, and appearance on one row. */
   .hraness-marketing-header { --hraness-marketing-gutter: 1rem; }
