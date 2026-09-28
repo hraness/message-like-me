@@ -12,7 +12,7 @@ export function translateIMessageError(error: unknown): never {
   if (code === "EACCES" || code === "EPERM" || code === "permission") {
     throw new CliError(
       "permission",
-      "Messages data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.",
+      "Message Like Me can't read your Messages data: macOS access is off for the app running this command. Turn on your terminal or agent app in System Settings › Privacy & Security › Full Disk Access (x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles), then retry.",
       { cause: error },
     );
   }
@@ -27,7 +27,7 @@ export function translateContactsError(error: unknown): never {
   if (code === "EACCES" || code === "EPERM") {
     throw new CliError(
       "permission",
-      "Contacts data is not readable. Grant Full Disk Access to this terminal or agent host, then retry.",
+      "Message Like Me can't read your Contacts data: macOS access is off for the app running this command. Turn on your terminal or agent app in System Settings › Privacy & Security › Full Disk Access (x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles), then retry.",
       { cause: error },
     );
   }

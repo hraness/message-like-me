@@ -234,7 +234,10 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
       } else if (choice.trim() === "8") {
         const action = await io.ask("[s] Start menu  [l] Start menu at login  [x] Stop menu  [Enter] Back: ");
         const command = action === "s" ? "start" : action === "l" ? "install" : action === "x" ? "stop" : null;
-        if (command) await runMenuBarCommand([command], dataDir, entrypoint,
+        // --json keeps the result on the write channel: the kit's human text
+        // and its interactive login-item notice would otherwise print over the
+        // terminal session and wait on stdin inside it.
+        if (command) await runMenuBarCommand([command, "--json"], dataDir, entrypoint,
           result => io.write(`${terminalText(describeMenuBarResult(command, result, symbolsFor()))}\n`));
       } else io.write("Choose a number from 1 to 9, or q to quit.\n");
     } catch (error) {

@@ -178,6 +178,13 @@ export function parseControlRequest(value: unknown): ControlRequest {
     exact(item, ["protocol", "command", "contactId", "expectedRevision", "settings"]);
     return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId), expectedRevision: integer(item.expectedRevision, 1), settings: parseUiSettings(item.settings) };
   }
+  if (item.command === "contact.label.update") {
+    exact(item, ["protocol", "command", "contactId", "expectedRevision", "label"]);
+    // Same bound as the stored label parser: nonempty after trim, at most 200
+    // characters, no C0/C1/DEL control characters.
+    if (typeof item.label !== "string" || !item.label.trim() || item.label.length > 200 || /[\u0000-\u001f\u007f]/u.test(item.label)) fail("invalid-request", "Use a nonempty contact label up to 200 characters.");
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId), expectedRevision: integer(item.expectedRevision, 1), label: item.label };
+  }
   if (item.command === "global.settings.update") {
     exact(item, ["protocol", "command", "expectedRevision", "settings"]);
     const settings = record(item.settings); exact(settings, ["paused", "activeContactLimit"]);
@@ -826,6 +833,15 @@ export class TextbutlerControlService {
       return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "memory", contactId: request.contactId, revision: memory.revision, content: memory.text };
     }
     if (request.expectedRevision !== current.state.revision) fail("conflict", "Settings changed. Reload before saving.");
+    // A label is display metadata only: it never touches grants, enrollment or
+    // reply settings, so it stays a plain revision-checked settings write.
+    if (request.command === "contact.label.update") {
+      let labeled: Settings;
+      try { labeled = configureContact(current.state.settings, request.contactId, { label: request.label }); }
+      catch { fail("invalid-request", "Use a nonempty contact label up to 200 characters."); }
+      await this.publish(current, labeled);
+      return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
+    }
     if (request.command === "contact.settings.update") {
       if (request.settings.accountId !== undefined && !this.providers && request.settings.accountId !== contact!.accountId) fail("invalid-request", "Provider accounts are not configured.");
       try { this.providers?.validateAccountChange(contact!, request.settings); }

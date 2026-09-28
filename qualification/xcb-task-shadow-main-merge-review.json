@@ -1,18 +1,59 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
+  "scope": "Source composition evidence for merging Textbutler main into evaluated-task shadow adoption. Owner contact labels, the upstream release/dependency updates, and instructions-only task shadow adoption are retained together.",
+  "parents": {
+    "task": "13223b20ae7e5223bd05ea97ae4c13f66d0659c8",
+    "main": "7f792f2d7b5f3335ab4c381629ba1e4ecc447815"
+  },
+  "dependencyPins": {
+    "@hraness/algal": "github:hraness/algal#47fb53d5cf96747477e7079b1d789a8d96c82225",
+    "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
+    "@hraness/support-foundation": "github:hraness/support-foundation#8bb514d24b79dc3f305390700ae312cab88e7ad2"
+  },
+  "independentReview": {
+    "reviewer": "Independent Cloud implementation agent, separate from the Textbutler merge implementer",
+    "sourceReportSha256": "eaa29be0c6b253ce6c18e001b0ffcb402161ca90f0b729da2c12c81d42a3f35f",
+    "frozenInputsSha256": "e344999f7a158388ed93b7ce04e72055ce7dcd20e67bd61c5895d8e2a5b0322f",
+    "method": "Independent read-only semantic review of the normal Textbutler PR232 merge resolution",
+    "result": "No blocking source finding.",
+    "observations": [
+      "All 45 frozen source hashes and seven test hashes match the reviewed working tree.",
+      "Contact capability/profile modules, contact habitat/repositories, task compiler/shadow privacy guards and strict source-admission validator retain the already reviewed PR bytes.",
+      "Control protocol, parser and handler retain contact.label.update and habitat.task.stage/task.rollback. Labels remain revision-checked settings metadata; task staging stays contact-bound, bounded, paused, and owner-revision checked.",
+      "Owner CLI retains unambiguous contact resolution, all label commands, both task commands, and private-file evidence loading.",
+      "Upstream release 0.8.22, desktop-foundation 0.8.0 and support-foundation 8bb514d are retained together with ALGAL47fb53d. Lock entries and build/support-policy pins correspond to those choices.",
+      "Upstream support help/display changes preserve the task command branches; no new provider route or private corpus authority was introduced."
+    ],
+    "qualification": "Source review only; no live provider, private corpus, aggregate, release or deployment qualification claimed."
+  },
+  "focusedValidation": {
+    "command": "bun test packages/textbutler/src/owner-cli.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/menubar.test.ts scripts/xcb-integration-admission.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "scheduler": "host-run shared compute, label textbutler-main-merge-focused",
+    "result": {
+      "exitCode": 0,
+      "passed": 115,
+      "failed": 0,
+      "files": 7,
+      "snapshots": 4,
+      "assertions": 1548
     },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
+    "log": "qualification/xcb-task-shadow-main-merge-check.log",
+    "logSha256": "273f01a7c05bce6c3a7ccf76c5a4ababce1d8f5def0e9ec941871ed0e43fdfb4",
+    "logScope": "Complete unedited stdout and stderr from the successful focused command. No aggregate check, live provider invocation or messaging result is claimed.",
+    "testSourceSha256": {
+      "packages/textbutler/src/owner-cli.test.ts": "03ab88b933d5137f8d1c38468af6f26ca43e1aa6c859697d67bf0fbdf7ccd35c",
+      "packages/textbutler/src/control-service.test.ts": "4b8b8e9476b3f69bb5bc13379117c6e86e55b15ea4b9478f7289617cbfcd3928",
+      "packages/textbutler/src/habitat-task-shadow.test.ts": "e9a8fdd0e4ec5b9580baede47a9d5442ccd376fcf5aa1875a7bf5cae2f69d1ed",
+      "packages/textbutler/src/habitat-program.test.ts": "598e9687d68ef976d9d4caff14806f10054a89fa035b8d145993c31197a673d6",
+      "packages/textbutler/src/cli-golden.test.ts": "2d32ef444708834b4d470c724e78f14e9b5209817002f0699c4b9f791b7dba3d",
+      "packages/textbutler/src/menubar.test.ts": "325d1e7cf8e75cd6780fac6d49af1b34fd740e7608c625444f0d900bec5a2538",
+      "scripts/xcb-integration-admission.test.ts": "e567b1e06d2900b15e37cc8ba634cdb14dc35948dee8d01c63992626f87234ee"
     }
   },
-  "sources": {
+  "sourceInventoryCount": 45,
+  "sourceDigest": "ce136490a28279de66c68856814f632b13ac00972b30596a7a78c7058fafd3cc",
+  "sourceSha256": {
     "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
     "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
     "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
@@ -59,8 +100,13 @@
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "bun test packages/textbutler/src/owner-cli.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/menubar.test.ts scripts/xcb-integration-admission.test.ts",
-    "receiptSha256": "af327f60276d8bc74fd7c00bd5844a0213f3460ebca958008edaa96d427c5227"
-  }
+  "parentAdmissionSha256": {
+    "head": "d4c8f32d58d105083cf9d719a776dfad36bea7b2333210e288ffb382e9eaaac3",
+    "main": "4574420e8423c3325485de8ad1fa0a45d06950c3fe88db2176e97219ecccf08a"
+  },
+  "limitations": [
+    "This is reviewed source composition with focused synthetic regression evidence, not a live provider qualification, release signature or proof of message delivery.",
+    "Automatic replies retain the host task. Evaluated-task examples remain rejected at staging and explicit shadow execution; provider readiness and contact grants are unchanged.",
+    "The integration owner must still run the required aggregate check and delivery gates."
+  ]
 }

@@ -8,7 +8,7 @@ import { DISTRIBUTION_FILES, MAX_RUNTIME_BYTES, physicalDirectory, publishArtifa
 const ROOT = resolve(import.meta.dir, "..");
 const PINNED_INPUTS = {
   "@hraness/agentmixer": "https://github.com/hraness/xcb/releases/download/v0.3.0/hraness-agentmixer-0.3.0.tgz",
-  "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.7.0/hraness-desktop-foundation-0.7.0.tgz",
+  "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
   "@anthropic-ai/sdk": "0.125.0",
 } as const;
 

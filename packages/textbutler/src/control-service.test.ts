@@ -229,6 +229,22 @@ describe("persistent owner control service", () => {
     expect(await service.request({ protocol, command: "contact.settings.update", contactId: "synthetic-b", expectedRevision: 2, settings })).toMatchObject({ ok: false, code: "capacity" });
     expect(await service.request({ protocol, command: "contact.memory.read", contactId: "not-configured" })).toMatchObject({ ok: false, code: "invalid-request" });
   });
+  test("contact labels update display names revision-checked without touching reply settings", async () => {
+    const { service } = await setup();
+    const before = await service.snapshot();
+    const renamed = await service.request({ protocol, command: "contact.label.update", contactId: "synthetic-a", expectedRevision: before.revision, label: "Aunt Alice" });
+    expect(renamed).toMatchObject({ ok: true, kind: "snapshot" });
+    const after = await service.snapshot();
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after.contacts[0]?.name).toBe("Aunt Alice");
+    expect((await service.settings()).contacts[0]).toMatchObject({ label: "Aunt Alice", enabled: false, keyword: "butler", mode: "keyword" });
+    // The label command carries no settings: a stale revision still conflicts.
+    expect(await service.request({ protocol, command: "contact.label.update", contactId: "synthetic-a", expectedRevision: before.revision, label: "Again" })).toMatchObject({ ok: false, code: "conflict" });
+    for (const label of ["", "   ", "x".repeat(201), "bad\0label", 42, null])
+      expect(await service.request({ protocol, command: "contact.label.update", contactId: "synthetic-a", expectedRevision: after.revision, label: label as never })).toMatchObject({ ok: false, code: "invalid-request" });
+    expect(await service.request({ protocol, command: "contact.label.update", contactId: "nobody", expectedRevision: after.revision, label: "Fine" })).toMatchObject({ ok: false, code: "invalid-request" });
+    expect(await service.request({ protocol, command: "contact.label.update", contactId: "synthetic-a", expectedRevision: after.revision, label: "Fine", extra: true })).toMatchObject({ ok: false, code: "invalid-request" });
+  });
   test("the repo allowlist round-trips through ordinary settings writes", async () => {
     const { service } = await setup();
     const settings = { ...((await service.snapshot()).contacts[0]!.settings), repos: ["https://github.com/hraness/bio"] };

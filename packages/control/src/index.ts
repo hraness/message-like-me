@@ -106,6 +106,7 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.logout"; accountId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "messaging.start"; provider: "imessage" | "whatsapp" | "beeper" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.settings.update"; contactId: string; expectedRevision: number; settings: ContactSettings }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "contact.label.update"; contactId: string; expectedRevision: number; label: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.read"; contactId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.configure"; contactId: string; expectedRevision: number; plan: ContactHabitatPlan }
   | { protocol: typeof CONTROL_PROTOCOL; command: "habitat.rollback"; contactId: string; expectedRevision: number }

@@ -71,11 +71,12 @@ export async function handleOwnerCommand(args: readonly string[], options: {
   const mode = family === "contacts" && verb === "mode" && (value === "smart" || value === "keyword")
     && (args.length === 4 || args.length === 6 && args[4] === "--keyword" && typeof args[5] === "string");
   const self = family === "contacts" && verb === "self" && args.length === 4 && (value === "on" || value === "off");
+  const label = family === "contacts" && verb === "label" && args.length >= 4;
   const job = family === "jobs" && verb === "show" && args.length === 3 && identity(target);
   const habitatRevision = /^(?:0|[1-9]\d{0,15})$/u.test(value ?? "") && Number.isSafeInteger(Number(value));
   const habitat = family === "habitats" && (verb === "show" && args.length === 3
     || (verb === "rollback" || verb === "memory-clear" || verb === "task-rollback") && args.length === 4 && habitatRevision || (verb === "configure" || verb === "task-stage") && args.length === 5 && habitatRevision);
-  if (!(status || pause || messagingList || messagingStart || conversations || contactsList || add || account || activation || mode || self || job || habitat)) {
+  if (!(status || pause || messagingList || messagingStart || conversations || contactsList || add || account || activation || mode || self || label || job || habitat)) {
     throw new CliUsageError(`Missing or invalid arguments for "${[family, verb].filter(word => word !== undefined && /^[a-z-]{1,24}$/u.test(word)).join(" ")}".`, `textbutler help ${family}`);
   }
   let habitatPlan: ReturnType<typeof parseHabitatPlan> | undefined;
@@ -115,6 +116,11 @@ export async function handleOwnerCommand(args: readonly string[], options: {
   if (add) return report(await awaitOwnerJob({ protocol: CONTROL_PROTOCOL, command: "contact.enroll", candidateId: target!, expectedRevision: snapshot.revision,
     initializeHistory: value === "--history" }, request));
   const contact = resolveOwnerContact(snapshot, target!);
+  if (label) {
+    const name = args.slice(3).join(" ");
+    if (!name.trim() || name.length > 200 || /[\u0000-\u001f\u007f]/u.test(name)) throw new OwnerCliError("Use a nonempty label up to 200 characters, without control characters.");
+    return report(await request({ protocol: CONTROL_PROTOCOL, command: "contact.label.update", contactId: contact.id, expectedRevision: snapshot.revision, label: name }));
+  }
   if (habitat) return report(await request(verb === "show" ? { protocol: CONTROL_PROTOCOL, command: "habitat.read", contactId: contact.id }
     : verb === "task-stage" ? { protocol: CONTROL_PROTOCOL, command: "habitat.task.stage", contactId: contact.id, expectedRevision: Number(value), artifact: taskEvidence!.artifact, archive: taskEvidence!.archive }
     : verb === "task-rollback" ? { protocol: CONTROL_PROTOCOL, command: "habitat.task.rollback", contactId: contact.id, expectedRevision: Number(value) }
