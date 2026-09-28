@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "scope": "Private observed-case export and evaluated task evidence with owner-controlled, revision-bound, instructions-only Textbutler shadow adoption. Normal replies retain their host task.",
+  "baseCommit": "c32f6dea8b23b8108145b6d21f971f5bf97ebc0a",
+  "dependency": {
+    "name": "@hraness/algal",
+    "previousCommit": "ac68f096d2e10e1824b9ee4d6fe031b4846094da",
+    "commit": "47fb53d5cf96747477e7079b1d789a8d96c82225",
+    "source": "https://github.com/hraness/algal/commit/47fb53d5cf96747477e7079b1d789a8d96c82225",
+    "validation": "Manifest and lockfile agree on the immutable published Git revision. Focused validation uses the installed package; its dependency directory is not a development symlink."
+  },
+  "independentReview": {
+    "reviewer": "Independent Cloud implementation agent, separate from the Textbutler feature implementer",
+    "method": "Reviewed task artifact staging/control/CLI, private export/import/freeze/study and explicit shadow execution. Separately reviewed the exact two-entry composition-inventory extension with no changes to validator logic. The Textbutler feature implementer independently reviewed the reviewer-authored privacy repair before this receipt was generated.",
+    "result": "No remaining blocking source finding.",
+    "reportSha256": "4fd27199be9bc3939a47539ffab2f7485b5c749c2943db6dcaeae1dc247027a7",
+    "findings": [
+      {
+        "finding": "Generic labeled artifacts can carry demonstrations from a different contact into explicit shadow inference.",
+        "resolution": "Stage qualification and explicit shadow execution both reject nonempty examples before any provider dispatch. The regression proves unchanged habitat state and zero provider calls for a winning labeled artifact. Labeled research artifacts remain private and non-installable until contact provenance is supported."
+      }
+    ],
+    "inventoryReview": "Add habitat-task.ts and habitat-task-shadow.ts because both are imported by the bundled runtime. habitat-study.ts belongs to the standalone private exporter, so it remains in source-review coverage but outside the bundle-only inventory. Strict exact-source/profile/receipt validation remains unchanged."
+  },
+  "focusedValidation": {
+    "command": "bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/habitat-study.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/owner-cli.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "scheduler": "host-run shared compute, label textbutler-wave2-admission-focused",
+    "result": {
+      "exitCode": 0,
+      "passed": 102,
+      "failed": 0,
+      "files": 7,
+      "assertions": 1279
+    },
+    "log": "qualification/xcb-evaluated-task-shadow-check.log",
+    "logSha256": "a61986683a9473d1a73360dfd9030de35d02bada7f6274de8d7272fba9aed02f",
+    "logScope": "Complete unedited stdout and stderr from the successful focused command. No aggregate check, live provider invocation or messaging result is claimed.",
+    "testSourceSha256": {
+      "scripts/xcb-integration-admission.test.ts": "e567b1e06d2900b15e37cc8ba634cdb14dc35948dee8d01c63992626f87234ee",
+      "packages/textbutler/src/habitat-program.test.ts": "598e9687d68ef976d9d4caff14806f10054a89fa035b8d145993c31197a673d6",
+      "packages/textbutler/src/habitat-task-shadow.test.ts": "e9a8fdd0e4ec5b9580baede47a9d5442ccd376fcf5aa1875a7bf5cae2f69d1ed",
+      "packages/textbutler/src/habitat-study.test.ts": "ba7117f383f20f7e2ae049819e0b7b1ea1ea50e4fc561f88fcee657752d0281e",
+      "packages/textbutler/src/contact-habitat.test.ts": "693066c8d788e93f37cb14f0d724a862d8248264813320c2e6c7c65ada3a13db",
+      "packages/textbutler/src/control-service.test.ts": "cef7dc3e1a52107ecebe45a789c8c54b7dd71659185f6b39255cf72802b9d868",
+      "packages/textbutler/src/owner-cli.test.ts": "b0de75e1b9013a12bfcc7f57f2f52417b3f1c1ab588f67fded13fe782014780e"
+    }
+  },
+  "sourceInventoryCount": 45,
+  "sourceDigest": "f89d905178ef8f0fc38190b04e6f272146d70e78c85a29156710703e11bcaa79",
+  "sourceSha256": {
+    "bun.lock": "22fcf68a639f733ee17b2d83c3bd337cc85c9bfdb8352cb22a91f71e87d6f60f",
+    "package.json": "f9e0c1547c67def4f1ce8298388862c7e6ffb1fb17e0b0dcc876e02f0618627c",
+    "packages/control/src/index.ts": "204254ae63757d7cc794567576e4cc5a8ac1ec65f0a51a5ed7849740d81d1c97",
+    "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
+    "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
+    "packages/textbutler/src/contact-habitat.ts": "39b75edf593ec7152c74a5db9b4b8ee0b35186da0c6361fa8073ce11ec1dbf5d",
+    "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
+    "packages/textbutler/src/control-service.ts": "7cfbb201f279023f9bccabd749ee20b98ce93fd597193bfc790cf1ba371ec910",
+    "packages/textbutler/src/daemon.ts": "158a15c0404de06c4b318a338ed7ba7e1727617b49f9301d095cf6406e1aa95c",
+    "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
+    "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
+    "packages/textbutler/src/habitat-agent.ts": "8f17a4f8d9171a726748d4a692a5fa42a8efeca5e431dce62724d9a5d6e57c8b",
+    "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
+    "packages/textbutler/src/habitat-program.ts": "b5a7f4cd70e2c67a84842d431162136d034203e6e382337697ac704f96dd7e32",
+    "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
+    "packages/textbutler/src/habitat-task.ts": "98238fe5abc47b7a4c354052d70b647eac2194ae8b2a04bd829fe3709e10ac7d",
+    "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
+    "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
+    "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
+    "packages/textbutler/src/javascript-worker-entry.ts": "26112477da6fda01af8c2d5257d191d08a7a061617ad7dcc540c60f2dc521e7d",
+    "packages/textbutler/src/journal.ts": "8c35a860e42087acdacf8ff0748096499ca35b65443463790f6a6bb32c8914e1",
+    "packages/textbutler/src/launch-agent.ts": "4dcae445ff4b0e684bb90dbde7b87d8e23175fe490b60ab98850c5bd142aead2",
+    "packages/textbutler/src/macos-app.ts": "8e2a481645ac896aa74fe01b81f2ecb98d7d785ea0dd57325a788f3eaf1a65a0",
+    "packages/textbutler/src/meme-search.ts": "ad422591ece4d981dd97d66928984fd7512d303b8773503bcf79283813914c95",
+    "packages/textbutler/src/memory-search.ts": "39036b33a3e573d1bb5f4f26d7b4520013224ee20f0a6004de09b2199867abcd",
+    "packages/textbutler/src/message-summary.ts": "75163888ce53a7535a93f23a8228853d984af7a3677a4c8d0709cf6384187523",
+    "packages/textbutler/src/messages-cli.ts": "44e5db75549e212ab2686d3673c5433908f1f9554bf133e98fd574d09255e66f",
+    "packages/textbutler/src/native-subscription.ts": "f448154b264237ac1e854f3f1a3cf8fb2d38266b71fbb2fb8ebec52cb842c91b",
+    "packages/textbutler/src/native-task.ts": "122ba7b346ba9cbaca3d1c71270c32e6d6dda37e4c59c8a34c4051c8241859f4",
+    "packages/textbutler/src/owner-cli.ts": "bb520b244dd37e02e8d1fa2401269f0bb8ff8fa7d2aafa78ea0e809867817dec",
+    "packages/textbutler/src/owner-messages.ts": "337d9f057d20e2cf32dbf781d4143ecee3fbd16f2aa82d88380af99aa1c3177a",
+    "packages/textbutler/src/owner-replies.ts": "586002d4acef0b2a1fc95abb35709a78f4b79122594ce309be0c3882d9d527d6",
+    "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",
+    "packages/textbutler/src/reply-loop.ts": "df1bf15374e31da1562194f0206e1e325cb8f722e53696ffe9820c73e5de7f37",
+    "packages/textbutler/src/routed-agent.ts": "63897e366965b77ac8bcce8b1b8c08b218c20605923dd86bf468e0b9a65f22b3",
+    "packages/textbutler/src/runtime-entry.ts": "5bc336c2e6e02b801282081ea51de23e28b6f0c7a27c422797121fc45376287e",
+    "packages/textbutler/src/runtime.ts": "cf412f57bcbee56706d04c9fda06143ba058dd5e1dabf3c1fa5d14e21a97cba6",
+    "packages/textbutler/src/workspace.ts": "70b2fbec3a14c835f9ec2a4fcc1c2535e1fd2e5fde4907486cef6d6a8fc599b4",
+    "packages/textbutler/src/xcb-client.ts": "bba78d7db3ccb6df794b4e59a554b392c632042a8fd0279de614283c8fc59be3",
+    "packages/textbutler/src/xcb-host.ts": "27395d6bb942dfb297ceb852c097bfa62263d893c94e273d2fb217bda853120b",
+    "packages/textbutler/src/xcb-integration.ts": "7fbb9e8e65ac9e0920990b8bee965f2dcaeec6ad5250713ccf3adda429dc0cad",
+    "packages/transport/src/automation-contract.ts": "629e02b9dda6f913cc482a815cd3df5f54ed9aad5c67af780cfbe2c64887da18",
+    "packages/transport/src/automation-diagnostics.ts": "c3ae9b6f666a73887b53d276095ca02e0ca99b2cb19832150337fee441cbf535",
+    "scripts/build-textbutler.ts": "89645b8c85058de94641de3f67291f802094e2be6b9261da5605e8a7797db272",
+    "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
+  },
+  "previousAdmissionReceiptSha256": "83b4420bf2e0bbcc24207e107733dc37a6dec49bd7061bba86bce7fe90fa1dc9",
+  "additionalReviewedSourceSha256": {
+    "packages/textbutler/src/habitat-study.ts": "f82a85a34240e82891fc58dd6e3f3c9a48cce8f02350d905f9c25e22b87f1809",
+    "scripts/export-textbutler-study.ts": "bfb367184361bdf6ae4fd6d4fc70354aa00e4cf2077797c5489e7040346c4a07"
+  },
+  "limitations": [
+    "This is source composition admission, not live provider qualification, a release signature or proof of message delivery.",
+    "The artifact only enables explicit shadow evaluation. Automatic replies, contact grants and provider readiness are unchanged.",
+    "The integration owner must still run the required aggregate check and delivery gates."
+  ]
+}

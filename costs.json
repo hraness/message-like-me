@@ -3,7 +3,7 @@
   "surfaces": {
     "local:contact-habitats": {
       "kind": "authoritative", "retention": "account", "owner": "packages/textbutler/src/contact-habitat.ts", "deletion": "docs/textbutler/local-data.md",
-      "budget": { "contacts": 128, "bytesPerContact": 524288, "episodesPerContact": 16, "followupsPerEpisode": 5, "toolsPerEpisode": 2, "toolQueryBytes": 256, "toolResultBytes": 4096, "actionKindsPerEpisode": 8, "memoryEntriesPerContact": 64, "memoryTextBytes": 1024, "memoryBytesPerContact": 98304, "memoryEntriesPerEpisode": 8, "priorMemoryEntriesPerEpisode": 24, "lineageEntries": 16, "evaluationsPerDayPerContact": 8 },
+      "budget": { "contacts": 128, "bytesPerContact": 524288, "episodesPerContact": 16, "followupsPerEpisode": 5, "toolsPerEpisode": 2, "toolQueryBytes": 256, "toolResultBytes": 4096, "actionKindsPerEpisode": 8, "memoryEntriesPerContact": 64, "memoryTextBytes": 1024, "memoryBytesPerContact": 98304, "memoryEntriesPerEpisode": 8, "priorMemoryEntriesPerEpisode": 24, "lineageEntries": 16, "evaluationsPerDayPerContact": 8, "shadowArtifactsPerContact": 2, "bytesPerShadowArtifact": 65536, "shadowRollbackTombstones": 16, "shadowAdmissionArchiveBytes": 786432 },
       "note": "private journal state; contact-scoped personalities, source-backed remembered observations and owner tool configuration, bounded observation and tool-result evidence, at-most-once checkpoint claims and conditional host-owned promotion"
     },
     "local:contact-habitat-operations": {
@@ -20,6 +20,11 @@
       "kind": "derived", "retention": "ephemeral", "source": "owner-enabled calculation request for one contact", "owner": "packages/textbutler/src/javascript-tool.ts",
       "budget": { "activeWorkers": 1, "queuedWorkers": 16, "queueWaitMs": 5000, "codeBytes": 8192, "inputBytes": 16384, "outputBytes": 4096, "quickjsHeapBytes": 8388608, "stackBytes": 262144, "workerDeadlineMs": 250 },
       "note": "fresh QuickJS heap per calculation, no host APIs, modules, IO or credentials; watchdog requests worker termination and queue admission remains reserved until worker exit is confirmed"
+    },
+    "local:textbutler-study-export": {
+      "kind": "derived", "retention": "persistent", "source": "explicit read-only export of private retained Textbutler inference records", "owner": "packages/textbutler/src/habitat-study.ts", "deletion": "docs/textbutler/local-data.md",
+      "budget": {"contacts": 128, "cases": 128, "bytesPerExport": 16777216, "sourceFileBytes": 33554432},
+      "note": "owner-chosen private no-clobber output; observations remain unlabeled; emits counts and digests only, no provider calls or live journal writes"
     },
     "local:habitat-evidence": {
       "kind": "derived", "retention": "persistent", "source": "bounded Algal executions of contact programs", "owner": "packages/textbutler/src/journal.ts",

@@ -44,6 +44,17 @@ usage reservations with their provider-cost settlements. Gateway and other
 provider credentials live under `state/provider-credentials` with owner-only
 permissions; they never enter contact workspaces or journal evidence.
 
+Explicit task-study exports are separate private files chosen by the owner,
+outside contact workspaces. They can contain full bounded message context and
+model output. Keep captures, annotation files and complete evaluation archives
+outside Git and public reports; they are not anonymized by their content hashes.
+After a study is finished, its owner may remove these explicit exports without
+changing the original journal. A staged shadow task retains its evaluated
+program and examples in the contact's existing habitat state, plus its archive
+digest and one predecessor. Keep the corresponding private evaluation archive
+for audit. Rollback retains the preceding artifact and a bounded tombstone; it
+does not erase historical evidence or activate a task for replies.
+
 The explicit legacy iMessage crash reconciliation script accepts a private
 witness for the Ghostget 0.18.16 startup failure. It checks the original crash,
 app, connector, account and process state, then archives a bounded settlement
