@@ -29,6 +29,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     dek: 'Textbutler drafts replies as a clearly marked assistant for the Mac chats you pick, and by default each draft waits until you read and approve it.',
     eyebrow: 'Release',
     published: '2026-09-24',
+    updated: '2026-09-28',
     tags: ['textbutler', 'messaging', 'drafts', 'local-first', 'macos', 'xcb', 'algal'],
     relationIds: [
       'contract:wrench:message-like-me:exports-private-bundles',

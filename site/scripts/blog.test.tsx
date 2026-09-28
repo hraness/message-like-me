@@ -212,7 +212,7 @@ describe('blog discovery', () => {
       const entry = entries.find((candidate) => candidate.url === url);
       const indexable = isIndexablePost(post);
       expect(entry !== undefined, post.slug).toBe(indexable);
-      if (entry !== undefined) expect(entry.lastModified, post.slug).toEqual(new Date(`${post.published}T00:00:00.000Z`));
+      if (entry !== undefined) expect(entry.lastModified, post.slug).toEqual(new Date(`${post.updated ?? post.published}T00:00:00.000Z`));
       expect(feed.includes(`<id>${url}</id>`), post.slug).toBe(indexable);
       expect(llms.includes(url), post.slug).toBe(indexable);
     }

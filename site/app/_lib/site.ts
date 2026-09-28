@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
-export const SITE_TITLE = 'Textbutler | Your AI butler replies in the chats you choose.';
+export const SITE_TITLE = 'Textbutler: AI replies for iMessage and WhatsApp on your Mac';
 export const SITE_DESCRIPTION =
   'Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose. It runs on your Mac and answers as a clearly marked assistant.';
 // The one development-status statement. Pages render it where they state the
@@ -81,3 +81,16 @@ export function pageMetadata({
     },
   };
 }
+
+// Each page carries the date its content last changed materially. Set these by
+// hand: Vercel builds from shallow clones, so Git history is not available.
+// The docs page publishes its dateModified from this table too.
+export const PAGE_LAST_MODIFIED = {
+  '/': '2026-09-28',
+  '/sources': '2026-09-11',
+  '/docs': '2026-09-28',
+  '/methodology': '2026-09-11',
+  '/research': '2026-09-11',
+  '/about': '2026-09-28',
+  '/compare/ghostreply': '2026-09-28',
+} as const;

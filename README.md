@@ -38,9 +38,11 @@ vision](https://algal.computer/docs/vision/) states the bet behind it.
 
 ## Open the guided terminal
 
-From a Textbutler checkout on your Mac, with Bun 1.3.14:
+On your Mac, with Bun 1.3.14:
 
 ```sh
+git clone https://github.com/hraness/textbutler.git
+cd textbutler
 bun install --frozen-lockfile --ignore-scripts
 bun run textbutler tui
 ```
@@ -120,10 +122,22 @@ sends plain text. The review shows the actual outgoing text. The send journal
 retains provider acceptance IDs when available; see the messaging guide for
 connection-specific attribution and delivery limits.
 
-Automatic replies are a separate step. They need an AI account that passes
-`providers check`, a working messaging connection, the contact turned on with
-`contacts enable`, and the butler resumed with `resume`. Leave them paused until
+Automatic replies are a separate step. They need a Vercel AI Gateway key, a
+model server on your Mac, or a subscription account that passes
+`providers check`; a working messaging connection; the contact turned on with
+`contacts enable`; and the butler resumed with `resume`. Leave them paused until
 all of that works and you've tested with a real recipient.
+
+## Compared with other tools
+
+Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that
+you send yourself. [GhostReply](https://ghostreply.lol) is a $4.99 Mac app that
+answers iMessages in your texting style. [OpenClaw](https://openclaw.ai) is an
+open-source assistant you message, and it can run commands on your computer.
+Textbutler answers only the contacts you turn on, marks its replies by default,
+keeps notes on each person in files you can edit, and its model can't run
+commands on your Mac. See
+[Textbutler compared with GhostReply](https://textbutler.app/compare/ghostreply).
 
 ## Legacy Message Like Me history tools
 

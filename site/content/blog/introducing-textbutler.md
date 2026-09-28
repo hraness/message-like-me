@@ -31,7 +31,7 @@ textbutler replies send <draft> <digest>
 
 When the butler writes, trusted code wraps its text in a marker the other person can see. The default looks like `🤖{ hello this is my response }`. You can change the markers per contact or clear them. Once cleared, the other person sees plain text with nothing to show the butler wrote it, so tell people you use it if you do that. Either way, Textbutler privately records which messages it wrote, so its own words never get mixed back in as examples of your style.
 
-AI drafts run through xcb on the Claude Code or Codex subscription you already have. xcb keeps your sign-in, and the model receives no tools of its own: it returns text or a proposed action, and Textbutler checks it before anything else happens. [How Textbutler uses xcb](/blog/how-textbutler-uses-xcb) has the details.
+Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key by default. Drafts you ask for with `replies suggest` run through xcb on the Claude Code, Codex, or Devin subscription you already have. On either route the model proposes a reply, and Textbutler checks it before anything is sent. [How Textbutler uses xcb](/blog/how-textbutler-uses-xcb) covers the subscription route.
 
 To start, clone the repository and open the guided terminal with Bun {{BUN_VERSION}}:
 
