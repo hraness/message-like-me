@@ -20,7 +20,7 @@ export function SiteHeader() {
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <MarketingSiteHeader
-        action={{ href: GETTING_STARTED_URL, label: 'Set up on your Mac' }}
+        action={{ href: GETTING_STARTED_URL, label: 'Set up' }}
         ariaLabel="Primary navigation"
         brand="Textbutler"
         brandLabel="Textbutler home"
