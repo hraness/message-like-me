@@ -30,7 +30,7 @@
     "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
     "packages/textbutler/src/habitat-task.ts": "98238fe5abc47b7a4c354052d70b647eac2194ae8b2a04bd829fe3709e10ac7d",
     "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
-    "packages/textbutler/src/imessage-setup.ts": "4915aa5115055ca08a7ba1f63506a8bb035409186edc4a622b15a2525feadb00",
+    "packages/textbutler/src/imessage-setup.ts": "fdc734271365a57abe87626c810c7afee880e5074cc118dbc89a6e36c61e86e7",
     "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
     "packages/textbutler/src/javascript-worker-entry.ts": "26112477da6fda01af8c2d5257d191d08a7a061617ad7dcc540c60f2dc521e7d",
     "packages/textbutler/src/journal.ts": "8c35a860e42087acdacf8ff0748096499ca35b65443463790f6a6bb32c8914e1",
@@ -60,7 +60,7 @@
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/history-search.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/runtime.test.ts",
-    "receiptSha256": "1a570f928de697ab2087774fcc104a0667adbac359eabf5b5ed2d9eca8132f20"
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/imessage-setup.test.ts",
+    "receiptSha256": "7a36e61abb2bad480b95ed4fcd7a896b7593d8a5ce564828698d1b226bb454ba"
   }
 }
