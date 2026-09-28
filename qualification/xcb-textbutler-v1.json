@@ -61,6 +61,6 @@
   },
   "validation": {
     "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/messages-activity.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/runtime.test.ts packages/textbutler/src/daemon.test.ts",
-    "receiptSha256": "68d243d547e511a8511839538b1fc31c592259b4b10f62a06bb861cf013b4271"
+    "receiptSha256": "f3bb7b1d4b22d429e7a872a9623b657dec009d6ed5015c703565cf73c39583e4"
   }
 }

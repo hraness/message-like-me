@@ -44,3 +44,32 @@ test("a replaced WAL is watched again, and a missing store only falls back to th
   missing.close();
   expect(await missing.wait(5_000)).toBe(false);
 });
+
+test("a recreated WAL that reuses its inode number is re-armed from the directory event", async () => {
+  // Linux can reuse a deleted file's inode number: the old file watcher goes
+  // silent, the identity looks unchanged, and only the directory reports it.
+  const root = messages();
+  const watchers = new Map<string, { listener: (event: string, name: string | null) => void; closed: boolean }[]>();
+  const fakeWatch = (path: string, listener: (event: string, name: string | null) => void) => {
+    const entry = { listener, closed: false };
+    watchers.set(path, [...(watchers.get(path) ?? []), entry]);
+    return { close() { entry.closed = true; }, on() { return this; } } as never;
+  };
+  const live = (path: string) => (watchers.get(path) ?? []).filter(entry => !entry.closed);
+  const activity = createMessagesActivity({ directory: root, watch: fakeWatch });
+  try {
+    const wal = join(root, "chat.db-wal");
+    expect(live(wal)).toHaveLength(1);
+    const dead = live(wal)[0]!;
+    live(root)[0]!.listener("rename", "chat.db-wal");
+    expect(dead.closed).toBe(true);
+    expect(await activity.wait(50)).toBe(true);
+    expect(live(wal)).toHaveLength(1);
+    const woke = activity.wait(5_000);
+    live(wal)[0]!.listener("change", "chat.db-wal");
+    expect(await woke).toBe(true);
+    // Unrelated directory entries never wake the loop.
+    live(root)[0]!.listener("change", "unrelated.db");
+    expect(await activity.wait(50)).toBe(false);
+  } finally { activity.close(); }
+});

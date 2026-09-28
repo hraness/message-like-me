@@ -11,13 +11,15 @@ export type MessagesActivity = Readonly<{
   close(): void;
 }>;
 
-type Watch = (path: string, listener: (event: string) => void) => FSWatcher;
+type Watcher = Pick<FSWatcher, "close" | "on">;
+type Watch = (path: string, listener: (event: string, name: string | null) => void) => Watcher;
 const FILES = ["chat.db-wal", "chat.db"] as const;
 
 export function createMessagesActivity(options: { directory?: string; watch?: Watch } = {}): MessagesActivity {
   const directory = options.directory ?? join(homedir(), "Library", "Messages");
-  const watchFile: Watch = options.watch ?? ((path, listener) => watch(path, { persistent: false }, event => listener(event)));
-  const watchers = new Map<string, { watcher: FSWatcher; identity: string }>();
+  const watchPath: Watch = options.watch ?? ((path, listener) => watch(path, { persistent: false }, (event, name) => listener(event, typeof name === "string" ? name : null)));
+  const watchers = new Map<string, { watcher: Watcher; identity: string }>();
+  let directoryWatcher: Watcher | undefined;
   const waiters = new Set<(changed: boolean) => void>();
   let dirty = false, closed = false;
   const fire = (): void => {
@@ -31,11 +33,23 @@ export function createMessagesActivity(options: { directory?: string; watch?: Wa
     watchers.delete(name);
     try { entry.watcher.close(); } catch { /* Already closed. */ }
   };
-  // SQLite may replace or truncate the WAL. A watcher reporting "rename" (the
-  // file was deleted or moved) is dropped, and any identity change re-arms,
-  // so a recreated file is watched again even when its inode number is reused.
+  // SQLite may replace or truncate the WAL. File watchers see writes (macOS
+  // reports none for a directory); the directory watcher sees an entry being
+  // deleted or recreated, which drops that file's watcher so the next wait
+  // re-arms it even when the filesystem reuses the old inode number.
   const arm = (): void => {
     if (closed) return;
+    if (directoryWatcher === undefined) {
+      try {
+        const watcher = watchPath(directory, (event, name) => {
+          if (name === null || !(FILES as readonly string[]).includes(name)) return;
+          if (event === "rename") drop(name);
+          fire();
+        });
+        watcher.on("error", () => { try { watcher.close(); } catch { /* Already closed. */ } if (directoryWatcher === watcher) directoryWatcher = undefined; fire(); });
+        directoryWatcher = watcher;
+      } catch { /* Absent or unwatchable store: file watchers and the heartbeat remain. */ }
+    }
     for (const name of FILES) {
       const path = join(directory, name);
       let identity: string;
@@ -44,7 +58,7 @@ export function createMessagesActivity(options: { directory?: string; watch?: Wa
       if (watchers.get(name)?.identity === identity) continue;
       drop(name);
       try {
-        const watcher = watchFile(path, event => { if (event === "rename") drop(name); fire(); });
+        const watcher = watchPath(path, event => { if (event === "rename") drop(name); fire(); });
         watcher.on("error", () => { drop(name); fire(); });
         watchers.set(name, { watcher, identity });
       } catch { /* Unwatchable (e.g. no access): the heartbeat still polls. */ }
@@ -66,6 +80,8 @@ export function createMessagesActivity(options: { directory?: string; watch?: Wa
     close(): void {
       closed = true;
       for (const name of [...watchers.keys()]) drop(name);
+      try { directoryWatcher?.close(); } catch { /* Already closed. */ }
+      directoryWatcher = undefined;
       for (const resolve of waiters) resolve(false);
       waiters.clear();
     },

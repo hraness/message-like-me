@@ -4,7 +4,7 @@
   "baseCommit": "db90687e637cc98341d635cbad332d0cc40aeb2f",
   "motivation": "With the persistent Ghostget helper, a poll costs tens of milliseconds, so intake latency is dominated by the timer between polls; polling continuously while idle also spends helper CPU for nothing.",
   "design": {
-    "activity": "createMessagesActivity watches the Messages store's chat.db-wal and chat.db files (non-persistent fs watchers) and drops a watcher that reports rename (deleted or moved) and re-arms whenever a file's device/inode changes, so a recreated WAL is watched even when its inode number is reused. It carries no message data: an event only resolves the loop's wait. An unwatchable or absent store falls back to the heartbeat.",
+    "activity": "createMessagesActivity watches the Messages store directory and its chat.db-wal and chat.db files (non-persistent watchers). File watchers see writes; the directory watcher sees an entry being deleted or recreated and drops that file's watcher, so the next wait re-arms it even when the filesystem reuses the inode number. It carries no message data: an event only resolves the loop's wait. An unwatchable or absent store falls back to the heartbeat.",
     "schedule": "Automatic loops given an activity source wait for activity or a 3s heartbeat (1s while any contact has sync failures), then tick after a 100ms floor. Activity during a tick is remembered, so a change is never missed between ticks. Without an activity source the loop keeps its one-second timer; tests with automatic:false are unaffected.",
     "unchanged": "Poll, drain, debounce, claim, dispatch, grant and reconciliation logic are unchanged; only when the next poll starts changes."
   },
@@ -18,17 +18,18 @@
     "toolchain": "Bun 1.3.14",
     "result": {
       "exitCode": 0,
-      "passed": 65,
+      "passed": 66,
       "failed": 0,
       "files": 4,
-      "assertions": 243
+      "assertions": 249
     },
-    "logSha256": "0142625ff790e5cfc5d77ac61973086c9f3c37f97ec8a9606468542a616981f2",
+    "logSha256": "9803096bbb31d4644dfa5df4e75967d63b5f76e1e6fa7d2a39e4d122800f3f0f",
     "coverage": [
       "a database write wakes the waiter well before its heartbeat",
       "activity between waits is remembered, and a quiet database times out",
       "a replaced WAL is watched again, and a missing store only falls back to the heartbeat",
-      "messages activity wakes automatic polling immediately; a quiet database waits for the heartbeat"
+      "messages activity wakes automatic polling immediately; a quiet database waits for the heartbeat",
+      "a recreated WAL that reuses its inode number is re-armed from the directory event (also run on Linux aarch64, Bun 1.3.14)"
     ]
   },
   "sourceInventoryCount": 45,
@@ -85,7 +86,7 @@
     "packages/textbutler/src/reply-loop.ts": "3797f80b0ce99a1cd4e0883cb0f5c5befab6e54942f034e839971af9b7d36109"
   },
   "outOfInventoryChanges": {
-    "packages/textbutler/src/messages-activity.ts": "1eba1b3e8623cac3371d1732ce3532b09da10de4dad2269ae60682502dc8c46d"
+    "packages/textbutler/src/messages-activity.ts": "a27bd90fa8c57ecf20964b6aaed82867c1aa068210e5868c930c8fb016e71201"
   },
   "aggregateValidation": {
     "status": "pending",
