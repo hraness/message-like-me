@@ -1,0 +1,30 @@
+{
+ "version": 1,
+ "scope": "Repin @hraness/algal from the pre-squash contract commit 9922202a2da45bb1f7e0db82c0be5a1c6770c21b to the merged main commit 0f73388df2093c52291687a9fccb6d170bdf2928. The tree content is identical; only the referenced commit identity changes.",
+ "baseCommit": "e876d638e8a225fd34e08f775c393d9b371920f6",
+ "motivation": "The host-contract PR merged with a squashed commit SHA; the dependency pin should name the commit that actually exists on algal main so installs resolve the merged ref.",
+ "design": {
+  "pin": "package.json and bun.lock move the github pin to the merged commit; no source, contract or behavior change.",
+  "admission": "The XCB reviewed-source receipt is rebound because package.json and bun.lock are inventory sources; the other 43 source hashes are unchanged."
+ },
+ "independentReview": {
+  "reviewer": "none",
+  "method": "Implementer self-review of the full diff only.",
+  "result": "Pending independent review."
+ },
+ "focusedValidation": {
+  "command": "/Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/contact-status.test.ts packages/textbutler/src/habitat-task-shadow.test.ts",
+  "toolchain": "Bun 1.3.14",
+  "result": {
+   "exitCode": 0,
+   "passed": 19,
+   "failed": 0,
+   "files": 3,
+   "assertions": 115
+  },
+  "logSha256": "e84984032954750b0c60dbdbc8b0388126349c54512f159137a9ea61cf375228"
+ },
+ "limitations": [
+  "This is a commit-identity repin with reviewed source composition evidence, not a live provider qualification, release signature or proof of message delivery."
+ ]
+}

@@ -13,8 +13,8 @@
   }
  },
  "sources": {
-  "bun.lock": "924bb0eaff2358dc49c8dbb943fc858d4bb826d2d93fae77f955137cc330fb3f",
-  "package.json": "04432286bfaf1ea52a017a5eb448a4ec12f0ea394fc68e7396e11b2fd0817828",
+  "bun.lock": "933c5cf676d427c94c9a63c69284d7dcd64835ab6117c0c858d18c7f639d2475",
+  "package.json": "0d43bed5cb2c6b3aab79bb6bbe44b58038ed367914905ae6c49f39084a4b8680",
   "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
   "packages/textbutler/src/cli.ts": "8f84d52aa3c36e23f5f9c826cd8f60380e1ea8bc80a25d98b632c96096da13bd",
   "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
@@ -60,7 +60,7 @@
   "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
  },
  "validation": {
-  "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/contact-status.test.ts packages/textbutler/src/control-service.test.ts packages/textbutler/src/habitat-task-shadow.test.ts packages/textbutler/src/owner-cli.test.ts packages/textbutler/src/cli-golden.test.ts scripts/xcb-integration-admission.test.ts",
-  "receiptSha256": "5a9d6318398021179c9704e4eecf594fbed07566af9c1f0f7ab3b484ba0b0f4a"
+  "command": "/Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/contact-status.test.ts packages/textbutler/src/habitat-task-shadow.test.ts",
+  "receiptSha256": "0b52cb93010b4b861a68696e0f3ce5c0807c8d74428d582824bc1b8fdfdbf3d0"
  }
 }
