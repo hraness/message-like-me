@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "scope": "Textbutler private web-query recovery at the reviewed local-model main base.",
+  "scope": "Textbutler local reply effect budget at the merged web-search recovery main base.",
   "toolchain": "Bun 1.3.14",
-  "command": "/Users/benguo/.bun/bin/host-run --mode=exclusive --label=textbutler-search-final-check -- /Users/benguo/.bun/bin/bun run check",
+  "command": "/Users/benguo/.bun/bin/host-run --mode=exclusive --label=textbutler-budget-final-check -- /Users/benguo/.bun/bin/bun run check",
   "result": {
     "exitCode": 0,
     "aggregateTests": 493,
@@ -10,7 +10,7 @@
     "failed": 0
   },
   "sourceInventoryCount": 45,
-  "sourceDigest": "ee5ba23396d9c5b0025384f5a7cc82e99aa7f182392ab8f6d22887d87ae95a4c",
+  "sourceDigest": "7b352e9297db1e93c8885734e1e5918004b486c817f832396d9c1e2dfc326e64",
   "sourceSha256": {
     "bun.lock": "933c5cf676d427c94c9a63c69284d7dcd64835ab6117c0c858d18c7f639d2475",
     "package.json": "0d43bed5cb2c6b3aab79bb6bbe44b58038ed367914905ae6c49f39084a4b8680",
@@ -27,7 +27,7 @@
     "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
     "packages/textbutler/src/habitat-program.ts": "b5a7f4cd70e2c67a84842d431162136d034203e6e382337697ac704f96dd7e32",
     "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
-    "packages/textbutler/src/habitat-task.ts": "98238fe5abc47b7a4c354052d70b647eac2194ae8b2a04bd829fe3709e10ac7d",
+    "packages/textbutler/src/habitat-task.ts": "ea6da92ba494683383c3b5ca590eca1259bf639daaab551e978af7243a68893e",
     "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
     "packages/textbutler/src/imessage-setup.ts": "fdc734271365a57abe87626c810c7afee880e5074cc118dbc89a6e36c61e86e7",
     "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
@@ -59,11 +59,11 @@
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "admissionReceipt": "qualification/xcb-textbutler-v1.json",
-  "admissionValidationSha256": "93366947698766036e84e8f8bd1e5572f13d35df481dd6a8aa26674b760ccfd3",
-  "focusedValidation": "qualification/xcb-search-recovery-validation.json",
-  "focusedValidationSha256": "93366947698766036e84e8f8bd1e5572f13d35df481dd6a8aa26674b760ccfd3",
-  "independentReview": "qualification/xcb-search-recovery-review.json",
-  "independentReviewSha256": "ea7a8b7fcc058bed9a9d74ba1fb5d4c675d13430e15ea15de95786e4e5632065",
-  "log": "qualification/xcb-search-recovery-current-check.log",
-  "logSha256": "2f4fd5ccf4604d31de9432283f9685eb40cede29e743ca6694225cca61d44696"
+  "admissionValidationSha256": "a11d92911684d207b9f4d43143df44932838882c427fe2b90faa1586b43a2dfb",
+  "focusedValidation": "qualification/xcb-local-budget-validation.json",
+  "focusedValidationSha256": "a11d92911684d207b9f4d43143df44932838882c427fe2b90faa1586b43a2dfb",
+  "independentReview": "qualification/xcb-local-budget-review.json",
+  "independentReviewSha256": "1a89c48306a076cfd75af38bfa0286013d923b0d9e75b2d2ee7d07f2dea06a51",
+  "log": "qualification/xcb-textbutler-v1-current-check.log",
+  "logSha256": "c43f7e4f48b95b31a7c6fcd0167d31c4789df20b7f84879ea392ad649c1d2e59"
 }

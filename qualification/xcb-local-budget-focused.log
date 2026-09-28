@@ -1,0 +1,27 @@
+[host-run] waiting for shared compute textbutler-budget-focused (1/4 permits)
+[host-run] admitted textbutler-budget-focused after 0.0s
+bun test v1.3.14 (0d9b296a)
+
+packages/textbutler/src/habitat-program.test.ts:
+(pass) the contact driver executes a real bounded Algal organism with replayable evidence [14.28ms]
+(pass) cancellation before dispatch starts no model and over-bound inputs fail closed [0.24ms]
+(pass) the respond instructions require an explicit ask and treat shares without one as context [1.31ms]
+(pass) structured personality remains style data and is bound into the replayable manifest [2.04ms]
+(pass) respond binds its task inputs, object output and effective host budgets [1.62ms]
+(pass) reflect binds its task inputs, object output and effective host budgets [1.32ms]
+(pass) judge binds its task inputs, object output and effective host budgets [1.10ms]
+(pass) task cancellation joins provider cleanup before rejecting and never repeats an unknown result [12.82ms]
+(pass) task object outputs remain enforced and provider failures are not retried [3.28ms]
+
+packages/textbutler/src/fast-driver.test.ts:
+(pass) Gateway driver pins destination/provider, disables reasoning and never includes credentials in evidence [4.67ms]
+(pass) daily admission is global, atomic, persistent and retains uncertain reservations [1.37ms]
+(pass) provider-reported generation cost settles the conservative reservation once [0.67ms]
+(pass) a bare object response is accepted and a non-object value still fails closed [0.60ms]
+(pass) a local driver searches through a named gateway credential; without one search stays off [4.29ms]
+(pass) truncated output, redirects, malformed usage and unapproved local destinations fail closed [1.14ms]
+
+ 15 pass
+ 0 fail
+ 127 expect() calls
+Ran 15 tests across 2 files. [178.00ms]

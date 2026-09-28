@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "scope": "Reply task effect budget for a local model with a 60-second driver timeout.",
+  "reviewer": "Independent AI subagent /root/search_recovery_review",
+  "method": "Read-only review of the current source and focused-test diff against merged main; no edits or tests by the reviewer.",
+  "result": "No blocking findings. The 65-second reply effect budget outlasts the local driver's 60-second timeout, while gateway completion retains its own 20-second timeout. The host joins pending provider cleanup and does not retry an unknown result.",
+  "reviewedSha256": {
+    "packages/textbutler/src/habitat-task.ts": "ea6da92ba494683383c3b5ca590eca1259bf639daaab551e978af7243a68893e",
+    "packages/textbutler/src/habitat-program.test.ts": "d4dd70470fa5efc9decf670dc163f1704df00587b26298e073cd011e07d0f284"
+  },
+  "remainingLimit": "The five-second margin does not guarantee that response-body cancellation finishes before the task deadline. The focused test checks budget ordering, not a timed cancellation race. A gateway adapter that ignores its 20-second signal could occupy the longer task ceiling."
+}
