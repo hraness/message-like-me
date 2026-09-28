@@ -1,4 +1,4 @@
-import { publicAssetExists } from './public-assets';
+import { publicAssetExists, publicPngSize } from './public-assets';
 
 type Variant = Readonly<{ wide: string; narrow?: string }>;
 
@@ -15,11 +15,15 @@ function variant(name: string, theme: 'light' | 'dark'): Variant | undefined {
 }
 
 function Picture({ files, alt, className }: Readonly<{ files: Variant; alt: string; className: string }>) {
+  // Intrinsic sizes on both the source and the img let the browser reserve the
+  // right box for whichever file it picks, so lazy loading causes no layout shift.
+  const wide = publicPngSize(files.wide);
+  const narrow = files.narrow === undefined ? undefined : publicPngSize(files.narrow);
   return (
     <picture className={className}>
-      {files.narrow === undefined ? null : <source media="(max-width: 899px)" srcSet={`/${files.narrow}`} />}
+      {files.narrow === undefined || narrow === undefined ? null : <source height={narrow.height} media="(max-width: 899px)" srcSet={`/${files.narrow}`} width={narrow.width} />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={alt} aria-hidden={alt === '' ? true : undefined} className="tb-diagram__img" decoding="async" loading="lazy" src={`/${files.wide}`} />
+      <img alt={alt} aria-hidden={alt === '' ? true : undefined} className="tb-diagram__img" decoding="async" height={wide.height} loading="lazy" src={`/${files.wide}`} width={wide.width} />
     </picture>
   );
 }

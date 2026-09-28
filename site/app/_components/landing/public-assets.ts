@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Launch media and diagrams land in public/ from their own lanes. A slot shows
@@ -6,6 +6,22 @@ import { join } from 'node:path';
 // broken image while an asset is still being made.
 export function publicAssetExists(path: string): boolean {
   return existsSync(join(process.cwd(), 'public', path));
+}
+
+/**
+ * Pixel size of a PNG under public/, read from its IHDR header, so an image
+ * can reserve its box before it loads and the page never jumps.
+ */
+export function publicPngSize(path: string): Readonly<{ width: number; height: number }> {
+  const header = Buffer.alloc(24);
+  const fd = openSync(join(process.cwd(), 'public', path), 'r');
+  try {
+    readSync(fd, header, 0, 24, 0);
+  } finally {
+    closeSync(fd);
+  }
+  if (header.toString('latin1', 12, 16) !== 'IHDR') throw new Error(`${path} is not a PNG`);
+  return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
 }
 
 /** Expected launch files under public/. One place to rename them. */

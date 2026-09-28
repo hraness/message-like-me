@@ -538,7 +538,8 @@ nav.message-like-me-ask-ai + footer {
 /* Theme-paired images use GitHub's fragment convention, so README and posts
  * show the same light or dark diagram on GitHub and on this site. */
 .blog-page .plain-publication__article-body img { display: block; height: auto; max-width: 100%; border-radius: 12px; }
-:where(.blog-page, .readme-prose) img[src$="#gh-dark-mode-only"] { display: none; }
+/* :root keeps this at the article img rule's specificity, so the dark copy stays hidden in light mode. */
+:root :where(.blog-page, .readme-prose) img[src$="#gh-dark-mode-only"] { display: none; }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme]), [data-theme="system"]) :where(.blog-page, .readme-prose) img[src$="#gh-light-mode-only"] { display: none; }
   :root:where(:not([data-theme]), [data-theme="system"]) :where(.blog-page, .readme-prose) img[src$="#gh-dark-mode-only"] { display: block; }

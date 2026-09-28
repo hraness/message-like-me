@@ -309,7 +309,7 @@ export default function Home() {
                 <PhoneSlot conversation={staysOutConversation} screenHeight={540} />
                 <figcaption>
                   <span className="tb-chip" data-tone="caution">WhatsApp · lightly tested</span>
-                  <span>No “butler”, no reply. Then Sam writes, so the butler stays out of it: it waits 5 minutes after you last wrote, and a request in that window is skipped, not saved for later.</span>
+                  <span>Jordan asks for the butler right after Sam wrote, so it stays out of it. For 5 minutes after you write in a chat, requests there are skipped, not saved for later.</span>
                 </figcaption>
               </figure>
               <figure className="tb-example">
