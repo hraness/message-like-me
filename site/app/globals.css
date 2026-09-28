@@ -984,6 +984,18 @@ html { scrollbar-color: var(--muted) var(--paper); }
 .readme-prose :is(p, li) { text-wrap: pretty; }
 .readme-prose h2 { border: 0; padding-block-start: 0.5rem; }
 .readme-prose :not(pre) > code { overflow-wrap: anywhere; }
+/* Paragraph rhythm for the rendered README; the shared reset zeroes block margins. */
+.readme-prose :is(p, ul, ol, blockquote, table, pre) { margin-block: 0 1rem; }
+.readme-prose :is(h2, h3) { margin-block: 2.5rem 0.75rem; }
+.readme-prose blockquote {
+  margin-inline: 0;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-inline-start: 3px solid var(--line);
+  color: var(--muted);
+}
+.readme-prose blockquote p:last-child { margin-block-end: 0; }
+.readme-prose img { display: block; border-radius: 12px; }
+.readme-prose p:has(> img) { margin-block-end: 2rem; }
 @media (forced-colors: active) {
   .tb-terminal, .tb-steps pre, .workspace-example pre { border: 1px solid CanvasText; }
 }

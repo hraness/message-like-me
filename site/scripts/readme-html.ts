@@ -1,5 +1,6 @@
 const REPOSITORY_BLOB_ROOT = "https://github.com/hraness/textbutler/blob/main/";
 const REPOSITORY_RAW_ROOT = "https://raw.githubusercontent.com/hraness/textbutler/main/";
+const SITE_PUBLIC_PREFIX = "site/public/";
 
 function decodeCharacterReferences(value: string): string {
   return value
@@ -39,6 +40,11 @@ function rewriteRelativeTargets(html: string): string {
       || /^[a-z][a-z0-9+.-]*:/iu.test(decodeCharacterReferences(target).trim())
     ) {
       return attribute;
+    }
+    // Images the site itself serves (site/public/…) load from this site, so
+    // /docs shows them in every preview before they reach main.
+    if (name === "src" && target.startsWith(SITE_PUBLIC_PREFIX)) {
+      return `${name}="/${target.slice(SITE_PUBLIC_PREFIX.length)}"`;
     }
     const root = name === "src" ? REPOSITORY_RAW_ROOT : REPOSITORY_BLOB_ROOT;
     return `${name}="${root}${target}"`;
