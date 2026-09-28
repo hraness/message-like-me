@@ -344,7 +344,7 @@ export default function Home() {
                 <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md   standing instructions\n├── ABOUT.md    what matters here\n├── MEMORY.md   dated, sourced notes\n├── STYLE.md    how it talks here\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre></div>
                 <figcaption>
                   <strong>Each person gets their own folder.</strong>
-                  <span>Your notes on how you talk, what matters, and what’s off-limits, in plain files you can edit. Your settings and sign-ins live elsewhere, where the butler can’t edit them. Optional learning (off by default; it needs a Claude Code subscription through xcb) can remember up to 64 sourced notes and adjust tone per chat; <code>habitats show</code> lists them and <code>habitats memory-clear</code> removes them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></span>
+                  <span>Your notes on how you talk, what matters, and what’s off-limits, in plain files you can edit. Your settings and sign-ins live elsewhere, where the butler can’t edit them. Optional learning (off by default; it needs a Claude Code subscription through xcb) can remember up to 64 sourced notes and adjust tone per chat; <code>textbutler habitats show</code> lists them and <code>textbutler habitats memory-clear</code> removes them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></span>
                 </figcaption>
               </figure>
             </div>
