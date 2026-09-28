@@ -66,7 +66,7 @@ export const metadata = publicAssetExists(LAUNCH_ASSETS.film)
       ...baseMetadata,
       openGraph: {
         ...baseMetadata.openGraph,
-        videos: [{ url: absoluteUrl(`/${LAUNCH_ASSETS.film}`), secureUrl: absoluteUrl(`/${LAUNCH_ASSETS.film}`), type: 'video/mp4', width: 1280, height: 720 }],
+        videos: [{ url: absoluteUrl(`/${LAUNCH_ASSETS.film}`), secureUrl: absoluteUrl(`/${LAUNCH_ASSETS.film}`), type: 'video/mp4', width: 1920, height: 1080 }],
       },
     }
   : baseMetadata;
