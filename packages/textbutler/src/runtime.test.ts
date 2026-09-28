@@ -198,6 +198,15 @@ test("a fast self-chat reply waits for its ack's echo before preparing, and stil
   const ordinary = setup({ sleep: async () => { ordinarySleeps++; } });
   expect((await ordinary.runtime.process(event)).status).toBe("submitted"); expect(ordinarySleeps).toBe(0);
 });
+test("the composer learns whether the butler was invoked by keyword or admitted by smart mode", async () => {
+  const seen: (string | undefined)[] = [];
+  const compose = async (request: { invocation?: string }) => { seen.push(request.invocation); return { summary: "I can help.", actions: [{ kind: "text", text: "Hello there." }] }; };
+  const keyword = setup(); keyword.ports.agent.compose = compose;
+  expect((await keyword.runtime.process(event)).status).toBe("submitted");
+  const smart = setup(); smart.ports.agent.compose = compose;
+  expect((await smart.runtime.process({ ...event, id: "m2", text: "can you help with this" })).status).toBe("submitted");
+  expect(seen).toEqual(["keyword", "inferred"]);
+});
 test("nontext intent gets a disclosed companion before the action", async () => {
   const fixture = setup();
   fixture.ports.agent.compose = async () => ({ summary: "I like that idea.", actions: [{ kind: "reaction", messageId: "m1", emoji: "👍", action: "add" }] });

@@ -8,7 +8,8 @@ import { RunJournal, type RunState } from "./journal.ts";
 import { DriverFault } from "./fast-driver.ts";
 
 export type ConversationSnapshot = Readonly<{ state: ConversationState; contextId: string; messageIds: readonly string[]; relatedMessageIds: ReadonlyMap<string, string> }>;
-export type AgentRequest = Readonly<{ runId: string; contact: ContactSettings; event: MessageEvent; signal: AbortSignal; capabilities?: readonly string[] }>;
+/** `keyword`: the message named the butler's keyword, an explicit request. `inferred`: admitted by smart mode. */
+export type AgentRequest = Readonly<{ runId: string; contact: ContactSettings; event: MessageEvent; signal: AbortSignal; capabilities?: readonly string[]; invocation?: "keyword" | "inferred" }>;
 export class NoReplyNeeded extends Error {}
 export type SubmittedReply = Readonly<{ runId: string; contact: ContactSettings; event: MessageEvent; actions: readonly ActionIntent[]; messageIds: readonly string[]; at: number }>;
 export interface ButlerAgent {
@@ -133,7 +134,8 @@ export class ButlerRuntime {
     this.dispatches.set(contact.id, dispatch);
     const timeout = setTimeout(() => { controller.abort(); dispatch.abort(); }, RUN_BUDGET_MS);
     const hook: HookContext = { contactId: contact.id, runId, eventId: event.id, signal: controller.signal };
-    const request: AgentRequest = { runId, contact, event, signal: controller.signal, capabilities: capabilities.value.capabilities.filter(value => value.available).map(value => value.capability) };
+    const request: AgentRequest = { runId, contact, event, signal: controller.signal, capabilities: capabilities.value.capabilities.filter(value => value.available).map(value => value.capability),
+      invocation: decision.reason === "keyword" || decision.reason === "owner-keyword" ? "keyword" : "inferred" };
     let state: RunState = "running";
     const finish = (next: RunState, reason: string): ProcessOutcome => {
       this.ports.journal.transition(runId, state, next, reason, this.clock());
