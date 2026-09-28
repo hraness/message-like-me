@@ -86,13 +86,13 @@ const messageObservation = (message: { id: string; at: number; author: "owner" |
 };
 const eventObservation = (request: AgentRequest): HabitatObservation => messageObservation({ id: request.event.id, at: request.event.occurredAt, author: request.event.author === "owner" ? "owner" : "contact", text: request.event.text }, 2048);
 const PRIVATE_SHAPE = /(?:[\w.+-]+@[\w.-]+\.[a-z]{2,}|\+?\d[\d\s().-]{7,}\d|https?:\/\/[^\s]*:[^\s@]+@)/iu;
+const queryWords = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter(word => word.length >= 2);
 /** A public query must not contain identifier shapes, any private 2-3 word span, or a
  * proper-noun token seen in private context. Fully paraphrased private facts remain a
  * residual risk, so web search stays plan-gated and owner-visible rather than default-on. */
 function publicQueryRefusal(query: string, corpus: string): string | null {
   if (PRIVATE_SHAPE.test(query)) return "The query contains an identifier. Use fresh public wording without it.";
-  const words = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").split(" ").filter(word => word.length >= 2);
-  const q = words(query), corpusWords = words(corpus), grams = new Set<string>();
+  const q = queryWords(query), corpusWords = queryWords(corpus), grams = new Set<string>();
   for (const size of [2, 3]) for (let index = 0; index + size <= corpusWords.length; index++) grams.add(corpusWords.slice(index, index + size).join(" "));
   const repeatedPairs = [...new Set(q.slice(0, -1).map((word, index) => `${word} ${q[index + 1]}`).filter(pair => grams.has(pair)))].slice(0, 4);
   if (repeatedPairs.length) return `Avoid these adjacent word pairs from your query: ${repeatedPairs.map(pair => `"${clip(pair, 80)}"`).join(", ")}. Use fresh public wording; changing case is insufficient.`;
@@ -101,6 +101,38 @@ function publicQueryRefusal(query: string, corpus: string): string | null {
   return q.some(word => corpusNouns.has(word)) ? "The query repeats a private proper name. Use fresh public wording without names from the conversation." : null;
 }
 export function admitPublicQuery(query: string, corpus: string): boolean { return publicQueryRefusal(query, corpus) === null; }
+
+// An owner who explicitly asks their self-chat Butler to search has supplied
+// the topic for that one search. A model may still echo adjacent private words.
+// Keep only words from the owner's request and admit the reduced query through
+// the same privacy gate; identifiers and repeated proper names never escape.
+const PUBLIC_QUERY_FILLERS = new Set(["the", "for", "and", "with", "about", "latest", "recent", "current", "today", "news", "headline", "headlines", "update", "updates"]);
+const PUBLIC_QUERY_NEGATIONS = new Set(["no", "not", "without", "except", "exclude", "excluding", "never"]);
+const PUBLIC_QUERY_CONDITIONS = new Set(["if", "unless", "whether", "provided", "when", "after", "before", "until", "once", "only", "since"]);
+const PUBLIC_QUERY_CANCELLATION = /\b(?:don['’]?t|do\s+not|never|stop|cancel|scratch(?:\s+that)?|forget(?:\s+it)?|never\s+mind|nevermind|ignore|skip|wait|hold\s+on|actually|nope|nah)\b/iu;
+function isDirectWebSearchRequest(text: string): boolean {
+  return /^\s*(?:hey\s+)?(?:butler|textbutler)[,:\s]+(?:(?:please|can you|could you|would you)\s+)*(?:search (?:the )?(?:web|internet)|search online|web search|browse (?:the )?web|look (?:it )?up online)\b/iu.test(text);
+}
+function prohibitsWebSearch(text: string): boolean { return /\b(?:do not|don't|never)\s+(?:search (?:the )?(?:web|internet)|search online|web search|browse (?:the )?web|look (?:it )?up online)\b/iu.test(text); }
+function ownerPublicQuerySubset(query: string, corpus: string, requestText: string): string | null {
+  if (!publicQueryRefusal(query, corpus)?.startsWith("Avoid these adjacent word pairs") || PRIVATE_SHAPE.test(query)) return null;
+  const words = (query.match(/[\p{L}\p{N}]+/gu) ?? []).filter(word => word.length >= 2);
+  if (words.length < 3 || words.length > 8 || words.some(word => PUBLIC_QUERY_NEGATIONS.has(word.toLowerCase()))) return null;
+  const privateNames = new Set((corpus.match(/\b[A-Z][a-z]{2,}\b/gu) ?? []).map(word => word.toLowerCase()));
+  if (words.some(word => /^[A-Z][a-z]{2,}$/u.test(word) && privateNames.has(word.toLowerCase()))) return null;
+  const requested = new Set(queryWords(requestText));
+  if ([...requested].some(word => PUBLIC_QUERY_NEGATIONS.has(word) || PUBLIC_QUERY_CONDITIONS.has(word))) return null;
+  let best: { query: string; score: number; words: number } | null = null;
+  for (let mask = 1; mask < 1 << words.length; mask++) {
+    const selected = words.filter((_, index) => (mask & (1 << index)) !== 0);
+    if (selected.length < 2 || selected.length === words.length || selected.some(word => !requested.has(word.toLowerCase()))) continue;
+    const score = selected.reduce((sum, word) => sum + (/^[A-Z]{2,12}$/u.test(word) ? 6 : PUBLIC_QUERY_FILLERS.has(word.toLowerCase()) ? 1 : 3), 0);
+    if (score === selected.length || publicQueryRefusal(selected.join(" "), corpus) !== null) continue;
+    if (best === null || score > best.score || score === best.score && selected.length > best.words)
+      best = { query: selected.join(" "), score, words: selected.length };
+  }
+  return best?.query ?? null;
+}
 
 // A standalone request for this assistant's help can be answered from its
 // local context even when the model needlessly tried a web search first.
@@ -178,6 +210,18 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     const history = retainedHistory.map(message => ({ ...message, text: clip(message.text, 512) }));
     const capabilities = request.capabilities ?? await ports.capabilities(request.contact), results: JsonValue[] = [], admittedMemes = new Set<string>();
     const tools: NonNullable<HabitatReply["tools"]> = [];
+    const exposedMemory = new Map<string, string>();
+    const ownerSearchProhibited = request.contact.selfChat && prohibitsWebSearch(request.event.text);
+    const directOwnerSearch = request.contact.selfChat && request.invocation === "keyword" && isDirectWebSearchRequest(request.event.text);
+    const ownerSearchCancelled = directOwnerSearch && PUBLIC_QUERY_CANCELLATION.test(request.event.text);
+    const constrainedOwnerSearch = directOwnerSearch && queryWords(request.event.text).some(word => PUBLIC_QUERY_NEGATIONS.has(word) || PUBLIC_QUERY_CONDITIONS.has(word));
+    const explicitOwnerSearch = directOwnerSearch && !ownerSearchProhibited && !ownerSearchCancelled && !constrainedOwnerSearch;
+    const finish = (result: z.infer<typeof outputSchema>) => {
+      const contextMessages = retainedHistory.filter(message => message.author !== "butler").slice(-plan.contextMessages).map(message => messageObservation({ ...message, author: message.author as "owner" | "contact" }, 512));
+      const priorMemory = [...exposedMemory].filter(([id]) => !memory.some(entry => entry.id === id)).map(([id, sourceDigest]) => ({ id, sourceDigest }));
+      cached.set(request.runId, { contactId: request.contact.id, generation, result, context: contextMessages, plan, tools, memory, priorMemory });
+      return result;
+    };
     // Owner intents on the self conversation (repo allow/deny/list) resolve
     // deterministically; the model never sees or overrides an approval decision.
     // Self-chat inbound text is the owner's by construction: the conversation
@@ -192,7 +236,6 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       }
     }
     const repos = ports.repos === undefined || plan.repoAccess !== true ? [] : await ports.repos.list(request.contact);
-    const exposedMemory = new Map<string, string>();
     const files = (await workspace.list()).filter(file => /^(?:outbox|attachments)\//u.test(file.path)).map(file => file.path).slice(-32);
     const privateCorpus = [request.event.text, plan.guidance, ...Object.values(plan.soulCore ?? {}), ...(state.memory ?? []).map(entry => entry.text), ...Object.values(guidance), ...history.map(message => message.text)].join("\n");
     let executedSearches = 0, refusedSearches = 0;
@@ -202,7 +245,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         ...(plan.memorySearch !== false ? ["memory-search"] : []),
         ...(plan.javascript === true ? ["javascript"] : []),
         ...(plan.repoAccess === true && ports.repos !== undefined ? ["repo-sync", "repo-read", "repo-search"] : []),
-        ...(plan.webSearch && ports.driver.canSearch && executedSearches === 0 ? ["web-search"] : []),
+        ...(plan.webSearch && ports.driver.canSearch && executedSearches === 0 && (!request.contact.selfChat || explicitOwnerSearch) ? ["web-search"] : []),
         ...(plan.memeSearch ? ["meme-search", ...(admittedMemes.size && capabilities.includes("attachment") ? ["meme-image"] : [])] : []),
         // Older plans carry no flag: history search defaults on for the
         // owner's self chat and off for everyone else.
@@ -219,6 +262,8 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       ports.journal.recordHabitatEvidence(request.contact.id, run.receipt.digest, JSON.stringify(run), now());
       let result = salvageToolRequest(outputSchema.parse(run.output));
       if (!result.respond || result.confidence < 0.85) result = { ...result, respond: false, actions: [], tool: null };
+      if (explicitOwnerSearch && result.respond && result.tool === null && executedSearches === 0)
+        result = outputSchema.parse({ respond: true, confidence: 1, reason: "requested", summary: "Requested search did not run", actions: [{ kind: "text", text: "I couldn't complete a web search. Please rephrase the public topic." }], tool: null });
       const onlyRefusedSearches = results.every(item => item !== null && typeof item === "object" && !Array.isArray(item) && item.tool === "web-search");
       // A refused search supplies no current facts. Preserve deliberate
       // silence, other-tool answers and narrow local help requests.
@@ -230,8 +275,11 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         // Small models often send a text action alongside the tool request
         // despite the contract. The tool wins; stray proposed actions are
         // discarded and the tool-result step produces the real reply.
-        if (step >= 2) throw Error("Fast driver tool budget exceeded");
         const tool = result.tool;
+        let sentPublicQuery: string | null = null, ownerSearchRefused = false;
+        if (tool.kind === "web-search" && request.contact.selfChat && !explicitOwnerSearch) return finish(outputSchema.parse({ respond: true, confidence: 1, reason: "requested", summary: "Owner search instruction protected", actions: [{ kind: "text", text: ownerSearchProhibited || ownerSearchCancelled ? "I won't search the web." : constrainedOwnerSearch ? "I couldn't safely preserve the search constraints. Please rephrase the public topic." : "I didn't search the web. Ask me directly to search if you'd like me to." }], tool: null }));
+        if (step >= 2 && tool.kind === "web-search" && explicitOwnerSearch) return finish(outputSchema.parse({ respond: true, confidence: 1, reason: "requested", summary: "Requested search did not run", actions: [{ kind: "text", text: "I couldn't complete a web search. Please rephrase the public topic." }], tool: null }));
+        if (step >= 2) throw Error("Fast driver tool budget exceeded");
         if (!availableTools.includes(tool.kind)) throw Error("Tool is not available for this reply");
         if (tool.kind === "javascript") {
           results.push({ tool: tool.kind, result: await runJavascriptTool(tool.code, tool.input ?? null, signal) });
@@ -250,15 +298,18 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         } else if (tool.kind === "web-search") {
           if (!plan.webSearch) throw Error("Web search is disabled for this plan");
           const refusal = publicQueryRefusal(tool.query, privateCorpus);
-          if (refusal === null) {
+          const publicQuery = refusal === null ? tool.query : explicitOwnerSearch ? ownerPublicQuerySubset(tool.query, privateCorpus, request.event.text) : null;
+          if (publicQuery !== null) {
             executedSearches++;
-            results.push({ tool: tool.kind, result: await ports.driver.search(`${request.runId}-search-${step}`, tool.query, signal) });
+            sentPublicQuery = publicQuery;
+            results.push({ tool: tool.kind, ...(publicQuery === tool.query ? {} : { publicQuery }), result: await ports.driver.search(`${request.runId}-search-${step}`, publicQuery, signal) });
           } else {
             // A refused query never left the machine, so it does not consume
             // the one-search bound: return the refusal and let the model try
             // a fresh public phrasing within the same tool budget.
             refusedSearches++;
             results.push({ tool: tool.kind, result: { error: "query-not-admitted", detail: refusal } });
+            ownerSearchRefused = explicitOwnerSearch;
           }
         } else {
           if (!plan.memeSearch) throw Error("Meme tools are disabled for this plan");
@@ -280,18 +331,16 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
           : tool.kind === "repo-read" ? `${tool.repo}:${tool.path}`
           : tool.kind === "repo-search" ? `${tool.repo}:${tool.query}`
           : tool.kind === "history-search" ? `q:${tool.query ?? ""} ${tool.from ?? ""}..${tool.to ?? ""} author:${tool.author ?? "any"}${tool.cursor ? " cursor" : ""}`
-          : tool.query;
+          : tool.kind === "web-search" && sentPublicQuery !== null ? sentPublicQuery : tool.query;
         tools.push({ kind: tool.kind, query, result: clip(JSON.stringify(results.at(-1)!), 4096) });
+        if (ownerSearchRefused) return finish(outputSchema.parse({ respond: true, confidence: 1, reason: "requested", summary: "Public search query remained private", actions: [{ kind: "text", text: "I couldn't form a safe web query. Please rephrase the public topic." }], tool: null }));
         continue;
       } else if (result.respond) {
         const actions = result.actions.map(parseActionIntent);
         if (!actions.length || actions.some(action => !capabilities.includes(action.kind)) || actions.filter(action => action.kind === "text").reduce((sum, action) => sum + action.text.length, 0) > plan.maxReplyCharacters) throw Error("Fast driver response violates its action budget");
       }
-      const contextMessages = retainedHistory.filter(message => message.author !== "butler").slice(-plan.contextMessages).map(message => messageObservation({ ...message, author: message.author as "owner" | "contact" }, 512));
       assertCurrent();
-      const priorMemory = [...exposedMemory].filter(([id]) => !memory.some(entry => entry.id === id)).map(([id, sourceDigest]) => ({ id, sourceDigest }));
-      cached.set(request.runId, { contactId: request.contact.id, generation, result, context: contextMessages, plan, tools, memory, priorMemory });
-      return result;
+      return finish(result);
     }
     throw Error("Fast driver did not finish within its tool budget");
   }
