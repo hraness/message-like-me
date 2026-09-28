@@ -264,7 +264,7 @@ export class ButlerRuntime {
    * rejects, so a caller can always await it before finishing. */
   private async dispatchAck(contact: ContactSettings, runId: string, contextId: string, grant: string, signal: AbortSignal): Promise<readonly (string | null)[] | "unknown"> {
     let plan;
-    try { plan = await this.ports.transport.prepare({ intentId: `${runId}:ack`, conversationId: contact.routeId, contextId, actions: [{ kind: "text", text: disclose("…", contact.disclosure) }] }); }
+    try { plan = await this.ports.transport.prepare({ intentId: `${runId}:ack`, conversationId: contact.routeId, contextId, actions: [{ kind: "text", text: disclose("👀", contact.disclosure) }] }); }
     catch { return []; }
     if (!plan.ok) return [];
     this.submitting++;

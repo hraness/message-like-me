@@ -45,14 +45,14 @@ test("wraps every text response and never replays one event", async () => {
 test("a disclosed ack lands first while the reply composes", async () => {
   const fixture = setup();
   expect((await fixture.runtime.process(event)).status).toBe("submitted");
-  expect(fixture.acks).toEqual([[{ kind: "text", text: "🤖{ … }" }]]);
+  expect(fixture.acks).toEqual([[{ kind: "text", text: "🤖{ 👀 }" }]]);
   expect(fixture.submitted).toEqual([[{ kind: "text", text: "🤖{ Hello there. }" }]]);
   // The journaled ack send attributes its own history echo to the butler.
   expect(fixture.journal.knownSentMessage("accepted:p1:0")).toBe(true);
   fixture.setSettings({ ...fixture.getSettings(), contacts: fixture.getSettings().contacts.map(c => ({ ...c, disclosure: { character: "", begin: "", end: "" } })) });
   fixture.setSnapshot({ ...fixture.getSnapshot(), messageIds: ["m1", "m2"] });
   expect((await fixture.runtime.process({ ...event, id: "m2", text: "butler again" })).status).toBe("submitted");
-  expect(fixture.acks[1]).toEqual([{ kind: "text", text: "…" }]);
+  expect(fixture.acks[1]).toEqual([{ kind: "text", text: "👀" }]);
 });
 test("an unproven ack wedges the run; a proven failure only skips it", async () => {
   const fixture = setup();

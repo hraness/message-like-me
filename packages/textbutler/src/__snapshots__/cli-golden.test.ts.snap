@@ -44,6 +44,7 @@ Chats and contacts
 
 AI replies
   providers gateway-key      Save a Vercel AI Gateway key (replies use Qwen)
+  providers local            Reply with a model on your own local server
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is ready
 
@@ -225,19 +226,23 @@ iMessage access" in docs/textbutler/getting-started.md. Then run
 textbutler doctor to check both."
 ,
   "providers": 
-"Usage: textbutler providers gateway-key | list | check <account>
+"Usage: textbutler providers gateway-key | local | list | check <account>
 
 Set up AI replies, show your AI accounts, or check that one is ready.
 
 Commands
   providers gateway-key      Save a Vercel AI Gateway key from a pipe
+  providers local [model]    Reply through a local server instead
+                             (--base-url http://127.0.0.1:<port>/v1)
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is signed in and ready
 
 Automatic replies use Qwen 3.5 Flash through your own Vercel AI Gateway key,
 capped at $1 a day. Pipe the key in so it never lands in your shell history,
 then restart the background service. Subscription accounts (native-claude-code,
-native-codex and native-devin) connect through xcb.
+native-codex and native-devin) connect through xcb. providers local switches
+replies to an OpenAI-compatible server on this Mac (Ollama by default);
+stop the service first. A saved gateway key still powers web search.
 
 Example
   pbpaste | textbutler providers gateway-key"

@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_GATEWAY_CREDENTIAL, defaultHabitatConfig, effectiveHabitat, gatewayKeyPresent, parseGatewayKey, saveGatewayKey } from "./default-reply-model.ts";
+import { DEFAULT_GATEWAY_CREDENTIAL, DEFAULT_LOCAL_BASE_URL, DEFAULT_LOCAL_MODEL, defaultHabitatConfig, defaultLocalModelServed, effectiveHabitat, gatewayKeyPresent, localSearchCredential, parseGatewayKey, saveGatewayKey } from "./default-reply-model.ts";
 import { parseFastDriverConfig } from "./fast-driver.ts";
 
 const roots: string[] = [];
@@ -37,13 +37,47 @@ test("a saved key is owner-only, replaces an earlier key, and bad keys are refus
 
 test("an explicit host.json habitat wins; otherwise the default runs only with a saved key in an admitted build", async () => {
   const root = await dataDir();
+  const off = async () => false;
   const explicit = { ...defaultHabitatConfig(), driver: { kind: "local" as const, model: "synthetic", baseUrl: "http://127.0.0.1:1234/v1" } };
-  expect(await effectiveHabitat({ habitat: explicit }, root, false)).toEqual({ state: "configured", config: explicit });
-  expect(await effectiveHabitat({ habitat: { ...explicit, enabled: false } }, root, true)).toEqual({ state: "disabled" });
-  expect(await effectiveHabitat({}, root, true)).toEqual({ state: "no-key" });
+  expect(await effectiveHabitat({ habitat: explicit }, root, false, off)).toEqual({ state: "configured", config: explicit });
+  expect(await effectiveHabitat({ habitat: { ...explicit, enabled: false } }, root, true, off)).toEqual({ state: "disabled" });
+  expect(await effectiveHabitat({}, root, true, off)).toEqual({ state: "no-key" });
   await saveGatewayKey(root, "vck_key");
-  expect(await effectiveHabitat({}, root, true)).toEqual({ state: "default", config: defaultHabitatConfig() });
-  expect(await effectiveHabitat({}, root, false)).toEqual({ state: "unadmitted" });
+  expect(await effectiveHabitat({}, root, true, off)).toEqual({ state: "default", config: defaultHabitatConfig() });
+  expect(await effectiveHabitat({}, root, false, off)).toEqual({ state: "unadmitted" });
   // A key never overrides an owner's explicit choice to turn the writer off.
-  expect(await effectiveHabitat({ habitat: { ...explicit, enabled: false } }, root, true)).toEqual({ state: "disabled" });
+  expect(await effectiveHabitat({ habitat: { ...explicit, enabled: false } }, root, true, off)).toEqual({ state: "disabled" });
+});
+
+test("with no gateway key, a loopback server already serving the pinned model becomes the default", async () => {
+  const root = await dataDir();
+  const on = async () => true;
+  expect(await effectiveHabitat({}, root, true, on)).toEqual({ state: "default", config: { enabled: true, driver: { kind: "local", model: DEFAULT_LOCAL_MODEL, baseUrl: DEFAULT_LOCAL_BASE_URL }, evolutionModel: null, debounceMs: 1500 } });
+  // An unadmitted build stays silent even when the model is right there.
+  expect(await effectiveHabitat({}, root, false, on)).toEqual({ state: "unadmitted" });
+  // A saved key still wins: the gateway default keeps replies and search together.
+  await saveGatewayKey(root, "vck_key");
+  expect(await effectiveHabitat({}, root, true, on)).toEqual({ state: "default", config: defaultHabitatConfig() });
+});
+
+test("the local default reuses an existing gateway credential for web search", async () => {
+  const root = await dataDir();
+  await mkdir(join(root, "state", "provider-credentials"), { mode: 0o700 });
+  await writeFile(join(root, "state", "provider-credentials", "habitat-gateway"), "vck_search\n", { mode: 0o600 });
+  const selected = await effectiveHabitat({}, root, true, async () => true);
+  if (selected.state !== "default") throw Error("unreachable");
+  expect(selected.config.driver).toEqual({ kind: "local", model: DEFAULT_LOCAL_MODEL, baseUrl: DEFAULT_LOCAL_BASE_URL, searchCredentialFile: "habitat-gateway" });
+  // A world-readable credential is not borrowed.
+  await chmod(join(root, "state", "provider-credentials", "habitat-gateway"), 0o644);
+  expect(await localSearchCredential(root)).toBeUndefined();
+});
+
+test("the local-model probe only accepts a served pinned model over loopback", async () => {
+  const list = (ids: string[]) => new Response(JSON.stringify({ object: "list", data: ids.map(id => ({ id, object: "model" })) }), { status: 200 });
+  expect(await defaultLocalModelServed(async () => list([DEFAULT_LOCAL_MODEL]))).toBe(true);
+  expect(await defaultLocalModelServed(async () => list(["other:model"]))).toBe(false);
+  expect(await defaultLocalModelServed(async () => list([]))).toBe(false);
+  expect(await defaultLocalModelServed(async () => new Response("nope", { status: 503 }))).toBe(false);
+  expect(await defaultLocalModelServed(async () => new Response("{", { status: 200 }))).toBe(false);
+  expect(await defaultLocalModelServed(async () => { throw Error("connection refused"); })).toBe(false);
 });

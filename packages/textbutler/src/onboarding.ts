@@ -87,7 +87,7 @@ export async function readReadiness(dataDir: string): Promise<Readiness> {
           : xcbAccounts.length
             ? { id: "agent", title: "AI replies", status: "blocked", detail: "Your xcb accounts are set up. Start the background service, then check an account. It must be signed in with model access before Textbutler can suggest replies.", command: `textbutler providers check ${nextAccount}` }
           : { id: "agent", title: "AI replies", status: "action-needed",
-            detail: `Add a ${DEFAULT_REPLY_MODEL.via} key and replies use ${DEFAULT_REPLY_MODEL.label}, capped at $1 a day. You can also connect a Claude, Codex, or Devin subscription through xcb. Without either you can still review your inbox and send your own replies.`,
+            detail: `Add a ${DEFAULT_REPLY_MODEL.via} key and replies use ${DEFAULT_REPLY_MODEL.label}, capped at $1 a day — or run a local model on this Mac (textbutler providers local; Ollama serving the pinned model is detected automatically). You can also connect a Claude, Codex, or Devin subscription through xcb. Without any you can still review your inbox and send your own replies.`,
             command: "pbpaste | textbutler providers gateway-key" });
   const automaticReplies = snapshot?.automation?.state ?? "unavailable";
   const paused = automaticReplies !== "running" && snapshot?.settings.paused === true;

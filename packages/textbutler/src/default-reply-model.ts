@@ -9,6 +9,11 @@ import type { HabitatHostConfig } from "./host-config.ts";
  * explicit `habitat` block in host.json always takes precedence. */
 export const DEFAULT_GATEWAY_CREDENTIAL = "vercel-ai-gateway";
 export const DEFAULT_REPLY_MODEL = Object.freeze({ id: "alibaba/qwen3.5-flash", label: "Qwen 3.5 Flash", via: "Vercel AI Gateway" });
+/** The out-of-box local route: an OpenAI-compatible server on loopback that
+ * already serves the pinned model — no key needed. Detection is one bounded
+ * probe at daemon start; it never installs or downloads anything. */
+export const DEFAULT_LOCAL_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
+export const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
 const MAX_KEY_BYTES = 4096;
 
 export function defaultHabitatConfig(): HabitatHostConfig {
@@ -20,6 +25,29 @@ export function defaultHabitatConfig(): HabitatHostConfig {
   });
 }
 
+function defaultLocalHabitatConfig(searchCredentialFile: string | undefined): HabitatHostConfig {
+  return Object.freeze({
+    enabled: true,
+    driver: Object.freeze({ kind: "local" as const, model: DEFAULT_LOCAL_MODEL, baseUrl: DEFAULT_LOCAL_BASE_URL,
+      ...(searchCredentialFile === undefined ? {} : { searchCredentialFile }) }),
+    evolutionModel: null,
+    debounceMs: 1500,
+  });
+}
+
+/** One bounded probe: the pinned model must appear in the server's own model
+ * list. Any refusal, redirect, timeout or unexpected body leaves it off. */
+export async function defaultLocalModelServed(fetcher: (url: string, init?: RequestInit) => Promise<Response> = fetch): Promise<boolean> {
+  try {
+    const response = await fetcher(`${DEFAULT_LOCAL_BASE_URL}/models`, { signal: AbortSignal.timeout(1500), redirect: "error" });
+    const text = await response.text();
+    if (!response.ok || Buffer.byteLength(text) > 262_144) return false;
+    const body: unknown = JSON.parse(text);
+    const data = typeof body === "object" && body !== null && "data" in body ? (body as { data: unknown }).data : undefined;
+    return Array.isArray(data) && data.some(entry => typeof entry === "object" && entry !== null && (entry as { id?: unknown }).id === DEFAULT_LOCAL_MODEL);
+  } catch { return false; }
+}
+
 const credentialDirectory = (dataDir: string): string => join(dataDir, "state", "provider-credentials");
 
 /** True only for an owner-only regular key file in an owner-only directory. */
@@ -29,6 +57,19 @@ export async function gatewayKeyPresent(dataDir: string): Promise<boolean> {
     await assertOwnedPath(join(credentialDirectory(dataDir), DEFAULT_GATEWAY_CREDENTIAL), { kind: "file", exactMode: 0o600, links: 1 });
     return true;
   } catch { return false; }
+}
+
+/** An existing gateway credential a local reply driver can reuse for web
+ * search: the explicit "habitat-gateway" file first, then the default name. */
+export async function localSearchCredential(dataDir: string): Promise<string | undefined> {
+  try {
+    await assertOwnedPath(credentialDirectory(dataDir), { kind: "directory", canonical: true, ownerOnly: true });
+    for (const name of ["habitat-gateway", DEFAULT_GATEWAY_CREDENTIAL]) {
+      try { await assertOwnedPath(join(credentialDirectory(dataDir), name), { kind: "file", exactMode: 0o600, links: 1 }); return name; }
+      catch { /* try the next credential name */ }
+    }
+  } catch { /* no credential directory */ }
+  return undefined;
 }
 
 /** A gateway key is one printable token; anything else is refused before it is stored. */
@@ -53,10 +94,12 @@ export type EffectiveHabitat =
   | Readonly<{ state: "disabled" | "no-key" | "unadmitted" }>;
 
 /** Which reply writer the daemon runs: an explicit host.json block as written,
- * otherwise the default Qwen route once its key is saved. The default never
+ * otherwise the default Qwen route once its key is saved, otherwise the pinned
+ * local model when a loopback server already serves it. The default never
  * blocks startup: an unadmitted source build simply runs without it. */
-export async function effectiveHabitat(host: Readonly<{ habitat?: HabitatHostConfig }>, dataDir: string, admitted: boolean): Promise<EffectiveHabitat> {
+export async function effectiveHabitat(host: Readonly<{ habitat?: HabitatHostConfig }>, dataDir: string, admitted: boolean, probeLocal: () => Promise<boolean> = defaultLocalModelServed): Promise<EffectiveHabitat> {
   if (host.habitat !== undefined) return host.habitat.enabled ? { state: "configured", config: host.habitat } : { state: "disabled" };
-  if (!await gatewayKeyPresent(dataDir)) return { state: "no-key" };
-  return admitted ? { state: "default", config: defaultHabitatConfig() } : { state: "unadmitted" };
+  if (await gatewayKeyPresent(dataDir)) return admitted ? { state: "default", config: defaultHabitatConfig() } : { state: "unadmitted" };
+  if (await probeLocal()) return admitted ? { state: "default", config: defaultLocalHabitatConfig(await localSearchCredential(dataDir)) } : { state: "unadmitted" };
+  return { state: "no-key" };
 }

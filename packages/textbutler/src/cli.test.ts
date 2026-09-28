@@ -112,4 +112,23 @@ describe("default reply model setup", () => {
     await expect(runTextbutlerCli(["providers", "gateway-key", "--data-dir", dataDir], { write: () => {} }, { readSecret: () => "two words" })).rejects.toThrow(CliUsageError);
     expect(await readFile(path, "utf8")).toBe("vck_synthetic-key\n");
   });
+
+  test("providers local writes a validated loopback driver into host.json and borrows a search key", async () => {
+    const dataDir = await root();
+    const { readFile, mkdir, writeFile } = await import("node:fs/promises");
+    const hostPath = join(dataDir, "state", "host.json");
+    const run = async (argv: string[]) => { const lines: string[] = []; const code = await runTextbutlerCli([...argv, "--data-dir", dataDir, "--json"], { write: text => lines.push(text) }); return { code, json: () => JSON.parse(lines.join("")) }; };
+    // Default model and Ollama address; the pinned local default is the tag.
+    expect((await run(["providers", "local"])).code).toBe(0);
+    expect(JSON.parse(await readFile(hostPath, "utf8")).habitat.driver).toEqual({ kind: "local", model: "qwen3:4b-instruct-2507-q4_K_M", baseUrl: "http://127.0.0.1:11434/v1" });
+    // A custom model and port, plus an existing gateway credential reused for search.
+    await mkdir(join(dataDir, "state", "provider-credentials"), { mode: 0o700 });
+    await writeFile(join(dataDir, "state", "provider-credentials", "habitat-gateway"), "vck_search\n", { mode: 0o600 });
+    expect((await run(["providers", "local", "qwen-test:1b", "--base-url", "http://127.0.0.1:9999/v1"])).json()).toMatchObject({ ok: true, status: "saved", model: "qwen-test:1b" });
+    expect(JSON.parse(await readFile(hostPath, "utf8")).habitat.driver).toEqual({ kind: "local", model: "qwen-test:1b", baseUrl: "http://127.0.0.1:9999/v1", searchCredentialFile: "habitat-gateway" });
+    // Non-loopback and malformed forms are refused before any write.
+    await expect(runTextbutlerCli(["providers", "local", "m", "--base-url", "http://10.0.0.1:9/v1", "--data-dir", dataDir], { write: () => {} })).rejects.toThrow(CliUsageError);
+    await expect(runTextbutlerCli(["providers", "local", "a", "b", "--data-dir", dataDir], { write: () => {} })).rejects.toThrow(CliUsageError);
+    expect(JSON.parse(await readFile(hostPath, "utf8")).habitat.driver.model).toBe("qwen-test:1b");
+  });
 });

@@ -102,11 +102,12 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     if (selected.state === "configured" && !admitted) throw Error("Habitat execution requires a reviewed, admitted Textbutler bundle");
     if (selected.state === "configured" || selected.state === "default") {
       const config = selected.config;
-      const driver = createFastDriver(config.driver, { journal: service.runJournal(), ...(config.driver.kind === "gateway" ? { credential: async () => {
+      const searchCredentialFile = config.driver.kind === "gateway" ? config.driver.credentialFile : config.driver.searchCredentialFile;
+      const driver = createFastDriver(config.driver, { journal: service.runJournal(), ...(searchCredentialFile === undefined ? {} : { credential: async () => {
         const directory = join(dataDir, "state", "provider-credentials");
         await assertOwnedPath(directory, { kind: "directory", canonical: true, ownerOnly: true });
-        return new TextDecoder("utf-8", { fatal: true }).decode(await readOwnedFileStable(join(directory, (config.driver as Extract<typeof config.driver, { kind: "gateway" }>).credentialFile), 8192)).trim();
-      } } : {}) });
+        return new TextDecoder("utf-8", { fatal: true }).decode(await readOwnedFileStable(join(directory, searchCredentialFile), 8192)).trim();
+      } }) });
       habitat = { config, driver };
       service.setHabitatConfig(config);
     }

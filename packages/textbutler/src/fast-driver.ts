@@ -4,9 +4,10 @@ import type { RunJournal } from "./journal.ts";
 import { parseXcbJson } from "./xcb-client.ts";
 
 const gatewayConfig = z.strictObject({ kind: z.literal("gateway"), model: z.enum(["alibaba/qwen3.5-flash", "alibaba/qwen3.7-flash"]), credentialFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/u), dailyBudgetUsd: z.number().min(0.01).max(10) });
+const credentialFile = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/u);
 const localConfig = z.strictObject({ kind: z.literal("local"), model: z.string().min(1).max(160).regex(/^[A-Za-z0-9][A-Za-z0-9/:._-]*$/u), baseUrl: z.string().refine(value => {
   try { const url = new URL(value); return url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname) && !!url.port && url.pathname === "/v1" && !url.username && !url.password && !url.search && !url.hash && url.href === value; } catch { return false; }
-}) });
+}), searchCredentialFile: credentialFile.optional(), searchDailyBudgetUsd: z.number().min(0.01).max(10).optional() });
 const configuration = z.discriminatedUnion("kind", [gatewayConfig, localConfig]);
 export type FastDriverConfig = z.infer<typeof configuration>;
 export const parseFastDriverConfig = (value: unknown): FastDriverConfig => configuration.parse(value);
@@ -97,12 +98,17 @@ export function createFastDriver(input: FastDriverConfig, ports: { journal: Pick
       return { id: `textbutler-${config.kind}`, capabilities: { effects: ["agent", "classifier"] }, cacheable: false, retryable: false,
         execute: async (request, signal) => (await run(request, signal)).output, executeEffect: run };
     },
+    /** True when a public web search path exists: the gateway driver always,
+     * a local driver when it names a gateway search credential. */
+    canSearch: config.kind === "gateway" || config.searchCredentialFile !== undefined,
     async search(operationId: string, query: string, signal: AbortSignal): Promise<JsonValue> {
-      if (config.kind !== "gateway") throw Error("Exa requires an explicitly configured Gateway account");
+      if (config.kind !== "gateway" && config.searchCredentialFile === undefined) throw Error("Exa requires an explicitly configured Gateway account");
       const credential = await ports.credential?.();
       if (!credential || credential.length < 16 || credential.length > 8192 || /[\s\u0000-\u001f]/u.test(credential)) throw Error("Search credential is unavailable");
       const { searchGateway } = await import("./gateway-search.ts");
-      return searchGateway({ operationId, query, credential, model: config.model, dailyBudgetUsd: config.dailyBudgetUsd, journal: ports.journal, signal, now, fetch: fetcher });
+      // Search always runs a gateway-served model: a local reply model's tag
+      // means nothing to the gateway, so the default flash model does search.
+      return searchGateway({ operationId, query, credential, model: config.kind === "gateway" ? config.model : "alibaba/qwen3.5-flash", dailyBudgetUsd: config.kind === "gateway" ? config.dailyBudgetUsd : config.searchDailyBudgetUsd ?? 1, journal: ports.journal, signal, now, fetch: fetcher });
     },
   };
 }
