@@ -4,6 +4,19 @@ Each version's section is copied onto its GitHub Release page: a summary
 paragraph, then one bullet per change. Write the section in the version bump
 pull request.
 
+## 0.8.22 - 2026-09-28
+
+The Textbutler menu companion is rebuilt around one status line and ten top-level rows, the terminal gains a guided macOS access step, and the `messagelikeme` history CLI drops its banner and names the app in access errors.
+
+- Bind legacy installation to the exact public `@hraness/message-like-me@0.8.22` npm package, with the same reviewed bytes mirrored in the immutable GitHub Release. This does not install the Textbutler menu companion or enable automatic replies.
+- Rebuild the menu companion around a status line and ten top-level rows: failed actions surface as a ⚠︎ row that clears, Quit actually ends the menu process, and the menu can launch through the locally built TextButler.app (behind `HRANESS_LOCAL_APP`).
+- Add a guided "Give Textbutler access" step to the terminal walkthrough and detect existing Ghostget and Bun installs in the connect step, using the shared desktop-foundation 0.8 permission copy, audience detection, and symbols.
+- Add owner-set contact labels: `textbutler contacts label <contact> <name>` renames a chat for commands instead of a raw number; labels are display metadata only and never touch routing, grants, or reply settings.
+- Adopt support-foundation 0.6.0: agent support verbs move to `textbutler help advanced` and every root help keeps one support line.
+- Reply loop: the acknowledgement now overlaps composition, polls yield to sends, due runs start at debounce expiry, drain replays deduplicate, and self-chat acks correlate by relatedMessageId; Ghostget pins 0.18.43 for the native iMessage setup.
+- `messagelikeme` CLI: root help no longer prints the banner, and Messages/Contacts permission failures name the app and deep-link the Full Disk Access pane.
+- Refresh the Textbutler site: quiet landing with real terminal proof, design-kit v0.23.0, and copy checked against source.
+
 ## 0.8.21 - 2026-09-24
 
 A LaunchAgent service installed by 0.8.19 now verifies and uninstalls under this release. In 0.8.20 it failed verification, because 0.8.19 had changed the service template without changing the receipt schema.

@@ -14,7 +14,7 @@
   },
   "sources": {
     "bun.lock": "fc621e46e59a6ccd0b34c619c0d02888d347a78d3d2b1555fd53bc108dbc03f4",
-    "package.json": "c032f1bc1cdfdb9bb42c1d68c3af09e28c1b1d93cf7573e4be8488c867c2bcb7",
+    "package.json": "aaeb707f644466ee2fa48949dd85a538c405094a3a19f7b1354c73f9d7a447a0",
     "packages/control/src/index.ts": "4947b0af05a5f7129a55187b4c8b49d939712b24fc4c4c2b2c2245d62c768c90",
     "packages/textbutler/src/cli.ts": "41c9afdce924c973c232f1c95981b152dd83c271d5fdc9afa7bc16394ee031f6",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
@@ -59,6 +59,6 @@
   },
   "validation": {
     "command": "bun run check",
-    "receiptSha256": "e26f339d6cf92ae4e11fbc44684c53e2970206a945e42384535640cd71dc9a04"
+    "receiptSha256": "c946f73f8b48f87223b9f1a168d3d217dd08d7d8bd6cc86f73c870023ad8d56b"
   }
 }
