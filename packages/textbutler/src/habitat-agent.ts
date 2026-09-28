@@ -40,6 +40,8 @@ function salvageToolRequest(result: z.infer<typeof outputSchema>): z.infer<typeo
   }
   return { ...result, actions, tool };
 }
+const KEYWORD_RULE = "invocation=keyword means the latest message deliberately addressed the Butler by its keyword, which is an explicit request even when it is a greeting or small talk: set respond=true with confidence at least 0.85 and reply briefly.";
+const INSIST_RULE = "Your previous answer stayed silent, but this message is a deliberate keyword invocation that is waiting on you: reply now.";
 const outputContract = { respond: "boolean", confidence: "number 0..1; below 0.85 stays silent", reason: "requested|helpful|human_active|not_needed|uncertain", summary: "brief intended purpose of this response", actions: "0..7 action objects", tool: "null, {kind:web-search|meme-search|meme-image|memory-search,query:string}, {kind:javascript,code:string,input:JSON}, {kind:repo-sync,url:string}, {kind:repo-read,repo:string,path:string}, or {kind:repo-search,repo:string,query:string}" };
 const actionContract = [
   { kind: "text", text: "The response" }, { kind: "attachment", file: "an existing outbox path", name: "file.png", mimeType: "image/png" },
@@ -131,7 +133,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     if (!scope || scope.contactId !== request.contact.id || contacts.get(request.contact.id)?.generation !== scope.generation) throw Error("Habitat reply was invalidated");
     scope.signal.throwIfAborted();
   }
-  async function answer(request: AgentRequest) {
+  async function answer(request: AgentRequest, insist = false) {
     request.signal.throwIfAborted(); shutdown.signal.throwIfAborted();
     let scope = runs.get(request.runId);
     if (!scope) {
@@ -187,10 +189,10 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         ...(plan.webSearch && ports.driver.config.kind === "gateway" && !tools.some(tool => tool.kind === "web-search") ? ["web-search"] : []),
         ...(plan.memeSearch ? ["meme-search", ...(admittedMemes.size && capabilities.includes("attachment") ? ["meme-image"] : [])] : []),
       ];
-      const context = { guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), capabilities: [...capabilities], files, repos, results, outputContract,
+      const context = { guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), invocation: request.invocation ?? "inferred", capabilities: [...capabilities], files, repos, results, outputContract,
         allowedActions: actionContract.filter(action => capabilities.includes(action.kind)),
         tools: availableTools,
-        rules: `Return strict JSON with all output fields. If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers or copied private messages.` };
+        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers or copied private messages.` };
       fitMemory(context, plan, 32_768);
       memory.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
       const run = await executeHabitatProgram({ phase: "respond", plan, context: context as JsonValue, executor: ports.driver.executor(`${request.runId}-driver-${step}`), signal });
@@ -254,7 +256,17 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
   const agent: ButlerAgent = {
     async qualified() { return !shutdown.signal.aborted; },
     async classify(request) { const result = await answer(request); assertRunCurrent(request); return { respond: result.respond, confidence: result.confidence, reason: result.reason }; },
-    async compose(request) { const result = await answer(request); assertRunCurrent(request); if (!result.respond || result.confidence < 0.85) throw new NoReplyNeeded(); return { summary: result.summary, actions: result.actions }; },
+    async compose(request) {
+      let result = await answer(request); assertRunCurrent(request);
+      // A keyword invocation is an explicit request, and its disclosed ack
+      // already promised a reply: a silent answer gets one insistent retry.
+      if ((!result.respond || result.confidence < 0.85) && request.invocation === "keyword") {
+        cached.delete(request.runId);
+        result = await answer(request, true); assertRunCurrent(request);
+      }
+      if (!result.respond || result.confidence < 0.85) throw new NoReplyNeeded();
+      return { summary: result.summary, actions: result.actions };
+    },
   };
   async function evolve(contact: ContactSettings, signal: AbortSignal) {
     if (!ports.evolution || !ports.active(contact)) return;

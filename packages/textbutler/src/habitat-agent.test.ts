@@ -277,6 +277,27 @@ test("the decision contract tells the model shares without an explicit ask stay 
   expect(f.calls()).toBe(1);
 });
 
+test("a keyword invocation that the model leaves silent gets one insistent retry; an inferred one stays silent", async () => {
+  const silent = { respond: false, confidence: 0.9, reason: "not_needed", summary: "Small talk", actions: [], tool: null };
+  const bodies: string[] = [];
+  const keyword = await fixture((body: string, call: number) => { bodies.push(body); return call === 1 ? silent : replyOutput; });
+  const result = await keyword.habitat.agent.compose({ ...keyword.request, invocation: "keyword" }) as { actions: unknown[] };
+  expect(result.actions.length).toBeGreaterThan(0);
+  expect(keyword.calls()).toBe(2);
+  // The model is told the message was a deliberate keyword invocation, and the retry insists.
+  expect(bodies[0]).toContain("invocation=keyword means the latest message deliberately addressed the Butler");
+  expect(bodies[0]).not.toContain("Your previous answer stayed silent");
+  expect(bodies[1]).toContain("Your previous answer stayed silent");
+  // A model that still declines stays silent after the single retry.
+  const stubborn = await fixture(silent);
+  await expect(stubborn.habitat.agent.compose({ ...stubborn.request, invocation: "keyword" })).rejects.toThrow(NoReplyNeeded);
+  expect(stubborn.calls()).toBe(2);
+  // Smart-mode admissions keep the model's silence with no retry.
+  const inferred = await fixture(silent);
+  await expect(inferred.habitat.agent.compose({ ...inferred.request, invocation: "inferred" })).rejects.toThrow(NoReplyNeeded);
+  expect(inferred.calls()).toBe(1);
+});
+
 test("driver outputs that omit the tool field parse as no tool", async () => {
   const omit = { respond: false, confidence: 0.95, reason: "not_needed", summary: "Nothing needed", actions: [] };
   const silent = await fixture(omit);
