@@ -18,6 +18,7 @@ import type { ClaudeApiAdapterOptions } from "@hraness/agentmixer";
 import { createSupervisedGhostgetAutomation } from "./ghostget-automation-process.ts";
 import { createAutomationOwnerPort } from "./automation-owner.ts";
 import { createDaemonReplyLoop } from "./reply-loop.ts";
+import { createMessagesActivity, type MessagesActivity } from "./messages-activity.ts";
 import { createFastDriver } from "./fast-driver.ts";
 import { bundledXcbIntegrationAdmission, validXcbIntegrationAdmission } from "./xcb-integration.ts";
 
@@ -48,6 +49,7 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
   let extensions: LoadedExtensions | undefined;
   let messaging: Awaited<ReturnType<typeof createSupervisedGhostgetAutomation>> | undefined;
   let replyLoop: Awaited<ReturnType<typeof createDaemonReplyLoop>> | undefined;
+  let activity: MessagesActivity | undefined;
   let nativeSubscriptions: NativeSubscriptionHost | undefined;
   const server = createServer();
   const transport = attachControlSocket(server, {
@@ -107,7 +109,8 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
       const supervised = messaging;
       // Recovery state rides the existing messaging detail so status surfaces
       // distinguish "recovering" from "running" and "needs attention".
-      replyLoop = await createDaemonReplyLoop({ service, client: supervised.client, hooks: extensions.hooks,
+      activity = createMessagesActivity();
+      replyLoop = await createDaemonReplyLoop({ service, client: supervised.client, hooks: extensions.hooks, activity,
         ...(habitat === undefined ? {} : { habitat }), onStatus: value => service!.setRuntimeStatus(supervised.recovery() ?? value) });
     }
     else if (messagingUnavailable) service.setRuntimeStatus({ state: "unavailable", detail: "Ghostget automation setup or previous process custody needs owner attention. No automatic replies are running." });
@@ -115,7 +118,7 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     const failures: unknown[] = [error];
     for (const cleanup of [
       async () => { await transport.close(); },
-      async () => replyLoop?.close(), async () => messaging?.close(), async () => service?.close(),
+      async () => replyLoop?.close(), async () => activity?.close(), async () => messaging?.close(), async () => service?.close(),
       async () => { if (service === undefined) await nativeSubscriptions?.close(); }, async () => custody.close(),
     ]) { try { await cleanup(); } catch (failure) { failures.push(failure); } }
     if (failures.length > 1) throw new AggregateError(failures, "Daemon startup and cleanup require attention");
@@ -127,7 +130,7 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
       const failures: unknown[] = [];
       for (const cleanup of [
         async () => { await transport.close(); },
-        async () => replyLoop?.close(), async () => messaging?.close(), async () => service!.close(), async () => custody.close(),
+        async () => replyLoop?.close(), async () => activity?.close(), async () => messaging?.close(), async () => service!.close(), async () => custody.close(),
       ]) { try { await cleanup(); } catch (error) { failures.push(error); } }
       if (failures.length) throw new AggregateError(failures, "Daemon cleanup requires attention");
     })();
