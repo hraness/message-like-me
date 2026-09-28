@@ -71,7 +71,7 @@ export default function CompareGhostReplyPage() {
             GhostReply and Textbutler both answer the iMessage conversations you choose on a Mac.
             Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick Textbutler
             if you want replies marked as an assistant’s, WhatsApp and Beeper as well as iMessage,
-            and notes on each person you can edit, and you are comfortable running it from source.
+            and notes on each person you can edit, and you are comfortable building it from source.
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>

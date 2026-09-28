@@ -136,7 +136,7 @@ answers iMessages in your texting style. [OpenClaw](https://openclaw.ai) is an
 open-source assistant you message, and it can run commands on your computer.
 Textbutler answers only the contacts you turn on, marks its replies by default,
 keeps notes on each person in files you can edit, and its model can't run
-commands. See
+commands on your Mac. See
 [Textbutler compared with GhostReply](https://textbutler.app/compare/ghostreply).
 
 ## Legacy Message Like Me history tools

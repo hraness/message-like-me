@@ -9,6 +9,7 @@ import About from '../app/about/page.tsx';
 import CompareGhostReplyPage from '../app/compare/ghostreply/page.tsx';
 import Home from '../app/page.tsx';
 import { SITE_TITLE } from '../app/_lib/site.ts';
+import { GET as getLlmsText } from '../app/llms.txt/route.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 const COMPARE_LINK = 'href="/compare/ghostreply"';
@@ -59,6 +60,18 @@ test('describes the default AI route on the comparison page', () => {
   expect(compare).toContain('Qwen 3.5 Flash through your own Vercel AI Gateway');
   expect(compare).not.toContain('fast-reply mode');
   expect(compare).toContain('Pick GhostReply for a finished $4.99 app whose replies read as yours.');
+  expect(compare).toContain('comfortable building it from source');
+});
+
+test('describes the local model route the same way in llms.txt', async () => {
+  const llms = await getLlmsText().text();
+  expect(llms).toContain('is detected automatically');
+  expect(llms).not.toContain('A habitat block in the host.json settings file');
+});
+
+test('scopes the no-commands claim to the Mac in the home comparison answer', () => {
+  const entry = faqEntries(renderToStaticMarkup(<Home />)).find(({ name }) => name.startsWith('How is it different'));
+  expect(entry?.text).toContain('its model can’t run commands on your Mac.');
 });
 
 test('publishes a free offer and the hub organization in site JSON-LD', () => {

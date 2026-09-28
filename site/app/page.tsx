@@ -53,7 +53,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
-    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. Textbutler answers only the contacts you turn on, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands. If you only want suggestions, the built-in features are simpler.',
+    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. Textbutler answers only the contacts you turn on, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands on your Mac. If you only want suggestions, the built-in features are simpler.',
     link: { href: '/compare/ghostreply', label: 'Textbutler compared with GhostReply' },
   },
   {
