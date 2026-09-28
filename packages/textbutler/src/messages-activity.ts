@@ -11,12 +11,12 @@ export type MessagesActivity = Readonly<{
   close(): void;
 }>;
 
-type Watch = (path: string, listener: () => void) => FSWatcher;
+type Watch = (path: string, listener: (event: string) => void) => FSWatcher;
 const FILES = ["chat.db-wal", "chat.db"] as const;
 
 export function createMessagesActivity(options: { directory?: string; watch?: Watch } = {}): MessagesActivity {
   const directory = options.directory ?? join(homedir(), "Library", "Messages");
-  const watchFile: Watch = options.watch ?? ((path, listener) => watch(path, { persistent: false }, listener));
+  const watchFile: Watch = options.watch ?? ((path, listener) => watch(path, { persistent: false }, event => listener(event)));
   const watchers = new Map<string, { watcher: FSWatcher; identity: string }>();
   const waiters = new Set<(changed: boolean) => void>();
   let dirty = false, closed = false;
@@ -31,8 +31,9 @@ export function createMessagesActivity(options: { directory?: string; watch?: Wa
     watchers.delete(name);
     try { entry.watcher.close(); } catch { /* Already closed. */ }
   };
-  // SQLite may replace or truncate the WAL; re-arm whenever a file's identity
-  // changes so a recreated file is watched again.
+  // SQLite may replace or truncate the WAL. A watcher reporting "rename" (the
+  // file was deleted or moved) is dropped, and any identity change re-arms,
+  // so a recreated file is watched again even when its inode number is reused.
   const arm = (): void => {
     if (closed) return;
     for (const name of FILES) {
@@ -43,7 +44,7 @@ export function createMessagesActivity(options: { directory?: string; watch?: Wa
       if (watchers.get(name)?.identity === identity) continue;
       drop(name);
       try {
-        const watcher = watchFile(path, fire);
+        const watcher = watchFile(path, event => { if (event === "rename") drop(name); fire(); });
         watcher.on("error", () => { drop(name); fire(); });
         watchers.set(name, { watcher, identity });
       } catch { /* Unwatchable (e.g. no access): the heartbeat still polls. */ }
