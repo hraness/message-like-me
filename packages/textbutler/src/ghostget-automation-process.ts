@@ -16,6 +16,7 @@ const MAX_FRAME = 24 * 1024 * 1024;
 const MAX_RESPONSE = 32 * 1024 * 1024;
 const MAX_ERROR = 65536;
 const CLEANUP_GRACE = 36000;
+const GROUP_DRAIN_MS = 3_000;
 const REQUEST_WATCHDOG_MS = 180_000;
 const PROBE_WATCHDOG_MS = 30_000;
 const INVOKE_HARD_CAP_MS = 15 * 60_000;
@@ -215,8 +216,18 @@ export async function createGhostgetAutomationProcess(input: GhostgetAutomationP
     child.once("error", stop);
     child.once("close", (code, signal) => {
       exited = true; if (forceTimer) clearTimeout(forceTimer); if (finalTimer) clearTimeout(finalTimer); resolveClosed?.();
-      if (code !== 0 || signal !== null || !cleanAcknowledgment || pending.size || buffered || groupExists()) stop();
-      if (fault) reject(new Error("Ghostget automation cleanup needs owner recovery")); else resolve();
+      const settle = () => { if (fault) reject(new Error("Ghostget automation cleanup needs owner recovery")); else resolve(); };
+      if (code !== 0 || signal !== null || !cleanAcknowledgment || pending.size || buffered) { stop(); settle(); return; }
+      // A clean leader can exit a moment before its same-group helpers notice
+      // their closed pipes. Custody still requires proof the group is gone:
+      // wait a bounded moment for it to drain, and only then fault.
+      const drainBy = Date.now() + GROUP_DRAIN_MS;
+      const drained = () => {
+        if (fault || !groupExists()) { settle(); return; }
+        if (Date.now() >= drainBy) { stop(); settle(); return; }
+        setTimeout(drained, 20);
+      };
+      drained();
     });
   });
   void settled.catch(() => undefined);
