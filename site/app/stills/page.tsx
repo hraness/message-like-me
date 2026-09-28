@@ -16,6 +16,7 @@ const SCENES: readonly Scene[] = [
   { id: 'ask-yourself', conversation: conversations.askYourself, screenHeight: 600 },
   { id: 'stays-out', conversation: conversations.staysOut, screenHeight: 540 },
   { id: 'boundaries', conversation: conversations.boundaries, screenHeight: 540 },
+  { id: 'whatsapp-reply', conversation: conversations.whatsappReply, screenHeight: 540 },
 ];
 
 // The site's gruvbox Paper values, fixed so a capture never depends on the viewer's theme.

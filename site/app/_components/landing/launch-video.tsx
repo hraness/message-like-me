@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import './launch-video.css';
+
 type Sources = Readonly<{ poster: string; film: string; loopWebm?: string; loopMp4?: string }>;
 
 /**
@@ -26,7 +28,7 @@ export function LaunchVideo({ sources, title }: Readonly<{ sources: Sources; tit
   return (
     <div className="tb-video" data-playing={playing ? 'true' : 'false'}>
       {playing ? (
-        <video className="tb-video__media" controls playsInline poster={sources.poster} preload="auto" ref={film} src={sources.film} />
+        <video aria-label={`Film: ${title}`} className="tb-video__media" controls playsInline poster={sources.poster} preload="auto" ref={film} src={sources.film} />
       ) : (
         <button aria-label={`Play the film: ${title}`} className="tb-video__cover" onClick={() => setPlaying(true)} type="button">
           {hasLoop && !reduced ? (

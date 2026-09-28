@@ -15,7 +15,7 @@ import { CopyButton } from './_components/landing/copy-button';
 import { DiagramFigure } from './_components/landing/diagram-figure';
 import { LaunchVideo } from './_components/landing/launch-video';
 import { PhoneSlot } from './_components/landing/phone-slot';
-import { DIAGRAMS, LAUNCH_ASSETS, publicAssetExists } from './_components/landing/public-assets';
+import { DIAGRAMS, LAUNCH_ASSETS, LAUNCH_FILM_SECONDS, launchFilmSources, publicAssetExists } from './_components/landing/public-assets';
 import './_components/landing/landing.css';
 import {
   askYourselfConversation,
@@ -33,6 +33,7 @@ import {
   type SupportChip,
 } from './_lib/landing';
 import {
+  absoluteUrl,
   AGENT_CLI_URL,
   AGENT_SETUP_PROMPT,
   ARCHITECTURE_URL,
@@ -52,11 +53,22 @@ import {
 } from './_lib/site';
 import { TERMINAL_FIRST_RUN } from './_lib/terminal';
 
-export const metadata = pageMetadata({
+const baseMetadata = pageMetadata({
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   path: '/',
 });
+
+// og:video points at the launch film only once the file is really there.
+export const metadata = publicAssetExists(LAUNCH_ASSETS.film)
+  ? {
+      ...baseMetadata,
+      openGraph: {
+        ...baseMetadata.openGraph,
+        videos: [{ url: absoluteUrl(`/${LAUNCH_ASSETS.film}`), secureUrl: absoluteUrl(`/${LAUNCH_ASSETS.film}`), type: 'video/mp4', width: 1280, height: 720 }],
+      },
+    }
+  : baseMetadata;
 
 // Related cards take each product's link, mark, and one-liner from the portfolio facts.
 const related = (id: PortfolioProductId, name: string) => {
@@ -146,19 +158,12 @@ function HeroStage() {
 }
 
 function FilmSlot() {
-  if (!publicAssetExists(LAUNCH_ASSETS.poster) || !publicAssetExists(LAUNCH_ASSETS.film)) return null;
+  const sources = launchFilmSources();
+  if (sources === null) return null;
   return (
     <section aria-labelledby="film-title" className="tb-film" id="film">
-      <h2 className="tb-film__title" id="film-title">Textbutler in 42 seconds</h2>
-      <LaunchVideo
-        sources={{
-          poster: `/${LAUNCH_ASSETS.poster}`,
-          film: `/${LAUNCH_ASSETS.film}`,
-          ...(publicAssetExists(LAUNCH_ASSETS.loopWebm) ? { loopWebm: `/${LAUNCH_ASSETS.loopWebm}` } : {}),
-          ...(publicAssetExists(LAUNCH_ASSETS.loopMp4) ? { loopMp4: `/${LAUNCH_ASSETS.loopMp4}` } : {}),
-        }}
-        title="AI in your messages"
-      />
+      <h2 className="tb-film__title" id="film-title">Textbutler in {LAUNCH_FILM_SECONDS} seconds</h2>
+      <LaunchVideo sources={sources} title="AI in your messages" />
       <p className="tb-caption">No sound needed. Every name in the film is made up.</p>
     </section>
   );

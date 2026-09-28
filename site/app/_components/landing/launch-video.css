@@ -1,0 +1,25 @@
+/* The launch film: poster or muted loop behind a Play button, then the full film.
+   Shared by the homepage film slot and the launch post, so it carries its own rules. */
+.tb-video { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--hraness-marketing-frame-radius, 0.875rem); background: var(--surface); aspect-ratio: 16 / 9; }
+.tb-video__media { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.tb-video__cover { all: unset; position: absolute; inset: 0; display: block; cursor: pointer; }
+.tb-video__cover:focus-visible { outline: 2px solid var(--primary); outline-offset: -4px; }
+.tb-video__play {
+  position: absolute;
+  inset: auto auto 1.25rem 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-block-size: 2.75rem;
+  padding: 0 1.1rem 0 0.9rem;
+  border-radius: 999px;
+  background: var(--foreground);
+  color: var(--background);
+  font: 600 0.9375rem/1 var(--font-text);
+}
+.tb-video__play-glyph { font-size: 0.75rem; }
+.tb-film-figure { margin: 0 0 2rem; display: grid; gap: 0.6rem; }
+.tb-film-figure figcaption { color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
+@media (forced-colors: active) {
+  .tb-video { border: 1px solid CanvasText; }
+}

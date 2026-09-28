@@ -154,6 +154,22 @@ export const staysOutConversation: Conversation = {
   ],
 };
 
+/** Video beat 8: the WhatsApp phone with a marked reply (the film shows one on every app). */
+export const whatsappReplyConversation: Conversation = {
+  id: 'whatsapp-reply',
+  app: 'whatsapp',
+  owner: SAM,
+  contact: { name: 'Jordan', initial: 'J' },
+  items: [
+    { kind: 'header', id: 'h1', day: 'Sat' },
+    { kind: 'message', id: 'm1', from: 'owner', text: 'Lucia’s at 8 on Thursday? I’ll book it' },
+    { kind: 'header', id: 'h2', day: 'Today' },
+    { kind: 'message', id: 'm2', from: 'contact', text: 'butler is Thursday still Lucia’s at 8?', waitMs: 500 },
+    { kind: 'message', id: 'm3', from: 'butler', text: marked('👀'), waitMs: 600 },
+    { kind: 'message', id: 'm4', from: 'butler', text: marked('Yes. On Saturday Sam said Lucia’s at 8 on Thursday, and that he’d book it.'), waitMs: 1400 },
+  ],
+};
+
 /** §6.4 Alternate C: “It keeps your boundaries” (neutral styling, via Beeper). */
 export const boundariesConversation: Conversation = {
   id: 'boundaries',
@@ -174,5 +190,6 @@ export const conversations = {
   heroFriend: heroFriendConversation,
   askYourself: askYourselfConversation,
   staysOut: staysOutConversation,
+  whatsappReply: whatsappReplyConversation,
   boundaries: boundariesConversation,
 } as const;

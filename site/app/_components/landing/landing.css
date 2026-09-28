@@ -158,24 +158,6 @@
   padding: 0 var(--hraness-marketing-gutter) var(--hraness-marketing-section-space);
 }
 .textbutler-marketing .tb-film__title { margin: 0; font: 600 0.8125rem/1.4 var(--font-text); color: var(--primary); }
-.tb-video { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--hraness-marketing-frame-radius, 0.875rem); background: var(--surface); aspect-ratio: 16 / 9; }
-.tb-video__media { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
-.tb-video__cover { all: unset; position: absolute; inset: 0; display: block; cursor: pointer; }
-.tb-video__cover:focus-visible { outline: 2px solid var(--primary); outline-offset: -4px; }
-.tb-video__play {
-  position: absolute;
-  inset: auto auto 1.25rem 1.25rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-block-size: 2.75rem;
-  padding: 0 1.1rem 0 0.9rem;
-  border-radius: 999px;
-  background: var(--foreground);
-  color: var(--background);
-  font: 600 0.9375rem/1 var(--font-text);
-}
-.tb-video__play-glyph { font-size: 0.75rem; }
 
 /* What it works with. */
 .tb-support { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); }
@@ -289,6 +271,6 @@
   .tb-prompt pre { padding-inline: 1rem; font-size: 0.75rem; }
 }
 @media (forced-colors: active) {
-  .tb-chip, .tb-writer, .tb-prompt, .tb-tile, .tb-modes, .tb-video { border: 1px solid CanvasText; }
+  .tb-chip, .tb-writer, .tb-prompt, .tb-tile, .tb-modes { border: 1px solid CanvasText; }
   .tb-copy { border: 1px solid ButtonText; }
 }

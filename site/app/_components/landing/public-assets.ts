@@ -26,11 +26,28 @@ export function publicPngSize(path: string): Readonly<{ width: number; height: n
 
 /** Expected launch files under public/. One place to rename them. */
 export const LAUNCH_ASSETS = {
-  poster: 'launch/textbutler-launch-poster.png',
+  poster: 'launch/textbutler-launch-poster.webp',
   film: 'launch/textbutler-launch.mp4',
   loopWebm: 'launch/textbutler-hero-loop.webm',
   loopMp4: 'launch/textbutler-hero-loop.mp4',
 } as const;
+
+/** The film's length, said in reader terms beside it. */
+export const LAUNCH_FILM_SECONDS = 42;
+
+/**
+ * Sources for <LaunchVideo>, or null while the poster or film is missing, so
+ * the homepage and the launch post show the film only once it really exists.
+ */
+export function launchFilmSources(): Readonly<{ poster: string; film: string; loopWebm?: string; loopMp4?: string }> | null {
+  if (!publicAssetExists(LAUNCH_ASSETS.poster) || !publicAssetExists(LAUNCH_ASSETS.film)) return null;
+  return {
+    poster: `/${LAUNCH_ASSETS.poster}`,
+    film: `/${LAUNCH_ASSETS.film}`,
+    ...(publicAssetExists(LAUNCH_ASSETS.loopWebm) ? { loopWebm: `/${LAUNCH_ASSETS.loopWebm}` } : {}),
+    ...(publicAssetExists(LAUNCH_ASSETS.loopMp4) ? { loopMp4: `/${LAUNCH_ASSETS.loopMp4}` } : {}),
+  };
+}
 
 /** Diagram base names under public/diagrams/ (see diagram-figure.tsx for the file pattern). */
 export const DIAGRAMS = {

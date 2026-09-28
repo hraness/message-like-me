@@ -25,7 +25,9 @@ or Beeper, before you rely on them.
 > answer because it doesn’t say “butler”; the reply comes only from what Sam
 > wrote earlier in the same chat.*
 
-See it on [textbutler.app](https://textbutler.app).
+See it on [textbutler.app](https://textbutler.app), or watch the
+[42-second launch film](https://textbutler.app/launch/textbutler-launch.mp4)
+(no sound; every name in it is made up).
 
 ## What it works with
 
