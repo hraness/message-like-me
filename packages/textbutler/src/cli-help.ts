@@ -51,7 +51,6 @@ AI accounts
 
 Background service
   daemon install | status    Start at login, or see whether it's running
-  menubar [start | install]  Show Textbutler in the menu bar
 
 Options
   -h, --help                 Show help (also: textbutler help <topic>)
@@ -59,7 +58,7 @@ Options
   --json                     Print machine-readable output
   --data-dir <path>          Use another private data folder (absolute path)
 
-Topics: setup, contacts, replies, messaging, providers, daemon, menubar,
+Topics: setup, contacts, replies, messaging, providers, daemon,
 permissions, advanced. Most commands print JSON so agents can read them.
 
 ${supportHelpLine({ command: ["textbutler"], env: HELP_ENV })}`;
@@ -137,12 +136,6 @@ Choosing an account never turns a chat on, and resume never does either.`,
   daemon run                 Run it in this terminal instead
 
 macOS shows a "Background Items Added" notice when you install it.` },
-  menubar: { usage: "textbutler menubar [start | stop | status | install | uninstall]", summary: "Show Textbutler in the menu bar. Quitting the menu doesn't stop replies.",
-    body: `Commands
-  menubar start              Open the menu now
-  menubar install            Open it at login too
-  menubar stop | uninstall   Close it, or remove it from login
-  menubar status | doctor    Check the menu helper` },
   support: { usage: "textbutler support", summary: "See optional ways to support Textbutler. Turn off: HRANESS_SUPPORT=off." },
   init: { usage: "textbutler init", summary: "Create private settings, paused, without the readiness checklist." },
   jobs: { usage: "textbutler jobs show <job>", summary: "Read the result of a long operation that was still running. Don't repeat\nthe original command: it may already have happened." },
@@ -207,4 +200,4 @@ export function topicHelp(name: string): string | undefined {
 
 /** The known command words, for "did you mean" and help routing. */
 export const COMMANDS: readonly string[] = ["setup", "tui", "doctor", "status", "pause", "resume", "inbox", "replies", "contacts", "conversations",
-  "messaging", "providers", "daemon", "menubar", "support", "init", "jobs", "habitats", "messages", "help", "version"];
+  "messaging", "providers", "daemon", "support", "init", "jobs", "habitats", "messages", "help", "version"];

@@ -104,8 +104,8 @@ export default function CompareGhostReplyPage() {
 
           <h2>What Textbutler does</h2>
           <p>
-            Textbutler is a macOS butler: a CLI, a guided terminal, a background daemon, and an
-            optional menu bar companion. You turn it on per conversation across iMessage, WhatsApp,
+            Textbutler is a headless macOS butler: a CLI, a guided terminal, and a background daemon,
+            with no window or menu bar icon. You turn it on per conversation across iMessage, WhatsApp,
             and Beeper, and it keeps each contact’s context in a folder of ordinary files you can
             open and edit. New installations start paused, and new contacts start disabled.
           </p>

@@ -124,21 +124,30 @@ export async function installTextbutler(options: { from: string; prefix: string;
   return { command, directory, version: source.manifest.version };
 }
 
-/** The menu's login item after an upgrade (T7). Read only: installation
- * stays inert, so the owner repoints it with one command. "previous-version"
- * starts the replaced version through Bun; "app" starts TextButler.app, which
- * runs the version it was built from until the app is rebuilt from this one. */
-export async function menuLoginItemAfterUpgrade(home: string, previousDirectory: string): Promise<"previous-version" | "app" | null> {
-  const path = join(home, "Library", "LaunchAgents", "app.hraness.companion.textbutler.plist");
+/** Textbutler is headless: the menu companion was removed. An upgrade retires
+ * the menu's old login item so login no longer starts it. Only a regular file
+ * at the companion's exact label that launches Textbutler's `menubar` role or
+ * TextButler.app is touched: it is booted out and renamed aside (launchd
+ * ignores the non-.plist name), never deleted. */
+export async function retireMenuLoginItem(home: string, bootout: (label: string) => Promise<void> = defaultBootout): Promise<"retired" | null> {
+  const label = "app.hraness.companion.textbutler";
+  const path = join(home, "Library", "LaunchAgents", `${label}.plist`);
   let text: string;
   try {
     const info = await lstat(path);
-    if (!info.isFile() || info.size > 65_536) return null;
+    if (!info.isFile() || info.size > 65_536 || info.uid !== process.getuid?.()) return null;
     text = (await readArtifact(path, 65_536)).toString("utf8");
   } catch { return null; }
-  if (text.includes("/TextButler.app/Contents/MacOS/TextButler<")) return "app";
-  const escaped = previousDirectory.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("'", "&apos;").replaceAll('"', "&quot;");
-  return text.includes(`${escaped}/`) || text.includes(`${previousDirectory}/`) ? "previous-version" : null;
+  const menuRole = text.includes("textbutler.mjs</string>") && text.includes("<string>menubar</string>");
+  if (!menuRole && !text.includes("/TextButler.app/Contents/MacOS/TextButler<")) return null;
+  await bootout(label);
+  await rename(path, `${path}.retired-${Date.now()}`);
+  return "retired";
+}
+async function defaultBootout(label: string): Promise<void> {
+  // A login item that isn't loaded right now is the common case; that is fine.
+  const child = Bun.spawn(["/bin/launchctl", "bootout", `gui/${process.getuid!()}/${label}`], { env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, stdin: "ignore", stdout: "ignore", stderr: "ignore", timeout: 20_000, killSignal: "SIGKILL" });
+  await child.exited;
 }
 
 if (import.meta.main) {
@@ -155,11 +164,9 @@ if (import.meta.main) {
     const distribution = from ?? (await buildTextbutler()).directory;
     const installed = await installTextbutler({ from: distribution, prefix, upgrade });
     const { manifest } = await verifyDistribution(installed.directory);
-    const menu = installed.previous === undefined ? null : await menuLoginItemAfterUpgrade(homedir(), installed.previous.directory);
-    const menuDetail = menu === "previous-version" ? " The menu still starts the previous version at login: run textbutler menubar install to point it at this one."
-      : menu === "app" ? " The menu starts TextButler.app at login, which runs the version it was built from: rebuild the app from this version and install it with --upgrade." : "";
+    const retired = await retireMenuLoginItem(homedir());
     process.stdout.write(`${JSON.stringify({ ok: true, ...installed, providerAdmission: manifest.providerAdmission, next: [installed.command, "setup"],
-      ...(menu === "previous-version" ? { menuLoginItem: { state: menu, next: [installed.command, "menubar", "install"] } } : menu === "app" ? { menuLoginItem: { state: menu, next: ["bun", "run", "textbutler:app", "build"] } } : {}),
-      detail: `Local pilot installed. No daemon, menu, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission.${menuDetail}` })}\n`);
+      ...(retired ? { retiredMenuLoginItem: true } : {}),
+      detail: `Local pilot installed. No daemon, account or automatic replies were started. Provider readiness requires separate account configuration and runtime admission.${retired ? " The retired menu bar companion no longer starts at login." : ""}` })}\n`);
   } catch (error) { process.stderr.write(`${error instanceof Error ? error.message : "Textbutler installation failed."}\n`); process.exitCode = 1; }
 }

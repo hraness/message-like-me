@@ -325,9 +325,14 @@ static const char *automation_permission(void) {
 }
 
 int main(int argc, char **argv) {
-  enum { MENU, DAEMON, IMESSAGE_SETUP, AUTOMATION_PERMISSION } role;
-  if (argc == 1) role = MENU;
-  else if (argc == 2 && strcmp(argv[1], "--daemon") == 0) role = DAEMON;
+  enum { DAEMON, IMESSAGE_SETUP, AUTOMATION_PERMISSION } role;
+  /* Textbutler is headless: opening the app itself (Finder, a stale login
+   * item) starts nothing. The daemon and setup roles run through launchd. */
+  if (argc == 1) {
+    fputs("TextButler runs in the background and has no window. Use the textbutler command in Terminal.\n", stderr);
+    return 0;
+  }
+  if (argc == 2 && strcmp(argv[1], "--daemon") == 0) role = DAEMON;
   else if (argc == 2 && strcmp(argv[1], "--imessage-setup") == 0) role = IMESSAGE_SETUP;
   else if (argc == 2 && strcmp(argv[1], "--request-imessage-automation") == 0) role = AUTOMATION_PERMISSION;
   else return failure("unsupported-role");
@@ -367,8 +372,8 @@ int main(int argc, char **argv) {
     environment[environment_count++] = automation_env;
   }
   char *child_argv[] = {TB_RUNTIME, "--config=/dev/null", "--cwd=/", "--no-env-file", TB_ENTRYPOINT,
-    role == MENU ? "menubar" : role == DAEMON ? "daemon" : "app",
-    role == MENU ? "--foreground" : role == DAEMON ? "run" : "imessage-setup",
+    role == DAEMON ? "daemon" : "app",
+    role == DAEMON ? "run" : "imessage-setup",
     "--data-dir", TB_DATA_DIR, NULL};
   if (!unchanged(&runtime) || !unchanged(&entrypoint)) {
     close(runtime.fd); close(entrypoint.fd); return failure("launch-precondition");

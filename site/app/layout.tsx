@@ -114,7 +114,7 @@ const structuredData = {
       sameAs: GITHUB_URL,
       author: { '@id': organizationId },
       featureList: [
-        'macOS menu-bar companion and local daemon controls',
+        'Headless macOS daemon with CLI and guided terminal controls',
         'Contact-specific guidance and editable memory',
         'Configurable visible assistant disclosure',
         'Smart and keyword-only response controls',

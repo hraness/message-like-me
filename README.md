@@ -67,34 +67,22 @@ history tools, not Textbutler. The website at
 [textbutler.app](https://textbutler.app) is informational and receives no private
 messages or contact folders.
 
-## Run the Textbutler menu companion
+## Run it in the background
 
-On first start, the menu bar companion downloads a prebuilt desktop-foundation
-runner and checks it against a pinned hash, so you don't need a local Rust
-build. Start it from the terminal's **Menu bar companion** action or run:
-
-```sh
-bun run textbutler menubar start
-bun run textbutler menubar status
-bun run textbutler menubar stop
-```
-
-One companion runs per user and data directory. To start it automatically when
-you sign in, register login startup (a per-user LaunchAgent on macOS):
+Textbutler has no window or menu bar icon. A background service does the work,
+and you control it from the terminal:
 
 ```sh
-bun run textbutler menubar install
-bun run textbutler menubar uninstall
+bun run textbutler daemon install
+bun run textbutler status
+bun run textbutler daemon uninstall
 ```
 
-`menubar doctor` reports the runner artifact, platform capability, and any
-operating-system approval step needed on an unsigned binary. The companion
-offers pause, connection checks, conversation selection, contact and agent
-settings, inbox previews and recent activity. Use the terminal for complete
-draft review and sending. Menu startup is separate from daemon startup;
-quitting the menu leaves an installed background service running. Use
-`daemon install` or `daemon uninstall` to manage that service. Uninstall retains
-your settings and contact memory.
+`daemon install` starts the service now and at every sign-in (a per-user
+LaunchAgent on macOS). `status` shows whether it's running, whether replies are
+paused, and each contact's state. `tui` opens the guided terminal for pause,
+connections, conversations, contacts, the inbox and macOS access. Uninstalling
+keeps your settings and contact memory.
 
 ## Answer your own messages
 

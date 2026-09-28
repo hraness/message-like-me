@@ -1,18 +1,35 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Make Textbutler headless: remove the menu bar companion, its CLI command and TUI action; the native app's no-argument launch starts nothing; upgrades retire the companion's login item.",
+  "baseCommit": "ded913bab2e67aef516956fc4569abe8ed6a0391",
+  "motivation": "Owner decision: the menu bar companion is unnecessary; Textbutler is controlled through its CLI and guided terminal.",
+  "design": {
+    "removed": "menubar.ts, menubar-icon.ts, menu-errors.ts and their tests; the `menubar` CLI command, help topic and command word; TUI action 8 (the access guide becomes 8); the TUI menu-result renderer.",
+    "cliSource": "cli.ts drops the menubar import, usage family and dispatch branch; every remaining command is unchanged.",
+    "nativeApp": "textbutler-launcher.c: a no-argument launch (Finder, a stale login item) prints a notice and exits 0 without launching the runtime; the daemon, iMessage setup and automation-permission roles are unchanged.",
+    "installer": "install-textbutler.ts replaces the menu login-item report with retireMenuLoginItem: only a regular, owner-owned app.hraness.companion.textbutler.plist that launches the menubar role or TextButler.app is booted out and renamed aside (never deleted); foreign items are untouched.",
+    "unchanged": "desktop-foundation remains a dependency for CLI style and permission copy; daemon, control protocol, grants, dispatch and data are unchanged."
   },
-  "sources": {
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only.",
+    "result": "Pending independent review."
+  },
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/tui.test.ts packages/textbutler/src/tui-results.test.ts packages/textbutler/src/cli.test.ts scripts/install-textbutler.test.ts packages/textbutler/src/access-guide.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 57,
+      "failed": 0,
+      "files": 6,
+      "assertions": 458
+    },
+    "logSha256": "375daf310ed0e8e734d493db8f13a98bfb93e4ea73facbc0359adbf5e1bd9518"
+  },
+  "sourceInventoryCount": 45,
+  "sourceDigest": "da6c4c232e14db7f53fa921cc3ea55b46478263d6c01c83bf3136d8f6cb5da4d",
+  "sourceSha256": {
     "bun.lock": "7100c20800941826fe4d203c3f4cad6704d5acac4d7fd4aad4fbc59183091a8f",
     "package.json": "4a292bb2de5638d91c393c718fe3308f7082ff05c007c0b208f0eb523e70a11c",
     "packages/control/src/index.ts": "a6a83519433f4c0c1a0d2aaffb91d772276ac8109dff128f08c709a7abdf3dd4",
@@ -59,8 +76,16 @@
     "scripts/build-textbutler.ts": "96e7fc62bd72bb44c2b5599076200fb559525a637e72ca4db9fc689289bb5427",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/tui.test.ts packages/textbutler/src/tui-results.test.ts packages/textbutler/src/cli.test.ts scripts/install-textbutler.test.ts packages/textbutler/src/access-guide.test.ts",
-    "receiptSha256": "adcdd9d7e5d2d8eac234991344edb28cb8d97c23096f5c7cdb6662f01cdf1bda"
-  }
+  "changedSourceSha256": {
+    "packages/textbutler/src/cli.ts": "e3ea8e406fe0155e74322bbe3215f95acb3bed1a22d57d9f7763075e5ba914db"
+  },
+  "aggregateValidation": {
+    "status": "pending",
+    "owner": "integration owner",
+    "requiredCommand": "bun run check",
+    "note": "CI on the pull request is the aggregate record."
+  },
+  "limitations": [
+    "The native no-argument notice is verified by scripts/verify-textbutler-macos-app.ts on macOS, not by the Linux package suite."
+  ]
 }

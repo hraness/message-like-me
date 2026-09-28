@@ -1,7 +1,7 @@
 # Textbutler readiness
 
-Textbutler currently supports a local, owner-controlled pilot. Its terminal and
-menu can connect configured messaging accounts, select direct conversations,
+Textbutler currently supports a local, owner-controlled pilot. It is headless:
+its CLI and guided terminal can connect configured messaging accounts, select direct conversations,
 show the reply inbox and manage contacts. An owner can write a reply, review its
 complete disclosed text and explicitly send it. Installation starts no service,
 connects no account and enables no automatic replies.
@@ -12,7 +12,6 @@ remain visible in setup and must be resolved before that claim is made.
 | Area | Current state | Remaining acceptance evidence |
 | --- | --- | --- |
 | First use | Guided terminal, actionable readiness, additive configuration, paused defaults | First-run testing with real owner-selected accounts and permissions |
-| Menu bar | Shared native Rust runner; setup, connections, contact controls, bounded menus and recoverable jobs | Confirm native lifecycle on each supported macOS release |
 | Reply review | Complete ordered action review, recipient/context digest, attachment byte verification; typed preview revision checks | Agreed-recipient live delivery and takeover tests |
 | Agent execution | Verified bundle requires reviewed Textbutler composition admission; [external xcb subscription connection](native-subscription.md), with an explicit executable pin, private state, account and model; no default account or automatic activation | Exact xcb build/provider admission, both classifier and reply checks, and authenticated live inference on the selected account; Claude API still requires separate trusted runtime admission |
 | iMessage | Existing native Ghostget connection | Current account permissions and live transport qualification |
@@ -28,8 +27,7 @@ contextual choices, complete review and clean cancellation. Textbutler follows
 that separation with a thin terminal client over its owner control protocol.
 All permission, account, contact, grant and dispatch checks remain in the daemon.
 
-The native menu already uses the shared Rust desktop foundation. A new Rust
-runtime is not required to make these controls usable. If the terminal grows
+Textbutler has no menu bar companion or desktop window. If the terminal grows
 into a full-screen workspace, xcb's Ratatui/Crossterm interface is an appropriate
 reference. The subscription connection uses xcb's dedicated zero-tool `generate`
 contract. It does not use the workspace coding command or inherit its tools and

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CONTROL_PROTOCOL, disconnectedSnapshot, type ControlRequest, type ControlResponse } from "../../control/src/index.ts";
 import { symbolsFor } from "./cli-style.ts";
 import { runTerminalSession } from "./tui.ts";
-import { describeControlResult, describeMenuBarResult, describeServiceInstall } from "./tui-results.ts";
+import { describeControlResult, describeServiceInstall } from "./tui-results.ts";
 import type { LaunchAgentStatus } from "./launch-agent.ts";
 
 const UTF8 = symbolsFor({ LANG: "en_US.UTF-8" }), ASCII = symbolsFor({ TERM: "dumb" });
@@ -45,20 +45,12 @@ test("control results read as one plain line, never JSON", () => {
     .toContain("textbutler --data-dir '/Volumes/Data/Application Support/Textbutler' jobs show job-1");
 });
 
-test("service and menu bar results", () => {
+test("service results", () => {
   const status = (installation: LaunchAgentStatus["installation"], detail: string): LaunchAgentStatus =>
     ({ label: "app.textbutler.daemon", installation, service: "running", plistPath: "/private/p.plist", pid: 1, detail } as LaunchAgentStatus);
   expect({
     installed: describeServiceInstall(status("installed", "The background service starts at login and is running."), UTF8),
     conflict: describeServiceInstall(status("conflict", "Another background service uses this name. Nothing was changed."), UTF8),
-    started: describeMenuBarResult("start", { appId: "textbutler", running: true, state: "running" }, UTF8),
-    already: describeMenuBarResult("start", { running: true, alreadyRunning: true }, UTF8),
-    "not started": describeMenuBarResult("start", { running: false, diagnostics: [] }, UTF8),
-    "not started with reason": describeMenuBarResult("start", { running: false, diagnostics: [
-      { code: "arch", severity: "error", message: "This Mac's processor isn't supported.", guidance: "Use an Apple silicon Mac." },
-      { code: "note", severity: "info", message: "Not shown." }] }, UTF8),
-    login: describeMenuBarResult("install", { loginStartup: "enabled", takesEffect: "next-login" }, UTF8),
-    stopped: describeMenuBarResult("stop", { appId: "textbutler", running: false, state: "stopped" }, ASCII),
   }).toMatchSnapshot();
 });
 

@@ -18,25 +18,12 @@ exports[`control results read as one plain line, never JSON 1`] = `
 }
 `;
 
-exports[`service and menu bar results 1`] = `
+exports[`service results 1`] = `
 {
-  "already": "✓ The Textbutler menu is already running.",
   "conflict": 
 "⚠ Another background service uses this name. Nothing was changed.
 → textbutler doctor"
 ,
   "installed": "✓ The background service starts at login and is running.",
-  "login": "✓ The Textbutler menu will start when you log in.",
-  "not started": 
-"✗ The Textbutler menu didn't start.
-→ textbutler doctor"
-,
-  "not started with reason": 
-"✗ The Textbutler menu didn't start.
-  This Mac's processor isn't supported. Use an Apple silicon Mac.
-→ textbutler doctor"
-,
-  "started": "✓ The Textbutler menu is running.",
-  "stopped": "OK The Textbutler menu stopped.",
 }
 `;

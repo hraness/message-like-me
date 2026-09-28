@@ -27,7 +27,7 @@ textbutler replies show <draft>         # read every line it would send, and to 
 textbutler replies send <draft> <digest>
 ```
 
-`inbox` only reads. A suggestion is a draft that expires after fifteen minutes and never sends on its own. `show` prints the recipient, every message in order, and a digest of that review. `send` sends only the draft that matches the digest you read. If the conversation moved on, your disclosure settings changed, or the draft expired, it refuses rather than send something stale. You can also type your own reply with `replies send <contact> <text>`, or `discard` a draft you do not like. The menu bar companion can check for replies and preview drafts, but a shortened preview there cannot authorize a send.
+`inbox` only reads. A suggestion is a draft that expires after fifteen minutes and never sends on its own. `show` prints the recipient, every message in order, and a digest of that review. `send` sends only the draft that matches the digest you read. If the conversation moved on, your disclosure settings changed, or the draft expired, it refuses rather than send something stale. You can also type your own reply with `replies send <contact> <text>`, or `discard` a draft you do not like.
 
 When the butler writes, trusted code wraps its text in a marker the other person can see. The default looks like `🤖{ hello this is my response }`. You can change the markers per contact or clear them. Once cleared, the other person sees plain text with nothing to show the butler wrote it, so tell people you use it if you do that. Either way, Textbutler privately records which messages it wrote, so its own words never get mixed back in as examples of your style.
 

@@ -74,19 +74,3 @@ export function describeServiceInstall(status: LaunchAgentStatus, symbols: Symbo
   return `${ok ? symbols.ok : symbols.warn} ${status.detail}${ok ? "" : `\n${symbols.next} textbutler doctor`}`;
 }
 
-/** Menu bar start, start-at-login and stop, from desktop-foundation's
- * companion commands. */
-export function describeMenuBarResult(action: "start" | "install" | "stop", value: unknown, symbols: Symbols): string {
-  const result = row(value) ?? {};
-  if (action === "install") return result.loginStartup === "enabled"
-    ? `${symbols.ok} The Textbutler menu will start when you log in.`
-    : `${symbols.warn} The menu wasn't set to start at login.\n${symbols.next} textbutler doctor`;
-  if (action === "stop") return result.running === false
-    ? `${symbols.ok} The Textbutler menu stopped.`
-    : `${symbols.warn} The Textbutler menu may still be running.\n${symbols.next} textbutler menubar status`;
-  if (result.running === true) return `${symbols.ok} ${result.alreadyRunning === true ? "The Textbutler menu is already running." : "The Textbutler menu is running."}`;
-  const reasons = (Array.isArray(result.diagnostics) ? result.diagnostics : []).map(row)
-    .filter((item): item is Row => item !== null && item.severity === "error")
-    .map(item => [sentence(item.message), sentence(item.guidance)].filter(Boolean).join(" ")).filter(Boolean).slice(0, 3);
-  return `${symbols.fail} The Textbutler menu didn't start.${reasons.map(reason => `\n  ${label(reason)}`).join("")}\n${symbols.next} textbutler doctor`;
-}

@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import { createLaunchAgentLifecycle, defaultLaunchAgentHost } from "./launch-agent.ts";
-import { runMenuBarCommand } from "./menubar.ts";
 import { createInterface } from "node:readline/promises";
 import { CONTROL_PROTOCOL, type ControlRequest, type ControlResponse, type DesktopSnapshot, type ReplyDraftDetail } from "../../control/src/index.ts";
 import { requestDaemon } from "./daemon.ts";
@@ -8,7 +7,7 @@ import { loadHostConfig } from "./host-config.ts";
 import { disclose } from "./config.ts";
 import { runSetup } from "./onboarding.ts";
 import { CliUsageError, symbolsFor } from "./cli-style.ts";
-import { describeControlResult, describeMenuBarResult, describeServiceInstall } from "./tui-results.ts";
+import { describeControlResult, describeServiceInstall } from "./tui-results.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
 import { openSettingsUrl, runAccessGuide, type AccessGuideOptions } from "./access-guide.ts";
 import { detectBun, detectConnector, needsBun, resolveTyped, type DetectedConnector } from "./connect-detect.ts";
@@ -30,7 +29,7 @@ export function terminalDashboard(snapshot: DesktopSnapshot | null): string {
   const state = !snapshot ? "Service not connected" : snapshot.settings.paused ? "Automatic replies paused" : snapshot.automation?.state === "running" ? "Automatic replies running" : "Automatic replies need setup";
   return ["", "TEXTBUTLER", "Your conversations, with you in control.", "", state,
     snapshot ? `${snapshot.contacts.length} conversations · ${active} with automatic replies on` : "Start with Setup & readiness.",
-    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Menu bar companion", "  9  Give Textbutler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
+    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Give Textbutler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
 }
 export function terminalDraft(draft: ReplyDraftDetail): string {
   const field = (value: string): string => terminalText(JSON.stringify(value));
@@ -144,7 +143,7 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
         }
         continue;
       }
-      if (choice.trim() === "9") {
+      if (choice.trim() === "8") {
         const { openUrl = openSettingsUrl, ...access } = options.access ?? {};
         await runAccessGuide(dataDir, { write: text => io.write(text), ask: prompt => io.ask(prompt), openUrl }, { symbols: symbolsFor(), ...access });
         continue;
@@ -231,15 +230,7 @@ export async function runTerminalSession(dataDir: string, io: TerminalSession, c
       } else if (choice.trim() === "6") await owner(["pause"], "Automatic replies are paused.");
       else if (choice.trim() === "7") {
         if ((await io.ask("Resume automatic replies for enabled contacts? [y/N]: "))?.trim().toLowerCase() === "y") await owner(["resume"], "Automatic replies resumed for contacts that have them on.");
-      } else if (choice.trim() === "8") {
-        const action = await io.ask("[s] Start menu  [l] Start menu at login  [x] Stop menu  [Enter] Back: ");
-        const command = action === "s" ? "start" : action === "l" ? "install" : action === "x" ? "stop" : null;
-        // --json keeps the result on the write channel: the kit's human text
-        // and its interactive login-item notice would otherwise print over the
-        // terminal session and wait on stdin inside it.
-        if (command) await runMenuBarCommand([command, "--json"], dataDir, entrypoint,
-          result => io.write(`${terminalText(describeMenuBarResult(command, result, symbolsFor()))}\n`));
-      } else io.write("Choose a number from 1 to 9, or q to quit.\n");
+      } else io.write("Choose a number from 1 to 8, or q to quit.\n");
     } catch (error) {
       if (error instanceof OwnerCliError) { io.write(`${terminalText(error.message)}\n`); continue; }
       // Input mistakes are not uncertain operations: show the one-line fix.

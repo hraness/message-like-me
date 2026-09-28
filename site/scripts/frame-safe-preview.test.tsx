@@ -13,7 +13,7 @@ test('server-renders a script-independent preview with the site status and no na
   expect(html).toContain(SITE_STATUS);
   expect(html).toContain('replies you write yourself');
   expect(html).toContain('AI replies also need a local build');
-  expect(html).toContain('uses a prebuilt runner');
+  expect(html).toContain('runs in the background with no window or menu bar icon');
   expect(html).toContain('no app to download');
   expect(html).toContain('Synthetic example · no message sent');
   expect(html).not.toContain('Happy to help');
