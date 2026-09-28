@@ -95,7 +95,7 @@ try {
           assert.equal(await page.evaluate(() => Object.hasOwn(window, '__next_f')), false, 'Preview runtime stays inert');
         }
         await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-        const metrics = await page.evaluate(() => {
+        const measure = () => page.evaluate(() => {
           const rect = element => element && { x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y,
             width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
             bottom: element.getBoundingClientRect().bottom, position: getComputedStyle(element).position };
@@ -111,9 +111,24 @@ try {
               .map(element => ({ label: element.getAttribute('aria-label') || element.textContent.trim(), ...rect(element) })) };
         });
         const label = `${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-').replace(/-$/u, '')}-${width}-${theme}`;
-        const screenshot = await page.screenshot({ path: resolve(artifacts, `${label}.png`), fullPage: true, animations: 'disabled' });
-        await page.screenshot({ path: resolve(artifacts, `${label}-viewport.png`), animations: 'disabled' });
-        report.records.push({ path, width, theme, metrics, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        let metrics;
+        let screenshot;
+        const captureSamples = [];
+        const settleDeadline = Date.now() + 5_000;
+        do {
+          const before = await measure();
+          await page.screenshot({ path: resolve(artifacts, `${label}-viewport.png`), animations: 'disabled' });
+          const viewport = await measure();
+          screenshot = await page.screenshot({ path: resolve(artifacts, `${label}.png`), fullPage: true, animations: 'disabled' });
+          const full = await measure();
+          captureSamples.push({ before, viewport, full });
+          if (JSON.stringify(before) === JSON.stringify(viewport) && JSON.stringify(viewport) === JSON.stringify(full)) {
+            metrics = full;
+            break;
+          }
+        } while (Date.now() < settleDeadline);
+        report.records.push({ path, width, theme, metrics, captureSamples, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        assert.ok(metrics, `${label}: layout and pointer media must settle across both captures`);
         assert.equal(screenshot.readUInt32BE(16), width, `${label}: uncropped full-page width`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);
