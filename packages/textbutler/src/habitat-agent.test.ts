@@ -419,13 +419,36 @@ test("tool inventory and dispatch both reject web search on a local driver", asy
 test("gateway search rejects private names and phrases found only in owner plan guidance", async () => {
   for (const query of ["Ryaan github", "ryaan github", "RYAAN github", "confidential project updates"]) {
     let searches = 0;
-    const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query } });
+    const f = await fixture((body: string, call: number) => {
+      if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query } };
+      expect(driverEvidence(body).results[0]).toEqual({ tool: "web-search", result: { error: "query-not-admitted", detail: expect.stringContaining("fresh") } });
+      return replyOutput;
+    });
     new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "Ryaan coordinates our confidential project", webSearch: true });
     f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
     f.driver.search = async () => { searches++; return {}; };
-    await expect(f.habitat.agent.compose(f.request)).rejects.toThrow("Public search query is not admitted");
-    expect(searches).toBe(0);
+    await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
+    expect(searches).toBe(0); expect(f.calls()).toBe(2);
   }
+});
+
+test("a refused public query stays inside the search budget and a fresh phrasing may still run once", async () => {
+  let searches = 0;
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "confidential project updates" } };
+    if (call === 2) {
+      expect(driverEvidence(body).results[0]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted" } });
+      expect(driverEvidence(body).tools).toContain("web-search");
+      return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "public municipal news" } };
+    }
+    expect(driverEvidence(body).tools).not.toContain("web-search");
+    return replyOutput;
+  });
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, guidance: "Ryaan coordinates our confidential project", webSearch: true });
+  f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
+  f.driver.search = async () => { searches++; return { excerpt: "Synthetic public result" }; };
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
+  expect(f.calls()).toBe(3); expect(searches).toBe(1);
 });
 
 test("one web search exhausts the reply's search inventory and dispatch budget", async () => {
@@ -487,20 +510,29 @@ test("memory fits every tool step and records the final view plus compact prior 
 
 test("remembered private names cannot escape through gateway search", async () => {
   let searches = 0;
-  const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query: "ryaan github" } });
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "ryaan github" } };
+    expect(driverEvidence(body).results[0]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted" } });
+    return replyOutput;
+  });
   const state = seedMemory(f, ["Ryaan prefers tea"]); state.configure(state.snapshot().revision, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
   f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
   f.driver.search = async () => { searches++; return {}; };
-  await expect(f.habitat.agent.compose(f.request)).rejects.toThrow("Public search query is not admitted"); expect(searches).toBe(0);
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
+  expect(searches).toBe(0);
 });
 
 test("owner-authored soul details are included in public-search privacy checks", async () => {
-  const f = await fixture({ ...replyOutput, actions: [], tool: { kind: "web-search", query: "Zelphora recipe" } });
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "Zelphora recipe" } };
+    expect(driverEvidence(body).results[0]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted" } });
+    return replyOutput;
+  });
   const state = new ContactHabitat(f.journal, f.request.contact.id);
   state.configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true, soulCore: { voice: "Zelphora is the private project name", relationshipContext: "", sharedContext: "", boundaries: "" } });
   f.driver.config = { kind: "gateway", model: "alibaba/qwen3.5-flash", credentialFile: "synthetic", dailyBudgetUsd: 1 };
   f.driver.search = async () => { throw Error("Private query must not escape"); };
-  await expect(f.habitat.agent.compose(f.request)).rejects.toThrow("Public search query is not admitted");
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
 });
 
 test("reflection learns a long trigger also shown in clipped history without another model call", async () => {

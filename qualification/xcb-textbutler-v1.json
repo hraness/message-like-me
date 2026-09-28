@@ -24,7 +24,7 @@
   "packages/textbutler/src/daemon.ts": "8bf7f509a95ebacf1bf35d3cb9ad5569ba48647e71f6d7b4024cce59fee31345",
   "packages/textbutler/src/fast-driver.ts": "dfdf839eac18a5730fd5f1bd1e426741a1d2d87feed084c9a6819da8532b959c",
   "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
-  "packages/textbutler/src/habitat-agent.ts": "e957d6776b88abd9df2c826cd2a02a57f6ba94c27c1beff026a3914e0baf1d1f",
+  "packages/textbutler/src/habitat-agent.ts": "6398e5b1c531f16ec7dd54126a39572c015de9cad60240b560c88cfc5e0eb2f2",
   "packages/textbutler/src/habitat-evolution.ts": "9a006281b9315693cdcc96582dc1c4018319711db023a98886fe89cc46d80380",
   "packages/textbutler/src/habitat-program.ts": "b5a7f4cd70e2c67a84842d431162136d034203e6e382337697ac704f96dd7e32",
   "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
@@ -60,7 +60,7 @@
   "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
  },
  "validation": {
-  "command": "/Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/contact-status.test.ts packages/textbutler/src/habitat-task-shadow.test.ts",
-  "receiptSha256": "0b52cb93010b4b861a68696e0f3ce5c0807c8d74428d582824bc1b8fdfdbf3d0"
+  "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/habitat-agent.test.ts",
+  "receiptSha256": "24cdd6eebdef84064209ee81b1bf6062504b2bd84f554c5534768e4bf28ae32a"
  }
 }
