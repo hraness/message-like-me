@@ -24,3 +24,4 @@ site/.browser-artifacts/
 
 # Generated same-origin appearance bootstrap.
 /site/public/theme-bootstrap.js
+site/.production-browser/
