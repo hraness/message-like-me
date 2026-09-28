@@ -27,7 +27,7 @@ test('renders the complete README with one source-owned heading and working anch
     'Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends',
   );
   expect(html).toContain('"headline":"Textbutler"');
-  expect(html).toContain('"dateModified":"2026-09-23"');
+  expect(html).toContain('"dateModified":"2026-09-28"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 

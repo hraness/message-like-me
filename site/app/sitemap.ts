@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { createBlogSitemapPaths } from '@hraness/web-discovery';
 
 import { articleDiscovery, BLOG_PATH, indexableBlogPosts } from './_lib/blog';
-import { absoluteUrl } from './_lib/site';
+import { absoluteUrl, PAGE_LAST_MODIFIED } from './_lib/site';
 
 // Indexable posts only; quarantined posts stay out of the sitemap.
 function blogEntries(): MetadataRoute.Sitemap {
@@ -15,18 +15,6 @@ function blogEntries(): MetadataRoute.Sitemap {
     priority: path === BLOG_PATH ? 0.6 : 0.7,
   }));
 }
-
-// Each page carries the date its content last changed materially. Set these by
-// hand: Vercel builds from shallow clones, so Git history is not available.
-const PAGE_LAST_MODIFIED = {
-  '/': '2026-09-28',
-  '/sources': '2026-09-11',
-  '/docs': '2026-09-28',
-  '/methodology': '2026-09-11',
-  '/research': '2026-09-11',
-  '/about': '2026-09-28',
-  '/compare/ghostreply': '2026-09-28',
-} as const;
 
 const lastModified = (path: keyof typeof PAGE_LAST_MODIFIED): Date => new Date(`${PAGE_LAST_MODIFIED[path]}T00:00:00Z`);
 

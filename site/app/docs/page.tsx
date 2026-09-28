@@ -1,5 +1,5 @@
 import { DocumentPage } from '../_components/document-page';
-import { GITHUB_URL, pageMetadata } from '../_lib/site';
+import { GITHUB_URL, PAGE_LAST_MODIFIED, pageMetadata } from '../_lib/site';
 import { readmeHtml } from '../readme.generated';
 
 const description =
@@ -20,7 +20,7 @@ export default function DocsPage() {
       path="/docs"
       html={readmeHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/README.md`}
-      dateModified="2026-09-23"
+      dateModified={PAGE_LAST_MODIFIED['/docs']}
       sourceOwnsHeading
     />
   );
