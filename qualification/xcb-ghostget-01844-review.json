@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "scope": "Pin the native iMessage connector setup to Ghostget 0.18.44, the release that carries the bounded dated history.window transport operation.",
+  "baseCommit": "c4d1c4d6cea988883675e1cbff8231d72d292e48",
+  "motivation": "Companion to history-search: the deployed connector is ghostget 0.18.44 (main after hraness/ghostget#442); the native setup pin must accept it and refuse 0.18.43.",
+  "design": {
+    "pin": "imessage-setup VERSION constant moves 0.18.43 -> 0.18.44; fixture package version and canned snapshot follow; 0.18.43 joins the refused pre-pin list.",
+    "docs": "architecture/getting-started/ghostget-contract pin mentions updated."
+  },
+  "independentReview": {
+    "reviewer": "none",
+    "method": "Implementer self-review of the full diff only.",
+    "result": "Pending independent review."
+  },
+  "focusedValidation": {
+    "command": "/Users/benguo/.bun/bin/bun test packages/textbutler/src/imessage-setup.test.ts",
+    "toolchain": "Bun 1.3.14",
+    "result": {
+      "exitCode": 0,
+      "passed": 23,
+      "failed": 0,
+      "files": 1,
+      "assertions": 306
+    },
+    "logSha256": "5ac551e2d6c04ef49bd3e1d4d5cc28037ca0bc158d63042a4a94a38db4b65aaf"
+  }
+}
