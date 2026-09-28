@@ -15,7 +15,7 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) awai
 const replyOutput = { respond: true, confidence: 0.95, reason: "requested", summary: "Explain briefly", actions: [{ kind: "text", text: "A useful answer" }], tool: null };
 const driverEvidence = (body: string): { history: { id: string }[]; results: { file?: string; [key: string]: unknown }[]; tools: string[]; memory: HabitatMemory[]; memoryOmitted: number } => JSON.parse(JSON.parse(body).messages[1].content).context.inputs.context.evidence;
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
-async function fixture(output: unknown, evolution?: Parameters<typeof createHabitatAgent>[0]["evolution"], overrides: Partial<Pick<Parameters<typeof createHabitatAgent>[0], "memes" | "getWorkspace" | "repos" | "resolveOwnerIntent">> = {}) {
+async function fixture(output: unknown, evolution?: Parameters<typeof createHabitatAgent>[0]["evolution"], overrides: Partial<Pick<Parameters<typeof createHabitatAgent>[0], "memes" | "getWorkspace" | "repos" | "resolveOwnerIntent" | "history">> = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "butler-habitat-"))), journal = RunJournal.memory(), workspace = await ContactWorkspace.create(root);
   const contact = { ...newContact("synthetic-contact", "Synthetic", "route"), enabled: true }, now = Date.parse("2026-09-20T12:00:00.000Z");
   await workspace.write("history/recent.json", JSON.stringify({ messages: [{ id: "message", at: now - 1000, author: "contact", text: "butler help" }] }));
@@ -660,4 +660,39 @@ test("an explicit top-level tool wins over a salvaged action tool", async () => 
   // The top-level memory-search ran; the nested repo-sync was dropped, not run.
   expect(calls).toEqual([]);
   expect(f.calls()).toBe(2);
+});
+
+test("history-search is offered only when enabled, and pages the conversation through the provider", async () => {
+  const page = { matches: [{ id: "old-1", at: "2026-06-10T00:00:00.000Z", author: "contact", text: "met at the bridge", truncated: false }], scanned: 7, nextCursor: "2026-06-10T00:00:00.000Z", complete: false };
+  const seen: unknown[] = [];
+  const history = async (_contact: unknown, request: unknown, _signal: AbortSignal) => { seen.push(request); return page as never; };
+  // Without the plan flag and without a self chat, the tool is not listed.
+  const offBodies: string[] = [];
+  const off = await fixture((body: string) => { offBodies.push(body); return replyOutput; }, undefined, { history });
+  await off.habitat.agent.compose(off.request);
+  expect(driverEvidence(offBodies[0]!).tools).not.toContain("history-search");
+  // In the owner's self chat it is on by default, calls the provider port,
+  // and its result reaches the next model call.
+  const bodies: string[] = [];
+  const driven = await fixture((body: string, call: number) => { bodies.push(body);
+    return call === 1 ? { respond: true, confidence: 0.95, reason: "requested", summary: "Searching", actions: [], tool: { kind: "history-search", query: "bridge", from: "2026-06-01" } } : replyOutput;
+  }, undefined, { history });
+  const selfRequest = { ...driven.request, contact: { ...driven.request.contact, selfChat: true } };
+  const reply = await driven.habitat.agent.compose(selfRequest) as { actions: [{ kind: string; text: string }] };
+  expect(reply.actions[0]!.text).toBe("A useful answer");
+  expect(driven.calls()).toBe(2);
+  expect(driverEvidence(bodies[0]!).tools).toContain("history-search");
+  expect(seen).toEqual([{ query: "bridge", from: "2026-06-01", to: null, author: null, cursor: null }]);
+  expect(bodies[1]!).toContain("met at the bridge");
+  // An explicit plan flag turns it on for an ordinary contact too.
+  const flaggedBodies: string[] = [];
+  const flagged = await fixture((body: string) => { flaggedBodies.push(body); return replyOutput; }, undefined, { history });
+  new ContactHabitat(flagged.journal, flagged.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, historySearch: true });
+  await flagged.habitat.agent.compose(flagged.request);
+  expect(driverEvidence(flaggedBodies[0]!).tools).toContain("history-search");
+  // Without a history port the tool stays unlisted even in the self chat.
+  const unportedBodies: string[] = [];
+  const unported = await fixture((body: string) => { unportedBodies.push(body); return replyOutput; });
+  await unported.habitat.agent.compose({ ...unported.request, contact: { ...unported.request.contact, selfChat: true } });
+  expect(driverEvidence(unportedBodies[0]!).tools).not.toContain("history-search");
 });

@@ -107,6 +107,17 @@ export function createGhostgetAutomationClient(invoke: GhostgetAutomationInvoker
       if (enrollment.id !== enrollmentId || messages.some(message => automationHash(message.coordinate) !== automationHash(enrollment.conversation.coordinate))) throw new Error("History changed enrollment");
       return { enrollment, messages };
     },
+    /** One read-only dated page read live from the provider: newest messages
+     * within [after, before), oldest first, never advancing the event cursor. */
+    async historyWindow(enrollmentId: string, window: { before: string | null; after: string | null; limit: number }, signal?: AbortSignal) {
+      const instant = (value: string | null) => { if (value === null) return null; if (typeof value !== "string" || new Date(Date.parse(value)).toISOString() !== value) throw new Error("Invalid history window instant"); return value; };
+      const limit = integer(window.limit, 1, 200), before = instant(window.before), after = instant(window.after);
+      const r = automationRecord(await invoke("history.window", { enrollmentId: automationId(enrollmentId), limit, before, after }, signal), ["enrollment", "messages"]);
+      const enrollment = remember(r.enrollment), messages = array(r.messages, limit).map(parseAutomationMessage);
+      if (enrollment.id !== enrollmentId || messages.some(message => automationHash(message.coordinate) !== automationHash(enrollment.conversation.coordinate))) throw new Error("History changed enrollment");
+      if (messages.some(message => (before !== null && Date.parse(message.occurredAt) >= Date.parse(before)) || (after !== null && Date.parse(message.occurredAt) < Date.parse(after)))) throw new Error("History window returned a message outside its bounds");
+      return { enrollment, messages };
+    },
     async events(request: { enrollmentIds: readonly string[]; cursor: string | null; limit?: number }, signal?: AbortSignal) {
       const ids = array(request.enrollmentIds, 100).map(automationId), limit = integer(request.limit ?? 200, 1, 500);
       if (!ids.length || new Set(ids).size !== ids.length) throw new Error("Invalid event selection");

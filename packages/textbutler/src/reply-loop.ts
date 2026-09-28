@@ -4,6 +4,7 @@ import { assertAutomationBinding, type AutomationBinding } from "./automation-ow
 import { messageAuthor, pendingCluster, type MessageAuthor } from "./attribution.ts";
 import type { OwnerRuntimeState, TextbutlerControlService } from "./control-service.ts";
 import { boundedHistory } from "./enrollment.ts";
+import { searchHistory } from "./history-search.ts";
 import type { RunJournal } from "./journal.ts";
 import type { ContactSettings, Settings } from "./config.ts";
 import { keywordPresent, type MessageEvent } from "./decision.ts";
@@ -131,6 +132,21 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       list: async contact => (await shelf.list(contact.id)).filter(entry => contact.repos.includes(entry.url)) as JsonValue[],
     },
     resolveOwnerIntent,
+    // One conversation's archived messages, read only inside a reply run and
+    // only for a live enrollment; same read permission as the intake history.
+    history: async (contact, request, signal) => {
+      const binding = owner.bindings[contact.id]; if (binding?.version !== 2) throw Error("Habitat conversation is unavailable");
+      const read = async (window: { before: string | null; after: string | null; limit: number }, readSignal: AbortSignal) => {
+        const page = await client.historyWindow(binding.enrollmentId, window, readSignal);
+        assertAutomationBinding(binding, page.enrollment);
+        return page.messages.flatMap(message => {
+          if (message.kind !== "message" || message.text === null) return [];
+          const who = messageAuthor(message, contact, journal);
+          return who === "unknown" ? [] : [{ id: message.id, at: Date.parse(message.occurredAt), author: who, text: message.text }];
+        });
+      };
+      return JSON.parse(JSON.stringify(await searchHistory(read, request, { now: now(), signal })));
+    },
     active: contact => active(contact.id, contact.revision),
     async capabilities(contact) {
       const binding = owner.bindings[contact.id]; if (binding?.version !== 2) throw Error("Habitat conversation is unavailable");

@@ -13,10 +13,12 @@ import type { FastDriver } from "./fast-driver.ts";
 import { createMemeSearch, type MemeSearch } from "./meme-search.ts";
 import { JAVASCRIPT_LIMITS, runJavascriptTool } from "./javascript-tool.ts";
 import { searchHabitatMemory } from "./memory-search.ts";
+import { HISTORY_SEARCH_LIMITS, type HistorySearchRequest } from "./history-search.ts";
 
 const bounded = (maximum: number) => z.string().min(1).refine(value => Buffer.byteLength(value) <= maximum && !value.includes("\0"));
 const toolSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.enum(["web-search", "meme-search", "meme-image", "memory-search"]), query: bounded(256) }),
+  z.strictObject({ kind: z.literal("history-search"), query: bounded(HISTORY_SEARCH_LIMITS.queryBytes).nullish(), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullish(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullish(), author: z.enum(["owner", "contact", "any"]).nullish(), cursor: z.string().max(64).nullish() }),
   z.strictObject({ kind: z.literal("javascript"), code: bounded(JAVASCRIPT_LIMITS.codeBytes), input: z.unknown().optional() }),
   z.strictObject({ kind: z.literal("repo-sync"), url: bounded(256) }),
   z.strictObject({ kind: z.literal("repo-read"), repo: bounded(80), path: bounded(240) }),
@@ -42,7 +44,7 @@ function salvageToolRequest(result: z.infer<typeof outputSchema>): z.infer<typeo
 }
 const KEYWORD_RULE = "invocation=keyword means the latest message deliberately addressed the Butler by its keyword, which is an explicit request even when it is a greeting or small talk: set respond=true with confidence at least 0.85 and reply briefly.";
 const INSIST_RULE = "Your previous answer stayed silent, but this message is a deliberate keyword invocation that is waiting on you: reply now.";
-const outputContract = { respond: "boolean", confidence: "number 0..1; below 0.85 stays silent", reason: "requested|helpful|human_active|not_needed|uncertain", summary: "brief intended purpose of this response", actions: "0..7 action objects", tool: "null, {kind:web-search|meme-search|meme-image|memory-search,query:string}, {kind:javascript,code:string,input:JSON}, {kind:repo-sync,url:string}, {kind:repo-read,repo:string,path:string}, or {kind:repo-search,repo:string,query:string}" };
+const outputContract = { respond: "boolean", confidence: "number 0..1; below 0.85 stays silent", reason: "requested|helpful|human_active|not_needed|uncertain", summary: "brief intended purpose of this response", actions: "0..7 action objects", tool: "null, {kind:history-search,query,from,to,author,cursor}, {kind:web-search|meme-search|meme-image|memory-search,query:string}, {kind:javascript,code:string,input:JSON}, {kind:repo-sync,url:string}, {kind:repo-read,repo:string,path:string}, or {kind:repo-search,repo:string,query:string}" };
 const actionContract = [
   { kind: "text", text: "The response" }, { kind: "attachment", file: "an existing outbox path", name: "file.png", mimeType: "image/png" },
   { kind: "reaction", messageId: "an actual message id", emoji: "a supported reaction", action: "add" },
@@ -107,6 +109,10 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     read(contact: ContactSettings, repo: string, path: string): Promise<JsonValue>;
     search(contact: ContactSettings, repo: string, query: string): Promise<JsonValue>;
     list(contact: ContactSettings): Promise<JsonValue> };
+  /** Full archived history of the replying conversation only, paged backwards
+   * through bounded dated provider windows. Absent it, history-search stays
+   * unlisted. */
+  history?: (contact: ContactSettings, request: HistorySearchRequest, signal: AbortSignal) => Promise<JsonValue>;
   /** Deterministic owner intents on the self conversation (repo approvals).
    * Returns a fixed reply when the text resolves, else null for the driver. */
   resolveOwnerIntent?(contact: ContactSettings, text: string): Promise<string | null> }) {
@@ -188,11 +194,14 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         ...(plan.repoAccess === true && ports.repos !== undefined ? ["repo-sync", "repo-read", "repo-search"] : []),
         ...(plan.webSearch && ports.driver.config.kind === "gateway" && !tools.some(tool => tool.kind === "web-search") ? ["web-search"] : []),
         ...(plan.memeSearch ? ["meme-search", ...(admittedMemes.size && capabilities.includes("attachment") ? ["meme-image"] : [])] : []),
+        // Older plans carry no flag: history search defaults on for the
+        // owner's self chat and off for everyone else.
+        ...(ports.history !== undefined && (plan.historySearch ?? request.contact.selfChat === true) ? ["history-search"] : []),
       ];
       const context = { guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), invocation: request.invocation ?? "inferred", capabilities: [...capabilities], files, repos, results, outputContract,
         allowedActions: actionContract.filter(action => capabilities.includes(action.kind)),
         tools: availableTools,
-        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers or copied private messages.` };
+        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's full history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers or copied private messages.` };
       fitMemory(context, plan, 32_768);
       memory.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
       const run = await executeHabitatProgram({ phase: "respond", plan, context: context as JsonValue, executor: ports.driver.executor(`${request.runId}-driver-${step}`), signal });
@@ -215,6 +224,8 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
           results.push({ tool: tool.kind, result: await ports.repos!.read(request.contact, tool.repo, tool.path) });
         } else if (tool.kind === "repo-search") {
           results.push({ tool: tool.kind, result: await ports.repos!.search(request.contact, tool.repo, tool.query) });
+        } else if (tool.kind === "history-search") {
+          results.push({ tool: tool.kind, result: await ports.history!(request.contact, { query: tool.query ?? null, from: tool.from ?? null, to: tool.to ?? null, author: tool.author ?? null, cursor: tool.cursor ?? null }, signal) }); // JsonValue by port contract
         } else if (tool.kind === "memory-search") {
           const found = searchHabitatMemory(state.memory ?? [], tool.query);
           found.matches.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
@@ -235,10 +246,14 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
           }
         }
         assertCurrent();
+        // The evidence label describes the request without copying private
+        // conversation text: history-search lists only its window shape.
         const query = tool.kind === "javascript" ? `sha256:${createHash("sha256").update(tool.code).digest("hex")}`
           : tool.kind === "repo-sync" ? tool.url
           : tool.kind === "repo-read" ? `${tool.repo}:${tool.path}`
-          : tool.kind === "repo-search" ? `${tool.repo}:${tool.query}` : tool.query;
+          : tool.kind === "repo-search" ? `${tool.repo}:${tool.query}`
+          : tool.kind === "history-search" ? `q:${tool.query ?? ""} ${tool.from ?? ""}..${tool.to ?? ""} author:${tool.author ?? "any"}${tool.cursor ? " cursor" : ""}`
+          : tool.query;
         tools.push({ kind: tool.kind, query, result: clip(JSON.stringify(results.at(-1)!), 4096) });
         continue;
       } else if (result.respond) {

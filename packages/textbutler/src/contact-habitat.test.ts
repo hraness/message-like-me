@@ -110,7 +110,7 @@ test("only evidence-bound improvement with no case regressions promotes; rollbac
 
 test("evolution cannot flip egress flags; identical flags still promote", () => {
   const plan = { ...DEFAULT_HABITAT_PLAN, guidance: "Prefer concise explanations." };
-  for (const flip of [{ webSearch: true }, { memeSearch: false }, { javascript: true }, { memorySearch: false }]) {
+  for (const flip of [{ webSearch: false }, { memeSearch: false }, { javascript: true }, { memorySearch: false }, { historySearch: true }]) {
     const journal = RunJournal.memory();
     try {
       const habitat = new ContactHabitat(journal, "contact-a");
