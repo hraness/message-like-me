@@ -85,7 +85,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
 
 test('keeps the hero outcome-led and free of contract vocabulary', () => {
   const html = renderToStaticMarkup(<Home />);
-  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<div\b[^>]*class="[^"]*\bhraness-marketing-hero__frame\b[^"]*"[^>]*>/u.exec(html);
+  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<\/header>/u.exec(html);
   expect(hero).not.toBeNull();
   const heroCopy = (hero?.[0] ?? '').replace(/<[^>]+>/gu, ' ').toLowerCase();
   const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
@@ -114,12 +114,15 @@ test('keeps delivery vocabulary off the product pages', async () => {
 
 test('shows the real first terminal screen, synthetic contact context, and disclosure without claiming transport support', async () => {
   const html = renderToStaticMarkup(<Home />);
-  // The hero proof is the guided terminal's own first screen, not a mockup.
+  // The setup proof is the guided terminal's own first screen, not a mockup.
   const tui = await readFile(resolve(siteRoot, '../packages/textbutler/src/tui.ts'), 'utf8');
   for (const line of TERMINAL_FIRST_RUN) {
     if (line) expect(tui, line).toContain(JSON.stringify(line));
   }
-  expect(html).toContain('$ bun run textbutler tui');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('$ bun run textbutler tui');
+  expect(html).toContain('data-hraness-marketing="proof-frame"');
+  expect(html).toContain('data-language="shell"');
+  expect(html).toContain('syntax-token--command');
   expect(html).not.toContain('Illustration only.');
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   expect(html).toContain('🤖{ Where are you headed, and for how long? }');
@@ -195,7 +198,7 @@ test('keeps machine-readable setup and conditional subscription admission consis
 });
 
 test('offers guided source setup without implying a released AI engine or a menu bar app', async () => {
-  const home = renderToStaticMarkup(<Home />);
+  const home = renderToStaticMarkup(<Home />).replace(/<\/?span\b[^>]*>/gu, '');
   const about = renderToStaticMarkup(<About />);
   const discovery = await getDiscoveryText().text();
   for (const content of [home, about, discovery]) {

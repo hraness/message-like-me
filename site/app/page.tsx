@@ -2,16 +2,19 @@ import {
   MarketingCallToAction,
   MarketingFlow,
   MarketingPage,
+  MarketingProofFrame,
   MarketingQuestionList,
   MarketingRelated,
   MarketingSection,
   ProductHero,
   ProviderMarkChip,
+  SyntaxCode,
 } from '@hraness/design-kit/react/server';
 import { product, type PortfolioProductId } from '@hraness/design-kit/portfolio';
 import Link from 'next/link';
 
 import { SiteFooter, SiteHeader } from './_components/site-chrome';
+import { CodeBlock } from './_components/code-block';
 import {
   ARCHITECTURE_URL,
   GITHUB_URL,
@@ -45,20 +48,16 @@ type HomeQuestion = Readonly<{ question: string; answer: string; link?: Readonly
 const HOME_QUESTIONS: readonly HomeQuestion[] = [
   {
     question: 'Can I use Textbutler today?',
-    answer: 'Yes, from source on a Mac. The guided terminal helps you connect your messaging apps through Ghostget, add a conversation, check your inbox, and send replies you write yourself. That needs no AI account, and new installations start paused. A local build with a connected AI account adds the butler: it reads the conversations you turn on, drafts replies, and can send them on its own. There is no app to download or window to open; you control it from the terminal.',
-  },
-  {
-    question: 'Can it answer messages for me?',
-    answer: 'Yes, with some setup. With a local build and either your own Vercel AI Gateway key, which uses Qwen 3.5 Flash by default, or a Claude Code, Codex, or Devin subscription connected through xcb, the butler writes and sends replies, marked by default, to the contacts you turn on, once you resume it. With a subscription, it can also suggest replies for you to review. Without an AI account, you draft each reply yourself in the guided inbox, read the complete text, and choose when to send. Running from source never writes AI replies.',
+    answer: 'Yes, from source on a Mac. Start in the guided terminal with replies you write yourself; that needs no AI account. For AI replies, build a local copy and connect an AI account. New installations start paused, and each contact starts with automatic replies off.',
   },
   {
     question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
-    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. Textbutler answers only the contacts you turn on, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands on your Mac. If you only want suggestions, the built-in features are simpler.',
+    answer: 'Textbutler keeps notes for each contact, marks its replies by default, and can answer automatically in the conversations you turn on. Smart Reply and Writing Help offer suggestions you send yourself. GhostReply answers iMessages in your texting style. OpenClaw is a broader assistant that can run commands on your computer; Textbutler’s model cannot.',
     link: { href: '/compare/ghostreply', label: 'Textbutler compared with GhostReply' },
   },
   {
     question: 'Can my agent use it directly?',
-    answer: 'Yes. The JSON CLI is built for agents. It can list conversations, read and summarize history, write drafts, and send messages you have explicitly authorized. These are the same staged actions the butler uses, and they stay within what each contact you turn on allows.',
+    answer: 'Yes. Its JSON commands let an agent list conversations, read history, prepare drafts, and send messages you have explicitly authorized, within each contact’s permissions.',
   },
   {
     question: 'Which AI writes the replies?',
@@ -81,13 +80,9 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
 
 function TerminalProof() {
   return (
-    <figure className="tb-terminal">
-      <figcaption className="tb-terminal__caption">
-        <span>Terminal</span>
-        <span>First run on a new install</span>
-      </figcaption>
-      <pre aria-label="The guided terminal's first screen" tabIndex={0}><code><span className="tb-terminal__prompt">$ bun run textbutler tui</span>{'\n\n'}{TERMINAL_FIRST_RUN.join('\n')}</code></pre>
-    </figure>
+    <MarketingProofFrame caption="First run on a new install" className="tb-terminal" title="Terminal">
+      <pre aria-label="The guided terminal's first screen" tabIndex={0}><SyntaxCode code="$ bun run textbutler tui" language="shell" styles="classes" />{'\n\n'}<SyntaxCode code={TERMINAL_FIRST_RUN.join('\n')} language="text" styles="classes" /></pre>
+    </MarketingProofFrame>
   );
 }
 
@@ -102,23 +97,22 @@ export default function Home() {
           <ProductHero
             backdrop={false}
             align="start"
-            actions={[{ href: GETTING_STARTED_URL, label: 'Set up on your Mac' }, { href: '#replies', label: 'How replies work', emphasis: 'secondary' }]}
+            actions={[{ href: '#get-started', label: 'Set up on your Mac' }, { href: '#replies', label: 'How replies work', emphasis: 'secondary' }]}
             boundary={HERO_FOOTNOTE}
             className="mlm-marketing-hero"
             eyebrow="Messaging assistant for Mac"
-            frame={<TerminalProof />}
             heading="Your AI butler replies in the chats you choose."
             headingId="textbutler-title"
             name="Textbutler"
             summary="Turn it on for one person on iMessage, WhatsApp, or Beeper, and it replies as a clearly marked assistant that knows your history with them."
           />
+          <p className="tb-status" id="development">{SITE_STATUS}</p>
 
           <MarketingSection heading="A butler for each relationship" headingId="contacts-title" id="how-it-works" label="How it works" summary="You choose which contacts your agent can help, and each one gets its own notes. You can pause one conversation or all of them at any time.">
             <MarketingFlow ariaLabel="How Textbutler works with one contact" steps={[
-              { label: 'Choose a contact', detail: 'Pick one direct conversation from a connected app. New contacts start with the butler off, and by default up to five contacts can have it on at once.' },
-              { label: 'Give it context', detail: 'Optionally import up to 200 recent messages. Guidance, preferences, and dated memories live in an ordinary folder you can read and edit.' },
-              { label: 'Let your agent work', detail: 'It reads new messages, sums up what needs an answer, and drafts replies within what that contact allows. You can review everything in the inbox.' },
-              { label: 'Turn on automatic replies later', detail: 'Automatic replies stay off until you add an AI key or connect a subscription, turn replies on for this contact, and resume the butler. They need a local build.' },
+              { label: 'Choose a contact', detail: 'Pick one direct conversation. New contacts start with the butler off; the default limit is five contacts at once.' },
+              { label: 'Give it context', detail: 'Optionally import up to 200 recent messages, then add instructions and notes in files you can read and edit.' },
+              { label: 'Decide how it replies', detail: 'With a local build and an AI account, review drafts or enable automatic replies for that contact, then resume the butler.' },
             ]} />
           </MarketingSection>
 
@@ -130,35 +124,36 @@ export default function Home() {
             <dl className="architecture-rows">
               <div><dt>Only when asked, by default</dt><dd>New contacts use keyword mode: the butler answers only messages that contain the word “butler”. You can change the word, or switch a contact to smart mode and let the butler decide when to answer.</dd></div>
               <div><dt>Paced, not instant</dt><dd>Replies wait through bursts of messages, hold back after you’ve just written, and check the conversation again right before sending. The current connections can’t see when you’re typing.</dd></div>
-              <div><dt>Limits it can’t raise</dt><dd>You turn each contact on separately, a cap limits how many are on at once, and hourly reply limits and a confidence threshold apply. The butler can choose to stay silent; it can’t raise its own limits.</dd></div>
+              <div><dt>Limits it can’t raise</dt><dd>You set hourly reply limits and a confidence threshold. The butler can stay silent; it can’t raise its own limits.</dd></div>
               <div><dt>You see what you send</dt><dd>When you send or approve a reply yourself, the terminal shows its complete text first. You can pause one conversation or the whole butler at any time.</dd></div>
             </dl>
           </MarketingSection>
 
-          <MarketingSection heading="It learns each relationship" headingId="memory-title" id="memory" label="Memory" layout="split" summary="The butler keeps each contact’s context in ordinary files: guidance it reads, dated memories with sources, and the corrections you make. It is designed to learn from conversation without turning its guesses into facts.">
+          <MarketingSection heading="Keep notes for each relationship" headingId="memory-title" id="memory" label="Memory" layout="split" summary="Each contact has a folder with your instructions, dated memories and their sources, and corrections you make. Read or edit those files whenever you need to.">
             <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md     your standing instructions\n├── ABOUT.md      what matters in this relationship\n├── MEMORY.md     dated notes, with sources\n├── STYLE.md      how to help in this conversation\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre><p>Your settings, sign-ins, and permissions live elsewhere, where the butler can’t edit them. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></p></div>
           </MarketingSection>
 
           <MarketingSection heading="Start with a reply you write" headingId="development-title" id="get-started" label="Get started" summary="Textbutler runs from source on your Mac. Start with replies you write, and connect AI when you’re ready.">
-            <p className="tb-status">{SITE_STATUS}</p>
             <ol className="tb-steps">
               <li>
                 <h3>Open the guided terminal</h3>
-                <p>You need a Mac, Bun 1.3.14, and Ghostget for your messaging apps. The terminal walks you through connecting an app, adding one conversation, and sending a reply you write yourself. No AI account is needed for this step. New installations start paused.</p>
-                <pre tabIndex={0}><code>{'git clone https://github.com/hraness/textbutler.git\ncd textbutler\nbun install --frozen-lockfile --ignore-scripts\nbun run textbutler tui'}</code></pre>
+                <p>You need a Mac, Bun 1.3.14, and Ghostget for your messaging apps. Connect an app, add a conversation, and send a reply you write yourself. You need no AI account. New installations start paused.</p>
+                <CodeBlock code={'git clone https://github.com/hraness/textbutler.git\ncd textbutler\nbun install --frozen-lockfile --ignore-scripts\nbun run textbutler tui'} />
                 <a href={GETTING_STARTED_URL}>Follow the setup guide</a>
+                <details className="tb-details"><summary>See the first terminal screen</summary><TerminalProof /></details>
               </li>
               <li>
                 <h3>Turn on AI replies</h3>
                 <p className="provider-marks"><ProviderMarkChip mark="claudecode" size={20} /><ProviderMarkChip mark="codex" size={20} /><ProviderMarkChip mark="devin" size={20} /></p>
-                <p>Build a local copy. It refuses to build if the source files it checks differ from the last reviewed version. Then pipe in your own Vercel AI Gateway key, and replies are written by Qwen 3.5 Flash, capped at $1 a day. You can connect a Claude Code, Codex, or Devin subscription through xcb instead and run <code>providers check</code>. Running from source never writes AI replies. A finished setup doesn’t show that replies work, so test delivery and rich actions on your own account before you rely on them.</p>
-                <pre tabIndex={0}><code>{'bun run textbutler:install\npbpaste | ~/.local/bin/textbutler providers gateway-key'}</code></pre>
+                <p>Build a local copy, then connect your own Vercel AI Gateway key or a Claude Code, Codex, or Devin subscription through xcb. A subscription must pass <code>providers check</code>. Running from source never writes AI replies.</p>
+                <CodeBlock code={'bun run textbutler:install\npbpaste | ~/.local/bin/textbutler providers gateway-key'} />
                 <a href={`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`}>Read the subscription guide</a>
+                <details className="tb-details"><summary>Build and first-send checks</summary><p>The installer refuses to build if the source files it checks differ from the last reviewed version. Before relying on automatic replies, test delivery and rich actions on your own account.</p></details>
               </li>
               <li>
                 <h3>Leave it running in the background</h3>
                 <p>Textbutler has no window or menu bar icon. Install the background service once and it starts again each time you sign in. <code>status</code> shows what it’s doing, and <code>pause</code> stops every reply at once.</p>
-                <pre tabIndex={0}><code>{'bun run textbutler daemon install\nbun run textbutler status'}</code></pre>
+                <CodeBlock code={'bun run textbutler daemon install\nbun run textbutler status'} />
               </li>
             </ol>
             <p className="legacy-note">Looking for the original history tools? The legacy history package is still published with the <a href={RELEASE_URL}>Textbutler v{SOFTWARE_VERSION}</a> release. It does not install Textbutler or enable automatic replies. <Link href="/sources">View legacy history sources.</Link></p>
@@ -170,7 +165,7 @@ export default function Home() {
               <div><dt>No commands on your Mac</dt><dd>Through <a href="https://github.com/hraness/xcb">xcb</a> the AI model gets no tools of its own. It can’t run commands, and your AI sign-in stays in xcb. Signing in alone doesn’t turn AI replies on.</dd></div>
               <div><dt>Every send is recorded</dt><dd>The background service logs each send with the messaging app’s confirmation. A send whose outcome is unclear stays blocked until it is resolved, and it is never retried silently.</dd></div>
               <div><dt>Only what the connection supports</dt><dd>Messaging runs through <a href="https://ghostget.com">Ghostget</a>. Anything beyond text depends on the messaging app and its permissions. Features Textbutler can’t use, such as mini apps, show as unavailable.</dd></div>
-              <div><dt>Open source, and extensible</dt><dd>Textbutler is free and MIT licensed. Developers can add hooks for context and reply decisions, kept apart from the butler’s editable memory. Its source also serves as an example app for building on xcb.</dd></div>
+              <div><dt>Free and open source</dt><dd>Textbutler is MIT licensed. Your AI provider or subscription may charge separately. Developers can add hooks for context and reply decisions, kept apart from the butler’s editable memory.</dd></div>
             </dl>
             <p className="mlm-section-link"><a href={ARCHITECTURE_URL}>Read the architecture and its limits</a></p>
           </MarketingSection>
