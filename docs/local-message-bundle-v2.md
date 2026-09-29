@@ -1,10 +1,10 @@
 # Local message bundle v2
 
 Local message bundle v2 is the native WhatsApp evidence boundary between a
-Ghostget-owned Wacli adapter and Message Like Me. Ghostget owns Wacli discovery,
+GhostGet-owned Wacli adapter and Message Like Me. GhostGet owns Wacli discovery,
 authentication, local synchronization, provider interpretation, and export.
 Message Like Me reads only the finished caller-owned directory. It never starts
-Ghostget or Wacli, receives a WhatsApp credential or session database, accesses a
+GhostGet or Wacli, receives a WhatsApp credential or session database, accesses a
 network, or sends a message.
 
 The intended producer flow is:
@@ -21,8 +21,8 @@ messagelikeme ingest bundle \
   --json
 ```
 
-The checked compatibility coordinates are Ghostget v0.17.1 and official Wacli
-v0.15.0. Ghostget owns that executable dependency and its authentication state;
+The checked compatibility coordinates are GhostGet v0.17.1 and official Wacli
+v0.15.0. GhostGet owns that executable dependency and its authentication state;
 neither enters Message Like Me.
 
 That exact producer excludes every reaction-shaped Wacli row. Wacli v0.15.0
@@ -90,7 +90,7 @@ byte disagreement, and SHA-256 disagreement. The same public bounds as v1
 apply, except v2 admits exactly one account.
 
 The v2 wire contract retains the fixed `reactions.ndjson` artifact and strict
-reaction parser for proven records. The checked Ghostget v0.17.1/Wacli v0.15.0
+reaction parser for proven records. The checked GhostGet v0.17.1/Wacli v0.15.0
 producer leaves that artifact empty because it cannot prove current reaction
 state.
 
@@ -163,7 +163,7 @@ duplicates cannot prove equivalence.
 
 Both source provenances and all source-unique history remain stored. Proven
 message duplicates contribute once. A reaction can deduplicate only when a
-conforming producer supplies a proven reaction record; Ghostget v0.17.1 supplies
+conforming producer supplies a proven reaction record; GhostGet v0.17.1 supplies
 none, so this overlap path does not reconcile reaction state. The native Wacli
 conversation is the preferred action route and carries the exact private
 `whatsappJid` coordinate. Its proven Beeper duplicate remains evidence with
@@ -178,6 +178,6 @@ handles, account coordinates, message bodies, and source metadata stay in the
 private store or explicit owner-only artifacts.
 
 Message Like Me may write an exact `whatsappJid` route into an explicit
-mode-`0600` route inventory. That coordinate is evidence for a separate Ghostget
+mode-`0600` route inventory. That coordinate is evidence for a separate GhostGet
 binding and preview. Message Like Me does not authenticate, synchronize,
 preview, submit, or send through WhatsApp.

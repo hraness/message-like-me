@@ -114,9 +114,9 @@ describe('supported source presentation', () => {
     );
   });
 
-  test('pins the native WhatsApp Ghostget/Wacli contract exactly', () => {
+  test('pins the native WhatsApp GhostGet/Wacli contract exactly', () => {
     expect(WHATSAPP_COMPATIBILITY).toEqual({
-      producer: 'Ghostget',
+      producer: 'GhostGet',
       producerVersion: '0.17.1',
       providerCli: 'Wacli',
       providerCliVersion: '0.15.0',
@@ -129,14 +129,14 @@ describe('supported source presentation', () => {
       reactionWarning: 'reaction-state-unproven',
     });
     const whatsapp = SUPPORTED_SOURCES.find((entry) => entry.id === 'whatsapp-via-ghostget');
-    expect(whatsapp?.name).toBe('WhatsApp via Ghostget');
+    expect(whatsapp?.name).toBe('WhatsApp via GhostGet');
     expect(whatsapp?.boundary).toContain('omits reaction-shaped rows');
     expect(whatsapp?.boundary).toContain('never operates WhatsApp');
   });
 
   test('pins the currently verified Beeper producer without widening the manifest contract', () => {
     expect(BEEPER_COMPATIBILITY).toEqual({
-      producer: 'Ghostget',
+      producer: 'GhostGet',
       producerVersion: '0.17.1',
       adapterId: 'beeper-local',
       adapterVersion: '2.4.0',
@@ -159,19 +159,19 @@ describe('supported source presentation', () => {
     );
 
     const beeper = SUPPORTED_SOURCES.find((entry) => entry.id === 'beeper-via-ghostget');
-    expect(beeper?.name).toBe('Beeper via Ghostget');
+    expect(beeper?.name).toBe('Beeper via GhostGet');
     expect(beeper?.summary).toBe(
-      'Adds a finished Beeper bundle from Ghostget v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
+      'Adds a finished Beeper bundle from GhostGet v0.17.1 and adapter 2.4.0 to the private local evidence corpus.',
     );
-    expect(beeper?.boundary).toContain('All 32 reviewed operations stay in Ghostget');
+    expect(beeper?.boundary).toContain('All 32 reviewed operations stay in GhostGet');
     expect(beeper?.boundary).toContain('26 through one pinned Beeper CLI 0.6.2 executable');
     expect(beeper?.boundary).toContain('including supported actions and writes');
     expect(beeper?.boundary).toContain('plus six fixed Desktop loopback reads');
     expect(beeper?.boundary).toContain('receives no provider credentials');
-    expect(beeper?.boundary).toContain('calls no Ghostget or Beeper operation');
+    expect(beeper?.boundary).toContain('calls no GhostGet or Beeper operation');
     expect(beeper?.boundary).toContain('never sends');
     expect(beeper?.boundary).toContain('does not claim complete history');
-    expect(`${beeper?.summary}\n${beeper?.boundary}`).not.toMatch(/Ghostget v0\.16\.(?:1|5)/u);
+    expect(`${beeper?.summary}\n${beeper?.boundary}`).not.toMatch(/GhostGet v0\.16\.(?:1|5)/u);
   });
 
   test('publishes the catalog across human and machine discovery surfaces', async () => {
@@ -212,13 +212,13 @@ describe('supported source presentation', () => {
     expect(renderedHomePage).toContain('View legacy history sources.');
     expect(renderedHomePage).not.toContain('messagelikeme ingest');
     expect(renderedSourcesPage).toContain('Legacy history sources');
-    expect(renderedSourcesPage).toContain('They only import old messages and are separate from Textbutler’s live iMessage, WhatsApp, and Beeper connections');
-    expect(modelText).toContain('## Current Textbutler development status');
+    expect(renderedSourcesPage).toContain('They only import old messages and are separate from TextButler’s live iMessage, WhatsApp, and Beeper connections');
+    expect(modelText).toContain('## Current TextButler development status');
     expect(modelText).toContain('## Legacy Message Like Me history tools');
-    expect(sourcesPage).toContain('Beeper via Ghostget');
-    expect(sourcesPage).toContain('It owns zero of Ghostget’s');
+    expect(sourcesPage).toContain('Beeper via GhostGet');
+    expect(sourcesPage).toContain('It owns zero of GhostGet’s');
     expect(renderedSourcesPage).toContain(
-      'Ghostget v0.17.1 uses beeper-local adapter v2.4.0',
+      'GhostGet v0.17.1 uses beeper-local adapter v2.4.0',
     );
     expect(renderedSourcesPage).toContain(
       'Bring Beeper history into the same private evidence corpus.',
@@ -233,13 +233,13 @@ describe('supported source presentation', () => {
       'that source-package value is provenance only and never overrides the executable runtime identity',
     );
     expect(renderedSourcesPage).toContain(
-      'Message Like Me receives no provider credential or live session, never calls Ghostget or a Beeper operation, and never sends',
+      'Message Like Me receives no provider credential or live session, never calls GhostGet or a Beeper operation, and never sends',
     );
     expect(renderedSourcesPage).toContain(
-      'It owns zero of Ghostget’s 32 reviewed Beeper operations and receives only the finished bundle',
+      'It owns zero of GhostGet’s 32 reviewed Beeper operations and receives only the finished bundle',
     );
     expect(renderedSourcesPage).toContain(
-      'Ghostget’s separate internal bounded export',
+      'GhostGet’s separate internal bounded export',
     );
     expect(renderedSourcesPage).toContain(
       'does not expose Beeper’s raw export arguments or establish complete-history coverage',
@@ -283,7 +283,7 @@ describe('supported source presentation', () => {
       'u',
     );
     for (const copy of [readme, bundleContract]) {
-      expect(copy).toContain(`Ghostget v${BEEPER_COMPATIBILITY.producerVersion}`);
+      expect(copy).toContain(`GhostGet v${BEEPER_COMPATIBILITY.producerVersion}`);
       expect(copy).toMatch(providerCliPattern);
       expect(copy).toContain(`beeper-local@${BEEPER_COMPATIBILITY.adapterVersion}`);
       expect(copy).toContain(`${BEEPER_COMPATIBILITY.reviewedOperationCount} reviewed Beeper operations`);
@@ -307,7 +307,7 @@ describe('supported source presentation', () => {
       `schema version \`${BEEPER_COMPATIBILITY.bundleSchemaVersion}\``,
     );
     for (const coordinate of [
-      `Ghostget v${WHATSAPP_COMPATIBILITY.producerVersion}`,
+      `GhostGet v${WHATSAPP_COMPATIBILITY.producerVersion}`,
       `Wacli v${WHATSAPP_COMPATIBILITY.providerCliVersion}`,
       `schema version \`${WHATSAPP_COMPATIBILITY.bundleSchemaVersion}\``,
       WHATSAPP_COMPATIBILITY.sourceId,
@@ -356,7 +356,7 @@ describe('supported source presentation', () => {
     expect(renderedSourcesPage).toContain(WHATSAPP_COMPATIBILITY.reactionWarning);
     expect(renderedSourcesPage).toContain('not evidence of no reactions');
     for (const coordinate of [
-      `Ghostget v${BEEPER_COMPATIBILITY.producerVersion}`,
+      `GhostGet v${BEEPER_COMPATIBILITY.producerVersion}`,
       `executable reports v${BEEPER_COMPATIBILITY.providerCliVersion}`,
       `bundle schema ${BEEPER_COMPATIBILITY.bundleSchemaVersion}`,
       BEEPER_COMPATIBILITY.sourceId,
@@ -365,15 +365,15 @@ describe('supported source presentation', () => {
       expect(renderedSourcesPage).toContain(coordinate);
     }
     for (const exactModelClaim of [
-      'Beeper via Ghostget lets users bring a finished private bundle into the same local evidence corpus as other sources.',
-      'Ghostget v0.17.1 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
+      'Beeper via GhostGet lets users bring a finished private bundle into the same local evidence corpus as other sources.',
+      'GhostGet v0.17.1 adapter beeper-local v2.4.0 owns 32 reviewed Beeper operations: 26 run through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads.',
       'The executable’s reported 0.6.2 is runtime authority; the upstream tagged packages/cli/package.json declaration of 0.6.1 is provenance only.',
-      'Message Like Me receives no provider credentials, never calls Ghostget or Beeper operations, and never sends; it does not claim complete history.',
+      'Message Like Me receives no provider credentials, never calls GhostGet or Beeper operations, and never sends; it does not claim complete history.',
       'Every ingest path is read-only with respect to its source.',
     ]) {
       expect(modelText).toContain(exactModelClaim);
     }
-    expect(modelText).not.toMatch(/Ghostget v0\.16\.(?:1|5)/u);
+    expect(modelText).not.toMatch(/GhostGet v0\.16\.(?:1|5)/u);
 
     const jsonLdSource = /<script type="application\/ld\+json">([^<]+)<\/script>/u
       .exec(renderedRootLayout)?.[1];

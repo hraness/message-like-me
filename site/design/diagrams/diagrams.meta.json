@@ -1,19 +1,19 @@
 {
   "d1-one-message-wide": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. Textbutler sends 🤖{ 👀 } back through Ghostget right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through Ghostget to the phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. TextButler sends 🤖{ 👀 } back through GhostGet right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through GhostGet to the phone."
   },
   "d1-one-message-narrow": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, Ghostget passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through Ghostget, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through Ghostget to their phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through GhostGet, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through GhostGet to their phone."
   },
   "d2-words-local-wide": {
     "title": "Where your words go: a local model",
-    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
+    "desc": "GhostGet, TextButler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
   },
   "d2-words-local-narrow": {
     "title": "Where your words go: a local model",
-    "desc": "Ghostget, Textbutler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
+    "desc": "GhostGet, TextButler and the reply writer all sit inside your Mac. With a local model, Ollama on this Mac writes the reply and nothing crosses the boundary. The reply is written on your Mac. In testing. Vercel AI Gateway, xcb and web search sit outside; web search is used only with your key."
   },
   "d2-words-key-wide": {
     "title": "Where your words go: your Gateway key",

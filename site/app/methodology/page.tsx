@@ -21,7 +21,7 @@ export default function MethodologyPage() {
       html={methodologyHtml}
       sourceUrl={`${GITHUB_URL}/blob/main/docs/methodology.md`}
       dateModified="2026-08-27"
-      legacyNote="This page comes from Message Like Me, Textbutler’s predecessor. It covers analyzing message history and drafting unsent replies, not Textbutler’s live messaging."
+      legacyNote="This page comes from Message Like Me, TextButler’s predecessor. It covers analyzing message history and drafting unsent replies, not TextButler’s live messaging."
       sourceOwnsHeading
     />
   );

@@ -16,8 +16,8 @@ export function SiteHeader() {
       <MarketingSiteHeader
         action={{ href: '/#setup', label: 'Set up' }}
         ariaLabel="Primary navigation"
-        brand="Textbutler"
-        brandLabel="Textbutler home"
+        brand="TextButler"
+        brandLabel="TextButler home"
         brandMark="/marks/message-like-me.svg"
         className="site-header"
         trailing={<ThemeMenuButton aria-label="Appearance" />}
@@ -42,11 +42,11 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
         />
       )}
       <MarketingSiteFooter
-        ariaLabel="Textbutler"
+        ariaLabel="TextButler"
         brand={null}
         brandMark="/marks/message-like-me.svg"
         brandHref="/"
-        brandLabel="Textbutler home"
+        brandLabel="TextButler home"
         links={[
           { href: '/about', label: 'About' },
           { href: '/sources', label: 'Legacy history tools' },
@@ -55,13 +55,13 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
           { href: '/blog', label: 'Blog' },
           { href: GITHUB_URL, label: 'GitHub' },
         ]}
-        name="Textbutler"
+        name="TextButler"
       >
         <p>AI in your messages · Mac only · MIT source · in development</p>
       </MarketingSiteFooter>
       <HranessSiteFooter
         mailingList={{ kind: "none" }}
-        support={{ id: "textbutler", name: "Textbutler", updates: false, valueProposition: "Support ongoing development of Textbutler." }}
+        support={{ id: "textbutler", name: "TextButler", updates: false, valueProposition: "Support ongoing development of TextButler." }}
       />
     </>
   );

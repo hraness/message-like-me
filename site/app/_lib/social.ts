@@ -5,10 +5,13 @@ import { SOCIAL_ICON_SVG } from './social-icon';
 
 const registry = product('message-like-me');
 
-// The one declaration every Textbutler share image renders from. The card
+// The one declaration every TextButler share image renders from. The card
 // itself comes from @hraness/web-discovery; pages pass copy only.
 export const socialSite = defineSocialImageSite({
-  name: registry.name,
+  // The product name is TextButler. The portfolio registry in the pinned
+  // design-kit still spells it Textbutler, so the card names it directly until
+  // a design-kit release carries the new spelling.
+  name: 'TextButler',
   description: registry.oneLiner,
   domain: 'textbutler.app',
   icon: { kind: 'app', src: `data:image/svg+xml,${encodeURIComponent(SOCIAL_ICON_SVG)}` },

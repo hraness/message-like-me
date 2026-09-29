@@ -2,10 +2,10 @@
 
 [![skills.sh](https://skills.sh/b/hraness/message-like-me)](https://skills.sh/hraness/message-like-me)
 
-Textbutler replaced Message Like Me. This page keeps the documentation for the
+TextButler replaced Message Like Me. This page keeps the documentation for the
 published Message Like Me package and Agent Skill, which read and study your
-own message history. Installing them doesn't install Textbutler or turn on
-automatic replies. For Textbutler itself, start with the
+own message history. Installing them doesn't install TextButler or turn on
+automatic replies. For TextButler itself, start with the
 [README](../README.md).
 
 **A local-first CLI and Agent Skill for studying private messaging history and
@@ -18,9 +18,9 @@ Like Me and Ensoul Agent Skills teach Codex, Claude, and other coding agents how
 to interpret those artifacts through the agent environment you already use.
 
 Beeper users can bring a bounded observation from supported connected accounts
-into the same private evidence layer as Apple Messages. Ghostget writes a finished
+into the same private evidence layer as Apple Messages. GhostGet writes a finished
 local bundle; Message Like Me verifies and ingests that directory. It receives
-no provider credentials, never calls Ghostget or a Beeper operation, and never
+no provider credentials, never calls GhostGet or a Beeper operation, and never
 sends. Every ingest path is read-only with respect to its source.
 
 The result is an inspectable evidence layer for relationship-aware drafting,
@@ -113,8 +113,8 @@ visibly instead of being treated as current.
 | --- | --- | --- |
 | Apple Messages | The current macOS user's native `chat.db` history | Read-only ingestion from an ownership-checked stable local copy; Messages is never operated or changed. |
 | X data archive | Direct-message history in a caller-owned archive ZIP | X Chat is not included; the importer does not contact X, extract the archive, or download media. |
-| Beeper via Ghostget | A finished local bundle from Ghostget v0.17.1 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
-| WhatsApp via Ghostget | A one-account native bundle produced by Ghostget v0.17.1 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
+| Beeper via GhostGet | A finished local bundle from GhostGet v0.17.1 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads | Message Like Me receives no provider credentials, never calls GhostGet or a Beeper operation, and never sends; it reads only the finished bundle and does not claim complete history. |
+| WhatsApp via GhostGet | A one-account native bundle produced by GhostGet v0.17.1 with official Wacli 0.15.0 | Reaction-shaped rows are omitted with `reaction-state-unproven` when current state cannot be proved. Message Like Me verifies the finished bundle and never operates WhatsApp. |
 | macOS Contacts | Optional names and exact email or phone handles from AddressBook | Label enrichment only; Contacts is not a messaging-history source and is never changed. |
 
 ## Add private local history
@@ -194,7 +194,7 @@ delete retained history.
 
 To study accounts connected through Beeper, install the currently verified
 [`@hraness/ghostget@0.17.1`](https://github.com/hraness/ghostget/releases/download/v0.17.1/hraness-ghostget-0.17.1.tgz)
-canonical GitHub Release archive, then use Ghostget to create a new private Message Like Me
+canonical GitHub Release archive, then use GhostGet to create a new private Message Like Me
 bundle:
 
 ```sh
@@ -208,21 +208,21 @@ ghostget beeper export-message-like-me \
 
 The optional `--limit-chats`, `--limit-messages`, and `--max-participants`
 flags lower the export bounds. The output path must be a normalized absolute
-path to a directory that does not already exist. Ghostget v0.17.1 adapter
+path to a directory that does not already exist. GhostGet v0.17.1 adapter
 `beeper-local@2.4.0` exposes 32 reviewed Beeper operations: 26 through one
 pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus
-six fixed Desktop loopback reads. Message Like Me never calls Ghostget or any of
-those Beeper operations. The bundle command enters Ghostget's separate internal
+six fixed Desktop loopback reads. Message Like Me never calls GhostGet or any of
+those Beeper operations. The bundle command enters GhostGet's separate internal
 bounded export, which fixes the raw export arguments, excludes attachments, and
 preserves explicit incomplete-coverage evidence instead of claiming full
 history.
 
-Ghostget calls the pinned
+GhostGet calls the pinned
 [official Beeper CLI 0.6.2 release](https://github.com/beeper/cli/releases/tag/v0%2E6%2E2)
 directly. The executable reports version `0.6.2`, which is the runtime
 authority. At the upstream tag, `packages/cli/package.json` declares `0.6.1`;
 that source-package value is provenance only and never overrides the executable
-runtime identity. Ghostget enumerates
+runtime identity. GhostGet enumerates
 the connected account realm, invokes `export --no-attachments` once per
 account in deterministic order, and reports the account ordinal, elapsed-time
 heartbeats, and cumulative validated chat and message counts on stderr. It
@@ -235,7 +235,7 @@ export path does not use it. The pinned CLI path supplies the bounded account
 snapshots and local files needed for hash validation, deterministic conversion,
 crash recovery, and atomic publication. Provider URLs and credentials are
 excluded. Message Like Me does not receive the Beeper credential or live
-session, start Ghostget, invoke a Beeper operation, or send a message.
+session, start GhostGet, invoke a Beeper operation, or send a message.
 
 Ingest the finished directory, then inspect its redacted source health:
 
@@ -254,9 +254,9 @@ iMessage and prior bundle sources remain alongside it.
 The interchange, integrity, identity, and reimport laws are in the
 [version-one local message bundle contract](local-message-bundle-v1.md).
 Message Like Me accepts bundle schema `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Ghostget v0.17.1 is the currently verified
+source-transform version `1.1.0`. GhostGet v0.17.1 is the currently verified
 producer. Compatibility is determined by those exact manifest coordinates,
-not by an open-ended Ghostget package range.
+not by an open-ended GhostGet package range.
 
 Beeper exports describe bounded local observations. A later bounded export
 that omits an older record does not delete retained history. Explicit deletion,
@@ -265,7 +265,7 @@ reappearance restores it. Older snapshots cannot overwrite newer state. Use
 `sources show <source-id> --private --json` only when you deliberately need the
 private provider account and source metadata.
 
-For native WhatsApp evidence, install Ghostget v0.17.1 and let its official
+For native WhatsApp evidence, install GhostGet v0.17.1 and let its official
 Wacli 0.15.0 adapter create the one-account v2 bundle:
 
 ```sh
@@ -290,7 +290,7 @@ surfaces are excluded. The complete contract is in
 [local message bundle v2](local-message-bundle-v2.md).
 
 Wacli v0.15.0 may retain an earlier emoji after a reaction is removed, so its
-local rows cannot prove current active reaction state. Ghostget v0.17.1 omits
+local rows cannot prove current active reaction state. GhostGet v0.17.1 omits
 every reaction-shaped row and adds `reaction-state-unproven` when it observes
 one. An empty `reactions.ndjson` from this producer means reaction behavior was
 unobservable, not that the account had no reactions. The v2 wire contract keeps
@@ -394,8 +394,8 @@ person scopes and labels, never handles or message bodies.
 ## Prepare an exact private agent handoff
 
 Message Like Me can bind an ordered unsent draft to one exact local
-source-conversation candidate and one current opaque Ghostget context. It still
-does not invoke Ghostget, authenticate, launch a provider command, access a
+source-conversation candidate and one current opaque GhostGet context. It still
+does not invoke GhostGet, authenticate, launch a provider command, access a
 network, or send a message.
 
 Start with the redacted candidate inventory:
@@ -412,18 +412,18 @@ Ordinary stdout reports only its digest, counts, and selection state.
 the exact account, source, and tagged conversation coordinate already observed
 in that imported source: `beeperConversation` for a Beeper bundle,
 `whatsappJid` for a native Wacli bundle, or `imessageChat` for Messages. It never
-emits names, handles, participants, or a locator derived from them. Ghostget
+emits names, handles, participants, or a locator derived from them. GhostGet
 rejects a coordinate whose tag does not match the selected provider adapter.
 
 An X archive candidate is always `evidence-only` with reason
 `archive-source`. Handoff v1 also keeps group candidates evidence-only as an
-explicit direct-conversation product limit. This does not claim that Ghostget or
+explicit direct-conversation product limit. This does not claim that GhostGet or
 a provider cannot address an exact group. It prevents Message Like Me from
 authorizing one through this first handoff contract. Several eligible direct
 candidates produce an `ambiguous` selection state; no route is chosen from a
 name, title, participant list, or merged person scope.
 
-After Ghostget has written its exact current context and the agent has written an
+After GhostGet has written its exact current context and the agent has written an
 ordered one-to-eight-bubble draft, prepare one private handoff:
 
 ```sh
@@ -442,12 +442,12 @@ singly linked physical files. The context must carry the pinned
 an unexpired opaque route and context reference, and exact SHA-256 data and
 latest-message revisions. The output is a mode-`0600` file whose canonical
 digest binds those values, the selected source revision, corpus and profile
-evidence, bubble order, text, and optional reply references. Raw opaque Ghostget
+evidence, bubble order, text, and optional reply references. Raw opaque GhostGet
 references and draft bodies appear only in the explicit private inputs and
 handoff file.
 
 Verification and audit commands emit hashes, counts, timestamps, and
-pseudonymous IDs without bodies or raw Ghostget references:
+pseudonymous IDs without bodies or raw GhostGet references:
 
 ```sh
 messagelikeme handoff verify /absolute/private/handoff.json --json
@@ -456,7 +456,7 @@ messagelikeme handoff record <handoff-id> \
 messagelikeme handoffs show <handoff-id> --json
 ```
 
-Recording requires Ghostget's pinned body-free receipt binding. It carries the
+Recording requires GhostGet's pinned body-free receipt binding. It carries the
 provider-neutral client-intent digest, set to this exact Message Like Me
 handoff digest, along with route-reference, context-reference, exact-turn, and
 private-preview digests. It also carries the proven prefix and a canonical
@@ -768,17 +768,17 @@ import type {
 The library does not start the CLI, inspect Messages, Contacts, or an X archive,
 connect to a network, or send a draft merely because it is imported.
 
-## Ghostget and Wrench names
+## GhostGet and Wrench names
 
-Ghostget is the current name of Wrench. The original `--wrench-context` and
-`--wrench-receipt` options remain aliases for the documented Ghostget options. The SDK accepts
+GhostGet is the current name of Wrench. The original `--wrench-context` and
+`--wrench-receipt` options remain aliases for the documented GhostGet options. The SDK accepts
 `ghostgetContext` and retains the original `wrenchContext` input alias.
 Existing bundle, handoff, receipt, and database formats retain their versioned
 `wrench` identifiers so saved evidence remains verifiable.
 
 ## Optional support
 
-`messagelikeme support` shows optional ways to support Textbutler.
+`messagelikeme support` shows optional ways to support TextButler.
 The person reviews current options and confirms any payment in their browser.
 These options do not restrict the tool's features.
 

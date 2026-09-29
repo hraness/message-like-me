@@ -1,6 +1,6 @@
 # Launch diagrams
 
-These are the Slopcamera sources for the Textbutler launch diagrams. The rendered
+These are the SlopCamera sources for the TextButler launch diagrams. The rendered
 files in `public/diagrams/` are derived from them and are replaced on every render.
 
 ```sh
@@ -9,7 +9,7 @@ bun run diagrams             # render every source
 bun run diagrams d2-words    # render only the sources whose name starts with d2-words
 ```
 
-You need Slopcamera 3.3.x on `PATH` (or set `SLOPCAMERA_BIN`) and Google Chrome.
+You need SlopCamera 3.3.x on `PATH` (or set `SLOPCAMERA_BIN`) and Google Chrome.
 To use a different Chromium build, set `TEXTBUTLER_BROWSER_EXECUTABLE`. Each
 source renders four files: `<name>.light.svg`, `<name>.dark.svg`,
 `<name>.light@2x.png`, and `<name>.dark@2x.png`.
@@ -26,8 +26,8 @@ so their text stays readable on a 360px screen.
 
 ## Files
 
-- `*.diagram.json` holds the positioned Slopcamera source. Edit it directly.
-- `slopcamera.config.json` maps Slopcamera tones to the gruvbox palette tokens the site renders (`--card`, `--primary`, `--secondary`, `--line`, `--muted`):
+- `*.diagram.json` holds the positioned SlopCamera source. Edit it directly.
+- `slopcamera.config.json` maps SlopCamera tones to the gruvbox palette tokens the site renders (`--card`, `--primary`, `--secondary`, `--line`, `--muted`):
 
   | Tone | Role | Light / dark from Paper |
   | --- | --- | --- |
@@ -43,7 +43,7 @@ so their text stays readable on a 360px screen.
 
 ## Id conventions applied by `scripts/render-diagrams.ts`
 
-Slopcamera's schema has no dashed strokes, per-edge widths, or layering, so the
+SlopCamera's schema has no dashed strokes, per-edge widths, or layering, so the
 render script applies these conventions:
 
 - `dash-*` shapes get a dashed outline (the Your Mac boundary and optional destinations).
@@ -51,7 +51,7 @@ render script applies these conventions:
 - `under-*` shapes are drawn beneath the connectors (the swimlane fills).
 - `thin-*` edges are 1.25px, `dash-*` edges are dashed 1.25px, and every other edge is 1.75px.
 
-Emoji (`🤖{ 👀 }`) render in Chrome from the system emoji font. Slopcamera's own
+Emoji (`🤖{ 👀 }`) render in Chrome from the system emoji font. SlopCamera's own
 PNG rasterizer has no emoji font, so the script uses Chrome for the PNGs.
 
 `slopcamera diagram check` reports `small-target`, `too-many-elements`, and a

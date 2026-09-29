@@ -46,7 +46,7 @@ function textBeforeRelated(html: string): string {
   return (related === -1 ? html : html.slice(0, related)).replace(/<[^>]+>/gu, ' ').toLowerCase();
 }
 
-test('renders Textbutler with the shared grammar and one development status', () => {
+test('renders TextButler with the shared grammar and one development status', () => {
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('An AI butler in your messaging apps.');
@@ -55,12 +55,12 @@ test('renders Textbutler with the shared grammar and one development status', ()
   }
   expect(html).toContain('hraness-marketing-header__brand');
   const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
-  expect(header).toContain('aria-label="Textbutler home"');
+  expect(header).toContain('aria-label="TextButler home"');
   expect(header).toContain('hraness-foil-mark');
   expect(header).toContain('src="/marks/message-like-me.svg"');
   expect(header).not.toContain('src="/icon.png"');
   expect(html).toContain('data-foil=""');
-  expect(html).toContain('Textbutler');
+  expect(html).toContain('TextButler');
   expect(html).toContain('See how it works');
   expect(html).toContain('id="how-it-works"');
   expect(html).toContain('id="setup"');
@@ -84,8 +84,8 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('Built on your Mac');
   expect(html).toContain('Setup builds a small helper app on your Mac so macOS can grant iMessage access.');
   expect(html).toContain('It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.');
-  expect(html).not.toContain(`Textbutler v${SOFTWARE_VERSION}`);
-  expect(html).toContain('Installing them doesn’t install Textbutler or turn on automatic replies.');
+  expect(html).not.toContain(`TextButler v${SOFTWARE_VERSION}`);
+  expect(html).toContain('Installing them doesn’t install TextButler or turn on automatic replies.');
   expect(html).toContain('Only anonymous visit counts. textbutler.app counts page views');
   expect(html).toContain('It sets no cookies, doesn’t identify you, and doesn’t record sessions.');
   expect(html).toContain('"@type":"FAQPage"');
@@ -138,7 +138,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   // The marker is literal text with one space inside each brace.
   expect(html).toContain('🤖{ 👀 }');
-  expect(html).toContain('Textbutler runs on Sam’s Mac; the people are made up.');
+  expect(html).toContain('TextButler runs on Sam’s Mac; the people are made up.');
   expect(html).not.toContain('Happy to help');
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
@@ -209,7 +209,7 @@ test('keeps machine-readable setup and conditional subscription admission consis
   expect(discovery).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
   expect(discovery).not.toContain('still needs an xcb account');
   expect(discovery.slice(0, discovery.indexOf('## Legacy Message Like Me history tools'))).not.toContain('habitat');
-  expect(discovery).toContain('no app to download and no published Textbutler package');
+  expect(discovery).toContain('no app to download and no published TextButler package');
   expect(discovery).toContain(AGENT_SETUP_PROMPT);
   expect(discovery).toContain('Test inference and delivery on your own account');
 });

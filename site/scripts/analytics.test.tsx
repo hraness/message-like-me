@@ -43,7 +43,7 @@ test('credits stay labeled as coming soon and are not offered as a reply writer'
   expect(REPLY_CREDITS_NOTE).toContain('aren’t available yet');
   const html = renderToStaticMarkup(<Home />);
   expect(html).toContain('>Coming</span>');
-  expect(html).toContain('Coming soon: Textbutler AI credits');
+  expect(html).toContain('Coming soon: TextButler AI credits');
   expect(html).toContain('coming soon and can’t be bought yet');
 });
 

@@ -17,10 +17,10 @@ const GHOSTREPLY_PRIVACY_URL = 'https://ghostreply.lol/privacy.html';
 const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-safe.html';
 
 const description =
-  'GhostReply answers iMessages in your texting style on a $4.99 license. Textbutler answers as a marked assistant when someone says “butler”, with a local model, your own key, or your subscription.';
+  'GhostReply answers iMessages in your texting style on a $4.99 license. TextButler answers as a marked assistant when someone says “butler”, with a local model, your own key, or your subscription.';
 
 export const metadata = pageMetadata({
-  title: 'GhostReply alternative: Textbutler compared',
+  title: 'GhostReply alternative: TextButler compared',
   description,
   path: '/compare/ghostreply',
 });
@@ -29,22 +29,22 @@ const questions = [
   {
     question: 'Does a GhostReply reply say it was automated?',
     answer:
-      'GhostReply’s site describes replies that match your style, slang, length, and emojis, and does not describe a visible marker; its safety guide recommends telling a contact yourself when AI assistance would be material. Textbutler marks generated replies with 🤖 by default, and you can change or clear the three disclosure symbols per contact.',
+      'GhostReply’s site describes replies that match your style, slang, length, and emojis, and does not describe a visible marker; its safety guide recommends telling a contact yourself when AI assistance would be material. TextButler marks generated replies with 🤖 by default, and you can change or clear the three disclosure symbols per contact.',
   },
   {
     question: 'Do I need my own AI account?',
     answer:
-      `Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Not necessarily for Textbutler either. ${REPLY_WRITERS_SENTENCE} A local model needs no account at all. Connecting chats and sending replies you type yourself need no AI option.`,
+      `Not for GhostReply: hosted AI is included in the $4.99 license, and no AI API key is involved. Not necessarily for TextButler either. ${REPLY_WRITERS_SENTENCE} A local model needs no account at all. Connecting chats and sending replies you type yourself need no AI option.`,
   },
   {
     question: 'Can either app send without me watching?',
     answer:
-      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New Textbutler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler waits 5 minutes after you last wrote.',
+      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New TextButler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler waits 5 minutes after you last wrote.',
   },
   {
     question: 'Where does my message history go?',
     answer:
-      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. Textbutler keeps a folder of notes per person locally. With a local model through Ollama (in testing), the reply is written on your Mac too; with your Gateway key or your subscription, the conversation context goes to that service.',
+      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. TextButler keeps a folder of notes per person locally. With a local model through Ollama (in testing), the reply is written on your Mac too; with your Gateway key or your subscription, the conversation context goes to that service.',
   },
 ] as const;
 
@@ -69,10 +69,10 @@ export default function CompareGhostReplyPage() {
         />
         <header className="document-hero">
           <p className="eyebrow">Compare</p>
-          <h1>Textbutler compared with GhostReply</h1>
+          <h1>TextButler compared with GhostReply</h1>
           <p>
-            GhostReply and Textbutler both answer the iMessage conversations you choose on a Mac.
-            Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick Textbutler
+            GhostReply and TextButler both answer the iMessage conversations you choose on a Mac.
+            Pick GhostReply for a finished $4.99 app whose replies read as yours. Pick TextButler
             if you want replies marked as an assistant’s, answers only when someone says “butler”,
             WhatsApp and Beeper as well as iMessage, and a choice of what writes the replies, and
             you are comfortable building it from source (your coding agent can do that for you).
@@ -82,10 +82,10 @@ export default function CompareGhostReplyPage() {
         <article className="readme-prose document-prose">
           <p>
             <a href={GHOSTREPLY_URL}>GhostReply</a> is a $4.99 Mac app whose pitch is that the
-            reply reads like you wrote it. Textbutler is a free, MIT-licensed butler whose replies
+            reply reads like you wrote it. TextButler is a free, MIT-licensed butler whose replies
             announce that an assistant sent them.
           </p>
-          <p>Textbutler status: {SITE_STATUS_LABEL}. <Link href="/#status">See where it stands</Link>.</p>
+          <p>TextButler status: {SITE_STATUS_LABEL}. <Link href="/#status">See where it stands</Link>.</p>
 
           <h2>What GhostReply does</h2>
           <p>
@@ -106,9 +106,9 @@ export default function CompareGhostReplyPage() {
             create.
           </p>
 
-          <h2>What Textbutler does</h2>
+          <h2>What TextButler does</h2>
           <p>
-            Textbutler is a headless macOS butler: a CLI, a guided terminal, and a background daemon,
+            TextButler is a headless macOS butler: a CLI, a guided terminal, and a background daemon,
             with no window or menu bar icon. You turn it on per conversation across iMessage, WhatsApp,
             and Beeper, and it keeps each contact’s context in a folder of ordinary files you can
             open and edit. New installations start paused, and new contacts start disabled.
@@ -126,14 +126,14 @@ export default function CompareGhostReplyPage() {
           <h2>How they compare</h2>
           <table>
             <caption>
-              Read from GhostReply’s site, safety guide, and privacy page, and from Textbutler’s
+              Read from GhostReply’s site, safety guide, and privacy page, and from TextButler’s
               documentation, on September 26, 2026
             </caption>
             <thead>
               <tr>
                 <th scope="col">Aspect</th>
                 <th scope="col">GhostReply</th>
-                <th scope="col">Textbutler</th>
+                <th scope="col">TextButler</th>
               </tr>
             </thead>
             <tbody>
@@ -173,7 +173,7 @@ export default function CompareGhostReplyPage() {
           <h2>Which one fits</h2>
           <p>
             GhostReply fits if you want a finished, paid Mac app whose replies pass as yours and
-            you accept reply context going through its hosted backend. Textbutler fits if you want
+            you accept reply context going through its hosted backend. TextButler fits if you want
             each reply marked as an assistant’s, want the reply written on your own Mac or on a
             subscription you already pay for, want to inspect and edit what it remembers about each person, or want
             WhatsApp and Beeper in scope alongside iMessage.
@@ -182,7 +182,7 @@ export default function CompareGhostReplyPage() {
             One caution applies to both: the person on the other end may assume you wrote the
             reply. GhostReply’s own safety guide recommends telling a contact when AI assistance
             would be material to their expectations, and it suggests keeping automatic sending off
-            for consequential conversations. Textbutler’s marker makes the disclosure part of the
+            for consequential conversations. TextButler’s marker makes the disclosure part of the
             message itself.
           </p>
 
@@ -199,17 +199,17 @@ export default function CompareGhostReplyPage() {
             <li><a href={GHOSTREPLY_URL}>GhostReply product page</a></li>
             <li><a href={GHOSTREPLY_PRIVACY_URL}>GhostReply privacy details</a> (updated August 22, 2026)</li>
             <li><a href={GHOSTREPLY_SAFETY_URL}>GhostReply’s own safety guide</a></li>
-            <li><a href={GETTING_STARTED_URL}>Textbutler setup guide</a></li>
-            <li><a href={SUBSCRIPTION_GUIDE_URL}>How Textbutler connects a subscription through xcb</a></li>
+            <li><a href={GETTING_STARTED_URL}>TextButler setup guide</a></li>
+            <li><a href={SUBSCRIPTION_GUIDE_URL}>How TextButler connects a subscription through xcb</a></li>
           </ul>
           <p>
-            Descriptions of GhostReply come from its public pages; Textbutler has no affiliation
+            Descriptions of GhostReply come from its public pages; TextButler has no affiliation
             with it and this page does not test its app.
           </p>
         </article>
         <nav className="document-next" aria-label="Learn more">
           <Link href="/docs">Read the project docs</Link>
-          <Link href="/about">About Textbutler</Link>
+          <Link href="/about">About TextButler</Link>
         </nav>
       </main>
       <SiteFooter path="/compare/ghostreply" />

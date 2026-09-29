@@ -1,24 +1,24 @@
-# WhatsApp through Ghostget
+# WhatsApp through GhostGet
 
-WhatsApp uses the same Textbutler contact settings, memory, disclosure, hooks
-and reply policy as iMessage. Ghostget owns the linked device, pairing,
-credentials, synchronization and send implementation. Textbutler never runs
+WhatsApp uses the same TextButler contact settings, memory, disclosure, hooks
+and reply policy as iMessage. GhostGet owns the linked device, pairing,
+credentials, synchronization and send implementation. TextButler never runs
 `wacli` directly or imports a WhatsApp session database.
 
 ```mermaid
 flowchart LR
-  Cli[Textbutler CLI] --> Butler[Textbutler daemon]
+  Cli[TextButler CLI] --> Butler[TextButler daemon]
   Butler --> Xcb[xcb]
-  Butler --> Ghostget[Ghostget owner process]
-  Ghostget --> Messages[iMessage helper]
-  Ghostget --> WhatsApp[Pinned wacli linked device]
+  Butler --> GhostGet[GhostGet owner process]
+  GhostGet --> Messages[iMessage helper]
+  GhostGet --> WhatsApp[Pinned wacli linked device]
 ```
 
 ## Setup and behavior
 
 Configure the WhatsApp account and its managed automation permissions in
-Ghostget, install its verified private messaging helper, then select that
-account in Textbutler's private `state/host.json`. Synchronization, enrollment and activation require explicit owner protocol
+GhostGet, install its verified private messaging helper, then select that
+account in TextButler's private `state/host.json`. Synchronization, enrollment and activation require explicit owner protocol
 operations; `textbutler status` shows their state but does not initiate them. Enable a
 contact only after the selected agent account passes its checks. New contacts and new installations start inactive.
 See [runtime setup](../../packages/textbutler/README.md).
@@ -28,12 +28,12 @@ incarnation, source generation and participant identity. Phone-number and
 linked-identity JIDs are never equated from similar digits. Self chats,
 broadcasts, newsletters and unsupported groups cannot be enrolled.
 
-The Ghostget provider uses a reviewed private transport patch on
+The GhostGet provider uses a reviewed private transport patch on
 [wacli](https://github.com/openclaw/wacli) 0.15.0. A single owned synchronization
 process maintains a bounded SQLite event journal and accepts generation-bound
 private requests. Each outward request gets a durable claim and one application
 dispatch attempt. It does not reuse stock send retry behavior after a timeout.
-The exact binary, patch and resource hashes are recorded in Ghostget's package.
+The exact binary, patch and resource hashes are recorded in GhostGet's package.
 
 Events preserve message identity, authored time, edits, deletion and reactions.
 Cursor anchors detect retention gaps and replaced stores. Catch-up and old
@@ -53,11 +53,11 @@ further automatic activity until reconciled.
 
 Capabilities are observed per account and intersected with its managed
 permissions. An unavailable capability is never converted to another action.
-Textbutler adds its configured disclosure before all rich responses.
+TextButler adds its configured disclosure before all rich responses.
 
 [WPPConnect](https://github.com/wppconnect-team/wppconnect) remains an alternative
-Ghostget provider implementation if a specific missing capability warrants it.
-It is not a second linked-device stack inside Textbutler. Replacing the provider
+GhostGet provider implementation if a specific missing capability warrants it.
+It is not a second linked-device stack inside TextButler. Replacing the provider
 must preserve identity and pending-action reconciliation or require explicit
 re-enrollment.
 

@@ -80,9 +80,9 @@ distributed bytes.
 
 ### Store and daemon ownership
 
-Extend Textbutler's existing `state/runs.sqlite`, owned by
+Extend TextButler's existing `state/runs.sqlite`, owned by
 [`RunJournal`](../../packages/textbutler/src/journal.ts). Its account leases
-already use that same SQLite connection. A Textbutler-owned `AccountLeaseStore`
+already use that same SQLite connection. A TextButler-owned `AccountLeaseStore`
 wrapper for native controllers must acquire the lease and reserve its invocation
 in one synchronous transaction. Reservation inside the later transport factory
 would leave a crash interval with an owned lease but no invocation record.
@@ -159,7 +159,7 @@ discovery. Contact reply execution stays unavailable until its exact tool,
 configuration and filesystem restrictions qualify. Credentials remain outside
 contact workspaces; signing in does not enable replies or message delivery.
 
-Wire the factory through the actual packaged Textbutler runtime and CLI into
+Wire the factory through the actual packaged TextButler runtime and CLI into
 `startDaemon`, with the admitted helper image preserved in the signed application
 resources. A test-only `startDaemon({ managedCodex })` injection is insufficient.
 Acceptance requires installed-artifact execution through that real composition,

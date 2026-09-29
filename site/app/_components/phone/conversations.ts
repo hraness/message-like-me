@@ -68,7 +68,7 @@ export interface Conversation {
   readonly via?: string;
 }
 
-/** Wrap text exactly as Textbutler marks what it sends. */
+/** Wrap text exactly as TextButler marks what it sends. */
 export function marked(text: string): string {
   return `🤖{ ${text} }`;
 }

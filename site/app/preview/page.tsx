@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { REPLY_WRITERS_SENTENCE, SITE_HEADLINE, SITE_STATUS } from '../_lib/site';
 
-export const metadata: Metadata = { title: { absolute: 'Textbutler | Preview' }, robots: { follow: false, index: false } };
+export const metadata: Metadata = { title: { absolute: 'TextButler | Preview' }, robots: { follow: false, index: false } };
 
 export default function PreviewPage() {
   return <main id="main-content"><section className="hero" aria-labelledby="textbutler-preview-heading">
