@@ -19,7 +19,7 @@
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
     "packages/textbutler/src/grammar.test.ts": "e95b4b9d6524da1f0986458458253e904d02b80ce62ddd09cb741c08eaf7b5da",
     "packages/textbutler/src/cli-golden.test.ts": "2ce5815fe9c046010d9934f083a5ecce1fd987eb14925af863ae03bc71d07ef9",
-    "packages/textbutler/src/daemon.test.ts": "d7f2c716319b4b1537f34664a22762733a49c775548534eda1cccf5f4e9b1d5a",
+    "packages/textbutler/src/daemon.test.ts": "09563846d108a786434598ebc95145996c88af9d0097ae47db22511413e4e15f",
     "packages/textbutler/src/cli.test.ts": "43d334967627b9e1c824adf421df54f8014672e58dcb0d54ba42ce1aaba736b1",
     "scripts/install-textbutler.test.ts": "bb0d159197d05cb967840fce662d7182c281cfd9f6a6864d5b96c72df139eb72",
     "scripts/textbutler-build.test.ts": "e37acb11c89517d9c3cf9f2607a3cdf45d28a43402422be6902eb77468d06d94",
