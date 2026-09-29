@@ -7,6 +7,7 @@
 @import '@hraness/site-footer/styles.css';
 @import '../styles/vendor/hraness-paper/paper-theme.css';
 @import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
+@import '../styles/vendor/hraness-forced-colors/marketing-forced-colors.css';
 @import '../styles/vendor/hraness-lantern/lantern-material.css';
 @import "@hraness/design-kit/palettes.css";
 
@@ -152,16 +153,18 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 }
 /* Primary actions are one flat accent button everywhere, header included;
  * hero and closing secondary actions read as a text link. */
-:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"] {
-  border: 1px solid var(--primary);
-  background: var(--primary);
-  background-image: none;
-  box-shadow: none;
-  color: var(--primary-foreground);
-  -webkit-text-fill-color: currentColor;
-}
-:root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"]:hover {
-  background: color-mix(in oklch, var(--primary) 86%, var(--foreground));
+@media (forced-colors: none) {
+  :root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"] {
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    background-image: none;
+    box-shadow: none;
+    color: var(--primary-foreground);
+    -webkit-text-fill-color: currentColor;
+  }
+  :root :is(.hraness-marketing-action, .hraness-status-page__action)[data-emphasis="primary"]:hover {
+    background: color-mix(in oklch, var(--primary) 86%, var(--foreground));
+  }
 }
 .textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="primary"] { padding-inline: 1.25rem; }
 .textbutler-marketing :where(.hraness-marketing-hero__actions, .hraness-marketing-cta__actions) .hraness-marketing-action[data-emphasis="secondary"] {
