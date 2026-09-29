@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CONTROL_PROTOCOL, type ControlRequest, type ControlResponse } from "../../control/src/index.ts";
 import {
   CAMPAIGN_DEFAULTS, capsAllowAt, emptyState, idempotencyKey, inQuietHours, parseCampaign, parseCampaignArgs, parseDuration,
-  parseQuietHours, quietHoursEnd, renderTemplate, runCampaignCommand, type CampaignPorts, type CampaignState,
+  normalizeHandle, parseQuietHours, parseSuppressList, quietHoursEnd, renderTemplate, runCampaignCommand, type CampaignPorts, type CampaignState,
 } from "./campaign.ts";
 import { OwnerCliError } from "./owner-cli.ts";
 import { OPERATOR_KEY_PATTERN } from "./owner-replies.ts";
@@ -12,10 +12,11 @@ const ZONE = "America/New_York";
 
 /** A simulated daemon: sends are keyed by idempotency key, exactly as the
  * journal keys them, so a repeated key reports the first outcome. */
-function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean; butler?: boolean }[]; recentOwner?: Map<string, number>; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number>;
+function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean; butler?: boolean; handles?: string[] }[]; recentOwner?: Map<string, number>; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number>;
   /** A contact reply this many ms after the first dispatch to them, visible once the clock reaches it. */
   replyAfterSend?: Map<string, number>; runningKeys?: Set<string> } = {}) {
-  const contacts = options.contacts ?? [{ id: "c-1", name: "Synthetic One" }, { id: "c-2", name: "Synthetic Two" }];
+  // Synthetic 555 numbers only; never real contact data.
+  const contacts = options.contacts ?? [{ id: "c-1", name: "Synthetic One", handles: ["+15555550101"] }, { id: "c-2", name: "Synthetic Two", handles: ["+15555550102"] }];
   const journal = new Map<string, { runId: string; state: "submitted" | "failed" | "indeterminate"; text: string; contactId: string }>();
   const dispatched: { contactId: string; text: string; key: string; minimumIntervalMs: number; at: number }[] = [];
   const requests: ControlRequest[] = [];
@@ -23,7 +24,7 @@ function daemon(options: { contacts?: { id: string; name: string; selfChat?: boo
   const request = async (item: ControlRequest): Promise<ControlResponse> => {
     requests.push(item);
     if (item.command === "snapshot") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot",
-      snapshot: { contacts: contacts.map(contact => ({ id: contact.id, name: contact.name, settings: { selfChat: contact.selfChat ?? false, enabled: contact.butler ?? false, keyword: "butler" } })) } } as never;
+      snapshot: { contacts: contacts.map(contact => ({ id: contact.id, name: contact.name, ...(contact.handles && "includeHandles" in item && item.includeHandles ? { handles: contact.handles } : {}), settings: { selfChat: contact.selfChat ?? false, enabled: contact.butler ?? false, keyword: "butler" } })) } } as never;
     if (item.command === "messages.history") {
       const replyAt = options.replies?.get(item.contactId), delay = options.replyAfterSend?.get(item.contactId);
       const firstAt = dispatched.find(value => value.contactId === item.contactId)?.at;
@@ -54,12 +55,14 @@ function daemon(options: { contacts?: { id: string; name: string; selfChat?: boo
   return { request, journal, dispatched, requests, now: () => clock, advance: (ms: number) => { clock += ms; } };
 }
 
-function harness(file: string, fake: ReturnType<typeof daemon>, stateRef: { value: CampaignState | null } = { value: null }) {
+function harness(file: string, fake: ReturnType<typeof daemon>, stateRef: { value: CampaignState | null } = { value: null }, suppress: { files?: Map<string, string | Error> } = {}) {
   const printed: Record<string, unknown>[] = [], sleeps: number[] = [];
   const ports: CampaignPorts = {
     request: fake.request, now: fake.now, random: () => 0.5, print: value => { printed.push(value as Record<string, unknown>); },
     sleep: async milliseconds => { sleeps.push(milliseconds); fake.advance(milliseconds); },
     readCampaign: async () => file,
+    readSuppress: async path => { const value = suppress.files?.get(path); if (value === undefined || value instanceof Error) throw value ?? new Error("missing"); return value; },
+    suppressExists: async path => suppress.files?.has(path) ?? false,
     loadState: async (_path, campaign) => structuredClone(stateRef.value ?? emptyState(campaign)),
     saveState: async (_path, state) => { stateRef.value = structuredClone(state); },
     lock: async () => async () => undefined,
@@ -330,15 +333,18 @@ test("a recipient texted recently from outside this file waits out the recipient
   expect(old.dispatched[0]!.at).toBe(START);
 });
 
-test("a dry run flags texts the daemon would refuse for the butler keyword", async () => {
+test("a dry run plans texts that name the butler for people whose butler is on, with no refusal", async () => {
   const fake = daemon({ contacts: [{ id: "c-1", name: "Synthetic One", butler: true }, { id: "c-2", name: "Synthetic Two" }] });
-  const file = [line({ id: "a", contact: "c-1", text: "Try the butler" }), line({ id: "b", contact: "c-2", text: "Try the butler" }), line({ id: "c", contact: "c-1", text: "Textbutler ships" })].join("\n");
+  const file = [line({ id: "a", contact: "c-1", text: "Try the butler" }), line({ id: "b", contact: "c-2", text: "Try the butler" }), line({ id: "c", contact: "c-1", text: "TextButler ships" })].join("\n");
   const { ports, printed } = harness(file, fake);
   expect(await runCampaignCommand([...ARGS, "--dry-run"], ports)).toBe(0);
-  expect(printed[0]).toMatchObject({ dryRun: true, wouldRefuse: 1, entries: [{ id: "a", refusal: "butler-keyword" }, { id: "b" }, { id: "c" }] });
-  const entries = (printed[0] as { entries: Record<string, unknown>[] }).entries;
-  expect(entries[1]).not.toHaveProperty("refusal");
-  expect(entries[2]).not.toHaveProperty("refusal");
+  expect(printed[0]).toMatchObject({ dryRun: true, counts: { pending: 3 }, entries: [{ id: "a", text: "Try the butler" }, { id: "b" }, { id: "c", text: "TextButler ships" }] });
+  expect(printed[0]).not.toHaveProperty("wouldRefuse");
+  for (const entry of (printed[0] as { entries: Record<string, unknown>[] }).entries) expect(entry).not.toHaveProperty("refusal");
+  // The real run sends each one verbatim.
+  const run = harness(file, fake);
+  expect(await runCampaignCommand(ARGS, run.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.text)).toEqual(["Try the butler", "Try the butler", "TextButler ships"]);
 });
 
 test("a missing campaign file is reported as a file problem, not a service outage", async () => {
@@ -347,4 +353,89 @@ test("a missing campaign file is reported as a file problem, not a service outag
   ports.readCampaign = async () => { throw Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" }); };
   await expect(runCampaignCommand([...ARGS, "--dry-run"], ports)).rejects.toThrow("The campaign file does not exist.");
   expect(fake.requests).toEqual([]);
+});
+
+const SUPPRESS_FILE = [
+  "# people who asked not to be texted (synthetic)",
+  "",
+  "(555) 555-0102  # formatting and a trailing comment",
+].join("\n");
+
+test("a suppressed recipient is never sent to and is counted as suppressed", async () => {
+  const fake = daemon();
+  const run = harness([line({ id: "a", contact: "c-1", text: "Hi one" }), line({ id: "b", contact: "c-2", text: "Hi two" })].join("\n"), fake, undefined,
+    { files: new Map([["/lists/suppress.txt", SUPPRESS_FILE]]) });
+  expect(await runCampaignCommand([...ARGS, "--suppress", "/lists/suppress.txt"], run.ports)).toBe(0);
+  expect(fake.dispatched.map(value => value.contactId)).toEqual(["c-1"]);
+  expect(run.printed).toContainEqual({ ok: true, status: "suppressed", id: "b", contactId: "c-2" });
+  expect(run.printed.at(-1)).toMatchObject({ status: "complete", counts: { sent: 1, suppressed: 1, pending: 0 } });
+  // No history read for a suppressed recipient either: they are never approached.
+  expect(fake.requests.some(item => item.command === "messages.history" && item.contactId === "c-2")).toBe(false);
+});
+
+test("a dry run reports suppressed recipients without their text", async () => {
+  const fake = daemon();
+  const run = harness([line({ id: "a", contact: "c-1", text: "Hi one" }), line({ id: "b", contact: "c-2", text: "Hi two" })].join("\n"), fake, undefined,
+    { files: new Map([["/lists/suppress.txt", SUPPRESS_FILE]]) });
+  expect(await runCampaignCommand([...ARGS, "--dry-run", "--suppress", "/lists/suppress.txt"], run.ports)).toBe(0);
+  expect(fake.dispatched).toEqual([]);
+  const report = run.printed[0] as { counts: Record<string, number>; suppress: unknown; entries: Record<string, unknown>[] };
+  expect(report.counts).toMatchObject({ pending: 1, suppressed: 1 });
+  expect(report.suppress).toEqual({ file: "explicit", handles: 1 });
+  expect(report.entries.find(item => item.id === "b")).toMatchObject({ suppressed: true });
+  expect(report.entries.find(item => item.id === "b")).not.toHaveProperty("text");
+});
+
+test("suppress.txt beside the campaign file applies without a flag", async () => {
+  const fake = daemon();
+  const run = harness([line({ id: "a", contact: "c-1", text: "Hi one" }), line({ id: "b", contact: "c-2", text: "Hi two" })].join("\n"), fake, undefined,
+    { files: new Map([["/campaigns/suppress.txt", "+1 555 555 0101\n"]]) });
+  expect(await runCampaignCommand(ARGS, run.ports)).toBe(0);
+  expect(fake.dispatched.map(value => value.contactId)).toEqual(["c-2"]);
+  expect(run.printed.at(-1)).toMatchObject({ counts: { sent: 1, suppressed: 1 } });
+});
+
+test("an unreadable or malformed suppress file stops before anything is sent", async () => {
+  for (const files of [new Map<string, string | Error>(), new Map<string, string | Error>([["/lists/suppress.txt", new Error("EACCES")]]),
+    new Map<string, string | Error>([["/lists/suppress.txt", "+15555550101\nnot a number\n"]])]) {
+    const fake = daemon();
+    const run = harness(line({ id: "a", contact: "c-1", text: "Hi" }), fake, undefined, { files });
+    const error = await runCampaignCommand([...ARGS, "--suppress", "/lists/suppress.txt"], run.ports).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(OwnerCliError);
+    expect(String((error as Error).message)).toContain("Nothing was sent");
+    expect(String((error as Error).message)).not.toContain("not a number");
+    expect(fake.requests).toEqual([]);
+  }
+  // A malformed default file fails closed too.
+  const fake = daemon();
+  const run = harness(line({ id: "a", contact: "c-1", text: "Hi" }), fake, undefined, { files: new Map([["/campaigns/suppress.txt", "nope\n"]]) });
+  await expect(runCampaignCommand(ARGS, run.ports)).rejects.toThrow(OwnerCliError);
+  expect(fake.requests).toEqual([]);
+});
+
+test("a suppress list without handles from the service fails closed", async () => {
+  const fake = daemon({ contacts: [{ id: "c-1", name: "Synthetic One" }] });
+  const run = harness(line({ id: "a", contact: "c-1", text: "Hi" }), fake, undefined, { files: new Map([["/lists/suppress.txt", "+15555550199\n"]]) });
+  await expect(runCampaignCommand([...ARGS, "--suppress", "/lists/suppress.txt"], run.ports)).rejects.toThrow(/cannot be checked/u);
+  expect(fake.dispatched).toEqual([]);
+});
+
+test("suppress numbers normalize like recipients", () => {
+  const list = parseSuppressList("+1 (555) 555-0101\n0015555550102\n555.555.0103\nSomeone@Example.com # email\n", "explicit");
+  expect([...list.phones].sort()).toEqual(["+15555550101", "+15555550102", "5555550103"]);
+  expect([...list.emails]).toEqual(["someone@example.com"]);
+  expect(normalizeHandle("tel:5555550101")).toBeNull();
+  expect(() => parseCampaignArgs(["run", "/c.jsonl", "--suppress", "relative.txt"], ZONE)).toThrow(OwnerCliError);
+  expect(parseCampaignArgs(["run", "/c.jsonl", "--suppress", "/l/s.txt"], ZONE).options.suppressPath).toBe("/l/s.txt");
+});
+
+test("contact handles are requested only when a suppress list must be checked", async () => {
+  const plain = daemon();
+  const first = harness(line({ id: "a", contact: "c-1", text: "Hi" }), plain);
+  expect(await runCampaignCommand([...ARGS, "--dry-run"], first.ports)).toBe(0);
+  expect(plain.requests.filter(item => item.command === "snapshot").every(item => !("includeHandles" in item))).toBe(true);
+  const listed = daemon();
+  const second = harness(line({ id: "a", contact: "c-1", text: "Hi" }), listed, undefined, { files: new Map([["/lists/suppress.txt", "+15555550199\n"]]) });
+  expect(await runCampaignCommand([...ARGS, "--dry-run", "--suppress", "/lists/suppress.txt"], second.ports)).toBe(0);
+  expect(listed.requests.filter(item => item.command === "snapshot").every(item => "includeHandles" in item && item.includeHandles === true)).toBe(true);
 });

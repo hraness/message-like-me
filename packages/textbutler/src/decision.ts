@@ -23,6 +23,9 @@ export type ConversationState = Readonly<{
   ownerTyping: boolean | "unknown";
   synchronizedAt: number;
   repliesInLastHour: number;
+  /** The newest outgoing text is an operator send (or one is in flight):
+   * replies are left to the owner unless the owner calls the butler. */
+  operatorThread?: boolean;
 }>;
 export type ReplyDecision = Readonly<{
   outcome: "ignore" | "defer" | "classify" | "reply";
@@ -47,7 +50,7 @@ export function keywordPresent(text: string, keyword: string): boolean {
   return false;
 }
 export function decideReply(settings: Settings, contact: ContactSettings, event: MessageEvent, state: ConversationState, now: number, admittedAt?: number): ReplyDecision {
-  if (!event.id || event.id.length > 256 || !event.revision || event.revision.length > 256 || typeof event.text !== "string" || Buffer.byteLength(event.text) > 16_384 || typeof event.historical !== "boolean" || typeof event.group !== "boolean" || (event.pinned !== undefined && typeof event.pinned !== "boolean") || ![true, false, "unknown"].includes(state.ownerTyping) || !Number.isSafeInteger(state.repliesInLastHour) || state.repliesInLastHour < 0 || (state.lastOwnerAt !== null && (!Number.isSafeInteger(state.lastOwnerAt) || state.lastOwnerAt < 0 || state.lastOwnerAt > now + 30_000))) return { outcome: "ignore", reason: "invalid-event-or-state" };
+  if (!event.id || event.id.length > 256 || !event.revision || event.revision.length > 256 || typeof event.text !== "string" || Buffer.byteLength(event.text) > 16_384 || typeof event.historical !== "boolean" || typeof event.group !== "boolean" || (event.pinned !== undefined && typeof event.pinned !== "boolean") || ![true, false, "unknown"].includes(state.ownerTyping) || !Number.isSafeInteger(state.repliesInLastHour) || state.repliesInLastHour < 0 || (state.lastOwnerAt !== null && (!Number.isSafeInteger(state.lastOwnerAt) || state.lastOwnerAt < 0 || state.lastOwnerAt > now + 30_000)) || (state.operatorThread !== undefined && typeof state.operatorThread !== "boolean")) return { outcome: "ignore", reason: "invalid-event-or-state" };
   if (!settings.contacts.some(c => c.id === contact.id && c.revision === contact.revision)) return { outcome: "ignore", reason: "settings-changed" };
   if (settings.paused || !contact.enabled || contact.pausedUntil > now) return { outcome: "ignore", reason: "paused" };
   if (event.contactId !== contact.id || event.routeId !== contact.routeId) return { outcome: "ignore", reason: "route-mismatch" };
@@ -58,6 +61,7 @@ export function decideReply(settings: Settings, contact: ContactSettings, event:
   if (state.synchronizedAt > now || state.synchronizedAt < now - 15_000) return { outcome: "defer", reason: "refresh-required" };
   if (state.ownerTyping === true) return { outcome: "ignore", reason: "owner-typing" };
   if (state.lastOwnerAt !== null && (invoked ? state.lastOwnerAt > event.occurredAt : state.lastOwnerAt >= event.occurredAt || now - state.lastOwnerAt < contact.humanCooldownMs)) return { outcome: "ignore", reason: "owner-active" };
+  if (state.operatorThread === true && !invoked) return { outcome: "ignore", reason: "operator-thread" };
   if (state.repliesInLastHour >= contact.maxRepliesPerHour) return { outcome: "ignore", reason: "rate-limit" };
   const eligibleAt = event.observedAt + contact.debounceMs;
   if (now < eligibleAt) return { outcome: "defer", reason: "collecting-messages", eligibleAt };

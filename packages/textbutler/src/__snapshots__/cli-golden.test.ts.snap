@@ -116,6 +116,7 @@ Paced owner-authored sends.
       [--max-per-hour 15] [--max-per-day 30] [--quiet-hours 19:30-10:00]
       [--burst 6] [--burst-pause 10m] [--recipient-gap 24h]
       [--time-zone ZONE] [--campaign NAME] [--state /absolute/state.json]
+      [--suppress /absolute/suppress.txt]
   campaign status FILE.jsonl [--campaign NAME] [--state /absolute/state.json]
 
 Each line of FILE.jsonl is one message. contact is a contact ID or exact
@@ -129,6 +130,11 @@ time zone, and stops a recipient after any reply. It halts on any send that is
 not confirmed. Rerun the same command to resume; sent messages are never sent
 again. After an uncertain send, check Messages, run
 textbutler replies reconcile CONTACT --sent or --failed, then rerun.
+
+A suppress file lists phone numbers or emails, one per line, never to text;
+# comments and blank lines are allowed. --suppress names one; otherwise
+suppress.txt beside the campaign file is used when it exists. A suppress file
+that cannot be read or parsed stops the run before anything is sent.
 
 Example
   textbutler campaign run ~/launch/intro.jsonl --dry-run"

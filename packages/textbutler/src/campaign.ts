@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, resolve } from "node:path";
+import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { CONTROL_PROTOCOL, type ControlRequest, type ControlResponse, type DesktopSnapshot } from "../../control/src/index.ts";
 import { awaitOwnerJob, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
 import { readOwnerInputFile } from "./messages-cli.ts";
 import { parseXcbJson } from "./xcb-client.ts";
-import { keywordPresent } from "./decision.ts";
 
 /**
  * Paced operator campaigns. Every message is the owner's own text, sent
@@ -21,6 +20,7 @@ export const CAMPAIGN_HELP = `Paced owner-authored sends (JSON output):
       [--max-per-hour 15] [--max-per-day 30] [--quiet-hours 19:30-10:00]
       [--burst 6] [--burst-pause 10m] [--recipient-gap 24h]
       [--time-zone ZONE] [--campaign NAME] [--state /absolute/state.json]
+      [--suppress /absolute/suppress.txt]
   campaign status FILE.jsonl [--campaign NAME] [--state /absolute/state.json]
 
 Each line of FILE.jsonl is one message. contact is a contact ID or exact
@@ -33,7 +33,12 @@ sends, honors the hourly and daily caps and quiet hours in each recipient's
 time zone, and stops a recipient after any reply. It halts on any send that is
 not confirmed. Rerun the same command to resume; sent messages are never sent
 again. After an uncertain send, check Messages, run
-textbutler replies reconcile CONTACT --sent or --failed, then rerun.`;
+textbutler replies reconcile CONTACT --sent or --failed, then rerun.
+
+A suppress file lists phone numbers or emails, one per line, never to text;
+# comments and blank lines are allowed. --suppress names one; otherwise
+suppress.txt beside the campaign file is used when it exists. A suppress file
+that cannot be read or parsed stops the run before anything is sent.`;
 
 export const CAMPAIGN_DEFAULTS = {
   minIntervalMs: 60_000, jitterMs: 120_000, maxPerHour: 15, maxPerDay: 30,
@@ -50,9 +55,13 @@ export interface CampaignOptions {
   readonly quietStart: number; readonly quietEnd: number;
   readonly burst: number; readonly burstPauseMs: number; readonly burstPauseJitterMs: number; readonly recipientGapMs: number;
   readonly timeZone: string; readonly campaign: string; readonly statePath: string; readonly dryRun: boolean;
+  /** An explicit --suppress file, or null to look for suppress.txt beside the campaign file. */
+  readonly suppressPath: string | null;
 }
 export interface CampaignEntry { readonly id: string; readonly contact: string; readonly template: string; readonly vars: Readonly<Record<string, string>>; readonly timeZone: string | null }
 export type EntryStatus = "pending" | "sending" | "sent" | "failed" | "uncertain" | "skipped";
+/** Summary counts: saved statuses plus pending entries held by the suppress list. */
+export type EntryCounts = Record<EntryStatus | "suppressed", number>;
 export interface EntryState {
   status: EntryStatus; contactId: string; textDigest: string; key: string; attempts: number;
   sentAt: number | null; runId: string | null; detail: string | null;
@@ -247,6 +256,9 @@ export interface CampaignPorts {
   signal?: AbortSignal;
   /** Test seam; production reads an owned physical file. */
   readCampaign?: (path: string) => Promise<string>;
+  /** Test seams for the suppress file; production reads an owned physical file. */
+  readSuppress?: (path: string) => Promise<string>;
+  suppressExists?: (path: string) => Promise<boolean>;
   loadState?: (path: string, campaign: string) => Promise<CampaignState>;
   saveState?: (path: string, state: CampaignState) => Promise<void>;
   lock?: (path: string) => Promise<() => Promise<void>>;
@@ -257,6 +269,7 @@ export function parseCampaignArgs(args: readonly string[], defaultTimeZone: stri
   if ((verb !== "run" && verb !== "status") || !file) throw new OwnerCliError(CAMPAIGN_HELP);
   if (file.includes("\0")) throw new OwnerCliError("Use a campaign file path.");
   const path = resolve(file);
+  let suppressPath: string | null = null;
   let dryRun = false, campaign = basename(path, extname(path)), statePath = `${path}.state.json`, timeZone = defaultTimeZone;
   let minIntervalMs: number = CAMPAIGN_DEFAULTS.minIntervalMs, jitterMs: number = CAMPAIGN_DEFAULTS.jitterMs, maxPerHour: number = CAMPAIGN_DEFAULTS.maxPerHour, maxPerDay: number = CAMPAIGN_DEFAULTS.maxPerDay;
   let quietStart: number = CAMPAIGN_DEFAULTS.quietStart, quietEnd: number = CAMPAIGN_DEFAULTS.quietEnd, burst: number = CAMPAIGN_DEFAULTS.burst, burstPauseMs: number = CAMPAIGN_DEFAULTS.burstPauseMs;
@@ -279,6 +292,7 @@ export function parseCampaignArgs(args: readonly string[], defaultTimeZone: stri
     else if (flag === "--recipient-gap" && verb === "run") recipientGapMs = parseDuration(take());
     else if (flag === "--time-zone" && verb === "run") { timeZone = take(); if (!validTimeZone(timeZone)) throw new OwnerCliError("--time-zone needs an IANA zone such as America/New_York."); }
     else if (flag === "--campaign") { campaign = take(); }
+    else if (flag === "--suppress" && verb === "run") { suppressPath = take(); if (!isAbsolute(suppressPath) || suppressPath.includes("\0")) throw new OwnerCliError("--suppress needs an absolute path."); }
     else if (flag === "--state") { statePath = take(); if (!isAbsolute(statePath)) throw new OwnerCliError("--state needs an absolute path."); }
     else throw new OwnerCliError(`Unknown campaign option "${flag.slice(0, 40)}".\n\n${CAMPAIGN_HELP}`);
   }
@@ -290,12 +304,12 @@ export function parseCampaignArgs(args: readonly string[], defaultTimeZone: stri
   if ((quietEnd - quietStart + 1440) % 1440 < LIMITS.minQuietMinutes)
     throw new OwnerCliError(`--quiet-hours must cover at least ${LIMITS.minQuietMinutes / 60} hours.`);
   return { verb, file: path, options: { minIntervalMs, jitterMs, maxPerHour, maxPerDay, quietStart, quietEnd, burst, burstPauseMs,
-    burstPauseJitterMs: CAMPAIGN_DEFAULTS.burstPauseJitterMs, recipientGapMs, timeZone, campaign, statePath, dryRun } };
+    burstPauseJitterMs: CAMPAIGN_DEFAULTS.burstPauseJitterMs, recipientGapMs, timeZone, campaign, statePath, dryRun, suppressPath } };
 }
 
 interface Planned { entry: CampaignEntry; contactId: string; name: string; text: string; key: string; timeZone: string;
-  /** The daemon refuses owner text holding the keyword of a contact whose butler is on. */
-  butlerKeyword: boolean }
+  /** The recipient is on the suppress list; nothing new is ever sent to them. */
+  suppressed: boolean }
 
 function recipient(state: CampaignState, contactId: string): RecipientState {
   return state.recipients[contactId] ??= { firstSentAt: null, lastSentAt: null, stopped: null };
@@ -303,7 +317,7 @@ function recipient(state: CampaignState, contactId: string): RecipientState {
 
 /** Reconciles the file with saved progress. A message already attempted may
  * not change its text or recipient, since the first attempt may have landed. */
-function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, state: CampaignState, options: CampaignOptions): Planned[] {
+function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, state: CampaignState, options: CampaignOptions, suppress: SuppressList): Planned[] {
   return entries.map(entry => {
     const contact = resolveCampaignContact(snapshot, entry.contact);
     const full = snapshot.contacts.find(value => value.id === contact.id);
@@ -313,19 +327,85 @@ function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, stat
     if (saved && saved.status !== "pending" && (saved.contactId !== contact.id || saved.textDigest !== digest(text)))
       throw new OwnerCliError(`Entry "${entry.id}" changed after it was attempted. Give changed messages a new id.`);
     if (!saved || saved.status === "pending") state.entries[entry.id] = { status: "pending", contactId: contact.id, textDigest: digest(text), key, attempts: saved?.attempts ?? 0, sentAt: null, runId: null, detail: null, attemptedAt: null };
-    const butlerKeyword = full?.settings.enabled === true && typeof full.settings.keyword === "string" && keywordPresent(text, full.settings.keyword);
-    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone, butlerKeyword };
+    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone, suppressed: isSuppressed(suppress, full) };
   });
 }
 
-function summary(state: CampaignState, planned: readonly Planned[]): Record<EntryStatus, number> {
-  const counts: Record<EntryStatus, number> = { pending: 0, sending: 0, sent: 0, failed: 0, uncertain: 0, skipped: 0 };
-  for (const item of planned) counts[state.entries[item.entry.id]!.status]++;
+function summary(state: CampaignState, planned: readonly Planned[]): EntryCounts {
+  const counts: EntryCounts = { pending: 0, sending: 0, sent: 0, failed: 0, uncertain: 0, skipped: 0, suppressed: 0 };
+  for (const item of planned) { const status = state.entries[item.entry.id]!.status; counts[status === "pending" && item.suppressed ? "suppressed" : status]++; }
   return counts;
 }
+/** A pending entry whose recipient may still be sent to. */
+const sendable = (state: CampaignState, item: Planned): boolean => state.entries[item.entry.id]!.status === "pending" && !item.suppressed;
 
-async function snapshotOf(request: OwnerControlClient): Promise<DesktopSnapshot> {
-  const response = await request({ protocol: CONTROL_PROTOCOL, command: "snapshot" });
+/** Normalized phone numbers and emails never to text. */
+export interface SuppressList { readonly phones: ReadonlySet<string>; readonly emails: ReadonlySet<string>; readonly source: string | null }
+const NO_SUPPRESS: SuppressList = { phones: new Set(), emails: new Set(), source: null };
+
+/** Normalizes a handle the way Messages participants are compared: emails
+ * lowercase; phone numbers keep only digits, a leading + or 00 marks the
+ * country code, and formatting such as spaces, dashes, dots and brackets is
+ * ignored. Returns null for anything that is neither. */
+export function normalizeHandle(value: string): { kind: "phone" | "email"; value: string } | null {
+  const text = value.trim().normalize("NFKC");
+  if (!text || text.length > 320 || /[\p{Cc}\p{Cf}]/u.test(text)) return null;
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(text)) return { kind: "email", value: text.toLowerCase() };
+  const body = text.startsWith("+") ? text.slice(1) : text;
+  if (!/^[0-9().\-\s]+$/u.test(body)) return null;
+  const digits = body.replace(/\D/gu, ""), international = text.startsWith("+") || digits.startsWith("00");
+  const canonical = text.startsWith("+") ? digits : digits.startsWith("00") ? digits.slice(2) : digits;
+  if (canonical.length < 7 || canonical.length > 15) return null;
+  return { kind: "phone", value: international ? `+${canonical}` : canonical };
+}
+/** Two phone numbers match when equal, or, when either lacks a country code,
+ * when their last ten digits (or all of the shorter one) agree. Leaning toward
+ * a match only ever suppresses more. */
+function phoneMatches(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.startsWith("+") && b.startsWith("+")) return false;
+  const x = a.replace(/\D/gu, ""), y = b.replace(/\D/gu, ""), tail = Math.min(10, x.length, y.length);
+  return x.slice(-tail) === y.slice(-tail);
+}
+export function parseSuppressList(source: string, label: string): SuppressList {
+  const phones = new Set<string>(), emails = new Set<string>();
+  source.split(/\r?\n/u).forEach((line, index) => {
+    const content = line.replace(/#.*$/u, "").trim();
+    if (!content) return;
+    const handle = normalizeHandle(content);
+    // Never echo the line: it is private contact data.
+    if (!handle) throw new OwnerCliError(`Line ${index + 1} of the suppress file is not a phone number or email. Nothing was sent.`);
+    (handle.kind === "phone" ? phones : emails).add(handle.value);
+  });
+  return { phones, emails, source: label };
+}
+function isSuppressed(list: SuppressList, contact: DesktopSnapshot["contacts"][number] | undefined): boolean {
+  if (!list.phones.size && !list.emails.size) return false;
+  // Suppression cannot be ruled out without the conversation's handles.
+  if (!contact?.handles?.length) throw new OwnerCliError(`The service did not report the handles for contact ${contact?.id ?? "unknown"}, so the suppress list cannot be checked. Nothing was sent. Update and restart the Textbutler daemon.`);
+  return contact.handles.some(raw => {
+    const handle = normalizeHandle(raw);
+    if (!handle) return false;
+    return handle.kind === "email" ? list.emails.has(handle.value) : [...list.phones].some(phone => phoneMatches(phone, handle.value));
+  });
+}
+/** --suppress, else suppress.txt beside the campaign file when it exists.
+ * Any file that is present but unreadable or malformed fails closed. */
+async function loadSuppress(campaignFile: string, options: CampaignOptions, read: (path: string) => Promise<string>, exists: (path: string) => Promise<boolean>): Promise<SuppressList> {
+  const path = options.suppressPath ?? join(dirname(campaignFile), "suppress.txt");
+  if (options.suppressPath === null && !await exists(path)) return NO_SUPPRESS;
+  let source: string;
+  try { source = await read(path); }
+  catch { throw new OwnerCliError(`The suppress file ${options.suppressPath === null ? "beside the campaign file " : ""}could not be read. Nothing was sent. Use an owned regular text file without links or group/public write access.`); }
+  return parseSuppressList(source, options.suppressPath === null ? "default" : "explicit");
+}
+
+async function snapshotOf(request: OwnerControlClient, suppress: SuppressList): Promise<DesktopSnapshot> {
+  // Handles are asked for only when there is a suppress list to check.
+  const withHandles = suppress.phones.size + suppress.emails.size > 0;
+  const response = await request({ protocol: CONTROL_PROTOCOL, command: "snapshot", ...(withHandles ? { includeHandles: true as const } : {}) });
+  if (withHandles && !response.ok && response.code === "invalid-request")
+    throw new OwnerCliError("This Textbutler daemon cannot report contact handles, so the suppress list cannot be checked. Nothing was sent. Update and restart the Textbutler daemon.");
   if (!response.ok || response.kind !== "snapshot") throw new OwnerCliError("The Textbutler daemon is unavailable. Run textbutler doctor.");
   return response.snapshot;
 }
@@ -357,24 +437,27 @@ export async function runCampaignCommand(args: readonly string[], ports: Campaig
     throw new OwnerCliError(code === "ENOENT" ? "The campaign file does not exist." : "The campaign file could not be read. Check that it is a readable UTF-8 text file.");
   }
   const entries = parseCampaign(source);
+  // Loaded before any snapshot, history read or send, so a bad file stops everything.
+  const suppress = await loadSuppress(file, options,
+    ports.readSuppress ?? (async (path: string) => new TextDecoder("utf-8", { fatal: true }).decode(await readOwnerInputFile(path, LIMITS.maxFileBytes))),
+    ports.suppressExists ?? (async (path: string) => { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") return false; throw new OwnerCliError("The suppress file beside the campaign file could not be checked. Nothing was sent."); } }));
   const load = ports.loadState ?? loadState, save = ports.saveState ?? saveState;
   if (verb === "status" || options.dryRun) {
     const state = await load(options.statePath, options.campaign);
-    const planned = plan(entries, await snapshotOf(ports.request), state, options);
+    const planned = plan(entries, await snapshotOf(ports.request, suppress), state, options, suppress);
     ports.print({ ok: true, campaign: options.campaign, dryRun: options.dryRun, state: options.statePath, counts: summary(state, planned),
-      ...(options.dryRun ? { pacing: pacingView(options), estimate: estimate(planned, state, options),
-        wouldRefuse: planned.filter(item => item.butlerKeyword && state.entries[item.entry.id]!.status === "pending").length } : {}),
+      suppress: suppress.source === null ? null : { file: suppress.source, handles: suppress.phones.size + suppress.emails.size },
+      ...(options.dryRun ? { pacing: pacingView(options), estimate: estimate(planned, state, options) } : {}),
       entries: planned.map(item => {
         const saved = state.entries[item.entry.id]!, who = state.recipients[item.contactId];
         return { id: item.entry.id, contactId: item.contactId, name: item.name, status: saved.status, timeZone: item.timeZone,
-          ...(who?.stopped ? { recipientStopped: who.stopped } : {}), ...(saved.detail ? { detail: saved.detail } : {}),
-          ...(options.dryRun && item.butlerKeyword && saved.status === "pending" ? { refusal: "butler-keyword" } : {}),
-          ...(options.dryRun ? { text: item.text } : { sentAt: saved.sentAt === null ? null : new Date(saved.sentAt).toISOString() }) };
+          ...(who?.stopped ? { recipientStopped: who.stopped } : {}), ...(item.suppressed ? { suppressed: true } : {}), ...(saved.detail ? { detail: saved.detail } : {}),
+          ...(options.dryRun && !item.suppressed ? { text: item.text } : { sentAt: saved.sentAt === null ? null : new Date(saved.sentAt).toISOString() }) };
       }) });
     return 0;
   }
   const unlock = await (ports.lock ?? lockState)(options.statePath);
-  try { return await runLoop(entries, options, ports, load, save); }
+  try { return await runLoop(entries, options, ports, load, save, suppress); }
   finally { await unlock(); }
 }
 
@@ -386,15 +469,17 @@ function pacingView(options: CampaignOptions): unknown {
 }
 /** Rough duration ignoring quiet hours: the binding cap, or the average gap. */
 function estimate(planned: readonly Planned[], state: CampaignState, options: CampaignOptions): unknown {
-  const remaining = planned.filter(item => state.entries[item.entry.id]!.status === "pending").length;
+  const remaining = planned.filter(item => sendable(state, item)).length;
   const perHour = Math.min(options.maxPerHour, 3_600_000 / (options.minIntervalMs + options.jitterMs / 2));
   return { remaining, days: Math.ceil(remaining / options.maxPerDay), hoursAtFullPace: Math.round(remaining / perHour * 10) / 10 };
 }
 
 async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptions, ports: CampaignPorts,
-  load: (path: string, campaign: string) => Promise<CampaignState>, save: (path: string, state: CampaignState) => Promise<void>): Promise<number> {
+  load: (path: string, campaign: string) => Promise<CampaignState>, save: (path: string, state: CampaignState) => Promise<void>, suppress: SuppressList): Promise<number> {
   const state = await load(options.statePath, options.campaign);
-  const planned = plan(entries, await snapshotOf(ports.request), state, options);
+  const planned = plan(entries, await snapshotOf(ports.request, suppress), state, options, suppress);
+  for (const item of planned) if (item.suppressed && state.entries[item.entry.id]!.status === "pending")
+    ports.print({ ok: true, status: "suppressed", id: item.entry.id, contactId: item.contactId });
   await save(options.statePath, state);
   const halt = async (item: Planned | null, reason: string, detail: string): Promise<number> => {
     await save(options.statePath, state);
@@ -420,9 +505,9 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     // key and never dispatches. A key it never journaled returns to pending
     // and goes through pacing and the reply check like any fresh message.
     const next = planned.find(item => ["sending", "uncertain"].includes(state.entries[item.entry.id]!.status))
-      ?? planned.find(item => state.entries[item.entry.id]!.status === "pending" && releaseAt(item.contactId) <= now)
+      ?? planned.find(item => sendable(state, item) && releaseAt(item.contactId) <= now)
       ?? null;
-    const waiting = planned.filter(item => state.entries[item.entry.id]!.status === "pending");
+    const waiting = planned.filter(item => sendable(state, item));
     if (!next && !waiting.length) {
       await save(options.statePath, state);
       ports.print({ ok: true, status: "complete", counts: summary(state, planned) });

@@ -421,6 +421,26 @@ describe("owner reply triage through the control surface", () => {
     expect(sent).toEqual([]);
     expect(await run({ command: "messages.summarize", contactId: "synthetic-a", limit: 20 })).toMatchObject({ ok: false, code: "unavailable" });
   });
+  test("contact handles appear in a snapshot only when the request asks for them", async () => {
+    const { run } = await replySetup();
+    const plain = await run({ command: "snapshot" });
+    expect(plain).toMatchObject({ ok: true, kind: "snapshot" });
+    if (!plain.ok || plain.kind !== "snapshot") throw new Error("expected snapshot");
+    expect(plain.snapshot.contacts[0]).not.toHaveProperty("handles");
+    const withHandles = await run({ command: "snapshot", includeHandles: true });
+    if (!withHandles.ok || withHandles.kind !== "snapshot") throw new Error("expected snapshot");
+    expect(withHandles.snapshot.contacts[0]!.handles).toEqual(["fixture@example.test"]);
+    // This fixture's provider accounts are not a full wire shape; the round trip checks the contact handles.
+    const wire = (value: typeof plain) => JSON.parse(JSON.stringify({ ...value, snapshot: { ...value.snapshot, providerAccounts: undefined } }));
+    const parsed = parseControlResponse(wire(withHandles));
+    if (!parsed.ok || parsed.kind !== "snapshot") throw new Error("expected snapshot");
+    expect(parsed.snapshot.contacts[0]!.handles).toEqual(["fixture@example.test"]);
+    const parsedPlain = parseControlResponse(wire(plain));
+    if (!parsedPlain.ok || parsedPlain.kind !== "snapshot") throw new Error("expected snapshot");
+    expect(parsedPlain.snapshot.contacts[0]).not.toHaveProperty("handles");
+    expect(() => parseControlRequest({ protocol, command: "snapshot", includeHandles: false })).toThrow();
+    expect(() => parseControlRequest({ protocol, command: "snapshot", includeHandles: true, extra: 1 })).toThrow();
+  });
   test("settled manual habitat suggestions release their scopes after success, failure and silence", async () => {
     const { service, run, dataDir, sent } = await replySetup();
     const journal = service.runJournal(), workspace = await ContactWorkspace.create(join(dataDir, "contacts", "synthetic-a"));
