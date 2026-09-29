@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import { conversations, PhoneMock, type PhoneTheme } from '../_components/phone';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Textbutler | Launch stills' },
+  title: { absolute: 'TextButler | Launch stills' },
   robots: { follow: false, index: false },
 };
 
@@ -46,7 +46,7 @@ function SocialCard({ capture, theme }: Readonly<{ capture: string; theme: keyof
       <div style={{ position: 'absolute', insetBlockStart: 64, insetInlineStart: 80, display: 'flex', alignItems: 'center', gap: 16 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img alt="" height={52} src="/marks/message-like-me.svg" width={52} />
-        <span style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.01em' }}>Textbutler</span>
+        <span style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-0.01em' }}>TextButler</span>
       </div>
       <div style={{ position: 'absolute', insetBlockStart: 168, insetInlineStart: 80, inlineSize: 620 }}>
         <p style={{ margin: 0, fontSize: 104, fontWeight: 600, lineHeight: 0.98, letterSpacing: '-0.035em' }}>AI in your messages.</p>

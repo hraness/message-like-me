@@ -61,6 +61,6 @@
   },
   "validation": {
     "command": "bun test packages/textbutler/src/grammar.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/daemon.test.ts packages/textbutler/src/cli.test.ts scripts/install-textbutler.test.ts",
-    "receiptSha256": "e20c20ec0d5da7ab01d889bf7253ea99262b96d54ce72201cb9259c0bef577a9"
+    "receiptSha256": "246b3287dc48afbfcb7ce180067baede66f0fb9f0618a720fcf18a75d20c653b"
   }
 }

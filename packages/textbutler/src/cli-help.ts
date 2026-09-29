@@ -6,7 +6,7 @@ import { TEXTBUTLER_VERSION } from "./version.ts";
 const HELP_ENV = { LANG: "en_US.UTF-8" } as const;
 
 /** Registry one-line description (portfolio registry, packages/textbutler/package.json). */
-export const TEXTBUTLER_DESCRIPTION = "Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and\nBeeper chats you choose on your Mac, and it answers when someone says \u201cbutler\u201d.";
+export const TEXTBUTLER_DESCRIPTION = "TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and\nBeeper chats you choose on your Mac, and it answers when someone says \u201cbutler\u201d.";
 
 /** Bare invocation without a terminal: at most 25 lines (SPEC § D2). */
 export const BARE_INTRO = `${TEXTBUTLER_DESCRIPTION}
@@ -18,7 +18,7 @@ Start here
   textbutler doctor          See what's ready and what to do next
 
 Everyday
-  textbutler status          See what Textbutler is doing
+  textbutler status          See what TextButler is doing
   textbutler inbox           Find chats waiting for your reply
   textbutler pause           Pause automatic replies
 
@@ -43,7 +43,7 @@ Everyday
 
 Chats and contacts
   conversations list         List recent one-to-one chats you can add
-  contacts <command>         Add chats and choose how Textbutler answers
+  contacts <command>         Add chats and choose how TextButler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
 AI replies
@@ -77,9 +77,9 @@ const TOPICS: Record<string, Topic> = {
   setup: { usage: "textbutler setup [options]",
     summary: "Create your private settings, or add a messaging app or AI account.\nAutomatic replies start paused. Setup never reads or sends messages.",
     body: `Options
-  --ghostget <path>          Ghostget executable that connects your apps
-  --runtime <path>           Bun, when Ghostget is a .ts file
-  --state-home <path>        Ghostget's private state folder
+  --ghostget <path>          GhostGet executable that connects your apps
+  --runtime <path>           Bun, when GhostGet is a .ts file
+  --state-home <path>        GhostGet's private state folder
   --account <app>:<id>       Account to use, e.g. imessage:messages (repeat)
   --xcb <path>               xcb executable for your AI subscription
   --xcb-state <path>         xcb's private state folder
@@ -87,7 +87,7 @@ const TOPICS: Record<string, Topic> = {
   --xcb-model <ai>/<model>[/<effort>]
                              Model for that account
 
-Use absolute paths. Sign in with Ghostget and xcb first; Textbutler stores
+Use absolute paths. Sign in with GhostGet and xcb first; TextButler stores
 only references and pins the xcb file's checksum. Stop the service before
 adding a connection, then start it again.`,
     example: "textbutler setup --ghostget /opt/ghostget/ghostget --account imessage:messages" },
@@ -112,7 +112,7 @@ adding a connection, then start it again.`,
 
 A contact is an exact ID or a unique name from textbutler contacts list.`,
     example: "textbutler replies suggest Alex" },
-  contacts: { usage: "textbutler contacts <command>", summary: "Choose which chats Textbutler answers and how. New chats start off.",
+  contacts: { usage: "textbutler contacts <command>", summary: "Choose which chats TextButler answers and how. New chats start off.",
     body: `Commands
   contacts list                          Show chats and their settings
   contacts add <candidate> [--history]   Add a chat from conversations list;
@@ -131,7 +131,7 @@ A contact is an exact ID or a unique name from textbutler contacts list.`,
 Choosing an account never turns a chat on, and resume never does either.`,
     example: "textbutler contacts mode Alex keyword --keyword butler" },
   conversations: { usage: "textbutler conversations list", summary: "List recent one-to-one chats from your connected apps. Add one with\ntextbutler contacts add <candidate>. The list expires after five minutes." },
-  messaging: { usage: "textbutler messaging list | start <app>", summary: "Show configured messaging apps, or connect one: imessage, whatsapp\nor beeper. Sign in to each app with Ghostget first. iMessage also\nneeds macOS access for Textbutler: see textbutler help permissions.",
+  messaging: { usage: "textbutler messaging list | start <app>", summary: "Show configured messaging apps, or connect one: imessage, whatsapp\nor beeper. Sign in to each app with GhostGet first. iMessage also\nneeds macOS access for TextButler: see textbutler help permissions.",
     example: "textbutler messaging start imessage" },
   providers: { usage: "textbutler providers gateway-key | local | list | check <account>", summary: "Set up AI replies, show your AI accounts, or check that one is ready.",
     body: `Commands
@@ -161,7 +161,7 @@ xcb. A saved gateway key still powers web search.`,
   daemon run                 Run it in this terminal instead
 
 macOS shows a "Background Items Added" notice when you install it.` },
-  support: { usage: "textbutler support", summary: "See optional ways to support Textbutler. Turn off: HRANESS_SUPPORT=off." },
+  support: { usage: "textbutler support", summary: "See optional ways to support TextButler. Turn off: HRANESS_SUPPORT=off." },
   init: { usage: "textbutler init", summary: "Create private settings, paused, without the readiness checklist." },
   jobs: { usage: "textbutler jobs show <job>", summary: "Read the result of a long operation that was still running. Don't repeat\nthe original command: it may already have happened." },
   habitats: { usage: "textbutler habitats <command>", summary: "A habitat is a chat's reply style, memory and daily budget.",
@@ -213,13 +213,13 @@ decide needs you in person: an agent gets human-required and nothing
 changes. The digest makes sure you send what you reviewed. replies send
 still works as before.`,
     example: "textbutler approvals show draft-1" },
-  permissions: { usage: "textbutler help permissions", summary: "iMessage works through the Textbutler app on this Mac, and macOS needs\ntwo settings for it. Textbutler never changes them for you.",
+  permissions: { usage: "textbutler help permissions", summary: "iMessage works through the TextButler app on this Mac, and macOS needs\ntwo settings for it. TextButler never changes them for you.",
     body: `Full Disk Access: read your Messages
   macOS doesn't ask for this. Turn on Textbutler in System Settings ›
   Privacy & Security › Full Disk Access. Only the chats you pick are read.
 
 Automation: send replies through Messages
-  macOS asks once, during app setup. Textbutler only sends replies in chats
+  macOS asks once, during app setup. TextButler only sends replies in chats
   you turn on. If you said no, turn on Textbutler in System Settings ›
   Privacy & Security › Automation, then run app setup again.
 
@@ -239,7 +239,7 @@ Which chats get automatic replies
   messages <command>         JSON commands for agents (help messages)
   campaign run <file>        Send your own texts at a slow pace (help campaign)
   daemon run                 Run the service in this terminal
-  support                    Optional ways to support Textbutler
+  support                    Optional ways to support TextButler
 
 ${supportAdvancedHelp({ command: ["textbutler"], env: HELP_ENV })}` },
 };

@@ -110,8 +110,8 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
         >
           {film === null ? null : (
             <figure className="tb-film-figure">
-              <LaunchVideo sources={film} title="Introducing Textbutler" />
-              <figcaption>Textbutler in {LAUNCH_FILM_SECONDS} seconds. No sound needed. Every name in the film is made up.</figcaption>
+              <LaunchVideo sources={film} title="Introducing TextButler" />
+              <figcaption>TextButler in {LAUNCH_FILM_SECONDS} seconds. No sound needed. Every name in the film is made up.</figcaption>
             </figure>
           )}
           <div dangerouslySetInnerHTML={{ __html: body.html }} />

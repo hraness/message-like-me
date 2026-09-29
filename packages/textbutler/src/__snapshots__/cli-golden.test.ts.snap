@@ -1,7 +1,7 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`Textbutler CLI style contract bare invocation off a terminal is a short, runnable intro 1`] = `
-"Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+"TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
 Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 New installs start paused, and everyone starts off.
 
@@ -11,7 +11,7 @@ Start here
   textbutler doctor          See what's ready and what to do next
 
 Everyday
-  textbutler status          See what Textbutler is doing
+  textbutler status          See what TextButler is doing
   textbutler inbox           Find chats waiting for your reply
   textbutler pause           Pause automatic replies
 
@@ -21,7 +21,7 @@ textbutler 0.1.0-alpha.1
 `;
 
 exports[`Textbutler CLI style contract root help is grouped, at most 60 lines, and hides internal commands 1`] = `
-"Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+"TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
 Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 
 Usage: textbutler <command> [options]
@@ -39,7 +39,7 @@ Everyday
 
 Chats and contacts
   conversations list         List recent one-to-one chats you can add
-  contacts <command>         Add chats and choose how Textbutler answers
+  contacts <command>         Add chats and choose how TextButler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
 AI replies
@@ -81,7 +81,7 @@ Commands
   messages <command>         JSON commands for agents (help messages)
   campaign run <file>        Send your own texts at a slow pace (help campaign)
   daemon run                 Run the service in this terminal
-  support                    Optional ways to support Textbutler
+  support                    Optional ways to support TextButler
 
 Support for agents
   textbutler support protocol --json   How an agent offers optional support
@@ -136,7 +136,7 @@ Example
   "contacts": 
 "Usage: textbutler contacts <command>
 
-Choose which chats Textbutler answers and how. New chats start off.
+Choose which chats TextButler answers and how. New chats start off.
 
 Commands
   contacts list                          Show chats and their settings
@@ -262,8 +262,8 @@ See docs/textbutler/agent-cli.md."
 "Usage: textbutler messaging list | start <app>
 
 Show configured messaging apps, or connect one: imessage, whatsapp
-or beeper. Sign in to each app with Ghostget first. iMessage also
-needs macOS access for Textbutler: see textbutler help permissions.
+or beeper. Sign in to each app with GhostGet first. iMessage also
+needs macOS access for TextButler: see textbutler help permissions.
 
 Example
   textbutler messaging start imessage"
@@ -276,15 +276,15 @@ Pause automatic replies for every chat. Replies you send yourself still work."
   "permissions": 
 "Usage: textbutler help permissions
 
-iMessage works through the Textbutler app on this Mac, and macOS needs
-two settings for it. Textbutler never changes them for you.
+iMessage works through the TextButler app on this Mac, and macOS needs
+two settings for it. TextButler never changes them for you.
 
 Full Disk Access: read your Messages
   macOS doesn't ask for this. Turn on Textbutler in System Settings ›
   Privacy & Security › Full Disk Access. Only the chats you pick are read.
 
 Automation: send replies through Messages
-  macOS asks once, during app setup. Textbutler only sends replies in chats
+  macOS asks once, during app setup. TextButler only sends replies in chats
   you turn on. If you said no, turn on Textbutler in System Settings ›
   Privacy & Security › Automation, then run app setup again.
 
@@ -356,9 +356,9 @@ Create your private settings, or add a messaging app or AI account.
 Automatic replies start paused. Setup never reads or sends messages.
 
 Options
-  --ghostget <path>          Ghostget executable that connects your apps
-  --runtime <path>           Bun, when Ghostget is a .ts file
-  --state-home <path>        Ghostget's private state folder
+  --ghostget <path>          GhostGet executable that connects your apps
+  --runtime <path>           Bun, when GhostGet is a .ts file
+  --state-home <path>        GhostGet's private state folder
   --account <app>:<id>       Account to use, e.g. imessage:messages (repeat)
   --xcb <path>               xcb executable for your AI subscription
   --xcb-state <path>         xcb's private state folder
@@ -366,7 +366,7 @@ Options
   --xcb-model <ai>/<model>[/<effort>]
                              Model for that account
 
-Use absolute paths. Sign in with Ghostget and xcb first; Textbutler stores
+Use absolute paths. Sign in with GhostGet and xcb first; TextButler stores
 only references and pins the xcb file's checksum. Stop the service before
 adding a connection, then start it again.
 
@@ -401,7 +401,7 @@ Example
   "support": 
 "Usage: textbutler support
 
-See optional ways to support Textbutler. Turn off: HRANESS_SUPPORT=off."
+See optional ways to support TextButler. Turn off: HRANESS_SUPPORT=off."
 ,
   "tui": 
 "Usage: textbutler tui [--snapshot | --json] [--width <n>]

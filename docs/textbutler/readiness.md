@@ -1,6 +1,6 @@
-# Textbutler readiness
+# TextButler readiness
 
-Textbutler currently supports a local, owner-controlled pilot. It is headless:
+TextButler currently supports a local, owner-controlled pilot. It is headless:
 its CLI and guided terminal can connect configured messaging accounts, select direct conversations,
 show the reply inbox and manage contacts. An owner can write a reply, review its
 complete disclosed text and explicitly send it. Installation starts no service,
@@ -13,21 +13,21 @@ remain visible in setup and must be resolved before that claim is made.
 | --- | --- | --- |
 | First use | Guided terminal, actionable readiness, additive configuration, paused defaults | First-run testing with real owner-selected accounts and permissions |
 | Reply review | Complete ordered action review, recipient/context digest, attachment byte verification; typed preview revision checks | Agreed-recipient live delivery and takeover tests |
-| Agent execution | Verified bundle requires reviewed Textbutler composition admission; default Qwen 3.5 Flash writer through the owner's Vercel AI Gateway key, or an [external xcb subscription connection](native-subscription.md), with an explicit executable pin, private state, account and model; no default account or automatic activation | Exact xcb build/provider admission, both classifier and reply checks, and authenticated live inference on the selected account; Claude API still requires separate trusted runtime admission |
-| iMessage | Existing native Ghostget connection | Current account permissions and live transport qualification |
-| WhatsApp | Existing Ghostget linked-device connection and explicit sync | Current linked-device identity, sync and live transport qualification |
-| Beeper | Direct text conversations through Ghostget 0.18.14+; independent connection checks | Current Desktop API/account setup, canonical pending-send reconciliation, and edit/delete observation coverage |
+| Agent execution | Verified bundle requires reviewed TextButler composition admission; default Qwen 3.5 Flash writer through the owner's Vercel AI Gateway key, or an [external xcb subscription connection](native-subscription.md), with an explicit executable pin, private state, account and model; no default account or automatic activation | Exact xcb build/provider admission, both classifier and reply checks, and authenticated live inference on the selected account; Claude API still requires separate trusted runtime admission |
+| iMessage | Existing native GhostGet connection | Current account permissions and live transport qualification |
+| WhatsApp | Existing GhostGet linked-device connection and explicit sync | Current linked-device identity, sync and live transport qualification |
+| Beeper | Direct text conversations through GhostGet 0.18.14+; independent connection checks | Current Desktop API/account setup, canonical pending-send reconciliation, and edit/delete observation coverage |
 | Uncertain sends | Journal preserves intent and blocks further sends | Owner reconciliation using durable upstream run/message identity; no blind retry |
 | Distribution | Local integrity-checked bundle and inert installer; `external-xcb` capability keeps provider execution in separately configured xcb | Signed/public release provenance, upgrade qualification and provider-specific admission; artifact hashes do not attest providers |
 
 ## Interface direction
 
 xcb is a useful interaction reference: a clear status view, filtered pickers,
-contextual choices, complete review and clean cancellation. Textbutler follows
+contextual choices, complete review and clean cancellation. TextButler follows
 that separation with a thin terminal client over its owner control protocol.
 All permission, account, contact, grant and dispatch checks remain in the daemon.
 
-Textbutler has no menu bar companion or desktop window. If the terminal grows
+TextButler has no menu bar companion or desktop window. If the terminal grows
 into a full-screen workspace, xcb's Ratatui/Crossterm interface is an appropriate
 reference. The subscription connection uses xcb's dedicated zero-tool `generate`
 contract. It does not use the workspace coding command or inherit its tools and
@@ -40,14 +40,14 @@ its build checks reviewed composition evidence against current source bytes and
 both contact profiles. A source daemon has no embedded admission and keeps
 subscription inference unavailable. xcb handles
 Claude Code, Codex, or Devin subscription authentication, confinement and provider
-custody. Textbutler uses zero-tool generation, parses one operation proposal at
+custody. TextButler uses zero-tool generation, parses one operation proposal at
 a time and applies its contact-scoped broker policy before any effect.
 
 Accounts are unavailable until configured and checked; contacts remain disabled
 until explicitly enabled. No provider qualification is manufactured by setup,
 the installer or a matching hash. The [subscription guide](native-subscription.md)
 explains this reusable application contract and its separate runtime and live
-acceptance requirements. Textbutler's MIT source serves as an xcb reference
+acceptance requirements. TextButler's MIT source serves as an xcb reference
 application; publication does not establish unattended operational readiness.
 
 ## Messaging expansion
@@ -59,7 +59,7 @@ confirmation that its adapter does not supply.
 
 A native Telegram client, an owner-linked Signal adapter and an Instagram
 professional-account integration have different account models and operating
-requirements. They should enter through Ghostget's scoped transport contract,
+requirements. They should enter through GhostGet's scoped transport contract,
 with explicit capabilities and live acceptance criteria. Business/bot APIs are
 not substitutes for a personal inbox. See [messaging app support](messaging-apps.md)
 for current primary sources and the limits of each approach.

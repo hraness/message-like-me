@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   creator: SITE_NAME,
   publisher: SITE_NAME,
   category: 'Messaging assistant for Mac',
-  keywords: ['Textbutler', 'AI butler', 'Mac message assistant', 'contact memory', 'Ghostget', 'iMessage', 'WhatsApp', 'Beeper'],
+  keywords: ['TextButler', 'AI butler', 'Mac message assistant', 'contact memory', 'GhostGet', 'iMessage', 'WhatsApp', 'Beeper'],
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [

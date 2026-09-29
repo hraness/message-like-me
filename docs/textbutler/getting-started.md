@@ -1,6 +1,6 @@
-# Start using Textbutler
+# Start using TextButler
 
-Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
+TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and
 Beeper chats you choose on your Mac, and it answers when someone says “butler”.
 Start with its inbox and replies you write yourself. Automatic replies stay
 paused until you choose what writes replies, turn them on for a contact, and
@@ -11,12 +11,12 @@ doctor` after each step and do what it says, stop and hand over whenever macOS
 asks for a permission, a pairing, or a key, leave every contact turned off, and
 don't send any messages.
 
-You need a Mac, Bun 1.3.14, and Ghostget, a separate Mac tool that handles
-messaging sign-in and permissions. If Ghostget isn't installed, follow its
+You need a Mac, Bun 1.3.14, and GhostGet, a separate Mac tool that handles
+messaging sign-in and permissions. If GhostGet isn't installed, follow its
 [getting started tutorial](https://ghostget.com/docs/tutorials/getting-started)
 first.
 
-AI replies need a local build of Textbutler and something to write them.
+AI replies need a local build of TextButler and something to write them.
 Replies can be written by a local model through Ollama (in testing), by Qwen 3.5
 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or
 Devin subscription through xcb. If you choose one with a command, that choice
@@ -31,7 +31,7 @@ supplies.
 
 ## Open the guided terminal
 
-From your Textbutler checkout, with Bun 1.3.14:
+From your TextButler checkout, with Bun 1.3.14:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -73,11 +73,11 @@ setup steps and whether reply generation is actually available.
 
 ## Connect your messaging apps
 
-Textbutler uses an existing Ghostget installation for account sign-in, permissions
-and messaging access. [Install Ghostget](https://ghostget.com/docs/tutorials/getting-started)
+TextButler uses an existing GhostGet installation for account sign-in, permissions
+and messaging access. [Install GhostGet](https://ghostget.com/docs/tutorials/getting-started)
 first if you haven't. You need its physical executable path and the exact account
-ID; Textbutler does not guess an identity. Native iMessage can use the app setup
-flow below. Set up other messaging accounts in Ghostget first.
+ID; TextButler does not guess an identity. Native iMessage can use the app setup
+flow below. Set up other messaging accounts in GhostGet first.
 
 Choose **Connect messaging apps** in the terminal:
 
@@ -85,9 +85,9 @@ Choose **Connect messaging apps** in the terminal:
 - **WhatsApp:** a native linked device; connecting explicitly starts sync.
 - **Beeper:** linked apps such as Signal, Telegram, Instagram, WhatsApp and
   iMessage. Keep Beeper Desktop open with its local API enabled. The current
-  Ghostget automation adapter supports direct conversations and text replies.
+  GhostGet automation adapter supports direct conversations and text replies.
 
-Beeper automation requires Ghostget 0.18.14 or later with the
+Beeper automation requires GhostGet 0.18.14 or later with the
 `ghostget.messaging-automation/1` protocol. A connection being configured does
 not prove that it is connected. Check it before selecting conversations.
 
@@ -100,7 +100,7 @@ bun run textbutler setup \
   --account beeper:beeper-main
 ```
 
-If Ghostget's entrypoint is a TypeScript file, also pass
+If GhostGet's entrypoint is a TypeScript file, also pass
 `--runtime /absolute/path/to/bun`. An optional `--state-home` selects its existing
 state directory. Configuration is additive: this command preserves existing accounts and agent
 settings and refuses to replace an account identity. Stop the service before
@@ -148,9 +148,9 @@ owner-authored `soulCore` or change tool grants. Tool output is evidence, never
 permission to send a message. See [contact calculation and memory tools](javascript-tools.md)
 for the runtime limits and memory-search behavior.
 
-## Give Textbutler access to iMessage
+## Give TextButler access to iMessage
 
-In the guided terminal, **Give Textbutler access** walks you through the two
+In the guided terminal, **Give TextButler access** walks you through the two
 macOS settings below in order and opens each System Settings pane when you
 press Enter or `o`. It never causes a macOS prompt itself.
 
@@ -166,21 +166,21 @@ bun run textbutler:app install --from /absolute/new/app-build-directory
 ```
 
 The default destination is `~/Applications/TextButler.app`, which macOS lists
-as Textbutler. Building and installing the app does not start replies or change
+as TextButler. Building and installing the app does not start replies or change
 macOS permissions. macOS never asks for Full Disk Access, so `install` ends
 with a notice; at a terminal, press Enter to open the Full Disk Access pane. In
 **System Settings → Privacy & Security → Full Disk Access**, click **+**, press
 **Command-Shift-G**, enter `~/Applications/TextButler.app`, and choose **Open**.
 Enable its switch. macOS may require your password in its own dialog.
 
-Configure the exact Ghostget `src/cli.ts`, Bun runtime, private state directory
+Configure the exact GhostGet `src/cli.ts`, Bun runtime, private state directory
 and `imessage:ACCOUNT` binding using `setup` above. This development version pins
-Ghostget 0.18.44 and its reviewed `imsg` helper artifact. Native setup provisions
+GhostGet 0.18.44 and its reviewed `imsg` helper artifact. Native setup provisions
 that pinned helper into the connector state directory (`imessage transport install`)
 before linking; a missing or mismatched artifact stops setup instead of reaching
 messaging. Setup links only
 that account to this Mac's Messages store and
-enables Ghostget's account-specific automation read, text and attachment-send capabilities.
+enables GhostGet's account-specific automation read, text and attachment-send capabilities.
 Contact selection and automatic replies remain separate choices.
 
 With the background service stopped, run the setup role through its verified
@@ -191,7 +191,7 @@ bun run textbutler:app imessage-setup \
   --data-dir "$HOME/Library/Application Support/Textbutler"
 ```
 
-Before macOS asks to let Textbutler control Messages, setup prints a notice;
+Before macOS asks to let TextButler control Messages, setup prints a notice;
 press Enter to continue or `s` to skip. If you choose Don't Allow, macOS won't
 ask again: turn on Textbutler in **System Settings → Privacy & Security →
 Automation**, then run the setup command again. `textbutler doctor` shows
@@ -213,7 +213,7 @@ with the following command:
 bun run textbutler:app install --from /absolute/new/app-build-directory --upgrade
 ```
 
-Apps now include the Textbutler icon, and releases from before the icon can't
+Apps now include the TextButler icon, and releases from before the icon can't
 verify them. To go back to an earlier release, stop the
 service, move `~/Applications/TextButler.app` and `state/macos-app.json` in
 your data folder somewhere safe, then build and install the app from that
@@ -249,8 +249,8 @@ Choose one of the three options below. You can switch later.
 ### A local model on your Mac (in testing)
 
 With a local model, the reply is written on your Mac. Install
-[Ollama](https://ollama.com), then pull the model Textbutler looks for (about
-2.5 GB; Textbutler never downloads a model for you):
+[Ollama](https://ollama.com), then pull the model TextButler looks for (about
+2.5 GB; TextButler never downloads a model for you):
 
 ```sh
 ollama pull qwen3:4b-instruct-2507-q4_K_M
@@ -279,7 +279,7 @@ it never lands in your shell history:
 pbpaste | ~/.local/bin/textbutler providers gateway-key
 ```
 
-Textbutler stores it owner-only under `state/provider-credentials` in your data
+TextButler stores it owner-only under `state/provider-credentials` in your data
 folder. Restart the background service (`daemon uninstall`, then
 `daemon install`) and replies are written by Qwen 3.5 Flash, with spending
 capped at $1 a day. `textbutler doctor` shows which model writes your replies.
@@ -293,7 +293,7 @@ Install an xcb native build with `generate` support and follow its
 then use `xcb accounts` and `xcb models` to obtain the exact account ID and full
 model key. Credentials remain in xcb's private state.
 
-With the Textbutler daemon stopped, connect that installation:
+With the TextButler daemon stopped, connect that installation:
 
 ```sh
 bun run textbutler setup \
@@ -330,7 +330,7 @@ Choose **Add a conversation**, select the exact person and app, and choose
 whether to import recent text history. Importing history never sends anything.
 The new contact has automatic replies off.
 
-Choose **Inbox & replies**. Textbutler lists unanswered incoming messages in your
+Choose **Inbox & replies**. TextButler lists unanswered incoming messages in your
 selected conversations. Choose **Type a reply**, review the recipient and the
 complete disclosed text, then type `send` if you want to send it. This path does
 not require an AI account. Leaving the review sends nothing.
@@ -356,7 +356,7 @@ remain until the operation can be reconciled; restarting does not erase them.
 
 ## Check on it from the terminal
 
-Textbutler has no window or menu bar icon. The background service keeps working
+TextButler has no window or menu bar icon. The background service keeps working
 after you close the terminal, and you check on it with:
 
 ```sh
@@ -371,7 +371,7 @@ each contact's state. `inbox` lists chats waiting for your reply. `pause` and
 unregisters the background service and keeps your data.
 
 If you open `TextButler.app` itself, it starts nothing and exits: the app exists
-so macOS can grant iMessage access to Textbutler, and launchd runs its
+so macOS can grant iMessage access to TextButler, and launchd runs its
 background roles. Upgrading with `bun run textbutler:install --upgrade` moves
 the retired menu bar companion's login item aside if an earlier version added
 it. It renames the file and never deletes it. Every menu item it had is now a

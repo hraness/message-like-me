@@ -100,15 +100,15 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'What does it cost?',
-    answer: 'Textbutler is free and open source. A local model costs nothing to run. With a Gateway key, Vercel bills you, and Textbutler stops spending at $1 a day. With a subscription, it uses the plan you already pay for. Textbutler AI credits, for people without a key of their own, are coming soon and can’t be bought yet.',
+    answer: 'TextButler is free and open source. A local model costs nothing to run. With a Gateway key, Vercel bills you, and TextButler stops spending at $1 a day. With a subscription, it uses the plan you already pay for. TextButler AI credits, for people without a key of their own, are coming soon and can’t be bought yet.',
   },
   {
     question: 'Do I need Ollama?',
-    answer: 'No. Ollama is one of three options. If you already run it with qwen3:4b-instruct-2507-q4_K_M pulled and no Gateway key is saved, Textbutler picks it up when its background service starts, or you can choose it with textbutler providers local. Otherwise paste a Vercel AI Gateway key or connect your Claude Code, Codex, or Devin subscription through xcb.',
+    answer: 'No. Ollama is one of three options. If you already run it with qwen3:4b-instruct-2507-q4_K_M pulled and no Gateway key is saved, TextButler picks it up when its background service starts, or you can choose it with textbutler providers local. Otherwise paste a Vercel AI Gateway key or connect your Claude Code, Codex, or Devin subscription through xcb.',
   },
   {
     question: 'Does it work on my iPhone?',
-    answer: 'Your friends and your phone see the messages as usual. Textbutler itself runs only on a Mac that’s awake and signed in. There’s no iPhone, Windows, or Linux version.',
+    answer: 'Your friends and your phone see the messages as usual. TextButler itself runs only on a Mac that’s awake and signed in. There’s no iPhone, Windows, or Linux version.',
   },
   {
     question: 'Does it answer in group chats?',
@@ -120,8 +120,8 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
-    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. Textbutler answers only the people you turn on, when they ask, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands on your Mac. If you only want suggestions, the built-in features are simpler.',
-    link: { href: '/compare/ghostreply', label: 'Textbutler compared with GhostReply' },
+    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a $4.99 Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. TextButler answers only the people you turn on, when they ask, marks its replies by default, keeps notes on each person in files you can edit, and its model can’t run commands on your Mac. If you only want suggestions, the built-in features are simpler.',
+    link: { href: '/compare/ghostreply', label: 'TextButler compared with GhostReply' },
   },
   {
     question: 'What about Telegram and Signal?',
@@ -133,7 +133,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'What happened to Message Like Me?',
-    answer: 'Textbutler replaced it. Its history readers and methodology are still available as legacy tools on the legacy history page. Installing them doesn’t install Textbutler or turn on automatic replies.',
+    answer: 'TextButler replaced it. Its history readers and methodology are still available as legacy tools on the legacy history page. Installing them doesn’t install TextButler or turn on automatic replies.',
   },
 ];
 
@@ -166,7 +166,7 @@ function HeroStage() {
         <li>The answer comes from this chat</li>
         <li>Every butler message is marked</li>
       </ul>
-      <figcaption className="tb-caption">Example conversation on Sam’s iPhone. Textbutler runs on Sam’s Mac; the people are made up.</figcaption>
+      <figcaption className="tb-caption">Example conversation on Sam’s iPhone. TextButler runs on Sam’s Mac; the people are made up.</figcaption>
     </figure>
   );
 }
@@ -176,7 +176,7 @@ function FilmSlot() {
   if (sources === null) return null;
   return (
     <section aria-labelledby="film-title" className="tb-film" id="film">
-      <h2 className="tb-film__title" id="film-title">Textbutler in {LAUNCH_FILM_SECONDS} seconds</h2>
+      <h2 className="tb-film__title" id="film-title">TextButler in {LAUNCH_FILM_SECONDS} seconds</h2>
       <LaunchVideo sources={sources} title="AI in your messages" />
       <p className="tb-caption">No sound needed. Every name in the film is made up.</p>
     </section>
@@ -201,7 +201,7 @@ export default function Home() {
             frame={<HeroStage />}
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
-            name="Textbutler"
+            name="TextButler"
             summary="When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. It writes with a local model or the AI subscription you already pay for. Claude Code, Codex, or Devin can set it up for you."
           />
 
@@ -211,7 +211,7 @@ export default function Home() {
           </section>
 
           <MarketingSection heading="From “butler” to a marked reply." headingId="how-title" id="how-it-works" label="How it works" summary="Most of the time, it does nothing. When someone you’ve turned on asks for it, it says so right away, reads your notes and your chat, and answers in a bubble nobody could mistake for you.">
-            <DiagramFigure alt="One message, start to finish: a friend’s message reaches Ghostget on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." className="tb-diagram--wide-only" name={DIAGRAMS.oneMessage} />
+            <DiagramFigure alt="One message, start to finish: a friend’s message reaches GhostGet on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." className="tb-diagram--wide-only" name={DIAGRAMS.oneMessage} />
             <MarketingFlow ariaLabel="What happens to one message" steps={HOW_IT_WORKS_STEPS} />
             <dl className="tb-modes" aria-label="When it answers">
               {REPLY_MODES.map((mode) => (
@@ -239,7 +239,7 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <p className="tb-fine">Messages reach Textbutler through Ghostget, a separate Mac tool you install first. <a href={GHOSTGET_SETUP_URL}>Set up Ghostget</a></p>
+                <p className="tb-fine">Messages reach TextButler through GhostGet, a separate Mac tool you install first. <a href={GHOSTGET_SETUP_URL}>Set up GhostGet</a></p>
               </div>
               <div className="tb-support__block">
                 <h3>Your Mac</h3>
@@ -272,9 +272,9 @@ export default function Home() {
               ))}
             </ol>
             <p className="tb-writer-coming"><Chip>{CREDITS_CHIP}</Chip> <span>{REPLY_CREDITS_NOTE}</span></p>
-            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} Setup installs a local copy of Textbutler on your Mac (<code>bun run textbutler:install</code>). That copy writes the AI replies, and it refuses to build if its code doesn’t match the last reviewed version. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
+            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} Setup installs a local copy of TextButler on your Mac (<code>bun run textbutler:install</code>). That copy writes the AI replies, and it refuses to build if its code doesn’t match the last reviewed version. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
             <DiagramSwitch label="Show where your words go with" options={[
-              { label: 'Local', caption: 'Local model: the reply is written on your Mac. In testing.', panel: <DiagramFigure alt="Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only with your key." name={DIAGRAMS.whereWordsGo} /> },
+              { label: 'Local', caption: 'Local model: the reply is written on your Mac. In testing.', panel: <DiagramFigure alt="Where your words go with a local model: GhostGet, TextButler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only with your key." name={DIAGRAMS.whereWordsGo} /> },
               { label: 'Your key', caption: 'Your Gateway key: the conversation context goes to Vercel AI Gateway, and spending stops at $1 a day.', panel: <DiagramFigure alt="Where your words go with your Vercel AI Gateway key: Qwen 3.5 Flash writes the reply, and one arrow leaves your Mac for Vercel AI Gateway." name={DIAGRAMS.whereWordsGoKey} /> },
               { label: 'Your subscription', caption: 'Your subscription: the conversation context goes through xcb to your Claude Code, Codex, or Devin account.', panel: <DiagramFigure alt="Where your words go with your subscription: your Claude Code, Codex, or Devin account writes the reply, and one arrow leaves your Mac through xcb." name={DIAGRAMS.whereWordsGoSubscription} /> },
             ]} />
@@ -293,8 +293,8 @@ export default function Home() {
               </figcaption>
               <pre aria-label="Setup prompt for your coding agent" tabIndex={0}><code>{AGENT_SETUP_PROMPT}</code></pre>
             </figure>
-            <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and Ghostget. There’s no one-line installer and no Textbutler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
-            <DiagramFigure alt="Who does what. Your agent clones and installs Textbutler, connects your apps, and runs textbutler doctor. You turn on the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper if you use them, pick what writes replies, and turn on one person." name={DIAGRAMS.whoDoesWhat} />
+            <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. There’s no one-line installer and no TextButler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
+            <DiagramFigure alt="Who does what. Your agent clones and installs TextButler, connects your apps, and runs textbutler doctor. You turn on the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper if you use them, pick what writes replies, and turn on one person." name={DIAGRAMS.whoDoesWhat} />
             <div className="tb-setup-extra">
               <div>
                 <h3>Prefer to do it yourself?</h3>
@@ -371,7 +371,7 @@ export default function Home() {
               heading: 'The agent platform',
               headingId: 'related-tools',
               summary: 'The connections, subscription, and model comparisons around the butler.',
-              items: [related('wrench', 'Ghostget'), related('xcb', 'xcb'), related('aicharts', 'AI Charts')],
+              items: [related('wrench', 'GhostGet'), related('xcb', 'Excalibur (xcb)'), related('aicharts', 'aicharts')],
             },
           ]} />
           <MarketingCallToAction actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading="Start with one person" headingId="closing-title" id="closing" summary="Paste the prompt, approve what your Mac asks for, and turn on someone who knows you’re trying it. Everyone else stays off." />

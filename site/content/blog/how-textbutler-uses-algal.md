@@ -1,12 +1,12 @@
-Textbutler can keep a separate reply plan for each conversation and change it only when a blinded comparison shows the new plan made no case worse and helped on average. It runs that learning, which it calls a habitat, as a set of ALGAL programs. The learned plan has no field for who gets a message, which AI provider writes it, or whether the reply is marked as the butler's, and a candidate that changes the owner's tool switches is rejected.
+TextButler can keep a separate reply plan for each conversation and change it only when a blinded comparison shows the new plan made no case worse and helped on average. It runs that learning, which it calls a habitat, as a set of ALGAL programs. The learned plan has no field for who gets a message, which AI provider writes it, or whether the reply is marked as the butler's, and a candidate that changes the owner's tool switches is rejected.
 
 ## Why each conversation needs its own plan
 
 Your brother answers in four words and hates small talk; your oldest friend sends paragraphs and expects a joke back. One style for everyone gets at least one of them wrong. An assistant free to rewrite its own rules, though, could learn something you never wanted.
 
-Textbutler answers as a disclosed assistant, and someone using it wants those replies to suit the person on the other end and to improve as the conversation goes on. Some things must stay fixed. Whatever the assistant learns about tone, it must never learn its way into writing to a different person, switching to a different AI provider, turning on a tool the owner left off, or dropping the marker that shows a reply came from the butler.
+TextButler answers as a disclosed assistant, and someone using it wants those replies to suit the person on the other end and to improve as the conversation goes on. Some things must stay fixed. Whatever the assistant learns about tone, it must never learn its way into writing to a different person, switching to a different AI provider, turning on a tool the owner left off, or dropping the marker that shows a reply came from the butler.
 
-Textbutler separates the part that may change, the reply style, from the part that may not, and runs the changing part inside programs that record each run.
+TextButler separates the part that may change, the reply style, from the part that may not, and runs the changing part inside programs that record each run.
 
 ## What ALGAL does
 
@@ -14,9 +14,9 @@ Textbutler separates the part that may change, the reply style, from the part th
 
 Each run leaves a record of every step and its result, so someone can see later what happened without calling the model again. ALGAL's README states its larger bet, that a computer can keep tested ways of acting and get better at later work, and calls whether this beats equally resourced alternatives an open question.
 
-## How Textbutler runs a habitat on ALGAL
+## How TextButler runs a habitat on ALGAL
 
-Textbutler status: {{SITE_STATUS_LABEL}}. It runs from source. Replies use a habitat by default once a reply model is set up; its learning step is opt-in and stays off unless the owner sets an evolution model in Textbutler's host settings. Each enrolled conversation gets its own habitat, stored in Textbutler's private journal on the Mac. Habitats share nothing, even two threads with the same person.
+TextButler status: {{SITE_STATUS_LABEL}}. It runs from source. Replies use a habitat by default once a reply model is set up; its learning step is opt-in and stays off unless the owner sets an evolution model in TextButler's host settings. Each enrolled conversation gets its own habitat, stored in TextButler's private journal on the Mac. Habitats share nothing, even two threads with the same person.
 
 A habitat does its model work in three kinds of runs. Each is a small ALGAL program with a single model step and limits fixed in code:
 
@@ -24,7 +24,7 @@ A habitat does its model work in three kinds of runs. Each is a small ALGAL prog
 - **Reflect** looks at a reply that went out and what the contact said afterward, then proposes a revised plan. It gets up to 96 KiB of context and two minutes.
 - **Judge** scores the current plan and the candidate plan side by side on the same past cases. It has the same limits as reflect.
 
-Every run allows at most one model call and four steps. Reflect and judge use the Claude Code subscription you connect through xcb, with no tools at all: the model returns JSON and Textbutler checks it. Learning runs only when the owner has also named a model for it in the habitat settings. Those calls are not cached or retried, so a failed learning step keeps the current plan instead of running twice.
+Every run allows at most one model call and four steps. Reflect and judge use the Claude Code subscription you connect through xcb, with no tools at all: the model returns JSON and TextButler checks it. Learning runs only when the owner has also named a model for it in the habitat settings. Those calls are not cached or retried, so a failed learning step keeps the current plan instead of running twice.
 
 ### A plan can hold only style settings
 
@@ -53,7 +53,7 @@ The owner can also write a fixed core for a contact: the voice to use, relations
 
 ### When a new plan replaces the old one
 
-After a reply goes out and the contact responds, the reflect run may propose a candidate plan. Textbutler then reruns the respond program with each plan on the two most recent past cases that drew a follow-up. It sets which answer appears first from a hash of the case, so the judge cannot rely on position, and asks the judge to score the anonymized pair. The candidate replaces the current plan only when all of these hold:
+After a reply goes out and the contact responds, the reflect run may propose a candidate plan. TextButler then reruns the respond program with each plan on the two most recent past cases that drew a follow-up. It sets which answer appears first from a hash of the case, so the judge cannot rely on position, and asks the judge to score the anonymized pair. The candidate replaces the current plan only when all of these hold:
 
 ```text
 the owner has not edited the habitat or its memory since the comparison started
@@ -67,7 +67,7 @@ tool switches and the owner's core text are unchanged
 
 If any line fails, the current plan stays. Silence from the contact counts as unknown, and the instructions tell the reflect step not to optimize for dependency, message volume, provocation, or guilt. When a candidate wins, the previous plan is kept as an ancestor so the owner can roll back to it. An evaluation that fails partway leaves the current plan in place and is not retried.
 
-Every habitat run, from live replies to reflections, replays, and judge runs, leaves an ALGAL record in Textbutler's private journal. Each evaluation stores the digests of the runs behind it, and Textbutler keeps the full records of the most recent 32 runs per contact, so you can trace a recent plan change back to the runs that produced it.
+Every habitat run, from live replies to reflections, replays, and judge runs, leaves an ALGAL record in TextButler's private journal. Each evaluation stores the digests of the runs behind it, and TextButler keeps the full records of the most recent 32 runs per contact, so you can trace a recent plan change back to the runs that produced it.
 
 ## What you can see and undo
 
@@ -84,7 +84,7 @@ textbutler habitats memory-clear <contact> <revision>      # clear learned excer
 
 A rollback steps back one saved plan at a time and cannot reach past the owner's last `configure`, so it never brings back a tool the owner switched off. Clearing memory empties the learned excerpts, and older run records stay in the journal.
 
-A habitat never decides who receives a message and has no way to send one. The model returns proposed actions, such as a text or a reaction, and Textbutler checks them against what the conversation allows. Whether and how anything is sent stays with Textbutler's normal send path and your settings for that contact, which [Introducing Textbutler](/blog/introducing-textbutler) walks through.
+A habitat never decides who receives a message and has no way to send one. The model returns proposed actions, such as a text or a reaction, and TextButler checks them against what the conversation allows. Whether and how anything is sent stays with TextButler's normal send path and your settings for that contact, which [Introducing TextButler](/blog/introducing-textbutler) walks through.
 
 ## Limits
 

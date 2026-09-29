@@ -1,4 +1,4 @@
-# Textbutler runtime
+# TextButler runtime
 
 This source package contains the macOS message-butler daemon. Replies can be
 written by a local model through Ollama (in testing), by Qwen 3.5 Flash through
@@ -8,14 +8,14 @@ The owner selects contacts and, for the subscription route, an explicit agent
 account. Trusted runtime code admits
 replies, isolates contact memory, adds disclosure, and journals outward intent.
 
-The automation connection polls Ghostget's durable incoming-message feed and
+The automation connection polls GhostGet's durable incoming-message feed and
 uses recipient-bound grants for enabled contacts. New installations start paused.
 Only configured, ready messaging connections and admitted agent accounts can
-run replies. Subscription inference requires a verified Textbutler bundle with
+run replies. Subscription inference requires a verified TextButler bundle with
 reviewed source composition admission; source daemon startup remains unadmitted.
 Claude Code, Codex, and Devin subscription inference uses an explicitly
 configured [xcb](https://github.com/hraness/xcb) native `generate` process.
-xcb keeps credentials and provider custody; Textbutler interprets structured
+xcb keeps credentials and provider custody; TextButler interprets structured
 proposals through its contact broker. This MIT-licensed package is a reference
 application for that API. Claude API is a separate billed choice; source-mode
 startup and the local installer do not supply its trusted runtime attestation.
@@ -30,7 +30,7 @@ Local builds use an ad-hoc or persistent owner certificate signature; they are n
 Start with the [guided setup](../../docs/textbutler/getting-started.md) and
 [messaging app support](../../docs/textbutler/messaging-apps.md). Run
 `bun run textbutler tui` for setup, connections, contact selection and inbox review.
-Textbutler is headless: it has no window or menu bar icon, and the terminal is
+TextButler is headless: it has no window or menu bar icon, and the terminal is
 its interface.
 
 ## Modules
@@ -56,11 +56,11 @@ its interface.
   activity immediately before atomic publication.
 - `enrollment.ts` and `ghostget-owner-read.ts`: explicit owner conversation
   selection, account/participant binding, and bounded context-only history.
-- `host-config.ts`: private owner configuration of the installed Ghostget CLI;
+- `host-config.ts`: private owner configuration of the installed GhostGet CLI;
   no account or message reads occur just by loading configuration.
 - `xcb-host.ts`: pinned external xcb execution, account/model binding, bounded
   zero-tool generation and settlement validation. Provider credentials stay in
-  xcb's private state; Textbutler handles the contact's operation proposals.
+  xcb's private state; TextButler handles the contact's operation proposals.
 - `provider-host.ts`: explicit account selection, current model availability,
   credential generation fencing, shared account leases, and optional trusted
   [managed Codex account controls](https://github.com/hraness/xcb/blob/main/MANAGED-CODEX.md). Its managed
@@ -123,8 +123,8 @@ separately. An unknown or changed service is never removed by name alone.
 ## Select a conversation
 
 Initialize the data directory with `bun run textbutler init`. Configure an
-existing Ghostget installation and its explicitly selected iMessage account in
-the mode-`0600` file `state/host.json` under the Textbutler data directory:
+existing GhostGet installation and its explicitly selected iMessage account in
+the mode-`0600` file `state/host.json` under the TextButler data directory:
 
 ```json
 {
@@ -138,29 +138,29 @@ the mode-`0600` file `state/host.json` under the Textbutler data directory:
 ```
 
 Replace the example paths with the actual physical installed paths. Omit
-`runtimeExecutable` when `executable` is the standalone Ghostget executable.
-An optional absolute `stateHome` selects Ghostget's configured state directory.
+`runtimeExecutable` when `executable` is the standalone GhostGet executable.
+An optional absolute `stateHome` selects GhostGet's configured state directory.
 No shell command, arbitrary arguments or environment fields are accepted.
 This configuration does not create an account or grant Messages permissions;
-complete that setup in Ghostget. Restart Textbutler after editing host settings.
+complete that setup in GhostGet. Restart TextButler after editing host settings.
 
 The owner control protocol supports listing up to 200 recent Messages
 conversations and enrolling one direct contact, optionally importing at most 200
 recent text messages. Enrollment rechecks account incarnation and participant
 identity and creates a disabled contact. Attachments are not imported. Use the terminal to select a conversation, or run
 `conversations list` followed by `contacts add CANDIDATE [--history]`. The native Contacts directory remains unavailable
-through the current Ghostget contract.
+through the current GhostGet contract.
 
 Long reads use bounded owner jobs; the global Pause button remains available.
-Bun source launches disable automatic `.env` loading. A cancelled Ghostget CLI
+Bun source launches disable automatic `.env` loading. A cancelled GhostGet CLI
 receives 36 seconds for its documented cleanup and persistence envelope before
 forced termination. Each invocation first claims the private
 `state/ghostget-read-custody.json` marker. Uncertain, signalled, failed or malformed
 outcomes preserve it; restarting the daemon does not clear the fence. Recovery
 requires owner inspection of the exact configuration digest and operation record,
-plus reconciliation of Ghostget's corresponding cleanup state. Do not delete the
+plus reconciliation of GhostGet's corresponding cleanup state. Do not delete the
 marker or run broad provider recovery merely to unblock a retry. The daemon
-does not automatically invoke Ghostget recovery or infer descendant cleanup from
+does not automatically invoke GhostGet recovery or infer descendant cleanup from
 the immediate parent process exiting.
 The configuration above selects the legacy read-only conversation path. For
 automation, add `ghostget.automationAccounts`, an explicit list of at most one account each for `imessage`, `whatsapp` and
@@ -177,8 +177,8 @@ selected. Connection checks alone do not enable replies.
 Enabling revalidates the messaging identity and grants only currently available
 actions, for at most 30 days and 100,000 actions. While the contact remains enabled,
 the daemon can renew that bounded grant after checking current provider state,
-recipient identity, settings revision and remaining capacity. Textbutler also
-enforces its per-contact reply rate limit. Textbutler shows grant expiry, recovery
+recipient identity, settings revision and remaining capacity. TextButler also
+enforces its per-contact reply rate limit. TextButler shows grant expiry, recovery
 requirements and last-confirmed rich-message capabilities. Pausing stops new
 dispatches; disabling also revokes the grant. An uncertain revocation retains
 private recovery state and blocks dispatch until reconciliation succeeds.

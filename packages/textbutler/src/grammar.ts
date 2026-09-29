@@ -2,12 +2,12 @@
  * `status`, `commands`, `tui`, `doctor`, `control …`, `approvals …` and
  * `permissions …`, each answering in the shared envelope with `--json`.
  *
- * Textbutler's owner is the existing daemon on `daemon.sock` (one owner-only
+ * TextButler's owner is the existing daemon on `daemon.sock` (one owner-only
  * socket through @hraness/local-custody). Op classes and human gates are
  * enforced here, in the CLI, before any request reaches that socket; there is
  * no separate agent socket (docs/cli-parity.md).
  *
- * Every other Textbutler verb keeps its name and behaviour and is listed in
+ * Every other TextButler verb keeps its name and behaviour and is listed in
  * the registry with its op class, so `textbutler commands --json` describes the
  * whole CLI. Verbs that already let an agent loosen or send (`replies send`,
  * `contacts enable`, `resume`, …) are `decide-legacy`: they keep today's
@@ -86,7 +86,7 @@ const cut = (text: string, limit: number): string => { const value = clean(text)
 
 /** Views shared by `tui --snapshot`, the plain `status` text and the goldens. */
 export const STATUS_VIEWS: readonly View<StatusData>[] = [
-  { id: "status", title: "Status", render: (state, width) => box("Textbutler", [
+  { id: "status", title: "Status", render: (state, width) => box("TextButler", [
     `Service: ${state.owner.state === "running" ? "running" : "stopped"}`,
     `Automatic replies: ${state.automaticReplies}`,
     `Messaging: ${state.messaging.length ? state.messaging.map(app => APP_NAMES[app] ?? app).join(", ") : "none connected"}`,
@@ -109,7 +109,7 @@ export const STATUS_VIEWS: readonly View<StatusData>[] = [
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const ownerUnavailable = (): HranessError => new HranessError("owner-unavailable", "The Textbutler background service isn't running.", undefined,
+const ownerUnavailable = (): HranessError => new HranessError("owner-unavailable", "The TextButler background service isn't running.", undefined,
   [{ command: "textbutler control serve", why: "Start the service in a terminal", audience: "human" }, { command: "textbutler control status --json", why: "Check the service", audience: "agent" }]);
 
 /** One owner request; transport and owner failures become shared error codes. */
@@ -152,7 +152,7 @@ const loginState = (status: LaunchAgentStatus): { installation: LaunchAgentStatu
 /** A product verb that the existing CLI still runs; listed here for `commands --json`. */
 function productVerb(path: string, opClass: "read" | "operate" | "decide-legacy", summary: string): Verb<null, unknown> {
   return { path: path.split(" "), opClass, schema: `textbutler.${path.split(" ")[0]}/1`, summary,
-    input: () => null, run: () => Promise.reject(new HranessError("internal", "This verb runs through the Textbutler CLI.")) };
+    input: () => null, run: () => Promise.reject(new HranessError("internal", "This verb runs through the TextButler CLI.")) };
 }
 /** Existing verbs, their op classes and one-line summaries (docs/cli-parity.md). */
 export const PRODUCT_VERBS: readonly Verb<null, unknown>[] = [
@@ -201,7 +201,7 @@ export const PRODUCT_VERBS: readonly Verb<null, unknown>[] = [
   productVerb("messages send", "decide-legacy", "Send your own text in a chat"),
   productVerb("campaign run", "decide-legacy", "Send your own texts at a slow pace"),
   productVerb("campaign status", "read", "Show a campaign's progress"),
-  productVerb("support", "read", "See optional ways to support Textbutler"),
+  productVerb("support", "read", "See optional ways to support TextButler"),
 ];
 
 // ── The registry ─────────────────────────────────────────────────────────────
@@ -244,10 +244,10 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
       flags: ["foreground"], output: "raw", input: none,
       run: async () => {
         // A live owner answers on the socket; custody refuses a second one.
-        if (await snapshotOrNull(deps)) throw new HranessError("control-already-running", "The Textbutler service is already running. Nothing changed.", undefined, [{ command: "textbutler control status --json", why: "Check the service", audience: "agent" }]);
+        if (await snapshotOrNull(deps)) throw new HranessError("control-already-running", "The TextButler service is already running. Nothing changed.", undefined, [{ command: "textbutler control status --json", why: "Check the service", audience: "agent" }]);
         try { return await deps.serve(); }
         catch (error) {
-          if (error instanceof Error && /already exists|still active/u.test(error.message)) throw new HranessError("control-already-running", "Another Textbutler service owns this data folder. Nothing changed.");
+          if (error instanceof Error && /already exists|still active/u.test(error.message)) throw new HranessError("control-already-running", "Another TextButler service owns this data folder. Nothing changed.");
           throw error;
         }
       } },
@@ -267,7 +267,7 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
           // Only a missing or refused socket means nothing is running; a timeout
           // or permission problem leaves the service's state unknown.
           if (socketAbsent(error)) return { state: "not-running" };
-          throw new HranessError("owner-unavailable", "Couldn't reach the Textbutler service, so it may still be running.", undefined,
+          throw new HranessError("owner-unavailable", "Couldn't reach the TextButler service, so it may still be running.", undefined,
             [{ command: "textbutler control status --json", why: "Check the service", audience: "agent" }]);
         }
         if (response.ok && response.kind === "stopping") return { state: "stopping" };
@@ -279,7 +279,7 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
     verbs.push({ path: ["control", action], opClass: "decide", schema: "textbutler.control/1",
       summary: action === "install" ? "Start the service at login (a persistent login item)" : "Stop the service and remove its login item",
       input: none,
-      gate: { tier: "T1T2", describe: () => ({ title: action === "install" ? "Start Textbutler at login" : "Remove Textbutler from login", digest: digestOf({ verb: `control ${action}`, label: "textbutler" }) }) },
+      gate: { tier: "T1T2", describe: () => ({ title: action === "install" ? "Start TextButler at login" : "Remove TextButler from login", digest: digestOf({ verb: `control ${action}`, label: "textbutler" }) }) },
       run: async () => {
         const lifecycle = deps.launchAgent();
         const login = action === "install" ? await lifecycle.install(deps.dataDir) : await lifecycle.uninstall(deps.dataDir);
@@ -287,7 +287,7 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
         if (login.installation !== want) throw new HranessError("textbutler.login-item", login.detail);
         return { loginItem: loginState(login) };
       },
-      text: () => action === "install" ? "Textbutler starts at login." : "Textbutler no longer starts at login." });
+      text: () => action === "install" ? "TextButler starts at login." : "TextButler no longer starts at login." });
   }
   verbs.push(
     { path: ["approvals", "list"], opClass: "read", schema: "textbutler.approvals/1", summary: "List reply suggestions waiting for a decision",

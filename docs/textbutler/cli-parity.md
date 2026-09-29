@@ -1,6 +1,6 @@
-# Textbutler commands
+# TextButler commands
 
-Everything Textbutler does is a command. Add `--json` to any command below and
+Everything TextButler does is a command. Add `--json` to any command below and
 it prints one JSON object with `ok`, `schema`, `generatedAt` and either
 `data` or `error`. `textbutler commands --json` prints this list for an
 agent to read.
@@ -25,7 +25,7 @@ Error codes and exit statuses: `usage` 2, `human-required` 3,
 
 ## The service
 
-The background service owns one private socket in your Textbutler data folder.
+The background service owns one private socket in your TextButler data folder.
 Only your macOS user can open it. The CLI checks each command's kind before it
 sends anything, so there is no separate socket for agents.
 
@@ -96,11 +96,11 @@ sends a signal to a process.
 | `messages send` | decide-legacy | Send your own text in a chat |
 | `campaign run` | decide-legacy | Send your own texts at a slow pace |
 | `campaign status` | read | Show a campaign's progress |
-| `support` | read | See optional ways to support Textbutler |
+| `support` | read | See optional ways to support TextButler |
 
 ## Where the old menu bar items went
 
-Textbutler no longer has a menu bar icon. Each item it had is a command:
+TextButler no longer has a menu bar icon. Each item it had is a command:
 
 | Menu item | Command |
 | --- | --- |
@@ -116,10 +116,10 @@ Textbutler no longer has a menu bar icon. Each item it had is a command:
 | Find conversations to add, Add a conversation | `textbutler conversations list`, `textbutler contacts add <id>` |
 | Connect a messaging app | `textbutler messaging start imessage`, `whatsapp` or `beeper` |
 | Open Full Disk Access or Automation settings | `textbutler doctor` prints the exact settings pane |
-| Start Textbutler at login | `textbutler control install` |
+| Start TextButler at login | `textbutler control install` |
 | Setup guide, Get started | `textbutler setup` |
 | Help & support | `textbutler support` |
-| Quit Textbutler | `textbutler control stop` |
+| Quit TextButler | `textbutler control stop` |
 
 ## Old login items
 

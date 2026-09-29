@@ -72,7 +72,7 @@ test('renders the in-flow content footer and one shared Hraness footer on every 
     expect(html.match(/<footer\b/gu), page.name).toHaveLength(2);
     expect(html.indexOf('data-hraness-marketing="footer"'), page.name)
       .toBeLessThan(html.indexOf('id="hraness-site-footer"'));
-    expect(html, page.name).toContain('<footer aria-label="Textbutler"');
+    expect(html, page.name).toContain('<footer aria-label="TextButler"');
     expect(html, page.name).toContain('src="/marks/message-like-me.svg"');
     expect(html, page.name).toContain('hraness-marketing-footer__name');
     expect(html, page.name).toContain('AI in your messages · Mac only · MIT source · in development');

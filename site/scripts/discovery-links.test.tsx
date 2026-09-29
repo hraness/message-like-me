@@ -26,7 +26,7 @@ function faqEntries(html: string): { name: string; text: string }[] {
 }
 
 test('names iMessage, WhatsApp, and Mac in the home title within 60 characters', () => {
-  for (const fact of ['Textbutler', 'iMessage', 'WhatsApp', 'Mac']) expect(SITE_TITLE).toContain(fact);
+  for (const fact of ['TextButler', 'iMessage', 'WhatsApp', 'Mac']) expect(SITE_TITLE).toContain(fact);
   expect(SITE_TITLE.length).toBeLessThanOrEqual(60);
 });
 
@@ -34,7 +34,7 @@ test('links the GhostReply comparison from the home FAQ, the footer, and the abo
   const home = renderToStaticMarkup(<Home />);
   const about = renderToStaticMarkup(<About />);
   const compare = renderToStaticMarkup(<CompareGhostReplyPage />);
-  expect(home).toContain(`<a ${COMPARE_LINK}>Textbutler compared with GhostReply</a>`);
+  expect(home).toContain(`<a ${COMPARE_LINK}>TextButler compared with GhostReply</a>`);
   for (const [name, html] of Object.entries({ home, about, compare })) {
     expect(html, name).toContain(`${COMPARE_LINK}>Compare with GhostReply</a>`);
   }

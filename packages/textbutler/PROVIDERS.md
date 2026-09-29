@@ -8,22 +8,22 @@ The first two need no account here: see
 This page covers the subscription route and the separately billed Claude API
 choice, which no build of this repository can run yet.
 
-Textbutler keeps **Claude API**, **Claude Code**, **Codex** and **Devin** as separate account
+TextButler keeps **Claude API**, **Claude Code**, **Codex** and **Devin** as separate account
 choices. Claude Code, Codex and Devin use an explicitly configured
 [xcb](https://github.com/hraness/xcb) native runtime. Selecting either never
 borrows an API credential or starts separately billed API work. xcb owns
-subscription sign-in, confinement and provider custody; Textbutler owns contact
+subscription sign-in, confinement and provider custody; TextButler owns contact
 policy and the broker that interprets operation proposals.
 
 ## Connect a subscription with xcb
 
-Use a verified Textbutler bundle with reviewed composition admission and an
+Use a verified TextButler bundle with reviewed composition admission and an
 xcb build with native `generate` support. `bun run textbutler:install` validates
 the recorded source/profile evidence before building; absent or stale evidence
 blocks the build. Run its installed daemon for AI replies. A source daemon
 remains unadmitted even when the xcb account is ready. Complete the selected provider's
 sign-in and admission in xcb, then copy the exact account ID and full observed
-model key from `xcb accounts` and `xcb models`. With Textbutler stopped, run:
+model key from `xcb accounts` and `xcb models`. With TextButler stopped, run:
 
 ```sh
 bun run textbutler setup \
@@ -45,7 +45,7 @@ changed bindings require review of private host configuration while stopped.
 Account metadata and executable integrity do not prove live inference or message
 delivery. Consult [the subscription contract](../../docs/textbutler/native-subscription.md)
 for generation limits, custody, recovery and the exact-runtime acceptance
-requirements. Textbutler's MIT source is the application example; each host
+requirements. TextButler's MIT source is the application example; each host
 still supplies its own admitted xcb/provider installation.
 
 ## Claude API: separate trusted runtime required
@@ -59,7 +59,7 @@ this route unavailable unless a trusted embedding integration supplies it.
 
 ### Configure the private API account reference
 
-Under the Textbutler data directory, create `state/provider-credentials` as an
+Under the TextButler data directory, create `state/provider-credentials` as an
 owner-only physical directory with mode `0700`. Put the chosen Anthropic API key
 in one mode-`0600` regular file there, without links or executable permission.
 Use the owner's secure editor or credential provisioning tool; do not put the
@@ -84,7 +84,7 @@ The fields are:
 Supply current prices from the provider's published pricing for the selected
 models. Price observations expire after 30 days; no guessed or bundled price
 table is used. Include the response model and at least one model eligible for
-classification. Textbutler checks actual model access and structured-output
+classification. TextButler checks actual model access and structured-output
 support, then chooses the lowest estimated classification cost for a
 2,000-input / 128-output-token request. The response remains pinned to
 `replyModel` unless the contact explicitly selects another available model.

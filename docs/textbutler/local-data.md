@@ -1,8 +1,8 @@
 # Local data
 
-Textbutler keeps settings, contact memory, reply journals and setup records in
+TextButler keeps settings, contact memory, reply journals and setup records in
 `~/Library/Application Support/Textbutler`, unless you select another data
-directory. These files are private to the Mac user. xcb and Ghostget keep their
+directory. These files are private to the Mac user. xcb and GhostGet keep their
 own accounts and credentials in their separately configured state directories.
 
 Explicit CLI media imports live in the selected contact's private `outbox`.
@@ -56,21 +56,21 @@ for audit. Rollback retains the preceding artifact and a bounded tombstone; it
 does not erase historical evidence or activate a task for replies.
 
 The explicit legacy iMessage crash reconciliation script accepts a private
-witness for the Ghostget 0.18.16 startup failure. It checks the original crash,
+witness for the GhostGet 0.18.16 startup failure. It checks the original crash,
 app, connector, account and process state, then archives a bounded settlement
 record before releasing that attempt's setup marker. It never retries setup or
 changes accounts, permissions or messages. It refuses other failure types.
 
-## Remove Textbutler data
+## Remove TextButler data
 
 Use `textbutler daemon uninstall` before removing
-local data. Confirm that Textbutler and its connector operations have stopped.
+local data. Confirm that TextButler and its connector operations have stopped.
 If an operation has an uncertain outcome, reconcile it and retain the evidence
 needed to settle that operation first.
 
-To erase an installation, the owner can then delete its complete Textbutler
+To erase an installation, the owner can then delete its complete TextButler
 data directory. This removes settings, contact memory, journals, setup results
-and the iMessage account binding. It does not delete Messages history, Ghostget
+and the iMessage account binding. It does not delete Messages history, GhostGet
 or xcb accounts, or macOS permission grants. Removing individual binding or
 custody records is not a supported way to replace an account or retry a failed
 operation. Reinstalling the command and uninstalling the background service

@@ -2,7 +2,7 @@
 
 exports[`tui goldens for every former menu bar state stopped snapshot at 40 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────┐
+┌ TextButler ──────────────────────────┐
 │Service: stopped                      │
 │Automatic replies: unavailable        │
 │Messaging: none connected             │
@@ -27,7 +27,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state stopped snapshot at 80 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────┐
 │Service: stopped                                                              │
 │Automatic replies: unavailable                                                │
 │Messaging: none connected                                                     │
@@ -52,7 +52,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state stopped snapshot at 120 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Service: stopped                                                                                                      │
 │Automatic replies: unavailable                                                                                        │
 │Messaging: none connected                                                                                             │
@@ -99,7 +99,7 @@ exports[`tui goldens for every former menu bar state stopped tui --json equals s
 
 exports[`tui goldens for every former menu bar state running-empty snapshot at 40 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────┐
+┌ TextButler ──────────────────────────┐
 │Service: running                      │
 │Automatic replies: running            │
 │Messaging: none connected             │
@@ -123,7 +123,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state running-empty snapshot at 80 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────┐
 │Service: running                                                              │
 │Automatic replies: running                                                    │
 │Messaging: none connected                                                     │
@@ -147,7 +147,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state running-empty snapshot at 120 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Service: running                                                                                                      │
 │Automatic replies: running                                                                                            │
 │Messaging: none connected                                                                                             │
@@ -193,7 +193,7 @@ exports[`tui goldens for every former menu bar state running-empty tui --json eq
 
 exports[`tui goldens for every former menu bar state paused snapshot at 40 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────┐
+┌ TextButler ──────────────────────────┐
 │Service: running                      │
 │Automatic replies: paused             │
 │Messaging: none connected             │
@@ -217,7 +217,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state paused snapshot at 80 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────┐
 │Service: running                                                              │
 │Automatic replies: paused                                                     │
 │Messaging: none connected                                                     │
@@ -241,7 +241,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state paused snapshot at 120 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Service: running                                                                                                      │
 │Automatic replies: paused                                                                                             │
 │Messaging: none connected                                                                                             │
@@ -287,7 +287,7 @@ exports[`tui goldens for every former menu bar state paused tui --json equals st
 
 exports[`tui goldens for every former menu bar state access-needed snapshot at 40 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────┐
+┌ TextButler ──────────────────────────┐
 │Service: running                      │
 │Automatic replies: unavailable        │
 │Messaging: none connected             │
@@ -311,7 +311,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state access-needed snapshot at 80 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────┐
 │Service: running                                                              │
 │Automatic replies: unavailable                                                │
 │Messaging: none connected                                                     │
@@ -335,7 +335,7 @@ Nothing yet.
 
 exports[`tui goldens for every former menu bar state access-needed snapshot at 120 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Service: running                                                                                                      │
 │Automatic replies: unavailable                                                                                        │
 │Messaging: none connected                                                                                             │
@@ -381,7 +381,7 @@ exports[`tui goldens for every former menu bar state access-needed tui --json eq
 
 exports[`tui goldens for every former menu bar state populated snapshot at 40 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────┐
+┌ TextButler ──────────────────────────┐
 │Service: running                      │
 │Automatic replies: running            │
 │Messaging: iMessage, WhatsApp, Beeper │
@@ -411,7 +411,7 @@ When              What
 
 exports[`tui goldens for every former menu bar state populated snapshot at 80 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────┐
 │Service: running                                                              │
 │Automatic replies: running                                                    │
 │Messaging: iMessage, WhatsApp, Beeper                                         │
@@ -441,7 +441,7 @@ When              What
 
 exports[`tui goldens for every former menu bar state populated snapshot at 120 columns 1`] = `
 "== Status ==
-┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌ TextButler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │Service: running                                                                                                      │
 │Automatic replies: running                                                                                            │
 │Messaging: iMessage, WhatsApp, Beeper                                                                                 │
@@ -1083,7 +1083,7 @@ exports[`commands --json every verb has an op class and every decide verb has a 
           "support",
         ],
         "schema": "textbutler.support/1",
-        "summary": "See optional ways to support Textbutler",
+        "summary": "See optional ways to support TextButler",
       },
     ],
   },

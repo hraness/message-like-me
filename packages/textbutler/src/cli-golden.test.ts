@@ -146,7 +146,7 @@ describe("the real entrypoint in a pipe", () => {
   };
   test("help | head -1 exits quietly and --help exits 0 off a terminal", async () => {
     const bun = JSON.stringify(process.execPath), file = JSON.stringify(entry);
-    expect(await shell(`${bun} ${file} --help | head -1`)).toEqual({ code: 0, stdout: "Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and\n", stderr: "" });
+    expect(await shell(`${bun} ${file} --help | head -1`)).toEqual({ code: 0, stdout: "TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and\n", stderr: "" });
     expect(await shell(`${bun} ${file} help contacts --help 2>&1 | head -1; exit 0`)).toMatchObject({ code: 0 });
     const unknown = await shell(`${bun} ${file} stauts`, { NO_COLOR: "1" });
     expect(unknown).toEqual({ code: 2, stdout: "", stderr: '✗ Unknown command "stauts". Did you mean "status"?\n→ textbutler --help\n' });

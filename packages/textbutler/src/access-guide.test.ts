@@ -115,7 +115,7 @@ describe("guided access step (T3)", () => {
       const output: string[] = [], answers = ["8", "q"];
       await runTerminalSession(root, { write: text => output.push(text), ask: async () => answers.shift() ?? null },
         async () => ({ protocol: CONTROL_PROTOCOL, ok: false, code: "unavailable", message: "Disconnected" }), { access: { platform: "darwin", imessageConfigured: async () => false } });
-      expect(output.join("")).toContain("  8  Give Textbutler access");
+      expect(output.join("")).toContain("  8  Give TextButler access");
       expect(output.join("")).toContain("Connect iMessage first");
     } finally { await rm(root, { recursive: true, force: true }); }
   });
