@@ -4,6 +4,19 @@ Each version's section is copied onto its GitHub Release page: a summary
 paragraph, then one bullet per change. Write the section in the version bump
 pull request.
 
+## 0.8.23 - 2026-09-29
+
+TextButler is now headless: the menu bar companion is gone, and every action is reachable from one shared command grammar with JSON output, a snapshot-able terminal UI, and in-person approval for sends and chat enablement.
+
+- Bind legacy installation to the exact public `@hraness/message-like-me@0.8.23` npm package, with the same reviewed bytes mirrored in the immutable GitHub Release. This does not install TextButler or enable automatic replies.
+- Remove the menu bar companion; the background service is the only owner, and an installed legacy menu login item is renamed aside by the shared desktop-foundation 0.9.0 retire module, never deleted.
+- Add the shared command grammar: `textbutler commands --json`, `status --json`, `doctor`, `control`, `approvals` and `permissions` return one envelope, and `textbutler tui --snapshot` prints the guided terminal's views as plain text.
+- Sends and chat enablement require the owner in person: an agent gets `human-required` and nothing changes; `replies send` keeps its reviewed draft-and-digest form.
+- Local reply models through Ollama (`textbutler providers local`), Qwen through the Vercel AI Gateway as the default route, full-history conversation search, and safe recovery after refused private web searches.
+- Owner-authored operator sends with a paced campaign runner; operator text no longer summons the butler.
+- Reply loop: keyword invocations always get an answer, fast self-chat replies wait for their acknowledgement echo, Messages database activity wakes polling, and Ghostget pins 0.18.44 for native iMessage setup.
+- Refresh the TextButler site: AI butler positioning, launch film and diagrams, shared share-image template, and cookieless analytics.
+
 ## 0.8.22 - 2026-09-28
 
 The Textbutler menu companion is rebuilt around one status line and ten top-level rows, the terminal gains a guided macOS access step, and the `messagelikeme` history CLI drops its banner and names the app in access errors.
