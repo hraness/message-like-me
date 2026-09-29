@@ -1,9 +1,9 @@
 # Publish Message Like Me
 
-## Textbutler informational-site delivery
+## TextButler informational-site delivery
 
 The following explicit site-subject route supersedes the package-publication
-prerequisite below for the informational Textbutler website only. It grants no
+prerequisite below for the informational TextButler website only. It grants no
 package publication, native app release, provider qualification, or live message
 authority. The legacy tagged package route and its exact-byte/npm checks remain
 unchanged. Source repository identity is the canonical `hraness/textbutler`

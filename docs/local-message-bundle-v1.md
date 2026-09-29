@@ -2,9 +2,9 @@
 
 Beeper users can bring a bounded provider observation into Message Like Me's
 private local evidence layer without giving Message Like Me a provider
-credential or send access. Ghostget writes a finished
+credential or send access. GhostGet writes a finished
 `message-like-me.local-message-bundle`; `messagelikeme ingest bundle` verifies
-and normalizes that directory. The importer never starts or calls Ghostget, never
+and normalizes that directory. The importer never starts or calls GhostGet, never
 invokes a Beeper operation, and never sends. Like every Message Like Me ingest
 path, it is read-only with respect to its source.
 
@@ -33,11 +33,11 @@ express.
 ## Compatibility coordinates
 
 Message Like Me accepts schema version `1` with source ID `beeper-local` and
-source-transform version `1.1.0`. Ghostget v0.17.1 emits those coordinates through
+source-transform version `1.1.0`. GhostGet v0.17.1 emits those coordinates through
 adapter `beeper-local@2.4.0`. That adapter has 32 reviewed Beeper operations:
 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions
 and writes, plus six fixed Desktop loopback reads. The Message Like Me bundle is
-made by Ghostget's separate internal bounded export, not by a Message Like Me
+made by GhostGet's separate internal bounded export, not by a Message Like Me
 provider operation. It fixes the raw export arguments, excludes attachments,
 and preserves incomplete-coverage evidence. It does not claim a complete
 Beeper history.
@@ -45,7 +45,7 @@ Beeper history.
 The pinned Beeper CLI executable reports version `0.6.2`; that executable is
 the runtime authority. At the upstream source tag,
 `packages/cli/package.json` declares `0.6.1`; that source-package value is
-provenance only and never overrides executable runtime identity. A later Ghostget
+provenance only and never overrides executable runtime identity. A later GhostGet
 package release remains compatible only while its manifest still declares the
 same bundle schema, source ID, and `source.version: "1.1.0"`. Package age,
 adapter version, or a permissive package range never overrides those manifest
@@ -53,7 +53,7 @@ coordinates. The provider version records the pinned Beeper CLI used for
 capture and may change without changing the bundle contract.
 
 Message Like Me owns zero Beeper operations, credentials, or live sessions. It
-does not start or call Ghostget, call the provider, or support sending. Its
+does not start or call GhostGet, call the provider, or support sending. Its
 authority begins at strict verification of the already finished private
 directory.
 

@@ -6,9 +6,9 @@ import type { ArticleIsoDate } from '@hraness/design-kit';
 
 export const BLOG_PATH = '/blog' as const;
 export const BLOG_FEED_PATH = '/blog/feed.xml' as const;
-export const BLOG_TITLE = 'Textbutler blog';
+export const BLOG_TITLE = 'TextButler blog';
 export const BLOG_DESCRIPTION =
-  'Posts about Textbutler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
+  'Posts about TextButler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
 
 export type BlogPost = Readonly<{
   slug: string;
@@ -25,7 +25,7 @@ export type BlogPost = Readonly<{
 export const BLOG_POSTS: readonly BlogPost[] = [
   {
     slug: 'introducing-textbutler',
-    title: 'Introducing Textbutler',
+    title: 'Introducing TextButler',
     dek: 'AI in your messages. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you.',
     eyebrow: 'Launch',
     published: '2026-09-24',
@@ -38,8 +38,8 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   },
   {
     slug: 'how-textbutler-uses-xcb',
-    title: 'How Textbutler uses xcb to reply on your own subscription',
-    dek: 'One of Textbutler’s three reply writers is the Claude Code, Codex, or Devin subscription you already pay for, reached through xcb with no tools of its own.',
+    title: 'How TextButler uses xcb to reply on your own subscription',
+    dek: 'One of TextButler’s three reply writers is the Claude Code, Codex, or Devin subscription you already pay for, reached through xcb with no tools of its own.',
     eyebrow: 'Integration',
     published: '2026-09-24',
     updated: '2026-09-28',
@@ -48,8 +48,8 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   },
   {
     slug: 'how-textbutler-uses-algal',
-    title: 'How Textbutler uses ALGAL to improve replies per contact',
-    dek: 'A Textbutler habitat replaces a contact\'s reply plan only after a blinded ALGAL replay scores the new plan no lower on any case and higher on average.',
+    title: 'How TextButler uses ALGAL to improve replies per contact',
+    dek: 'A TextButler habitat replaces a contact\'s reply plan only after a blinded ALGAL replay scores the new plan no lower on any case and higher on average.',
     eyebrow: 'Integration',
     published: '2026-09-24',
     updated: '2026-09-28',
@@ -58,8 +58,8 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   },
   {
     slug: 'how-textbutler-uses-ghostget',
-    title: 'How the legacy history tools use Ghostget to import your message history',
-    dek: 'The legacy Message Like Me history tools import Beeper and WhatsApp history from a private folder that Ghostget writes. Live Textbutler replies take a different path.',
+    title: 'How the legacy history tools use GhostGet to import your message history',
+    dek: 'The legacy Message Like Me history tools import Beeper and WhatsApp history from a private folder that GhostGet writes. Live TextButler replies take a different path.',
     eyebrow: 'Legacy',
     published: '2026-09-24',
     updated: '2026-09-28',

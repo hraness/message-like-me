@@ -1,4 +1,4 @@
-# Optional Textbutler support
+# Optional TextButler support
 
 The installed `messagelikeme support protocol --json` is the current contract.
 It does not claim an invitation or read Git configuration. After useful work,

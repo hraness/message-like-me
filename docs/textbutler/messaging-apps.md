@@ -1,6 +1,6 @@
 # Messaging apps
 
-Textbutler can use native iMessage and WhatsApp connections through Ghostget,
+TextButler can use native iMessage and WhatsApp connections through GhostGet,
 or a Beeper connection for several messaging apps at once. For a Mac with
 iMessage, WhatsApp, Signal, Telegram and Instagram, Beeper is the simplest
 shared connection. Each conversation still needs its own enrollment and reply
@@ -10,10 +10,10 @@ settings. An available connection does not by itself enable automatic replies.
 
 | App | Current route | Other options |
 | --- | --- | --- |
-| iMessage | Ghostget's native Mac connection, or Beeper on that Mac | Keep the native connection for users who do not use Beeper. Apple's Messages framework creates iOS conversation extensions; it is not a Mac inbox API. |
-| WhatsApp | Ghostget's reviewed linked-device connection, or Beeper | The official WhatsApp Business Platform is a separate business integration, not a connection to an ordinary personal inbox. |
+| iMessage | GhostGet's native Mac connection, or Beeper on that Mac | Keep the native connection for users who do not use Beeper. Apple's Messages framework creates iOS conversation extensions; it is not a Mac inbox API. |
+| WhatsApp | GhostGet's reviewed linked-device connection, or Beeper | The official WhatsApp Business Platform is a separate business integration, not a connection to an ordinary personal inbox. |
 | Signal | Beeper | A future `signal-cli` connection is possible, but it is unofficial and needs separate maintenance and qualification. |
-| Telegram | Beeper, subject to the content-use limits below | Telegram's official TDLib supports personal client sessions. A direct connector is a future option, not currently implemented in Textbutler. |
+| Telegram | Beeper, subject to the content-use limits below | Telegram's official TDLib supports personal client sessions. A direct connector is a future option, not currently implemented in TextButler. |
 | Instagram | Beeper | Meta's official messaging API supports professional accounts. It does not cover the same personal-inbox use case. |
 
 Beeper documents support for these networks, with iMessage limited to macOS.
@@ -31,23 +31,23 @@ as a way to create sticker packs and iOS conversation extensions.
    Prefer on-device connections when using this Mac as your messaging host.
 2. Enable Beeper's local API. Its current authentication guide places approved
    connections under **Settings → Integrations**; some releases use
-   **Settings → Developers**. Authorize Ghostget using its supported Beeper
+   **Settings → Developers**. Authorize GhostGet using its supported Beeper
    account setup. Keep credentials out of contact folders.
-3. Use a Ghostget release that includes Beeper owner automation. This support
-   entered Ghostget's 0.18.14 source. It requires the reviewed Beeper adapter
+3. Use a GhostGet release that includes Beeper owner automation. This support
+   entered GhostGet's 0.18.14 source. It requires the reviewed Beeper adapter
    and pinned Beeper CLI; an older read-only export setup is insufficient.
-4. Allow Ghostget's exact Beeper automation read and text-send operations for
-   that account. Then select its account ID in Textbutler setup.
+4. Allow GhostGet's exact Beeper automation read and text-send operations for
+   that account. Then select its account ID in TextButler setup.
 5. Enroll a single conversation, inspect its identity, and start with a reviewed
    reply. Enable automatic replies separately after the connection and selected
    agent account pass their checks.
 
-The current Ghostget automation route supports Beeper text sends and bounded
+The current GhostGet automation route supports Beeper text sends and bounded
 conversation history. Beeper's wider API also offers attachments and other
-actions, but those are not yet admitted through this Textbutler route. The
+actions, but those are not yet admitted through this TextButler route. The
 connection requires Beeper Desktop to remain open. Restart and reconnect should
 finish catching up before new messages can trigger a reply.
-See the [Ghostget owner contract](ghostget-contract.md) and
+See the [GhostGet owner contract](ghostget-contract.md) and
 [Beeper authentication](https://developers.beeper.com/desktop-api/auth/).
 
 iMessage in Beeper requires the Mac's Messages data, Automation, Accessibility
@@ -59,19 +59,19 @@ See [Beeper's iMessage setup guide](https://help.beeper.com/en_US/chat-networks/
 
 Beeper returns a pending message ID when it accepts a send request. That is not
 proof of delivery. The API can resolve that ID through a subsequent message
-read; delivery status is available only when the network reports it. Textbutler
+read; delivery status is available only when the network reports it. TextButler
 must preserve an uncertain result without sending the message again.
 See [Beeper's send contract](https://developers.beeper.com/desktop-api-reference/resources/messages/methods/send/).
 
 The optional Beeper WebSocket stream is experimental. Its sequence numbers
 apply to one connection, so they are not durable restart cursors. A production
-connector needs bounded catch-up reads after reconnection. Ghostget currently
-owns the durable observation boundary for Textbutler.
+connector needs bounded catch-up reads after reconnection. GhostGet currently
+owns the durable observation boundary for TextButler.
 See [Beeper's event stream](https://developers.beeper.com/desktop-api/websocket-experimental/).
 
 ## Expansion without Beeper
 
-**iMessage and WhatsApp:** Improve the existing Ghostget setup and recovery
+**iMessage and WhatsApp:** Improve the existing GhostGet setup and recovery
 paths first. Text and file support on iMessage should work with ordinary Mac
 permissions; advanced native actions depend on separately configured support.
 The current WhatsApp connection uses a reviewed private build of
@@ -94,7 +94,7 @@ resolve the applicable consent requirements before enabling that workflow.
 See [Telegram's API terms](https://core.telegram.org/api/terms) and
 [content license](https://telegram.org/tos/content-licensing).
 
-**Signal:** A future Ghostget adapter could link `signal-cli` to an existing
+**Signal:** A future GhostGet adapter could link `signal-cli` to an existing
 account, receive messages through its daemon, and submit exact recipient-bound
 sends. The project explicitly calls itself unofficial and warns that versions
 older than three months may stop working. This adds a linked device and a

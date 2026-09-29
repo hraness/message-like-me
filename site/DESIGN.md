@@ -1,4 +1,4 @@
-# Textbutler public site
+# TextButler public site
 
 The homepage is a Persuade surface; the documentation and legacy source catalog
 are Read surfaces. Visitors should understand the intended Mac butler, inspect
@@ -59,7 +59,7 @@ the setup steps; synthetic tests do not establish live account delivery.
 The website remains informational. No message or contact collection, sign-in,
 agent execution, live dashboard, or signed app download is present. Historical
 Message Like Me artifacts keep their immutable coordinates and are explicitly
-labeled legacy. Their history source support does not imply Textbutler transport
+labeled legacy. Their history source support does not imply TextButler transport
 support.
 
 At narrow widths, the phone, the support blocks, the reply-writer cards, and the

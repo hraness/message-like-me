@@ -1,14 +1,14 @@
-# Ghostget integration contract
+# GhostGet integration contract
 
-Textbutler owns reply policy and contact memory. Ghostget owns messaging
+TextButler owns reply policy and contact memory. GhostGet owns messaging
 accounts, native permissions, synchronization, event storage and outward
-actions. Textbutler communicates with its own Ghostget owner process through
-`ghostget messaging automation serve --stdio`; it does not share the Ghostget
+actions. TextButler communicates with its own GhostGet owner process through
+`ghostget messaging automation serve --stdio`; it does not share the GhostGet
 menu companion's private helper or open provider databases.
 
 The automation contract was first admitted with
-[Ghostget 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2).
-This development version of the native `TextButler.app` iMessage setup pins Ghostget
+[GhostGet 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2).
+This development version of the native `TextButler.app` iMessage setup pins GhostGet
 0.18.44. Its matching artifact and live conversation checks remain pending.
 The required contract preserves the native helper's resource bundle, avoids
 opening unrelated protected folders during state validation, and exposes bounded
@@ -27,11 +27,11 @@ and ID and carries either a checked result or a typed error. Initialization
 selects up to two explicit accounts, one per network, through stdin. Contact
 memory and model tools cannot configure that process or invoke its control API.
 
-Textbutler records process custody before launch, bounds its streams and queue,
+TextButler records process custody before launch, bounds its streams and queue,
 and removes custody only after a successful close response and verified clean
 process exit. Cancellation and revocation can interrupt an active submission.
 A malformed response, crash or uncertain cleanup retains the recovery fence.
-Restarting Textbutler does not silently clear it.
+Restarting TextButler does not silently clear it.
 
 ## Contacts, events and grants
 
@@ -48,11 +48,11 @@ Restarting Textbutler does not silently clear it.
 Enrollment records contain the provider account incarnation, source generation,
 implementation identity, exact conversation coordinate and participants. Display
 titles are labels, not authority. Account or participant replacement invalidates
-the binding. Existing Textbutler version 1 read bindings remain readable;
+the binding. Existing TextButler version 1 read bindings remain readable;
 automation requires explicit version 2 enrollment.
 
-Ghostget's managed permissions must explicitly allow each requested operation.
-A broad capability advertisement does not create a grant. Textbutler activation
+GhostGet's managed permissions must explicitly allow each requested operation.
+A broad capability advertisement does not create a grant. TextButler activation
 issues a bounded grant only after checking the selected agent account and
 conversation. It renews standing enabled-contact grants within their limits,
 and persists grant intent before issuance so a lost response can be resolved
@@ -60,8 +60,8 @@ without blindly creating another grant. Disabled and uncommitted grants are
 reconciled through revocation.
 
 Startup, re-enablement and recovery drain old events silently. An unresolved gap
-pauses automation. Textbutler waits for a new eligible inbound event and applies
-debounce, owner cooldown, classification and rate limits. Ghostget rechecks
+pauses automation. TextButler waits for a new eligible inbound event and applies
+debounce, owner cooldown, classification and rate limits. GhostGet rechecks
 identity, permission, context and grant before dispatch, and observes intervening
 conversation changes between actions. Neither component retries an uncertain
 send automatically.
@@ -71,14 +71,14 @@ send automatically.
 Attachments, reactions, stickers, rich links and native polls are separate
 capabilities. They become available only when the installed provider, current
 account and managed permission admit them. Message targets must belong to the
-enrolled conversation. Attachment and sticker paths are resolved by Textbutler's
-contact file broker; Ghostget receives admitted bytes, not arbitrary paths.
+enrolled conversation. Attachment and sticker paths are resolved by TextButler's
+contact file broker; GhostGet receives admitted bytes, not arbitrary paths.
 
 Every response starts with disclosed text while disclosure markers remain
-configured. For a nontext response, Textbutler inserts a companion such as
+configured. For a nontext response, TextButler inserts a companion such as
 `🤖{ … }` before the rich actions; when the owner clears all three disclosure
 fields no companion is added and butler authorship is carried by the accepted
-message IDs the run receipt returns to Textbutler's journal instead of by
+message IDs the run receipt returns to TextButler's journal instead of by
 visible text. Execution stops
 when a preceding action fails or the conversation changes. An accepted receipt
 does not claim delivery.

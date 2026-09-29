@@ -1,4 +1,4 @@
-# Textbutler website identity
+# TextButler website identity
 
 The header uses the checked transparent `/marks/message-like-me.svg` artwork through the shared metallic foil treatment. The content footer, browser icon, and touch icon retain their supplied PNG artwork. The 192-pixel browser icon is a transparent rendering of the header mark.
 

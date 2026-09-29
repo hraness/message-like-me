@@ -38,7 +38,7 @@ Preserve these boundaries in the legacy Message Like Me history tools under
 - Local IDs remain HMAC-derived, and owned data paths remain physical and
   private.
 
-The Textbutler runtime under `packages/` sends messages and calls AI providers.
+The TextButler runtime under `packages/` sends messages and calls AI providers.
 [`docs/textbutler/architecture.md`](docs/textbutler/architecture.md) describes
 those paths and their limits, and `AGENTS.md` lists the rules that govern them.
 

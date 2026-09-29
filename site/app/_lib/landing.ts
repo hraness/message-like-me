@@ -35,7 +35,7 @@ export const MESSAGING_APPS: readonly MessagingApp[] = [
   {
     name: 'Group chats, SMS, and RCS',
     chip: 'Not supported',
-    gets: 'Nothing. Textbutler ignores group chats, reactions, and old messages.',
+    gets: 'Nothing. TextButler ignores group chats, reactions, and old messages.',
     limits: 'It answers one person at a time, in the one-to-one chats you turn on.',
   },
 ];
@@ -58,7 +58,7 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
     chip: 'In testing',
     command: 'ollama pull qwen3:4b-instruct-2507-q4_K_M\ntextbutler providers local',
     leaves: 'Nothing. The reply is written on your Mac.',
-    note: 'About 2.5 GB. Textbutler never downloads a model for you. This is where the default is heading.',
+    note: 'About 2.5 GB. TextButler never downloads a model for you. This is where the default is heading.',
   },
   {
     id: 'key',
@@ -81,7 +81,7 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
 ];
 
 export const HOW_IT_WORKS_STEPS = [
-  { label: 'Someone texts you.', detail: 'They write in a one-to-one chat you’ve turned on. Ghostget passes the message to Textbutler, running in the background on your Mac.' },
+  { label: 'Someone texts you.', detail: 'They write in a one-to-one chat you’ve turned on. GhostGet passes the message to TextButler, running in the background on your Mac.' },
   { label: 'It checks before it speaks.', detail: 'Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Has it been 5 minutes since you last wrote here? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.' },
   { label: '👀, right away.', detail: 'It sends 🤖{ 👀 } so they know it’s on it.' },
   { label: 'It reads the room.', detail: 'It reads the notes you keep for this person (how you talk, what matters, what’s off-limits) and the recent conversation. In your own chat it can also search your full history; for other people that’s off unless you turn it on.' },

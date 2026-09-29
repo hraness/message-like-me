@@ -13,13 +13,13 @@ test('renders the complete README with one source-owned heading and working anch
   const css = await Bun.file(new URL('../app/globals.css', import.meta.url)).text();
 
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(html).toContain('<h1 id="textbutler">Textbutler</h1>');
+  expect(html).toContain('<h1 id="textbutler">TextButler</h1>');
   // The legacy Message Like Me reference moved to docs/message-like-me.md.
   expect(html).not.toContain('skills.sh');
   expect(html).not.toContain('id="install-and-first-run"');
   expect(html).toContain('href="https://github.com/hraness/textbutler/blob/main/docs/message-like-me.md"');
   for (const fragment of html.matchAll(/href="#([^"]+)"/gu)) expect(html).toContain(`id="${fragment[1]}"`);
-  expect(html).toContain('"headline":"Textbutler"');
+  expect(html).toContain('"headline":"TextButler"');
   expect(html).toContain('"dateModified":"2026-09-28"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
@@ -51,6 +51,6 @@ test.each([
   expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe(heading);
   expect(html).toContain(`"headline":"${heading}"`);
   expect(html).toContain('"dateModified":"2026-08-27"');
-  expect(html).toContain('This page comes from Message Like Me, Textbutler’s predecessor.');
-  expect(html).toContain('not Textbutler’s live messaging');
+  expect(html).toContain('This page comes from Message Like Me, TextButler’s predecessor.');
+  expect(html).toContain('not TextButler’s live messaging');
 });

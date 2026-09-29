@@ -1,15 +1,15 @@
-# Textbutler architecture
+# TextButler architecture
 
-Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through Textbutler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
+TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through TextButler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
 
-The source includes the owner daemon, contact reply loop, versioned Ghostget automation protocol and owner CLI with its guided terminal. Textbutler is headless: it has no desktop window or menu bar companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below.
+The source includes the owner daemon, contact reply loop, versioned GhostGet automation protocol and owner CLI with its guided terminal. TextButler is headless: it has no desktop window or menu bar companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below.
 
 ## Ownership
 
 ```mermaid
 flowchart LR
   Cli[Owner CLI and guided terminal] --> Control[Owner-only control socket]
-  Control --> Butler[Textbutler daemon]
+  Control --> Butler[TextButler daemon]
   Butler --> Xcb[xcb zero-tool generate]
   Xcb --> Provider[Admitted subscription provider]
   Provider --> Proposal[Structured result or proposal]
@@ -20,15 +20,15 @@ flowchart LR
   Tools --> Intents[Proposed actions]
   Intents --> Butler
   Butler --> Transport[Versioned transport adapter]
-  Transport --> Ghostget[Ghostget]
-  Ghostget --> Messages[iMessage and WhatsApp]
+  Transport --> GhostGet[GhostGet]
+  GhostGet --> Messages[iMessage and WhatsApp]
 ```
 
-Ghostget owns native permissions, message and contact acquisition, provider actions, and receipts. Textbutler does not open chat.db or automate Messages directly. xcb owns subscription credentials, provider admission, model catalogs, confinement, cancellation and account custody. Textbutler invokes its native zero-tool generation API and interprets returned operation proposals through its own contact broker. Textbutler owns conversation policy and the durable send transaction. The owner CLI changes settings through a small local protocol; it never gives a model arbitrary local commands.
+GhostGet owns native permissions, message and contact acquisition, provider actions, and receipts. TextButler does not open chat.db or automate Messages directly. xcb owns subscription credentials, provider admission, model catalogs, confinement, cancellation and account custody. TextButler invokes its native zero-tool generation API and interprets returned operation proposals through its own contact broker. TextButler owns conversation policy and the durable send transaction. The owner CLI changes settings through a small local protocol; it never gives a model arbitrary local commands.
 
 The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence needs no interactive app. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A minimal native TextButler.app can supervise the verified daemon so Full Disk Access belongs to the app. Its private installation receipt pins the runtime, payload, native executable and signature resources; a changed identity blocks startup. The app accepts fixed daemon and iMessage setup roles, with no arbitrary command passthrough; opening the app itself starts nothing. Local builds default to an ad-hoc signature, so a rebuilt app may require a fresh macOS permission grant; building with a persistent signing identity keeps grants bound to that certificate across rebuilds.
 
-The daemon serves owner controls, enrollment jobs and a reply loop through its own supervised Ghostget process. Startup, enablement and recovery establish a silent event boundary, refresh bounded history and admit only subsequent eligible inbound messages. A failed catch-up pauses the affected conversation. No provider work starts without explicit owner account configuration.
+The daemon serves owner controls, enrollment jobs and a reply loop through its own supervised GhostGet process. Startup, enablement and recovery establish a silent event boundary, refresh bounded history and admit only subsequent eligible inbound messages. A failed catch-up pauses the affected conversation. No provider work starts without explicit owner account configuration.
 
 ## Contact data
 
@@ -39,7 +39,7 @@ Textbutler/
   daemon.sock                  owner-only native control socket
   state/
     settings.json              owner configuration and contact bindings
-    host.json                  private Ghostget and xcb executable/account bindings
+    host.json                  private GhostGet and xcb executable/account bindings
     runs.sqlite                private run and send journal
     daemon-custody.sqlite      exclusive process/socket ownership
     launch-agent-custody.sqlite lifecycle serialization
@@ -62,7 +62,7 @@ Textbutler/
 
 Directory names use opaque identifiers, not contact names or phone numbers. Files are private to the Mac user. Models cannot traverse parent paths, links, other contact folders, or host configuration. The file broker supports reads, conditional writes, and exact edits. It exposes no symlink, directory, delete-tree, shell, or executable permission operations. Atomic replacement preserves the preceding file if a write fails. A stale memory revision produces a conflict instead of overwriting an owner's correction.
 
-The owner chooses one verified direct conversation from a bounded Ghostget list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
+The owner chooses one verified direct conversation from a bounded GhostGet list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
 
 The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated.
 
@@ -88,7 +88,7 @@ Every text action is wrapped by trusted code with the contact's three symbols. E
 
 Clearing disclosure never makes butler output indistinguishable internally. The transport reports the provider-accepted message IDs for every submitted action, and the daemon records them in a private `sent_messages` journal table. Each row carries a provenance, `butler` or `operator`. History and attribution classify an outgoing message through that journal first: `butler` rows are butler output and `operator` rows are the owner's own words, even when they quote the wrap. Only unjournaled text in the configured visible wrap, from sends that predate the journal, falls back to butler. The history readers themselves mark every outgoing message owner-authored and leave classification to the journal. A cleared wrap simply has no visible form; provenance stays exact.
 
-Reactions, stickers, link previews, and app cards cannot literally carry that text prefix. When visible markers remain configured, a disclosed text companion is therefore the first action in a nontext response, and counts toward the eight-action maximum. With disclosure fully cleared the companion would be unexplained extra text and is not added. The provider must execute in order and stop if that companion fails. App-specific cards may additionally identify Textbutler in their content, but never remove the companion requirement.
+Reactions, stickers, link previews, and app cards cannot literally carry that text prefix. When visible markers remain configured, a disclosed text companion is therefore the first action in a nontext response, and counts toward the eight-action maximum. With disclosure fully cleared the companion would be unexplained extra text and is not added. The provider must execute in order and stop if that companion fails. App-specific cards may additionally identify TextButler in their content, but never remove the companion requirement.
 
 Before send, the runtime rechecks owner activity, conversation revision, current settings, capability availability, cancellation, attachment ownership, target message membership, and the contact grant. It asks the transport to prepare an exact plan with an expiry and digest. Immediately before submission, it journals the dispatch intent. The transport must atomically validate the grant, contact route, context revision, and plan digest at its own effect boundary.
 
@@ -118,9 +118,9 @@ Each contact's plan defines its guidance, humor, context size and reply length. 
 
 The same reflection can select useful source message IDs for durable contact memory. Trusted code resolves them to observed owner or contact messages and retains up to 64 attributed excerpts of 1 KiB each under a 96 KiB encoded-byte cap, with digests of bounded canonical observations and explicit truncation. Optional categories distinguish preferences, shared references, open loops and context; they label evidence but do not establish relationship claims. Reflection applies bounded additions, reclassifications and forgets instead of replacing the ledger. It rejects invented or ambiguous sources and evicts the oldest entries deterministically at capacity. A local lexical `memory-search` retrieves up to eight relevant notes from only that contact; the full archive is never copied into every prompt. Each submitted episode snapshots at most eight 512-byte notes and records source digests for up to 24 additional notes exposed during tool steps. These remain untrusted statements, separate from `soulCore` and existing `MEMORY.md`. The owner can inspect it with `habitats show` or clear it with `habitats memory-clear CONTACT REVISION` while paused. Clearing advances an observation cutoff and cancels pending learning, so old observations cannot immediately restore the cleared excerpts. Historical records and `MEMORY.md` remain retained; personality rollback does not rewind memory.
 
-Evolution runs in the background when the contact is idle. It reviews the reply's purpose, tool results and later messages or reactions, then proposes a candidate personality and response strategy. It compares the current and candidate plans on two retained cases with blinded ordering and asks a separate judge for scores. A candidate needs cited follow-up evidence, acceptable behavior on every case, no lower score on either case, and an average improvement of at least 0.1. Silence alone cannot improve its score. The comparison generates text only; recorded tool results describe the submitted reply, and no tools run during replay. It does not measure whether a candidate would choose better tools. Recent Algal execution records remain in the private journal for replay, with the oldest removed after 32 records per contact.
+Evolution runs in the background when the contact is idle. It reviews the reply's purpose, tool results and later messages or reactions, then proposes a candidate personality and response strategy. It compares the current and candidate plans on two retained cases with blinded ordering and asks a separate judge for scores. A candidate needs cited follow-up evidence, acceptable behavior on every case, no lower score on either case, and an average improvement of at least 0.1. Silence alone cannot improve its score. The comparison generates text only; recorded tool results describe the submitted reply, and no tools run during replay. It does not measure whether a candidate would choose better tools. Recent ALGAL execution records remain in the private journal for replay, with the oldest removed after 32 records per contact.
 
-The reply, reflection and judge programs use Algal's task authoring API and compile to ordinary replayable organisms. Their prompts, input and output checks, provider deadlines and one-call limits remain host-controlled. Cancellation waits for provider cleanup; an uncertain attempt is never repeated automatically.
+The reply, reflection and judge programs use ALGAL's task authoring API and compile to ordinary replayable organisms. Their prompts, input and output checks, provider deadlines and one-call limits remain host-controlled. Cancellation waits for provider cleanup; an uncertain attempt is never repeated automatically.
 
 An owner may stage a portable `algal.evaluated-task.v1` response task for explicit
 shadow evaluation with `textbutler habitats task-stage CONTACT REVISION FILE`
@@ -152,7 +152,7 @@ anything; `uncertain` asks the owner to reconcile, never to retry.
 
 The explicit source command `bun scripts/export-textbutler-study.ts --journal
 ABSOLUTE_PRIVATE_JOURNAL --out NEW_PRIVATE_FILE` captures up to 128 retained
-response inferences for the Algal Lab importer. It opens the existing journal
+response inferences for the ALGAL Lab importer. It opens the existing journal
 read-only, includes source digests and complete replay evidence, omits records
 without a current habitat base, and reports omissions. It does not read provider
 credentials or infer labels from recorded model decisions. Independent annotation
@@ -174,8 +174,8 @@ The daemon reads a bounded private `plugins/extensions.json` manifest and prefli
 
 ## xcb application contract
 
-Textbutler is an MIT-licensed reference application for
-[xcb](https://github.com/hraness/xcb). AI execution requires a verified Textbutler
+TextButler is an MIT-licensed reference application for
+[xcb](https://github.com/hraness/xcb). AI execution requires a verified TextButler
 bundle whose build validates independently reviewed composition evidence against
 current source bytes and both contact capability profiles. The build embeds
 this application admission separately from xcb's provider admission. Source
@@ -187,18 +187,18 @@ separate installations; contact memory cannot edit their configuration.
 
 xcb generates with zero provider tools and no inherited coding session. It owns
 provider credentials, runtime admission, operating-system confinement and
-process cleanup. Textbutler sends bounded contact context, validates the
+process cleanup. TextButler sends bounded contact context, validates the
 structured response and accepts output only with a settled execution receipt.
 A hash match or a root process exit alone cannot establish this receipt.
 Uncertain cleanup preserves custody and blocks another invocation.
 
-For replies, the model can propose a Textbutler operation. The application
+For replies, the model can propose a TextButler operation. The application
 validates the exact operation and closed input, calls its contact-bound broker,
 and includes a bounded result in the next inference step. Classification
 advertises no operations. The native provider never receives a filesystem or
 messaging tool. The [subscription guide](native-subscription.md) documents setup,
 limits and recovery. Credentials remain in xcb; grant and send authority remain
-in Textbutler and Ghostget.
+in TextButler and GhostGet.
 
 The retained AgentMixer compatibility library supplies shared application types
 and broker helpers. Its historical package identity remains pinned for
@@ -217,32 +217,32 @@ cannot reach private networks, local sockets or cloud metadata through DNS or
 redirects. Messaging operations stage recipient-bound intents. Credential and
 account controls are never model tools.
 
-## Ghostget contract and rich features
+## GhostGet contract and rich features
 
-WhatsApp follows the same Ghostget ownership boundary. Its private wacli-backed transport provides durable observations and recipient-bound actions; pairing, session state and synchronization stay in Ghostget. The [WhatsApp guide](whatsapp.md) describes setup and action support. Textbutler does not embed WPPConnect or invoke wacli directly.
+WhatsApp follows the same GhostGet ownership boundary. Its private wacli-backed transport provides durable observations and recipient-bound actions; pairing, session state and synchronization stay in GhostGet. The [WhatsApp guide](whatsapp.md) describes setup and action support. TextButler does not embed WPPConnect or invoke wacli directly.
 
-Ghostget owns its provider process and private control socket; Textbutler consumes only Ghostget's documented CLI and automation contracts.
+GhostGet owns its provider process and private control socket; TextButler consumes only GhostGet's documented CLI and automation contracts.
 
 The older generic messaging APIs retain expiring route references and owner-confirmed previews. Automation uses a separate explicit owner protocol with durable enrollment, revocable grants and event observations. The iMessage provider negotiates attachments, reactions, stickers, rich links and polls separately; unsupported App Clips and arbitrary experiences remain unavailable. Native Contacts directory discovery is not implemented in this protocol.
 
-Text and file sending use the native helper's AppleScript path. The upstream rich-action bridge injects into Messages and requires SIP to be disabled. Textbutler and Ghostget never change that security setting or install the injection automatically. Rich actions therefore remain unavailable unless the required bridge is already working. This is a significant installation constraint, not a completed rich-messaging experience on a stock Mac.
+Text and file sending use the native helper's AppleScript path. The upstream rich-action bridge injects into Messages and requires SIP to be disabled. TextButler and GhostGet never change that security setting or install the injection automatically. Rich actions therefore remain unavailable unless the required bridge is already working. This is a significant installation constraint, not a completed rich-messaging experience on a stock Mac.
 
-Ghostget 0.18.2 includes the admitted imsg `0.14.1+private-transport.3` helper. Automated rich links use `send.rich` with `fetch_metadata: false`, constructing the URL and host-title card without helper metadata or image fetching. Availability still requires current managed permission and a compatible native bridge; this does not claim network isolation for Messages itself. The host never falls back to fetching an agent-provided URL.
+GhostGet 0.18.2 includes the admitted imsg `0.14.1+private-transport.3` helper. Automated rich links use `send.rich` with `fetch_metadata: false`, constructing the URL and host-title card without helper metadata or image fetching. Availability still requires current managed permission and a compatible native bridge; this does not claim network isolation for Messages itself. The host never falls back to fetching an agent-provided URL.
 
-The [Ghostget integration contract](ghostget-contract.md) documents the implemented binding, grant, event, action and receipt semantics.
+The [GhostGet integration contract](ghostget-contract.md) documents the implemented binding, grant, event, action and receipt semantics.
 
-The Textbutler transport supports capability negotiation, conversations, bounded history, cursor-based events, exact preparation, authorization and receipts. File paths become admitted bytes before crossing the boundary. Per-action permission and context checks stop a rich batch when conversation activity changes. Private database access stays inside Ghostget's provider implementation.
+The TextButler transport supports capability negotiation, conversations, bounded history, cursor-based events, exact preparation, authorization and receipts. File paths become admitted bytes before crossing the boundary. Per-action permission and context checks stop a rich batch when conversation activity changes. Private database access stays inside GhostGet's provider implementation.
 
-Linq's documented iMessage API includes attachments, reactions, stickers, rich links, App Clips, and experiences. App cards and rich links are standalone messages. Those hosted capabilities do not establish availability through native macOS Messages. Optional Linq would be a separate transport with explicit account setup, sender identity, webhook signature verification, replay protection, and the same Textbutler policy gates. It is not a way to silently route an owner's personal conversation through a different phone number.
+Linq's documented iMessage API includes attachments, reactions, stickers, rich links, App Clips, and experiences. App cards and rich links are standalone messages. Those hosted capabilities do not establish availability through native macOS Messages. Optional Linq would be a separate transport with explicit account setup, sender identity, webhook signature verification, replay protection, and the same TextButler policy gates. It is not a way to silently route an owner's personal conversation through a different phone number.
 
-Ghostget currently imports published Message Like Me bundle contracts. Keep that immutable package a leaf. Do not repoint it at the Textbutler runtime. Extract the neutral bundle contracts before reversing a live package dependency, or consume Ghostget's installed CLI contract without a package import in the interim. Preserve historical wire-format identifiers.
+GhostGet currently imports published Message Like Me bundle contracts. Keep that immutable package a leaf. Do not repoint it at the TextButler runtime. Extract the neutral bundle contracts before reversing a live package dependency, or consume GhostGet's installed CLI contract without a package import in the interim. Preserve historical wire-format identifiers.
 
 ## Admission still required
 
-1. This development version pins Ghostget 0.18.44 for the native `TextButler.app` iMessage setup; matching artifact admission and live conversation checks remain pending. Preserve its native helper resource bundle, protected-folder startup fix, partial discovery that excludes chats without usable participant metadata, and bounded discovery diagnostics without message bodies. Real account synchronization, recipient identity, rich actions and revocation still require a bounded owner-authorized live test; artifact admission and synthetic fixtures do not prove delivery.
-2. Use a verified Textbutler bundle with reviewed composition admission and connect an admitted native xcb build through its zero-tool generation contract. Verify the exact provider/account, both classifier and reply behavior, cancellation and uncertain-custody recovery before enabling automatic replies. The separate Claude API path retains explicit account setup and packaged-runtime admission.
+1. This development version pins GhostGet 0.18.44 for the native `TextButler.app` iMessage setup; matching artifact admission and live conversation checks remain pending. Preserve its native helper resource bundle, protected-folder startup fix, partial discovery that excludes chats without usable participant metadata, and bounded discovery diagnostics without message bodies. Real account synchronization, recipient identity, rich actions and revocation still require a bounded owner-authorized live test; artifact admission and synthetic fixtures do not prove delivery.
+2. Use a verified TextButler bundle with reviewed composition admission and connect an admitted native xcb build through its zero-tool generation contract. Verify the exact provider/account, both classifier and reply behavior, cancellation and uncertain-custody recovery before enabling automatic replies. The separate Claude API path retains explicit account setup and packaged-runtime admission.
 3. Publish the CLI package with its pinned desktop-foundation SDK dependency and verify the package bytes. A source checkout must never trigger a build at launch.
-4. Keep historical repository and published package identities as compatibility and provenance anchors. The Textbutler site is assigned to `textbutler.app`; later identity migrations must preserve immutable artifacts and existing release protections.
+4. Keep historical repository and published package identities as compatibility and provenance anchors. The TextButler site is assigned to `textbutler.app`; later identity migrations must preserve immutable artifacts and existing release protections.
 
 ## Sources
 

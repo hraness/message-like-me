@@ -15,8 +15,8 @@ async function packageVersion(path: string): Promise<string> {
 }
 
 describe("release identity", () => {
-  test("uses Textbutler identity without advertising a web messaging app", () => {
-    expect(SITE_NAME).toBe("Textbutler");
+  test("uses TextButler identity without advertising a web messaging app", () => {
+    expect(SITE_NAME).toBe("TextButler");
     expect(SITE_ORIGIN).toBe("https://textbutler.app");
     expect(new URL(String(metadata.metadataBase)).origin).toBe(SITE_ORIGIN);
     expect(metadata.applicationName).toBe(SITE_NAME);
@@ -40,7 +40,7 @@ describe("release identity", () => {
     );
   });
 
-  test("keeps legacy installation separate from the unreleased Textbutler runtime", async () => {
+  test("keeps legacy installation separate from the unreleased TextButler runtime", async () => {
     const siteRoot = resolve(import.meta.dir, "..");
     const repositoryRoot = resolve(siteRoot, "..");
     const packageRelease = await packageVersion(resolve(repositoryRoot, "package.json"));
@@ -52,9 +52,9 @@ describe("release identity", () => {
     ]);
 
     expect(readme).toContain(exactInstall);
-    // The home page never names the legacy package version as a Textbutler release.
-    expect(page).not.toContain("Textbutler v{SOFTWARE_VERSION}");
-    expect(page).toContain("Installing them doesn’t install Textbutler or turn on automatic replies.");
+    // The home page never names the legacy package version as a TextButler release.
+    expect(page).not.toContain("TextButler v{SOFTWARE_VERSION}");
+    expect(page).toContain("Installing them doesn’t install TextButler or turn on automatic replies.");
     expect(page).not.toContain("Message Like Me v{SOFTWARE_VERSION}");
     expect(page).not.toContain("bun add --global");
     expect(readme).not.toContain("github:hraness/message-like-me#");

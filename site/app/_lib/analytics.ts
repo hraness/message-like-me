@@ -3,7 +3,7 @@ import {
   type PostHogSiteDefinition,
 } from '@hraness/posthog';
 
-// Textbutler shares the Hraness "small-sites" PostHog project and is told apart
+// TextButler shares the Hraness "small-sites" PostHog project and is told apart
 // by site_id. Capture is cookieless and anonymous, runs only on the production
 // hosts below, and sends only page views plus the events listed here.
 export const TEXTBUTLER_CTA_EVENT = 'cta clicked';

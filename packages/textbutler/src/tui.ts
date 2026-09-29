@@ -30,7 +30,7 @@ export function terminalDashboard(snapshot: DesktopSnapshot | null): string {
   const state = !snapshot ? "Service not connected" : snapshot.settings.paused ? "Automatic replies paused" : snapshot.automation?.state === "running" ? "Automatic replies running" : "Automatic replies need setup";
   return ["", "TEXTBUTLER", "Your conversations, with you in control.", "", state,
     snapshot ? `${snapshot.contacts.length} conversations · ${active} with automatic replies on` : "Start with Setup & readiness.",
-    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Give Textbutler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
+    "", "  1  Setup & readiness", "  2  Connect messaging apps", "  3  Add a conversation", "  4  Inbox & replies", "  5  Manage a contact", "  6  Pause automatic replies", "  7  Resume automatic replies", "  8  Give TextButler access", "  q  Quit terminal", "", "Quitting leaves the background service running.", ""].join("\n");
 }
 /** The model that writes automatic replies when the fast reply writer is on. */
 export function replyWriterLabel(snapshot: DesktopSnapshot): string | null {

@@ -406,8 +406,8 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (!readme.includes(expectedInstall)) {
     problems.push(`README.md npm install must match package version ${version}`);
   }
-  if (!readme.startsWith("# Textbutler\n\n")) {
-    problems.push("README.md must identify Textbutler");
+  if (!readme.startsWith("# TextButler\n\n")) {
+    problems.push("README.md must identify TextButler");
   }
   const legacyDocs = await readFile(join(PACKAGE_ROOT, "docs", "message-like-me.md"), "utf8");
   if (!legacyDocs.includes(`\n\n${SKILLS_BADGE}\n\n`)) {
