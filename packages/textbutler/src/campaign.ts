@@ -354,7 +354,7 @@ export async function runCampaignCommand(args: readonly string[], ports: Campaig
     // A missing or unreadable file is not a service outage; say which it is.
     if (error instanceof OwnerCliError) throw error;
     const code = (error as NodeJS.ErrnoException | null)?.code;
-    throw new OwnerCliError(code === "ENOENT" ? "The campaign file does not exist." : "The campaign file could not be read as UTF-8 text.");
+    throw new OwnerCliError(code === "ENOENT" ? "The campaign file does not exist." : "The campaign file could not be read. Check that it is a readable UTF-8 text file.");
   }
   const entries = parseCampaign(source);
   const load = ports.loadState ?? loadState, save = ports.saveState ?? saveState;
