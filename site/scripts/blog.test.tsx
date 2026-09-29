@@ -168,7 +168,7 @@ describe('blog pages', () => {
         expect(copy, `${post.slug}: ${word}`).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
       }
     }
-  });
+  }, 20_000); // renders every post, the launch post with its mockups
 
   test('render status and versions from release data, never typed in post sources', async () => {
     for (const post of BLOG_POSTS) {

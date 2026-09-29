@@ -1,0 +1,16 @@
+/* The desk the camera moves across (mockups.tsx). */
+.tbf-desk {
+  display: grid;
+  grid-template-columns: 460px 1fr;
+  gap: 48px;
+  align-items: start;
+  padding: 56px;
+  background: #f4f3f0;
+  font-family: "Film Sans", ui-sans-serif, system-ui, sans-serif;
+  color: #16171a;
+  --font-text: "Film Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.tbf-desk__mac { display: grid; gap: 28px; }
+.tbf-desk__phone { display: grid; justify-items: center; }
+.tbf-note { margin: 0; font-size: 18px; color: #6b6d73; text-align: right; }

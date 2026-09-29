@@ -1,0 +1,14 @@
+/* Diagrams exported by the diagram lane, swapped by theme. */
+.tb-diagram { max-inline-size: 1040px; margin: 0 auto 2rem; }
+/* On phones the numbered steps right below already tell this story. */
+@media (max-width: 599px) { .tb-diagram--wide-only { display: none; } }
+.tb-diagram__picture { display: block; }
+.tb-diagram__img { display: block; inline-size: 100%; block-size: auto; border-radius: 16px; box-shadow: 0 0 0 1px var(--line); }
+.tb-diagram figcaption { margin-block-start: 0.75rem; color: var(--muted); font-size: 0.875rem; }
+.tb-theme-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme]), [data-theme="system"]) .tb-theme-light { display: none; }
+  :root:where(:not([data-theme]), [data-theme="system"]) .tb-theme-dark { display: block; }
+}
+:root:where([data-theme="dark"]) .tb-theme-light { display: none; }
+:root:where([data-theme="dark"]) .tb-theme-dark { display: block; }

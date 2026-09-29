@@ -57,8 +57,11 @@ export const BLOG_ADMISSIONS = [
       launchSource('Messaging apps and live limitations', 'textbutler', 'docs/textbutler/messaging-apps.md'),
       launchSource('Agent JSON CLI', 'textbutler', 'docs/textbutler/agent-cli.md'),
       launchSource('messagelikeme.com permanent redirects', 'textbutler', 'site/next.config.ts'),
+      launchSource('Draft review and expiry (terminal and agent CLI)', 'textbutler', 'packages/textbutler/src/owner-replies.ts'),
+      launchSource('Launch facts behind the beats and social kit', 'textbutler', 'site/app/launch/facts.ts'),
     ],
     observations: [
+      'The post opens with short beats, each with one illustration; every number in them comes from site/app/launch/facts.ts, which scripts/launch.test.tsx pins to the source files above. The mockups are labelled illustrations with made-up people and unbranded third-party apps.',
       'The acknowledgment is the marked text 🤖{ 👀 }, not a tapback, and a request inside the 5-minute owner cooldown is skipped rather than deferred.',
       'Local Ollama auto-detection applies only when no Gateway key is saved; the post keeps the local route tagged as in testing until it becomes the default on main.',
       'History search is on in the owner’s own chat and off for other contacts unless the plan enables it; the examples answer only from messages visible in the same chat.',

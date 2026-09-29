@@ -60,6 +60,7 @@ import {
   XCB_URL,
 } from './_lib/site';
 import { TERMINAL_FIRST_RUN } from './_lib/terminal';
+import { AgentMockup } from './mockups';
 
 const baseMetadata = pageMetadata({
   title: SITE_TITLE,
@@ -295,6 +296,10 @@ export default function Home() {
                 <CopyButton analyticsTarget="agent-setup-prompt" label="Copy prompt" text={AGENT_SETUP_PROMPT} />
               </figcaption>
               <pre aria-label="Setup prompt for your coding agent" tabIndex={0}><code>{AGENT_SETUP_PROMPT}</code></pre>
+            </figure>
+            <figure className="tb-agent-demo">
+              <AgentMockup />
+              <figcaption className="tb-caption">Illustration of what happens next: your agent installs TextButler, runs <code>textbutler doctor</code>, and stops at the first switch that’s yours to flip.</figcaption>
             </figure>
             <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. There’s no TextButler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
             <div className="tb-install" id="install">

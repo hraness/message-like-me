@@ -1,0 +1,60 @@
+{
+  "name": "Introducing TextButler",
+  "aspect": "16:9",
+  "fps": 30,
+  "seed": 20261005,
+  "background": "#111214",
+  "accent": "#0a84ff",
+  "productCss": ["../site/app/mockups/mockups.css", "film-product.css"],
+  "copy": {
+    "name": "TextButler",
+    "promise": "An AI butler in your messaging apps.",
+    "url": "textbutler.app",
+    "open": [
+      "Your phone keeps buzzing while you’re busy.",
+      "Most of it is one quick question."
+    ],
+    "steps": [
+      {
+        "heading": "Just say butler",
+        "body": "Someone you turned on texts “butler”. It answers for you, from your Mac.",
+        "focus": "phone",
+        "target": "phone",
+        "highlight": "phone",
+        "zoom": 1.2
+      },
+      {
+        "heading": "Always marked",
+        "body": "Every butler message is wrapped in 🤖{ }. 👀 goes out first.",
+        "focus": "marker",
+        "target": "marker",
+        "highlight": "marker"
+      },
+      {
+        "heading": "Your choice of writer",
+        "body": "A local model, your Claude Code, Codex or Devin subscription, or your own key.",
+        "focus": "writer",
+        "target": "writer",
+        "highlight": "writer"
+      },
+      {
+        "heading": "Check it first",
+        "body": "Ask for a suggestion instead. Nothing sends until you type send.",
+        "focus": "draft",
+        "target": "draft",
+        "highlight": "draft"
+      }
+    ],
+    "proof": {
+      "caption": "Defaults for every chat you turn on.",
+      "items": []
+    },
+    "limits": {
+      "heading": "What it won’t do",
+      "body": "It stays out of group chats, and it never pretends to be you."
+    },
+    "end": {
+      "line": ""
+    }
+  }
+}

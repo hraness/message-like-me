@@ -1,3 +1,5 @@
+import './diagram-figure.css';
+
 import { publicAssetExists, publicPngSize } from './public-assets';
 
 type Variant = Readonly<{ wide: string; narrow?: string }>;
