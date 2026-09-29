@@ -49,7 +49,7 @@ function textBeforeRelated(html: string): string {
 test('renders Textbutler with the shared grammar and one development status', () => {
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('AI in your messages.');
+  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('An AI butler in your messaging apps.');
   for (const role of ['header', 'hero', 'section', 'flow', 'questions', 'cta', 'footer']) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
@@ -86,7 +86,8 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.');
   expect(html).not.toContain(`Textbutler v${SOFTWARE_VERSION}`);
   expect(html).toContain('Installing them doesn’t install Textbutler or turn on automatic replies.');
-  expect(html).toContain('No. textbutler.app is informational');
+  expect(html).toContain('Only anonymous visit counts. textbutler.app counts page views');
+  expect(html).toContain('It sets no cookies, doesn’t identify you, and doesn’t record sessions.');
   expect(html).toContain('"@type":"FAQPage"');
   expect(html).not.toMatch(/<(?:form|input|textarea)\b/u);
   expect(html).not.toContain('bun add --global');

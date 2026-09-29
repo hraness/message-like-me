@@ -4,10 +4,10 @@ import { SOCIAL_IMAGE_ALT } from './social';
 
 export const SITE_NAME = 'Textbutler';
 export const SITE_ORIGIN = 'https://textbutler.app';
-export const SITE_TITLE = 'Textbutler: AI in your iMessage and WhatsApp chats on Mac';
-export const SITE_HEADLINE = 'AI in your messages.';
+export const SITE_TITLE = 'Textbutler: an AI butler for iMessage and WhatsApp on Mac';
+export const SITE_HEADLINE = 'An AI butler in your messaging apps.';
 export const SITE_DESCRIPTION =
-  'When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac, in iMessage, WhatsApp, and Beeper. Claude Code, Codex, or Devin can set it up for you.';
+  'An AI butler in your messaging apps. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac, in iMessage and WhatsApp, and in more apps through Beeper (text only). Claude Code, Codex, or Devin can set it up for you.';
 // The one-sentence "what it is": README line 5, the launch post, and the CLI
 // description use the same words.
 export const SITE_WHAT_IT_IS =
@@ -22,6 +22,10 @@ export const REPLY_WRITERS_SENTENCE =
   'Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
 export const REPLY_WRITERS_PRECEDENCE =
   'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins, and with no key saved, an Ollama server already serving the pinned model is picked up when the background service starts. When a Gateway key is saved, the butler can also search the web for the people you turn on (in your own chat, only when you ask), using your key even when a local model writes the replies. It refuses any search that reuses words from your private messages, and you can turn search off for one person from the command line.';
+// Textbutler AI credits are planned, not built. Keep them labeled as coming
+// soon everywhere until credits can actually be bought and used.
+export const REPLY_CREDITS_NOTE =
+  'Coming soon: Textbutler AI credits, so the butler can write replies through Vercel AI Gateway without a key of your own. Credits aren’t available yet. Today you pick a local model, your own subscription, or your own Gateway key.';
 export { SOCIAL_IMAGE_ALT };
 // The prompt a reader pastes into Claude Code, Codex, or Devin. It follows the
 // written guide; there is no Textbutler setup skill or one-line installer yet.
