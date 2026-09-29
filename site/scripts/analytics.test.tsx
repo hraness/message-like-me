@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { classifyAnalyticsRoute, isAllowedCustomEvent } from '@hraness/posthog';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -44,4 +45,9 @@ test('credits stay labeled as coming soon and are not offered as a reply writer'
   expect(html).toContain('>Coming</span>');
   expect(html).toContain('Coming soon: Textbutler AI credits');
   expect(html).toContain('coming soon and can’t be bought yet');
+});
+
+test('every event textbutler.app sends is registered in the repo cost registry', () => {
+  const surfaces = (JSON.parse(readFileSync(new URL('../../costs.json', import.meta.url), 'utf8')) as { surfaces: Record<string, { kind: string }> }).surfaces;
+  for (const name of ['$pageview', ...textbutlerPostHogSite.customEvents]) expect(surfaces[`posthog:${name}`]?.kind).toBe('telemetry');
 });
