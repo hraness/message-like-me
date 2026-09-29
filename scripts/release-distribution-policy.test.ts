@@ -120,6 +120,28 @@ describe("public release distribution policy", () => {
       },
     }, version);
     expect(parsed.integrity).toBe("sha512-QUJDRA==");
+    const npmRelease = (oidcConfigId: string) => ({
+      _npmUser: { ...npmUser, trustedPublisher: { id: "github", oidcConfigId } },
+      name: "@hraness/message-like-me",
+      version,
+      license: "MIT",
+      dist: {
+        attestations: {
+          provenance: { predicateType: "https://slsa.dev/provenance/v1" },
+          url: `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fmessage-like-me@${version}`,
+        },
+        integrity: "sha512-QUJDRA==",
+        shasum: "b".repeat(40),
+        tarball: `https://registry.npmjs.org/@hraness/message-like-me/-/message-like-me-${version}.tgz`,
+      },
+    });
+    // The registry dropped the `oidc:` prefix from the configuration id.
+    expect(parseNpmRelease(npmRelease("12345678-1234-1234-1234-123456789abc"), version).integrity)
+      .toBe("sha512-QUJDRA==");
+    for (const invalid of ["oidc:", "oidc:not-a-uuid", "OIDC:12345678-1234-1234-1234-123456789abc",
+      "x12345678-1234-1234-1234-123456789abc", "12345678-1234-1234-1234-123456789abc\n"]) {
+      expect(() => parseNpmRelease(npmRelease(invalid), version)).toThrow("provenance");
+    }
     expect(() => parseNpmRelease({
       _npmUser: npmUser,
       name: "@hraness/message-like-me",
