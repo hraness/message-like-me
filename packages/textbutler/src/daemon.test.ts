@@ -16,7 +16,7 @@ describe("foreground owner-only control socket", () => {
   test("CLI help is a successful read-only command", async () => {
     const lines: string[] = [];
     expect(await runTextbutlerCli(["--help"], { write: text => lines.push(text) })).toBe(0);
-    expect(lines[0]).toContain("daemon install");
+    expect(lines[0]).toContain("control install");
     lines.length = 0;
     expect(await runTextbutlerCli(["help", "daemon"], { write: text => lines.push(text) })).toBe(0);
     expect(lines[0]).toContain("daemon run");
