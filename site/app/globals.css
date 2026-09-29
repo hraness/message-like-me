@@ -1002,3 +1002,8 @@ html { scrollbar-color: var(--muted) var(--paper); }
 @media (forced-colors: active) {
   .tb-terminal, .tb-steps pre, .workspace-example pre { border: 1px solid CanvasText; }
 }
+
+@media (forced-colors: active) {
+  /* Preserve the selected tab’s paired system colors without text backplates. */
+  .hraness-platform-install__tab[aria-selected="true"] { forced-color-adjust: none; }
+}
