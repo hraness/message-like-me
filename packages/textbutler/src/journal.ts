@@ -242,6 +242,13 @@ export class RunJournal {
     return this.database.query<RunRecord, [string, string, string]>("SELECT * FROM runs WHERE contactId = ? AND (eventId = ? OR eventId GLOB ?) ORDER BY startedAt DESC, rowid DESC LIMIT 16")
       .all(contactId, eventId, `${eventId}:*`);
   }
+  /** Last state change of any operator run that is claimed, dispatched or
+   * reached the provider, across contacts. Operator pacing reads this. */
+  lastOperatorSendAt(): number | null {
+    const row = this.database.query<{ updatedAt: number }, []>(`SELECT updatedAt FROM runs WHERE eventId GLOB 'operator:*'
+      AND (state IN ('running','dispatching','submitted','partial','indeterminate') OR planDigest IS NOT NULL) ORDER BY updatedAt DESC LIMIT 1`).get();
+    return row?.updatedAt ?? null;
+  }
   /** Self-chat inbound echoes arrive under fresh IDs; text-less ones carry no
    * disclosure wrap, so send recency is the only signal they are ours. */
   lastButlerSendAt(contactId: string): number | null {

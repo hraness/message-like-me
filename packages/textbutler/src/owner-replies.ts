@@ -12,7 +12,7 @@ import type { ContactWorkspace } from "./workspace.ts";
 import { ControlFailure, type OwnerBinding, type OwnerRuntimeState } from "./control-service.ts";
 import { createRoutedButlerAgent } from "./routed-agent.ts";
 import { NoReplyNeeded, type AgentRequest, type ButlerAgent } from "./runtime.ts";
-import type { MessageEvent } from "./decision.ts";
+import { keywordPresent, type MessageEvent } from "./decision.ts";
 import { discloseReplyActions } from "./reply-actions.ts";
 import type { ReplyDraftDetail } from "../../control/src/index.ts";
 
@@ -445,6 +445,11 @@ export class OwnerReplies {
       if (prior[0] && !neverDispatched(prior[0])) return operatorReplay(prior[0]);
       if (operator.replayOnly) fail("invalid-request", "Nothing was sent under this idempotency key.");
       if (prior.length >= 8) fail("conflict", "This idempotency key has been attempted too many times.");
+      // An operator send is owner-authored, so the reply loop would read the
+      // contact's keyword in it as the owner summoning the butler.
+      if (contact.enabled && "text" in input && keywordPresent(input.text, contact.keyword))
+        fail("invalid-request", `This message contains "${contact.keyword}", which would make the butler reply right after it. Reword it or turn the butler off for this contact.`);
+      this.refuseUnpacedOperatorSend(operator.minimumIntervalMs);
       if (prior.length) eventId = `${eventId}:${prior.length + 1}`;
     }
     const binding = state.bindings[contact.id];
@@ -476,6 +481,9 @@ export class OwnerReplies {
     signal.throwIfAborted();
     if (this.ports.grantWork.has(contact.id)) fail("conflict", "This conversation's messaging grant is changing. Wait for it to settle.");
     if (this.pendingGrantRecovery(contact.id)) fail("conflict", "A previous messaging grant needs reconciliation before another reply.");
+    // Checked again with no await before the claim, so two operator sends to
+    // different contacts cannot both pass the pacing check.
+    if (operator) this.refuseUnpacedOperatorSend(operator.minimumIntervalMs);
     if (!this.ports.journal.claim(runId, contact.id, eventId, this.ports.now())) {
       const prior = operator ? this.ports.journal.operatorRuns(contact.id, operator.idempotencyKey)[0] : undefined;
       if (prior && prior.eventId === eventId) return operatorReplay(prior);
@@ -539,10 +547,18 @@ export class OwnerReplies {
     try { return await work; } finally { this.ports.grantWork.delete(contact.id); }
   }
 
+  /** The daemon paces operator sends at the caller's requested interval across
+   * all contacts, counting any claimed or dispatched operator run. */
+  private refuseUnpacedOperatorSend(minimumIntervalMs: number): void {
+    const last = this.ports.journal.lastOperatorSendAt();
+    if (minimumIntervalMs > 0 && last !== null && this.ports.now() - last < minimumIntervalMs)
+      fail("conflict", `Operator sends are paced at least ${Math.ceil(minimumIntervalMs / 1000)} seconds apart. Nothing was sent; rerun after the interval.`);
+  }
+
   /** Reuse a live standing grant or issue a tightly scoped owner-send grant.
    * The caller's work registration keeps recovery from revoking mid-dispatch.
-   * An operator's minimum interval goes on the scoped grant; a standing grant
-   * keeps its own pacing, since replacing it would change the contact's setup. */
+   * Operator pacing is enforced in send() from the journal; the interval also
+   * goes on a scoped grant, and a standing grant keeps its own pacing. */
   private async sendGrant(automation: OwnerAutomationPort, contact: ContactSettings, binding: AutomationBinding, kinds: readonly ActionIntent["kind"][], actionCount: number, signal: AbortSignal, minimumIntervalMs = 0): Promise<{ grantId: string; ephemeral: AutomationGrant | null }> {
     const state = await this.ports.state();
     const existing = state.grants[contact.id];

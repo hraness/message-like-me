@@ -527,7 +527,7 @@ const OPERATOR_KEY = "campaign-key-0000000001";
 const operatorSend = (text: string, key = OPERATOR_KEY, extra: { replayOnly?: boolean } = {}) =>
   ({ contactId: "contact-1", text, operator: { idempotencyKey: key, minimumIntervalMs: 60_000, ...extra } });
 
-test("an operator send goes out verbatim with operator provenance and the requested pacing", async () => {
+test("an operator send goes out verbatim with operator provenance and its interval on the grant", async () => {
   const fixture = await setup();
   const result = await fixture.replies.send(operatorSend("Hey, it's me. Coffee next week?"), AbortSignal.timeout(5000));
   expect(result.state).toBe("submitted");
@@ -598,6 +598,36 @@ test("operator sends reject bad keys, settings revisions and self chats", async 
   (fixture.contact as { selfChat: boolean }).selfChat = true;
   await expect(fixture.replies.send(operatorSend("x"), AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
   expect(fixture.sent).toEqual([]);
+});
+
+test("the daemon paces operator sends across contacts; a replay is never refused by pacing", async () => {
+  const fixture = await setup();
+  // A recent operator send to another contact holds this one.
+  fixture.journal.claim("other-op", "contact-2", "operator:campaign-key-other-000001", NOW - 30_000);
+  fixture.journal.transition("other-op", "running", "submitted", "sent", NOW - 30_000, "a".repeat(64));
+  await expect(fixture.replies.send(operatorSend("First"), AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "conflict" });
+  expect(fixture.sent).toEqual([]);
+  fixture.journal.transition("other-op", "submitted", "submitted", "sent", NOW - 60_000);
+  const first = await fixture.replies.send(operatorSend("First"), AbortSignal.timeout(5000));
+  expect(first.state).toBe("submitted");
+  await expect(fixture.replies.send(operatorSend("Second", "campaign-key-0000000002"), AbortSignal.timeout(5000)))
+    .rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("paced at least 60 seconds") });
+  expect(fixture.sent).toHaveLength(1);
+  // The same key still reports its outcome inside the interval.
+  expect(await fixture.replies.send(operatorSend("First", OPERATOR_KEY, { replayOnly: true }), AbortSignal.timeout(5000))).toMatchObject({ state: "submitted", runId: first.runId });
+});
+
+test("an operator send containing the butler keyword is refused while the butler is on", async () => {
+  const fixture = await setup();
+  const text = `I built an AI ${fixture.contact.keyword} this week, want to see it?`;
+  await expect(fixture.replies.send(operatorSend(text), AbortSignal.timeout(5000)))
+    .rejects.toMatchObject({ code: "invalid-request", message: expect.stringContaining("would make the butler reply") });
+  expect(fixture.sent).toEqual([]); expect(fixture.grantRequests).toEqual([]);
+  expect(fixture.journal.operatorRuns("contact-1", OPERATOR_KEY)).toEqual([]);
+  // With the butler off for this contact nothing can be invoked, so it sends.
+  (fixture.contact as { enabled: boolean }).enabled = false;
+  expect((await fixture.replies.send(operatorSend(text), AbortSignal.timeout(5000))).state).toBe("submitted");
+  expect(fixture.sent).toEqual([[{ kind: "text", text }]]);
 });
 
 test("disclosure stays the default for literal owner text", async () => {

@@ -55,6 +55,9 @@ export type EntryStatus = "pending" | "sending" | "sent" | "failed" | "uncertain
 export interface EntryState {
   status: EntryStatus; contactId: string; textDigest: string; key: string; attempts: number;
   sentAt: number | null; runId: string | null; detail: string | null;
+  /** When the current attempt was written ahead, before the request. The
+   * message may have landed any time after this, so it bounds the reply check. */
+  attemptedAt?: number | null;
 }
 export interface RecipientState { firstSentAt: number | null; lastSentAt: number | null; stopped: string | null }
 export interface CampaignState {
@@ -305,7 +308,7 @@ function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, stat
     const saved = state.entries[entry.id];
     if (saved && saved.status !== "pending" && (saved.contactId !== contact.id || saved.textDigest !== digest(text)))
       throw new OwnerCliError(`Entry "${entry.id}" changed after it was attempted. Give changed messages a new id.`);
-    if (!saved || saved.status === "pending") state.entries[entry.id] = { status: "pending", contactId: contact.id, textDigest: digest(text), key, attempts: saved?.attempts ?? 0, sentAt: null, runId: null, detail: null };
+    if (!saved || saved.status === "pending") state.entries[entry.id] = { status: "pending", contactId: contact.id, textDigest: digest(text), key, attempts: saved?.attempts ?? 0, sentAt: null, runId: null, detail: null, attemptedAt: null };
     return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone };
   });
 }
@@ -430,7 +433,7 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
         ports.print({ ok: true, status: "recipient-stopped", id: next.entry.id, contactId: next.contactId, reason: check });
         continue;
       }
-      saved.status = "sending"; saved.attempts++; await save(options.statePath, state);
+      saved.status = "sending"; saved.attempts++; saved.attemptedAt = ports.now(); await save(options.statePath, state);
     }
     const request: ControlRequest = { protocol: CONTROL_PROTOCOL, command: "replies.send", contactId: next.contactId, text: next.text,
       operator: { idempotencyKey: saved.key, minimumIntervalMs: options.minIntervalMs, ...(resolving ? { replayOnly: true } : {}) } };
@@ -439,20 +442,24 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     const sentAt = ports.now();
     if (response?.ok && response.kind === "reply-sent" && response.state === "submitted") {
       saved.status = "sent"; saved.runId = response.runId; saved.detail = null; saved.sentAt ??= sentAt;
-      who.firstSentAt ??= saved.sentAt; who.lastSentAt = Math.max(who.lastSentAt ?? 0, saved.sentAt);
+      // The message may have landed as early as the write-ahead attempt, and a
+      // replayed receipt can arrive hours later. Any contact message after the
+      // attempt counts as a reply, so a reply in that window still stops them.
+      const landedFrom = Math.min(saved.attemptedAt ?? saved.sentAt, saved.sentAt);
+      who.firstSentAt = Math.min(who.firstSentAt ?? landedFrom, landedFrom); who.lastSentAt = Math.max(who.lastSentAt ?? 0, saved.sentAt);
       // The uncertainty that stopped this recipient is now settled.
       if (resolving && who.stopped === "uncertain-send") who.stopped = null;
       // A reconciled send counts toward the caps too; it went out at some
       // point, and counting it can only slow the campaign down.
       state.sends = [...state.sends.filter(time => time > sentAt - 86_400_000), sentAt];
-      if (!resolving) {
-        const quiet = state.sends.length > 1 && sentAt - state.sends.at(-2)! >= options.burstPauseMs;
-        state.burstCount = quiet ? 1 : state.burstCount + 1;
-        const gap = options.minIntervalMs + Math.floor(ports.random() * (options.jitterMs + 1));
-        const pause = state.burstCount >= options.burst ? options.burstPauseMs + Math.floor(ports.random() * (options.burstPauseJitterMs + 1)) : 0;
-        if (pause) state.burstCount = 0;
-        state.nextSlotAt = sentAt + Math.max(gap, pause);
-      }
+      // A replayed send may have landed seconds ago, so it paces the next
+      // message exactly like a fresh one: gap, jitter and burst pauses.
+      const quiet = state.sends.length > 1 && sentAt - state.sends.at(-2)! >= options.burstPauseMs;
+      state.burstCount = quiet ? 1 : state.burstCount + 1;
+      const gap = options.minIntervalMs + Math.floor(ports.random() * (options.jitterMs + 1));
+      const pause = state.burstCount >= options.burst ? options.burstPauseMs + Math.floor(ports.random() * (options.burstPauseJitterMs + 1)) : 0;
+      if (pause) state.burstCount = 0;
+      state.nextSlotAt = Math.max(state.nextSlotAt ?? 0, sentAt + Math.max(gap, pause));
       await save(options.statePath, state);
       ports.print({ ok: true, status: resolving ? "reconciled" : "sent", id: next.entry.id, contactId: next.contactId, runId: response.runId,
         at: new Date(saved.sentAt).toISOString(), nextSlotAt: state.nextSlotAt === null ? null : new Date(state.nextSlotAt).toISOString() });
