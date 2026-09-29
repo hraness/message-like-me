@@ -14,12 +14,15 @@ if (authId === "slow") {
 if (authId === "graceful" && !args.includes("--projection-identity-only")) {
   const child = spawn(process.execPath, ["--no-env-file", "-e", "process.on('SIGTERM',()=>{});process.stdout.write('ready\\n');setInterval(()=>{},1000)"], { detached: true, stdio: ["ignore", "pipe", "ignore"], env: { PATH: "/usr/bin:/bin" } });
   await new Promise<void>((resolve, reject) => { child.stdout!.once("data", () => resolve()); child.once("error", reject); child.once("exit", () => reject(Error("Detached fixture exited before readiness"))); });
-  writeFileSync(join(directory, "descendant.json"), JSON.stringify({ pid: child.pid }), { mode: 0o600 });
-  await new Promise<void>(resolve => process.once("SIGTERM", () => {
+  // Install the documented grace handler before announcing the descendant, so
+  // a test that aborts as soon as it sees descendant.json always gets the grace.
+  const terminated = new Promise<void>(resolve => process.once("SIGTERM", () => {
     process.kill(-child.pid!, "SIGTERM");
     setTimeout(() => { process.kill(-child.pid!, "SIGKILL"); }, 700);
     child.once("exit", () => resolve());
   }));
+  writeFileSync(join(directory, "descendant.json"), JSON.stringify({ pid: child.pid }), { mode: 0o600 });
+  await terminated;
 }
 if (args[0] !== "invoke" || args[1] !== "imessage-direct" || !["messaging.list", "conversations.read", "messaging.read"].includes(operation!)) process.exit(9);
 const chat = { guid: "synthetic-chat", id: 42, service: "iMessage", kind: "single", title: "Synthetic Robin", participants: ["synthetic@example.invalid"], observedAccountId: "synthetic-account", observedAccountLogin: null, observedLastAddressedHandle: null };

@@ -1687,7 +1687,8 @@ esac
     expect(helper).toContain("rateLimit { cost remaining resetAt }");
     expect(helper).toContain("totalCount");
     expect(helper).toContain("MAX_PROVIDER_POLLS = 15");
-    expect(helper).toContain("PROVIDER_POLL_INTERVAL_MILLISECONDS = 60_000");
+    expect(helper).toContain("PROVIDER_POLL_INTERVAL_MILLISECONDS = 120_000");
+    expect(helper).toContain("PROVIDER_POLL_CEILING_MILLISECONDS = 840_000");
     expect(helper).not.toContain("Date.now");
     expect(helper).toContain('this.#runRaw([\n      "--include",');
     expect(helper).toContain('spawnSync("/usr/bin/gh"');
@@ -1709,7 +1710,12 @@ esac
       githubTokenLimit: 1_000,
       headroom: 786,
       maxPolls: 15,
-      pollIntervalMilliseconds: 60_000,
+      pollCeilingMilliseconds: 840_000,
+      pollDelaysMilliseconds: [
+        10_000, 10_000, 15_000, 15_000, 20_000, 30_000, 45_000,
+        60_000, 90_000, 105_000, 105_000, 105_000, 110_000, 120_000,
+      ],
+      pollIntervalMilliseconds: 120_000,
       providerBaseline: 2,
       providerOutcome: 164,
       providerPromotion: 30,
@@ -1726,6 +1732,10 @@ esac
       providerOutcome: 85,
       totalRequests: 95,
     });
+    expect(releaseRestRequestBudget.pollDelaysMilliseconds).toHaveLength(releaseRestRequestBudget.maxPolls - 1);
+    expect(releaseRestRequestBudget.pollDelaysMilliseconds.reduce((sum, delay) => sum + delay, 0))
+      .toBe(releaseRestRequestBudget.pollCeilingMilliseconds);
+    expect(releaseRestRequestBudget.pollDelaysMilliseconds[0]).toBeLessThanOrEqual(10_000);
     expect(releaseRestRequestBudget.total).toBeLessThan(250);
     expect(releaseGraphqlRequestBudget.maxPoints).toBeLessThan(200);
   });

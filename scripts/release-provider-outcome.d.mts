@@ -33,6 +33,8 @@ export const releaseRestRequestBudget: Readonly<{
   githubTokenLimit: number;
   headroom: number;
   maxPolls: number;
+  pollCeilingMilliseconds: number;
+  pollDelaysMilliseconds: readonly number[];
   pollIntervalMilliseconds: number;
   providerBaseline: number;
   providerOutcome: number;
