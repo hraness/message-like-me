@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer PR push supersedes the older PR run. Main pushes get one group per
+# SHA and are never cancelled, so site promotion always finds complete
+# attempt-1 CI for the exact commit it admits.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -66,13 +69,22 @@ jobs:
         with:
           node-version: "24.19.0"
       - name: Restore Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'site/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --ignore-scripts
+      # Standalone saves the root install cache on main; the other root jobs
+      # restore it and PR runs never save.
+      - name: Save Bun install cache on main
+        if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       - run: bun run check:cost-surfaces
       - run: bun run typecheck
       - run: bun run check:effect
@@ -106,7 +118,8 @@ jobs:
         with:
           node-version: "24.19.0"
       - name: Restore Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'site/bun.lock') }}
@@ -130,13 +143,17 @@ jobs:
         with:
           node-version: "24.19.0"
       - name: Restore Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'site/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --ignore-scripts
+      # Runs the package tests as balanced parallel lanes plus both typechecks
+      # (scripts/check-textbutler.ts); the job name stays in the site
+      # promotion's CI inventory.
       - run: bun run check:textbutler
 
   site:
@@ -155,15 +172,18 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.19.0"
+      # The site installs only site/bun.lock, so it keeps its own cache family.
       - name: Restore Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'site/bun.lock') }}
+          key: bun-site-${{ runner.os }}-${{ hashFiles('site/bun.lock') }}
           restore-keys: |
+            bun-site-${{ runner.os }}-
             bun-${{ runner.os }}-
       - name: Restore Next.js build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: site/.next/cache
           key: next-${{ runner.os }}-${{ hashFiles('site/bun.lock') }}-${{ github.sha }}
@@ -171,6 +191,12 @@ jobs:
             next-${{ runner.os }}-${{ hashFiles('site/bun.lock') }}-
       - run: bun install --frozen-lockfile --ignore-scripts
         working-directory: site
+      - name: Save Bun install cache on main
+        if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       - run: bun run sync:readme
         working-directory: site
       - run: bun run test
@@ -179,6 +205,14 @@ jobs:
         working-directory: site
       - run: bun run build
         working-directory: site
+      # Main saves the warm compile cache that PRs and the site promotion
+      # restore; PR runs never save, so they cannot churn or evict it.
+      - name: Save Next.js build cache on main
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: site/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('site/bun.lock') }}-${{ github.sha }}
       - name: Verify generated README view
         run: git diff --exit-code -- site/app/readme.generated.ts site/app/methodology.generated.ts site/app/research.generated.ts
 
@@ -196,13 +230,20 @@ jobs:
         with:
           bun-version: "1.3.14"
       - name: Restore Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: bun-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'site/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Save Bun install cache on main
+        if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
       - name: Test generated fixtures with an isolated home
         env:
           HOME: ${{ runner.temp }}/message-like-me-fixture-home
@@ -210,8 +251,10 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME"
           bun test src/imessage.test.ts src/contacts.test.ts src/metrics.test.ts
+      # The package typechecks are platform-independent and run in the Linux
+      # "Textbutler packages" job, so macOS runs only the package tests.
       - name: Test Textbutler owner controls and native custody with synthetic data
-        run: bun run check:textbutler
+        run: bun run check:textbutler --tests-only
       - name: Verify native app supervision with synthetic data
         run: bun scripts/verify-textbutler-macos-app.ts
 

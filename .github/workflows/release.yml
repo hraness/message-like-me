@@ -151,17 +151,38 @@ jobs:
             exit 1
           fi
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun run check
       - run: bun install --frozen-lockfile --ignore-scripts
         working-directory: site
-      - run: bun run sync:readme
-        working-directory: site
-      - run: bun run test
-        working-directory: site
-      - run: bun run lint
-        working-directory: site
-      - run: bun run build
-        working-directory: site
+      # The root gate and the site gate share no outputs, so they run side by
+      # side; both must pass, and each log prints in full afterwards.
+      - name: Run the complete root and site gates in parallel
+        run: |
+          set -euo pipefail
+          root_log="$RUNNER_TEMP/root-check.log"
+          site_log="$RUNNER_TEMP/site-check.log"
+          bun run check > "$root_log" 2>&1 &
+          root_pid=$!
+          (
+            cd site
+            bun run sync:readme
+            bun run test
+            bun run lint
+            bun run build
+          ) > "$site_log" 2>&1 &
+          site_pid=$!
+          root_status=0
+          site_status=0
+          wait "$root_pid" || root_status=$?
+          wait "$site_pid" || site_status=$?
+          echo "::group::Root gate: bun run check (exit $root_status)"
+          cat "$root_log"
+          echo "::endgroup::"
+          echo "::group::Site gate: sync:readme, test, lint, build (exit $site_status)"
+          cat "$site_log"
+          echo "::endgroup::"
+          if [[ "$root_status" -ne 0 ]]; then echo "::error::Root gate failed with exit $root_status"; fi
+          if [[ "$site_status" -ne 0 ]]; then echo "::error::Site gate failed with exit $site_status"; fi
+          [[ "$root_status" -eq 0 && "$site_status" -eq 0 ]]
       - name: Verify generated documentation views
         run: git diff --exit-code -- site/app/readme.generated.ts site/app/methodology.generated.ts site/app/research.generated.ts
       - name: Verify checked distribution and lockfiles

@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "bun install --frozen-lockfile",
-  "buildCommand": "bun run build"
+  "buildCommand": "bun run build",
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" = production ]; then exit 1; fi; git diff --quiet HEAD^ HEAD -- ."
 }

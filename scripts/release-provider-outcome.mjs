@@ -31,7 +31,23 @@ const PRODUCTION_REF = "refs/heads/website-production";
 const PAGE_SIZE = 100;
 const MAX_ITEMS = 500;
 const MAX_PROVIDER_POLLS = 15;
-const PROVIDER_POLL_INTERVAL_MILLISECONDS = 60_000;
+// Short-first delays between the 15 polls: a quick Vercel Production build is
+// seen within ~10-35 s instead of the next whole minute, while the total wait
+// ceiling stays the previous 14 x 60 s = 840 s and the request budgets, which
+// derive from MAX_PROVIDER_POLLS, stay unchanged.
+const PROVIDER_POLL_DELAYS_MILLISECONDS = Object.freeze([
+  10_000, 10_000, 15_000, 15_000, 20_000, 30_000, 45_000,
+  60_000, 90_000, 105_000, 105_000, 105_000, 110_000, 120_000,
+]);
+const PROVIDER_POLL_INTERVAL_MILLISECONDS = 120_000;
+const PROVIDER_POLL_CEILING_MILLISECONDS = 840_000;
+if (
+  PROVIDER_POLL_DELAYS_MILLISECONDS.length !== MAX_PROVIDER_POLLS - 1 ||
+  Math.max(...PROVIDER_POLL_DELAYS_MILLISECONDS) !== PROVIDER_POLL_INTERVAL_MILLISECONDS ||
+  PROVIDER_POLL_DELAYS_MILLISECONDS.reduce((sum, delay) => sum + delay, 0) !== PROVIDER_POLL_CEILING_MILLISECONDS
+) {
+  throw new Error("provider poll schedule does not match its poll count and ceiling");
+}
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const MAX_ENCODED_RECEIPT_BYTES = 64 * 1024;
 const PAGINATED_READ_REQUESTS = MAX_ITEMS / PAGE_SIZE + 1;
@@ -193,6 +209,8 @@ export const releaseRestRequestBudget = Object.freeze({
     OUTCOME_SITE_AUTHORITY_REQUESTS -
     SURROUNDING_RELEASE_REST_REQUESTS,
   maxPolls: MAX_PROVIDER_POLLS,
+  pollCeilingMilliseconds: PROVIDER_POLL_CEILING_MILLISECONDS,
+  pollDelaysMilliseconds: PROVIDER_POLL_DELAYS_MILLISECONDS,
   pollIntervalMilliseconds: PROVIDER_POLL_INTERVAL_MILLISECONDS,
   providerBaseline: BASELINE_REST_REQUESTS,
   providerOutcome: OUTCOME_REST_REQUESTS,
@@ -2414,7 +2432,8 @@ export async function waitForAdmittedProviderOutcome({ api, baseline, promotion,
     }
 
     if (poll === maxPolls) fail("timed out waiting for the exact Vercel Production deployment");
-    await sleep(pollIntervalMilliseconds);
+    // pollIntervalMilliseconds caps each scheduled delay (tests pass 0).
+    await sleep(Math.min(pollIntervalMilliseconds, PROVIDER_POLL_DELAYS_MILLISECONDS[poll - 1]));
   }
   fail("provider outcome loop ended unexpectedly");
 }
