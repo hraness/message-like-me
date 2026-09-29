@@ -19,6 +19,7 @@ import {
 import { blogPostBodies } from '../blog/posts.generated';
 import { blogAdmission } from './blog-admissions';
 import {
+  BLOG_CARD_DESCRIPTION,
   BLOG_DESCRIPTION,
   BLOG_FEED_PATH,
   BLOG_PATH,
@@ -83,11 +84,15 @@ export function bodyFor(post: BlogPost) {
 export const BLOG_INDEX_SOCIAL_PAGE: SocialImagePage = {
   eyebrow: 'Blog',
   headline: BLOG_TITLE,
-  description: BLOG_DESCRIPTION,
+  description: BLOG_CARD_DESCRIPTION,
 };
 
 export function socialPageFor(post: BlogPost): SocialImagePage {
-  return { eyebrow: post.eyebrow, headline: post.title, description: post.dek };
+  return {
+    eyebrow: post.card?.eyebrow ?? post.eyebrow,
+    headline: post.card?.headline ?? post.title,
+    description: post.card?.description ?? post.dek,
+  };
 }
 
 export function articleDiscovery(post: BlogPost): ArticleDiscovery {
