@@ -9,6 +9,12 @@ export const BLOG_FEED_PATH = '/blog/feed.xml' as const;
 export const BLOG_TITLE = 'TextButler blog';
 export const BLOG_DESCRIPTION =
   'Posts about TextButler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
+// The blog share card's copy, written to fit the card as drawn (see scripts/social-image.test.ts).
+export const BLOG_CARD_DESCRIPTION = 'How TextButler decides when to answer, what writes its replies, and the tools it runs on.';
+
+// Share-card copy for a post, written to fit the card without being shortened.
+// Fields left out fall back to the post's own title, dek, and eyebrow.
+export type BlogPostCard = Readonly<{ headline?: string; description?: string; eyebrow?: string }>;
 
 export type BlogPost = Readonly<{
   slug: string;
@@ -20,6 +26,7 @@ export type BlogPost = Readonly<{
   tags: readonly string[];
   // Registered portfolio relations this post is about; they pick the related products shown.
   relationIds: readonly string[];
+  card?: BlogPostCard;
 }>;
 
 export const BLOG_POSTS: readonly BlogPost[] = [
@@ -35,6 +42,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
       'contract:wrench:message-like-me:exports-private-bundles',
       'contract:message-like-me:peopleblade:shared-bundle-format',
     ],
+    card: { description: 'AI in your messages. A clearly marked AI assistant answers for you from your Mac.' },
   },
   {
     slug: 'how-textbutler-uses-xcb',
@@ -45,6 +53,10 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     updated: '2026-09-28',
     tags: ['textbutler', 'xcb', 'subscriptions', 'drafts', 'claude-code', 'codex', 'devin'],
     relationIds: [],
+    card: {
+      headline: 'How TextButler uses xcb',
+      description: 'One of its three reply writers is the Claude Code, Codex, or Devin subscription you already pay for.',
+    },
   },
   {
     slug: 'how-textbutler-uses-algal',
@@ -55,6 +67,10 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     updated: '2026-09-28',
     tags: ['textbutler', 'algal', 'habitats', 'drafts', 'messaging', 'local-first'],
     relationIds: [],
+    card: {
+      headline: 'How TextButler uses ALGAL',
+      description: 'A contact’s reply plan changes only after a blinded ALGAL replay scores the new plan higher.',
+    },
   },
   {
     slug: 'how-textbutler-uses-ghostget',
@@ -65,6 +81,11 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     updated: '2026-09-28',
     tags: ['textbutler', 'ghostget', 'beeper', 'whatsapp', 'message-history', 'local-first'],
     relationIds: ['contract:wrench:message-like-me:exports-private-bundles'],
+    card: {
+      headline: 'How TextButler uses GhostGet',
+      description: 'TextButler reads and sends live messages through GhostGet automation on your Mac.',
+      eyebrow: 'Integration',
+    },
   },
 ];
 

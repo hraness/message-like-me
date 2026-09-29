@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { socialImageContentType, socialImageSize } from '@hraness/web-discovery/social-image';
+import { socialImageFit, socialImageSiteDetails } from '@hraness/web-discovery/social-image/card';
 
 import * as rootImage from '../app/opengraph-image.tsx';
 import * as blogImage from '../app/blog/opengraph-image.tsx';
@@ -42,5 +43,23 @@ describe('social images', () => {
     }
     const response = await postImage.default({ params: Promise.resolve({ slug: BLOG_POSTS[0]!.slug }) });
     expect(response.headers.get('content-type')).toBe('image/png');
+  });
+
+  test('every page card fits as written', () => {
+    for (const page of [BLOG_INDEX_SOCIAL_PAGE, ...BLOG_POSTS.map(socialPageFor)]) {
+      const fit = socialImageFit(socialImageSiteDetails(socialSite, page));
+      expect({ headline: page.headline, issues: fit.issues }).toEqual({ headline: page.headline, issues: [] });
+      expect(fit.eyebrow).toBe(page.eyebrow);
+    }
+  });
+
+  test('the home card shows the registry one-liner', () => {
+    const fit = socialImageFit(socialImageSiteDetails(socialSite));
+    expect(fit.headline.lines).toEqual([SITE_NAME]);
+    // web-discovery v0.11.0 does not fit the one-liner on two lines and cuts it
+    // at its first comma, which opens a list ("AI butler for the iMessage").
+    // The registry owns this copy, so the template fix belongs upstream; drop
+    // this expectation when a release draws the whole line.
+    expect(fit.issues).toEqual(['description was shortened to its last whole clause that fits']);
   });
 });
