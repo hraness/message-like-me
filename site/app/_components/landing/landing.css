@@ -287,3 +287,6 @@
   .tb-chip, .tb-writer, .tb-prompt, .tb-tile, .tb-modes { border: 1px solid CanvasText; }
   .tb-copy { border: 1px solid ButtonText; }
 }
+
+/* Planned reply option: labeled as coming, set apart from the options you can pick today. */
+.tb-writer-coming { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.75rem; max-inline-size: 70ch; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.6; }

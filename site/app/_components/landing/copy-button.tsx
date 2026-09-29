@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 
+import { captureInstallCopied } from '../analytics';
+
 /**
  * Copies one fixed string. It is a plain button: the page never collects or
  * submits anything, so there is no form, input, or textarea here.
  */
-export function CopyButton({ text, label = 'Copy' }: Readonly<{ text: string; label?: string }>) {
+export function CopyButton({ text, label = 'Copy', analyticsTarget }: Readonly<{ text: string; label?: string; analyticsTarget?: string }>) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   useEffect(() => {
     if (state === 'idle') return undefined;
@@ -23,7 +25,10 @@ export function CopyButton({ text, label = 'Copy' }: Readonly<{ text: string; la
           setState('failed');
           return;
         }
-        void navigator.clipboard.writeText(text).then(() => setState('copied'), () => setState('failed'));
+        void navigator.clipboard.writeText(text).then(() => {
+          setState('copied');
+          if (analyticsTarget !== undefined) captureInstallCopied(analyticsTarget);
+        }, () => setState('failed'));
       }}
       type="button"
     >

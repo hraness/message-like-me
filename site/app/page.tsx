@@ -44,6 +44,7 @@ import {
   GETTING_STARTED_URL,
   GHOSTGET_SETUP_URL,
   pageMetadata,
+  REPLY_CREDITS_NOTE,
   REPLY_WRITERS_PRECEDENCE,
   REPLY_WRITERS_SENTENCE,
   serializeJsonLd,
@@ -99,7 +100,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'What does it cost?',
-    answer: 'Textbutler is free and open source. A local model costs nothing to run. With a Gateway key, Vercel bills you, and Textbutler stops spending at $1 a day. With a subscription, it uses the plan you already pay for.',
+    answer: 'Textbutler is free and open source. A local model costs nothing to run. With a Gateway key, Vercel bills you, and Textbutler stops spending at $1 a day. With a subscription, it uses the plan you already pay for. Textbutler AI credits, for people without a key of their own, are coming soon and can’t be bought yet.',
   },
   {
     question: 'Do I need Ollama?',
@@ -128,13 +129,15 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Is textbutler.app collecting anything?',
-    answer: 'No. textbutler.app is informational and has no message upload, contact import, account, or drafting form. Your Mac keeps each person’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
+    answer: 'Only anonymous visit counts. textbutler.app counts page views and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each person’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
   },
   {
     question: 'What happened to Message Like Me?',
     answer: 'Textbutler replaced it. Its history readers and methodology are still available as legacy tools on the legacy history page. Installing them doesn’t install Textbutler or turn on automatic replies.',
   },
 ];
+
+const CREDITS_CHIP: SupportChip = 'Coming';
 
 function Chip({ children }: Readonly<{ children: SupportChip }>) {
   const tone = children === 'Works today'
@@ -194,12 +197,12 @@ export default function Home() {
             actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: '#how-it-works', label: 'See how it works', emphasis: 'secondary' }]}
             boundary={HERO_BOUNDARY}
             className="mlm-marketing-hero tb-hero"
-            eyebrow="For iMessage, WhatsApp, and Beeper on Mac"
+            eyebrow="iMessage and WhatsApp today, more apps through Beeper, on Mac"
             frame={<HeroStage />}
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
             name="Textbutler"
-            summary="When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you."
+            summary="When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. It writes with a local model or the AI subscription you already pay for. Claude Code, Codex, or Devin can set it up for you."
           />
 
           <section aria-labelledby="status-title" className="tb-status-band" id="status">
@@ -268,6 +271,7 @@ export default function Home() {
                 </li>
               ))}
             </ol>
+            <p className="tb-writer-coming"><Chip>{CREDITS_CHIP}</Chip> <span>{REPLY_CREDITS_NOTE}</span></p>
             <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} Setup installs a local copy of Textbutler on your Mac (<code>bun run textbutler:install</code>). That copy writes the AI replies, and it refuses to build if its code doesn’t match the last reviewed version. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
             <DiagramSwitch label="Show where your words go with" options={[
               { label: 'Local', caption: 'Local model: the reply is written on your Mac. In testing.', panel: <DiagramFigure alt="Where your words go with a local model: Ghostget, Textbutler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only with your key." name={DIAGRAMS.whereWordsGo} /> },
@@ -285,7 +289,7 @@ export default function Home() {
             <figure className="tb-prompt">
               <figcaption className="tb-prompt__bar">
                 <span>Paste into Claude Code, Codex, or Devin</span>
-                <CopyButton label="Copy prompt" text={AGENT_SETUP_PROMPT} />
+                <CopyButton analyticsTarget="agent-setup-prompt" label="Copy prompt" text={AGENT_SETUP_PROMPT} />
               </figcaption>
               <pre aria-label="Setup prompt for your coding agent" tabIndex={0}><code>{AGENT_SETUP_PROMPT}</code></pre>
             </figure>

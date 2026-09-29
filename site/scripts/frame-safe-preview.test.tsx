@@ -9,7 +9,7 @@ test('server-renders a script-independent preview with the site status and no na
   const html = renderToStaticMarkup(<PreviewPage />);
 
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(html).toContain('AI in your messages.');
+  expect(html).toContain('An AI butler in your messaging apps.');
   expect(html).toContain(SITE_STATUS);
   expect(html).toContain('local model through Ollama (in testing)');
   expect(html).toContain('runs in the background with no window or menu bar icon');
