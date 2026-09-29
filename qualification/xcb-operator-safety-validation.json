@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "scope": "Verify replay pacing, the reply cutoff after a lost response, daemon operator pacing and the butler-keyword refusal.",
+  "toolchain": "Bun 1.3.14",
+  "command": "bun test packages/textbutler/src/campaign.test.ts packages/textbutler/src/journal.test.ts packages/textbutler/src/owner-replies.test.ts packages/textbutler/src/attribution.test.ts packages/textbutler/src/owner-messages.test.ts packages/textbutler/src/ghostget-owner-read.test.ts packages/textbutler/src/cli-golden.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 117,
+    "failed": 0,
+    "files": 7,
+    "assertions": 11552
+  },
+  "typecheck": {
+    "command": "node_modules/.bin/tsc --noEmit -p packages/textbutler/tsconfig.json",
+    "exitCode": 0,
+    "log": "qualification/xcb-operator-safety-typecheck.log",
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceSha256": {
+    "packages/textbutler/src/campaign.test.ts": "6d542952143177c8f7636d2dcf26b2fad8bc65718edd50dd961a21772b6b36a3",
+    "packages/textbutler/src/campaign.ts": "8ebfdedcb21c7d47a993f974e9a774b5e394a9ba3267e533ff8e0b89a696cb6f",
+    "packages/textbutler/src/journal.test.ts": "67e6c49fd6a098dcd685639ef118033df738e033a283842bbaf9925d213a247f",
+    "packages/textbutler/src/journal.ts": "8f74e4aab576e61c9e6c7c35c7dc4155d918a845435852ea86e53ee86302a411",
+    "packages/textbutler/src/owner-replies.test.ts": "b3713c18edd3f8f8161a6fec7d2bd92ca059b385ea06a4fd592ce576de10ab12",
+    "packages/textbutler/src/owner-replies.ts": "c9dab5b6092e27539a8f6e078b3d49ae83ac6597d2988a136b270ecfafed05f1"
+  },
+  "review": "qualification/xcb-operator-safety-review.json",
+  "reviewSha256": "472a7cc21162754c9cb12bd643b248a43457d67c71012c93309fdbd1124bf164",
+  "log": "qualification/xcb-operator-safety-focused.log",
+  "logSha256": "639163226eeff07069fa5f3577c66c49aa5a9b4384e655754fea6d2074f3a09f"
+}

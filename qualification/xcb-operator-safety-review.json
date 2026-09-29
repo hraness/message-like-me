@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "scope": "Follow-up to operator sends: campaign pacing after a replayed send, a write-ahead attempt time as the reply cutoff, daemon-enforced operator pacing across contacts, and refusal of operator text that would invoke the butler keyword.",
+  "reviewer": "Independent AI reviewer: two separate read-only Claude Code processes, not the drafting session",
+  "method": "Read-only review of the working tree against origin/main, then a confirmation pass over the fixes for the first-pass findings; no edits or tests by the reviewer.",
+  "result": "First pass: no blocking finding. Fixed from it: the pacing check now runs again synchronously immediately before the claim, provider-failed dispatched operator runs count toward pacing, the pacing query walks the updatedAt index, and the pacing test crosses contacts. Confirmation pass: no blocking finding; replays are never refused, no double-send path, no undisclosed butler output.",
+  "reviewedSha256": {
+    "packages/textbutler/src/campaign.test.ts": "6d542952143177c8f7636d2dcf26b2fad8bc65718edd50dd961a21772b6b36a3",
+    "packages/textbutler/src/campaign.ts": "8ebfdedcb21c7d47a993f974e9a774b5e394a9ba3267e533ff8e0b89a696cb6f",
+    "packages/textbutler/src/journal.test.ts": "67e6c49fd6a098dcd685639ef118033df738e033a283842bbaf9925d213a247f",
+    "packages/textbutler/src/journal.ts": "8f74e4aab576e61c9e6c7c35c7dc4155d918a845435852ea86e53ee86302a411",
+    "packages/textbutler/src/owner-replies.test.ts": "b3713c18edd3f8f8161a6fec7d2bd92ca059b385ea06a4fd592ce576de10ab12",
+    "packages/textbutler/src/owner-replies.ts": "c9dab5b6092e27539a8f6e078b3d49ae83ac6597d2988a136b270ecfafed05f1"
+  },
+  "remainingLimit": "A campaign state entry that was mid-send before this change has no attempt time, so its reply cutoff stays at the replay time. A daemon pacing refusal halts the campaign as busy rather than waiting. Daemon pacing is not verified against a live provider."
+}

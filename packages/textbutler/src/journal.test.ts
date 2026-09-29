@@ -111,3 +111,19 @@ test("operator runs outlive ordinary run retention so their keys stay exactly-on
   journal.claim("much-later", "contact-2", "event-3", 402 * day);
   expect(journal.recent("contact-1")).toEqual([]);
 });
+
+test("operator pacing counts claimed, dispatched and provider-failed operator runs across contacts", () => {
+  const journal = RunJournal.memory();
+  expect(journal.lastOperatorSendAt()).toBeNull();
+  journal.claim("butler-1", "contact-1", "event-1", 10);
+  expect(journal.lastOperatorSendAt()).toBeNull();
+  journal.claim("op-1", "contact-2", "operator:campaign-key-0000000001", 20);
+  expect(journal.lastOperatorSendAt()).toBe(20);
+  journal.transition("op-1", "running", "abandoned", "daemon restarted", 25);
+  expect(journal.lastOperatorSendAt()).toBeNull();
+  journal.claim("op-2", "contact-3", "operator:campaign-key-0000000002", 30);
+  journal.transition("op-2", "running", "dispatching", "intent", 31, "b".repeat(64));
+  journal.transition("op-2", "dispatching", "failed", "provider refused", 32);
+  expect(journal.lastOperatorSendAt()).toBe(32);
+  journal.close();
+});
