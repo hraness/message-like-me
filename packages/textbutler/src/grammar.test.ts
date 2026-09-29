@@ -5,12 +5,17 @@ import { join } from "node:path";
 import { commandsJson, type CliIO } from "@hraness/desktop-foundation/registry";
 import { renderSnapshot } from "@hraness/desktop-foundation/tui";
 import { CONTROL_PROTOCOL, type ControlRequest, type ControlResponse, type DesktopSnapshot, type ReplyDraftDetail } from "../../control/src/index.ts";
-import { digestOf, GRAMMAR_FAMILIES, legacyLoginItems, LEGACY_MENU_LOGIN_ITEM, PRODUCT_VERBS, runGrammar, STATUS_VIEWS, statusFromSnapshot, textbutlerRegistry, type GrammarDeps } from "./grammar.ts";
+import { MAX_LOGIN_ITEM_BYTES, retireLegacyLoginItem } from "@hraness/desktop-foundation/retire";
+import { digestOf, GRAMMAR_FAMILIES, isMenuLoginItem, legacyLoginItems, LEGACY_MENU_LOGIN_ITEM, PRODUCT_VERBS, runGrammar, STATUS_VIEWS, statusFromSnapshot, textbutlerRegistry, type GrammarDeps } from "./grammar.ts";
 import type { LaunchAgentLifecycle, LaunchAgentStatus } from "./launch-agent.ts";
 import type { Readiness } from "./onboarding.ts";
 
 const AT = new Date("2026-09-29T12:00:00.000Z");
 const DIGEST = "d".repeat(64);
+const MENU_PLIST = `<plist><dict><key>ProgramArguments</key><array><string>/opt/bun</string><string>/owner/share/textbutler/versions/${"a".repeat(64)}/textbutler.mjs</string><string>menubar</string></array></dict></plist>`;
+// What bun run textbutler:install does (scripts/install-textbutler.ts retireMenuLoginItem).
+const retireMenuLoginItem = async (home: string, bootout: (label: string) => Promise<void>) =>
+  await retireLegacyLoginItem({ home, labels: [LEGACY_MENU_LOGIN_ITEM], accepts: isMenuLoginItem, bootout }) ? "retired" : null;
 
 // ── Fixture states: every state the retired menu bar showed ─────────────────
 function base(): DesktopSnapshot {
@@ -271,10 +276,54 @@ describe("doctor legacy login items", () => {
       const agents = join(home, "Library", "LaunchAgents");
       await mkdir(agents, { recursive: true });
       expect(await legacyLoginItems(home)).toEqual([]);
-      await writeFile(join(agents, `${LEGACY_MENU_LOGIN_ITEM}.plist`), "<plist/>");
+      await writeFile(join(agents, `${LEGACY_MENU_LOGIN_ITEM}.plist`), MENU_PLIST);
       await symlink("/nonexistent", join(agents, "other.plist"));
       expect(await legacyLoginItems(home)).toEqual([{ label: LEGACY_MENU_LOGIN_ITEM, state: "present" }]);
       expect((await readdir(agents)).sort()).toEqual([`${LEGACY_MENU_LOGIN_ITEM}.plist`, "other.plist"]);
+    } finally { await rm(home, { recursive: true, force: true }); }
+  });
+  // Regression: doctor must only advise a reinstall for an item the installer
+  // will actually retire, or a person or agent following the advice loops.
+  test("reports an item the installer will not retire as not-ours, and doctor does not advise a reinstall", async () => {
+    const home = await mkdtemp(join(tmpdir(), "tb-grammar-"));
+    try {
+      const agents = join(home, "Library", "LaunchAgents");
+      await mkdir(agents, { recursive: true });
+      const item = join(agents, `${LEGACY_MENU_LOGIN_ITEM}.plist`);
+      const notOurs = [{ label: LEGACY_MENU_LOGIN_ITEM, state: "not-ours" as const }];
+      // A plist that is not the menu item.
+      await writeFile(item, "<plist><string>/usr/bin/true</string></plist>");
+      expect(await legacyLoginItems(home)).toEqual(notOurs);
+      expect(await retireMenuLoginItem(home, async () => {})).toBeNull();
+      // Another user's file.
+      await writeFile(item, MENU_PLIST);
+      expect(await legacyLoginItems(home, (process.getuid?.() ?? 0) + 1)).toEqual(notOurs);
+      // An oversized file.
+      await writeFile(item, MENU_PLIST + " ".repeat(MAX_LOGIN_ITEM_BYTES));
+      expect(await legacyLoginItems(home)).toEqual(notOurs);
+      expect(await retireMenuLoginItem(home, async () => {})).toBeNull();
+      // A symlink, even to the real menu item.
+      await rm(item);
+      const target = join(home, "real.plist");
+      await writeFile(target, MENU_PLIST);
+      await symlink(target, item);
+      expect(await legacyLoginItems(home)).toEqual(notOurs);
+      expect(await retireMenuLoginItem(home, async () => {})).toBeNull();
+      const h = harness(null);
+      h.deps.home = home;
+      h.deps.readiness = async () => ({ ok: true, platform: "darwin", dataDir: "/x", initialized: true, daemonConnected: true, automaticReplies: "running",
+        canReviewInbox: true, canGenerateReplies: true, snapshot: null, steps: [] });
+      const text = await run(h, ["doctor"]);
+      expect(text.out).not.toContain("Reinstall");
+      expect(text.out).toContain("not Textbutler's old menu login item");
+      expect((await run(h, ["doctor", "--json"])).json().data.legacyLoginItems).toEqual(notOurs);
+      // The real item: present, and the installer does retire it.
+      await rm(item);
+      await writeFile(item, MENU_PLIST);
+      expect(await legacyLoginItems(home)).toEqual([{ label: LEGACY_MENU_LOGIN_ITEM, state: "present" }]);
+      expect((await run(h, ["doctor"])).out).toContain("Reinstall with bun run textbutler:install");
+      expect(await retireMenuLoginItem(home, async () => {})).toBe("retired");
+      expect(await legacyLoginItems(home)).toEqual([]);
     } finally { await rm(home, { recursive: true, force: true }); }
   });
   test("doctor --json exits 0 with readiness in data.ok and the next setup step", async () => {

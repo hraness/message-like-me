@@ -137,4 +137,8 @@ TextButler no longer has a menu bar icon. Each item it had is a command:
 If an earlier version installed the menu bar's login item, the installer moves
 it aside to a `.retired-<time>` file when you reinstall. It never deletes the
 file and never touches a login item that it didn't create.
-`textbutler doctor --json` lists any that remain under `legacyLoginItems`.
+`textbutler doctor --json` lists any that remain under `legacyLoginItems`. An
+item with `state: "present"` is the old menu login item, and a reinstall retires
+it. An item with `state: "not-ours"` is something else at that name, such as a
+symlink, another user's file, a file over 64 KiB or a plist that doesn't start
+the menu bar. The installer leaves it alone, so reinstalling won't clear it.

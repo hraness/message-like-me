@@ -3,7 +3,8 @@ import { constants, type Stats } from "node:fs";
 import { lstat, open, readdir, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { launches, retireLegacyLoginItem } from "@hraness/desktop-foundation/retire";
+import { retireLegacyLoginItem } from "@hraness/desktop-foundation/retire";
+import { isMenuLoginItem, LEGACY_MENU_LOGIN_ITEM } from "../packages/textbutler/src/legacy-login-item.ts";
 import { buildTextbutler } from "./build-textbutler.ts";
 import { DISTRIBUTION_FILES, physicalDirectory, publishArtifact, readArtifact, recoverPublishedStage, sealDistribution, shellQuote, validateBun, verifyDistribution } from "./textbutler-distribution.ts";
 
@@ -131,11 +132,8 @@ export async function installTextbutler(options: { from: string; prefix: string;
  * launches Textbutler's `menubar` role or TextButler.app is touched: it is
  * booted out and renamed aside (launchd ignores the non-.plist name), never
  * deleted, and no other process is signalled. */
-export const MENU_LOGIN_ITEM_LABEL = "app.hraness.companion.textbutler";
-export function isMenuLoginItem({ text }: { text: string }): boolean {
-  return launches(/\/textbutler\.mjs$/u, "menubar")({ label: MENU_LOGIN_ITEM_LABEL, path: "", text })
-    || launches(/\/TextButler\.app\/Contents\/MacOS\/TextButler$/u)({ label: MENU_LOGIN_ITEM_LABEL, path: "", text });
-}
+export const MENU_LOGIN_ITEM_LABEL = LEGACY_MENU_LOGIN_ITEM;
+export { isMenuLoginItem };
 export async function retireMenuLoginItem(home: string, bootout?: (label: string) => Promise<void>): Promise<"retired" | null> {
   const retired = await retireLegacyLoginItem({ home, labels: [MENU_LOGIN_ITEM_LABEL], accepts: isMenuLoginItem, ...(bootout ? { bootout } : {}) });
   return retired ? "retired" : null;

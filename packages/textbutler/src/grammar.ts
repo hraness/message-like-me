@@ -13,9 +13,7 @@
  * `contacts enable`, `resume`, …) are `decide-legacy`: they keep today's
  * digest- and revision-bound behaviour until the owner decides otherwise. */
 import { createHash } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   defineRegistry, HranessError, okEnvelope, runCli, type CliIO, type Envelope, type ParsedArgs, type Registry, type Verb,
 } from "@hraness/desktop-foundation/registry";
@@ -24,13 +22,14 @@ import type { Contact, ControlRequest, ControlResponse, DesktopSnapshot, ReplyDr
 import { TEXTBUTLER_CONTROL_PROTOCOL } from "./control-service.ts";
 import type { LaunchAgentLifecycle, LaunchAgentStatus } from "./launch-agent.ts";
 import type { Readiness } from "./onboarding.ts";
+import { legacyLoginItems, LEGACY_MENU_LOGIN_ITEM } from "./legacy-login-item.ts";
+export { isMenuLoginItem, legacyLoginItems, LEGACY_MENU_LOGIN_ITEM, type LegacyLoginItemState } from "./legacy-login-item.ts";
 import { OwnerCliError, resolveOwnerContact } from "./owner-cli.ts";
 
 export const PRODUCT = "textbutler";
 /** First words that the shared grammar owns. Everything else is a product verb. */
 export const GRAMMAR_FAMILIES: ReadonlySet<string> = new Set(["commands", "status", "tui", "doctor", "control", "approvals", "permissions"]);
 /** The login item the retired menu companion used; doctor reports it read-only. */
-export const LEGACY_MENU_LOGIN_ITEM = "app.hraness.companion.textbutler";
 
 export interface GrammarDeps {
   request(request: ControlRequest): Promise<ControlResponse>;
@@ -240,7 +239,8 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
         } else {
           // Plain text keeps the old exit: 1 until setup is done (cli-parity.md).
           ctx.io.stdout.write(deps.readinessText(value));
-          if (legacy.length) ctx.io.stdout.write(`\nAn old menu login item is still present. Reinstall with bun run textbutler:install to retire it.\n`);
+          if (legacy.some(item => item.state === "present")) ctx.io.stdout.write(`\nAn old menu login item is still present. Reinstall with bun run textbutler:install to retire it.\n`);
+          else if (legacy.length) ctx.io.stdout.write(`\nA file at ~/Library/LaunchAgents/${LEGACY_MENU_LOGIN_ITEM}.plist is not Textbutler's old menu login item, so a reinstall leaves it alone. Check it yourself.\n`);
         }
         return value.ok ? 0 : 1;
       } },
@@ -391,14 +391,6 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
     ...PRODUCT_VERBS,
   );
   return defineRegistry(PRODUCT, verbs);
-}
-
-/** Read-only: legacy login items that a reinstall retires. Never boots out or renames. */
-export async function legacyLoginItems(home: string): Promise<{ label: string; state: "present" }[]> {
-  try {
-    const info = await lstat(join(home, "Library", "LaunchAgents", `${LEGACY_MENU_LOGIN_ITEM}.plist`));
-    return info.isFile() || info.isSymbolicLink() ? [{ label: LEGACY_MENU_LOGIN_ITEM, state: "present" }] : [];
-  } catch { return []; }
 }
 
 /** Runs a grammar command line through the shared registry. */
