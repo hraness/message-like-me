@@ -8,8 +8,15 @@ import { automationId, parseAutomationGrant, type AutomationGrant } from "../../
 
 export type RunState = "running" | "dispatching" | "submitted" | "failed" | "partial" | "indeterminate" | "cancelled" | "ignored" | "abandoned";
 export type RunRecord = Readonly<{ id: string; contactId: string; eventId: string; state: RunState; reason: string; planDigest: string | null; startedAt: number; updatedAt: number }>;
+/** Who authored a message this daemon dispatched. Butler text carries the
+ * disclosure; operator text is the owner's own words, sent verbatim. */
+export type SendOrigin = "butler" | "operator";
+/** Operator runs are keyed by the caller's idempotency key. */
+export const OPERATOR_EVENT_PREFIX = "operator:";
 export type GrantIntent = Readonly<{ id: string; contactId: string; enrollmentId: string; bindingDigest: string }>;
 const RUN_RETENTION_MS = 90 * 86_400_000;
+/** Operator runs back idempotency keys, so they outlive ordinary runs. */
+const OPERATOR_RUN_RETENTION_MS = 400 * 86_400_000;
 function grantIntent(value: GrantIntent): GrantIntent {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(value.contactId) || !/^[a-f0-9]{64}$/u.test(value.bindingDigest)) throw new Error("Invalid grant intent scope");
   return { id: automationId(value.id), contactId: value.contactId, enrollmentId: automationId(value.enrollmentId), bindingDigest: value.bindingDigest };
@@ -40,6 +47,9 @@ export class RunJournal {
         state TEXT NOT NULL, requestedAt INTEGER NOT NULL, decidedAt INTEGER,
         UNIQUE(contactId, url, state)
       );`);
+    // Additive provenance: rows written before operator sends existed stay butler.
+    if (!database.query<{ name: string }, []>("PRAGMA table_info(sent_messages)").all().some(column => column.name === "origin"))
+      database.exec("ALTER TABLE sent_messages ADD COLUMN origin TEXT NOT NULL DEFAULT 'butler'");
   }
   static async open(path: string): Promise<RunJournal> {
     const absolute = resolve(path);
@@ -165,7 +175,8 @@ export class RunJournal {
     // may settle while this caller awaits provider readiness or account admission.
     let claimed = false;
     this.database.transaction(() => {
-      this.database.query("DELETE FROM runs WHERE state NOT IN ('partial','indeterminate') AND updatedAt < ?").run(now - RUN_RETENTION_MS);
+      this.database.query("DELETE FROM runs WHERE state NOT IN ('partial','indeterminate') AND updatedAt < ? AND (substr(eventId, 1, 9) <> 'operator:' OR updatedAt < ?)")
+        .run(now - RUN_RETENTION_MS, now - OPERATOR_RUN_RETENTION_MS);
       claimed = this.database.query(`INSERT OR IGNORE INTO runs
         SELECT ?, ?, ?, 'running', 'claimed', NULL, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM runs WHERE contactId = ? AND state IN ('partial','indeterminate'))`)
@@ -199,24 +210,42 @@ export class RunJournal {
   }
   /** Trusted provenance for disclosure-free sends: which upstream message IDs this
    * daemon dispatched. Cleared markers never leave butler output indistinguishable. */
-  recordSentMessages(contactId: string, runId: string, messageIds: readonly (string | null)[], now: number): void {
+  recordSentMessages(contactId: string, runId: string, messageIds: readonly (string | null)[], now: number, origin: SendOrigin = "butler"): void {
+    if (origin !== "butler" && origin !== "operator") throw new Error("Invalid send origin");
     const ids = messageIds.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 512);
     if (!ids.length) return;
     this.database.transaction(() => {
       this.database.query("DELETE FROM sent_messages WHERE sentAt < ?").run(now - 90 * 86_400_000);
-      for (const id of ids.slice(0, 8)) this.database.query("INSERT OR IGNORE INTO sent_messages VALUES(?,?,?,?)").run(id, contactId, runId, now);
+      for (const id of ids.slice(0, 8)) this.database.query("INSERT OR IGNORE INTO sent_messages (messageId, contactId, runId, sentAt, origin) VALUES(?,?,?,?,?)").run(id, contactId, runId, now, origin);
       while ((this.database.query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM sent_messages WHERE contactId = ?").get(contactId)?.count ?? 0) > 2000) {
         this.database.query("DELETE FROM sent_messages WHERE contactId = ? AND sentAt = (SELECT MIN(sentAt) FROM sent_messages WHERE contactId = ?)").run(contactId, contactId);
       }
     })();
   }
   isButlerMessage(contactId: string, messageId: string): boolean {
-    return this.database.query("SELECT 1 FROM sent_messages WHERE messageId = ? AND contactId = ? LIMIT 1").get(messageId, contactId) !== null;
+    return this.messageOrigin(contactId, messageId) === "butler";
+  }
+  /** Journal provenance of a message this daemon sent, or null when it did not. */
+  messageOrigin(contactId: string, messageId: string): SendOrigin | null {
+    const row = this.database.query<{ origin: string }, [string, string]>("SELECT origin FROM sent_messages WHERE messageId = ? AND contactId = ? LIMIT 1").get(messageId, contactId);
+    return row === null ? null : row.origin === "operator" ? "operator" : "butler";
+  }
+  /** Global form of messageOrigin for bootstrap history, before a contact exists. */
+  sentMessageOrigin(messageId: string): SendOrigin | null {
+    const row = this.database.query<{ origin: string }, [string]>("SELECT origin FROM sent_messages WHERE messageId = ? LIMIT 1").get(messageId);
+    return row === null ? null : row.origin === "operator" ? "operator" : "butler";
+  }
+  /** Every run an operator idempotency key claimed, newest first. A later
+   * attempt exists only after a daemon restart abandoned one before dispatch. */
+  operatorRuns(contactId: string, idempotencyKey: string): readonly RunRecord[] {
+    const eventId = `${OPERATOR_EVENT_PREFIX}${idempotencyKey}`;
+    return this.database.query<RunRecord, [string, string, string]>("SELECT * FROM runs WHERE contactId = ? AND (eventId = ? OR eventId GLOB ?) ORDER BY startedAt DESC, rowid DESC LIMIT 16")
+      .all(contactId, eventId, `${eventId}:*`);
   }
   /** Self-chat inbound echoes arrive under fresh IDs; text-less ones carry no
    * disclosure wrap, so send recency is the only signal they are ours. */
   lastButlerSendAt(contactId: string): number | null {
-    const row = this.database.query<{ sentAt: number | null }, [string]>("SELECT MAX(sentAt) AS sentAt FROM sent_messages WHERE contactId = ?").get(contactId);
+    const row = this.database.query<{ sentAt: number | null }, [string]>("SELECT MAX(sentAt) AS sentAt FROM sent_messages WHERE contactId = ? AND origin = 'butler'").get(contactId);
     return row?.sentAt ?? null;
   }
   /** Message IDs are provider-unique; bootstrap uses the global form before a contact exists. */
@@ -224,7 +253,7 @@ export class RunJournal {
     return this.database.query("SELECT 1 FROM sent_messages WHERE messageId = ? LIMIT 1").get(messageId) !== null;
   }
   repliesSince(contactId: string, since: number): number {
-    const row = this.database.query<{ count: number }, [string, number]>("SELECT COUNT(*) AS count FROM runs WHERE contactId = ? AND startedAt >= ? AND state IN ('dispatching','submitted','partial','indeterminate')").get(contactId, since);
+    const row = this.database.query<{ count: number }, [string, number]>("SELECT COUNT(*) AS count FROM runs WHERE contactId = ? AND startedAt >= ? AND state IN ('dispatching','submitted','partial','indeterminate') AND substr(eventId, 1, 9) <> 'operator:'").get(contactId, since);
     return row?.count ?? 0;
   }
   recent(contactId: string, limit = 50): readonly RunRecord[] {

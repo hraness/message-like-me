@@ -42,6 +42,7 @@ The Mac must be awake and signed in for local messaging. The installed user agen
 - Rich actions include files, reactions, stickers, links, and mini-app experiences when the transport explicitly supports them. Unsupported capabilities are visible rather than silently imitated.
 - History bootstrapping never triggers sends. Owner-authored text provides owner-style evidence; incoming messages and butler output do not.
 - A separate owner workflow answers "what do I need to reply to?": the inbox scan lists conversations with unanswered inbound runs, `replies suggest` drafts a reviewable reply, and `replies send` dispatches only an explicit owner choice. Suggestions never send themselves.
+- Disclosure is the default for everything the butler sends, including literal `replies send` text. The one exception is an operator send: text the owner wrote, sent verbatim through `textbutler campaign run`. It is journaled with its own `operator` provenance, never treated as butler output, never counted against the butler's reply rate, idempotent per message, paced with conservative defaults and quiet hours, and stopped for a recipient on any reply or uncertain send. It never runs a model, and agents must not author its text; see `docs/textbutler/campaigns.md`.
 - Message Like Me was an unused product spike. Its wire contracts and published artifacts still have downstream consumers and must not be changed in place.
 
 ## Brand Commitments
@@ -52,7 +53,7 @@ provider seam; Textbutler's supported surface is the CLI and status item.
 
 ## Product Principles
 
-1. Make it obvious when the butler speaks.
+1. Make it obvious when the butler speaks. Text the owner wrote goes out as the owner's.
 2. Keep each relationship's memory inspectable and isolated.
 3. Yield to the owner before composing and immediately before dispatch.
 4. Expose only proven transport capabilities, and state each limit beside the capability it limits.

@@ -79,6 +79,14 @@ textbutler messages send CONTACT_ID --text 'I have arrived.'
 Treat that command as an outward action. A CLI's availability is not permission
 for an agent to message someone without its user's instruction.
 
+## Owner campaigns are not an agent send path
+
+`textbutler campaign run` sends text without the `🤖{ }` wrap because the
+owner wrote it. An agent must never write, rewrite, template or translate
+campaign text, and runs `campaign run` only on a file its user wrote and asked
+it to send. Anything an agent composes goes through `messages send`, which
+keeps the disclosure. See [campaigns.md](campaigns.md).
+
 ## Media and reactions
 
 Inspect `messages capabilities CONTACT_ID` before requesting an action.

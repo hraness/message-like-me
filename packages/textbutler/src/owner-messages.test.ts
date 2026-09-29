@@ -126,6 +126,15 @@ test("legacy read-only history revalidates its exact conversation and never inve
     messages: [{ id: "legacy:1", at: NOW, text: "Read only", author: "contact" }] }) });
   const history = await f.owner.history("synthetic", 20, signal());
   expect(history.messages).toEqual([{ id: "legacy:1", at: NOW, text: "Read only", textTruncated: false, author: "contact", kind: "message", relatedMessageId: null, attachments: [] }]);
+  // The reader marks outgoing text owner-authored; journal provenance, then the
+  // contact's visible wrap, decide which of it was the butler.
+  f.ports.journal.recordSentMessages("synthetic", "run-op", ["legacy:op"], NOW, "operator");
+  f.ports.enrollment = () => ({ list: async () => { throw Error("No discovery"); }, read: async () => ({ conversation: { binding: observed, title: "Synthetic", kind: "single" },
+    messages: [{ id: "legacy:wrap", at: NOW - 2, text: "🤖{ from the butler }", author: "owner" }, { id: "legacy:op", at: NOW - 1, text: "🤖{ quoted by me }", author: "owner" },
+      { id: "legacy:own", at: NOW, text: "typed by me", author: "owner" }] }) });
+  expect((await f.owner.history("synthetic", 20, signal())).messages.map(message => message.author)).toEqual(["butler", "owner", "owner"]);
+  f.ports.enrollment = () => ({ list: async () => { throw Error("No discovery"); }, read: async () => ({ conversation: { binding: observed, title: "Synthetic", kind: "single" },
+    messages: [{ id: "legacy:1", at: NOW, text: "Read only", author: "contact" }] }) });
   expect(history.limitations.join(" ")).toContain("legacy read-only");
   const capabilities = await f.owner.capabilities("synthetic", signal());
   expect(capabilities.ready).toBe(false); expect(Object.values(capabilities.actions).every(value => !value.available)).toBe(true); expect(f.calls).toEqual([]);

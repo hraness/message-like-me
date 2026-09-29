@@ -139,9 +139,9 @@ export function createGhostgetOwnerReadPort(options: GhostgetOwnerReadOptions): 
         const message = object(value);
         const at = typeof message.createdAt === "string" ? Date.parse(message.createdAt) : NaN;
         if (message.chatGuid !== binding.chatGuid || message.chatId !== binding.observedChatRowId || typeof message.isFromMe !== "boolean" || typeof message.guid !== "string" || typeof message.text !== "string" || !Number.isSafeInteger(at) || at < 0) throw new Error("History conversation binding changed");
-        // Visible butler messages are never owner style evidence. Unknown/custom historical
-        // automation remains untrusted context; this bootstrap does not infer style rules.
-        return { id: message.guid, at, text: message.text, author: message.isFromMe ? /^🤖\{/u.test(message.text) ? "butler" : "owner" : "contact" };
+        // Butler provenance comes from the send journal (control-service reauthor), not a
+        // hardcoded wrap, so cleared or custom disclosure and operator sends classify correctly.
+        return { id: message.guid, at, text: message.text, author: message.isFromMe ? "owner" : "contact" };
       });
       return { conversation, messages };
     },

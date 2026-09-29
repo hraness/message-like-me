@@ -63,7 +63,7 @@ async function setup(options: {
   ];
   const sent: readonly unknown[][] = [], mutableSent = sent as unknown[][];
   const plans = new Map<string, { id: string; intentId: string; actions: readonly unknown[] }>(), grants = new Map<string, AutomationGrant>();
-  const grantRequests: { actions: readonly string[]; maximumActions: number; expiresAt: string }[] = [];
+  const grantRequests: { actions: readonly string[]; maximumActions: number; expiresAt: string; minimumIntervalMs: number }[] = [];
   let grantSequence = 0;
   const client = createGhostgetAutomationClient(async (method, params) => {
     if (method === "poll") return enrolled();
@@ -78,7 +78,7 @@ async function setup(options: {
     if (method === "grant") {
       const { intentId: _intentId, ...request } = params as Record<string, unknown>;
       const grant = { ...(request as object), id: `grant:${++grantSequence}`, revoked: false, consumedActions: 0 } as AutomationGrant;
-      grantRequests.push({ actions: grant.actions, maximumActions: grant.maximumActions, expiresAt: grant.expiresAt });
+      grantRequests.push({ actions: grant.actions, maximumActions: grant.maximumActions, expiresAt: grant.expiresAt, minimumIntervalMs: grant.minimumIntervalMs });
       grants.set(grant.id, grant); if (options.failGrant) throw new Error("Synthetic lost grant response"); return grant;
     }
     if (method === "grant.get") { const grant = grants.get(String(params.grantId)); if (!grant) throw new Error("Unknown grant"); return grant; }
@@ -521,4 +521,89 @@ test("reconcile refuses unconfigured contacts and reports clean contacts", async
   const fixture = await setup();
   await expect(fixture.replies.reconcile("missing", "sent", AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
   expect((await fixture.replies.reconcile("contact-1", "sent", AbortSignal.timeout(5000)))).toMatchObject({ resolved: true, detail: "No send is awaiting reconciliation." });
+});
+
+const OPERATOR_KEY = "campaign-key-0000000001";
+const operatorSend = (text: string, key = OPERATOR_KEY, extra: { replayOnly?: boolean } = {}) =>
+  ({ contactId: "contact-1", text, operator: { idempotencyKey: key, minimumIntervalMs: 60_000, ...extra } });
+
+test("an operator send goes out verbatim with operator provenance and the requested pacing", async () => {
+  const fixture = await setup();
+  const result = await fixture.replies.send(operatorSend("Hey, it's me. Coffee next week?"), AbortSignal.timeout(5000));
+  expect(result.state).toBe("submitted");
+  // No robot, no braces: the owner wrote this.
+  expect(fixture.sent).toEqual([[{ kind: "text", text: "Hey, it's me. Coffee next week?" }]]);
+  expect(fixture.journal.messageOrigin("contact-1", "sent:1:0")).toBe("operator");
+  expect(fixture.journal.isButlerMessage("contact-1", "sent:1:0")).toBe(false);
+  expect(fixture.grantRequests[0]).toMatchObject({ actions: ["text"], maximumActions: 1, minimumIntervalMs: 60_000 });
+  // Operator sends do not count against the butler's hourly reply budget.
+  expect(fixture.journal.repliesSince("contact-1", 0)).toBe(0);
+});
+
+test("operator text that looks like a disclosure wrap is still the owner's", async () => {
+  const fixture = await setup();
+  await fixture.replies.send(operatorSend("🤖{ quoting the bot }"), AbortSignal.timeout(5000));
+  expect(fixture.journal.messageOrigin("contact-1", "sent:1:0")).toBe("operator");
+  const { messageAuthor } = await import("./attribution.ts");
+  expect(messageAuthor({ id: "sent:1:0", direction: "outgoing", text: "🤖{ quoting the bot }" } as never, fixture.contact, fixture.journal)).toBe("owner");
+});
+
+test("a repeated operator key reports the first outcome and never sends again", async () => {
+  const fixture = await setup();
+  const first = await fixture.replies.send(operatorSend("Once only"), AbortSignal.timeout(5000));
+  const second = await fixture.replies.send(operatorSend("Once only"), AbortSignal.timeout(5000));
+  const probe = await fixture.replies.send(operatorSend("Once only", OPERATOR_KEY, { replayOnly: true }), AbortSignal.timeout(5000));
+  expect(first.state).toBe("submitted");
+  expect(second).toMatchObject({ state: "submitted", runId: first.runId });
+  expect(second.detail).toContain("Nothing was sent again");
+  expect(probe).toMatchObject({ state: "submitted", runId: first.runId });
+  expect(fixture.sent).toHaveLength(1);
+});
+
+test("a replay-only probe for an unknown key sends nothing", async () => {
+  const fixture = await setup();
+  await expect(fixture.replies.send(operatorSend("Never", OPERATOR_KEY, { replayOnly: true }), AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
+  expect(fixture.sent).toEqual([]); expect(fixture.grantRequests).toEqual([]);
+});
+
+test("an uncertain operator send replays as uncertain and needs the owner's attestation", async () => {
+  const fixture = await setup({ failSubmit: true });
+  const result = await fixture.replies.send(operatorSend("Maybe landed"), AbortSignal.timeout(5000));
+  expect(result.state).toBe("indeterminate");
+  const again = await fixture.replies.send(operatorSend("Maybe landed"), AbortSignal.timeout(5000));
+  expect(again.state).toBe("indeterminate");
+  // History cannot tell unwrapped operator text from the owner's typing.
+  fixture.messages.push({ ...fixture.messages[0]!, id: "landed-op", direction: "outgoing", text: "Maybe landed", occurredAt: new Date(NOW + 30_000).toISOString() });
+  expect(await fixture.replies.reconcile("contact-1", undefined, AbortSignal.timeout(5000))).toMatchObject({ resolved: false });
+  expect(await fixture.replies.reconcile("contact-1", "sent", AbortSignal.timeout(5000))).toMatchObject({ resolved: true, state: "submitted" });
+  expect(await fixture.replies.send(operatorSend("Maybe landed"), AbortSignal.timeout(5000))).toMatchObject({ state: "submitted", runId: result.runId });
+});
+
+test("a run abandoned before dispatch lets the same operator key try again", async () => {
+  const fixture = await setup();
+  const journal = fixture.journal;
+  journal.claim("abandoned-1", "contact-1", `operator:${OPERATOR_KEY}`, NOW - 1000);
+  journal.transition("abandoned-1", "running", "abandoned", "daemon restarted", NOW - 500);
+  const result = await fixture.replies.send(operatorSend("Second try"), AbortSignal.timeout(5000));
+  expect(result.state).toBe("submitted");
+  expect(fixture.sent).toHaveLength(1);
+  expect(journal.operatorRuns("contact-1", OPERATOR_KEY).map(run => run.eventId)).toEqual([`operator:${OPERATOR_KEY}:2`, `operator:${OPERATOR_KEY}`]);
+});
+
+test("operator sends reject bad keys, settings revisions and self chats", async () => {
+  const fixture = await setup();
+  await expect(fixture.replies.send(operatorSend("x", "short"), AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
+  await expect(fixture.replies.send({ ...operatorSend("x"), operator: { idempotencyKey: OPERATOR_KEY, minimumIntervalMs: -1 } }, AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
+  await expect(fixture.replies.send({ ...operatorSend("x"), expectedRevision: 1 }, AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
+  (fixture.contact as { selfChat: boolean }).selfChat = true;
+  await expect(fixture.replies.send(operatorSend("x"), AbortSignal.timeout(5000))).rejects.toMatchObject({ code: "invalid-request" });
+  expect(fixture.sent).toEqual([]);
+});
+
+test("disclosure stays the default for literal owner text", async () => {
+  const fixture = await setup();
+  await fixture.replies.send({ contactId: "contact-1", text: "Default path" }, AbortSignal.timeout(5000));
+  expect(fixture.sent).toEqual([[{ kind: "text", text: "🤖{ Default path }" }]]);
+  expect(fixture.journal.messageOrigin("contact-1", "sent:1:0")).toBe("butler");
+  expect(fixture.journal.repliesSince("contact-1", 0)).toBe(1);
 });

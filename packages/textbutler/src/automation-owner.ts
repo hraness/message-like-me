@@ -121,7 +121,8 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
         for (const message of history.messages) {
           if (message.kind !== "message" || message.text === null || message.direction === "unknown") continue;
           messages.push({ id: message.id, at: Date.parse(message.occurredAt), text: message.text,
-            author: message.direction === "incoming" ? "contact" : /^🤖\{ [\s\S]* \}$/u.test(message.text) ? "butler" : "owner" });
+            // Butler provenance comes from the send journal (control-service reauthor), not a hardcoded wrap.
+            author: message.direction === "incoming" ? "contact" : "owner" });
         }
       }
       signal.throwIfAborted(); return { binding, messages };
