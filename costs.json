@@ -174,6 +174,27 @@
         "bytesPerArtifact": 2097152
       },
       "note": "optional WASM fast path for the strict X-archive reader; TypeScript remains authoritative"
+    },
+    "posthog:$pageview": {
+      "kind": "telemetry",
+      "retention": "ttl:P365D",
+      "owner": "site/app/_lib/analytics.ts",
+      "maxBytesPerEvent": 4096,
+      "note": "textbutler.app only, cookieless, anonymous, no person profiles; also covers the SDK's $pageleave and $web_vitals; canonical path only, query and referrer path stripped by @hraness/posthog"
+    },
+    "posthog:cta clicked": {
+      "kind": "telemetry",
+      "retention": "ttl:P365D",
+      "owner": "site/app/_components/analytics.tsx",
+      "maxBytesPerEvent": 4096,
+      "note": "cta_target is an in-page anchor, own path, or outside host only; cta_location is the marketing block name"
+    },
+    "posthog:install command copied": {
+      "kind": "telemetry",
+      "retention": "ttl:P365D",
+      "owner": "site/app/_components/analytics.tsx",
+      "maxBytesPerEvent": 4096,
+      "note": "copy_target is a fixed label; the copied text is never sent"
     }
   },
   "exempt": []

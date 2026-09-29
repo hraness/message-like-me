@@ -129,7 +129,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Is textbutler.app collecting anything?',
-    answer: 'Only anonymous visit counts. textbutler.app counts page views and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each person’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
+    answer: 'Only anonymous visit counts. textbutler.app counts page views, page load speed, and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each person’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
   },
   {
     question: 'What happened to Message Like Me?',
