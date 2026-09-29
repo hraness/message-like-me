@@ -58,7 +58,16 @@ test("CI runs the standalone package on Ubuntu and only synthetic local-data fix
   // must still run somewhere in the workflow.
   const checkScript = (JSON.parse(packageManifest) as { scripts: Record<string, string> }).scripts.check;
   if (checkScript === undefined) throw new Error("package.json has no check script");
+  const scripts = (JSON.parse(packageManifest) as { scripts: Record<string, string> }).scripts;
   for (const command of checkScript.split(" && ")) {
+    if (command === "bun run check:textbutler") {
+      // CI runs the same package gate as balanced parallel lanes. package.json stays
+      // byte-identical (it is a digest-bound XCB admission source), so pin the serial
+      // script the lane runner reproduces (scripts/check-textbutler.test.ts proves coverage).
+      expect(scripts["check:textbutler"]).toBe("bun test packages && tsc --noEmit -p packages/transport/tsconfig.json && tsc --noEmit -p packages/textbutler/tsconfig.json");
+      expect(workflow).toContain("- run: bun scripts/check-textbutler.ts\n");
+      continue;
+    }
     expect(workflow).toContain(command);
   }
   expect(workflow).toContain("name: Required");
