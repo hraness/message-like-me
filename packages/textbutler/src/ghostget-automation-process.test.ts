@@ -242,17 +242,22 @@ test("a held send does not starve concurrent lane reads, and a caller abort stay
   } finally { await process.close(); }
 });
 test("the group CPU probe observes real process-group work", async () => {
-  // A detached burner over one second: macOS ps shows centisecond progress
-  // quickly while Linux whole-second granularity still moves within the burn.
-  const burner = spawn(process.execPath, ["-e", "const s=Date.now();while(Date.now()-s<2000);"], { detached: true, stdio: "ignore" });
+  // A detached burner that spends CPU time, not wall time: macOS ps shows
+  // centisecond progress quickly while Linux reports whole seconds, and on a
+  // busy runner (parallel test lanes) a wall-clock burn can accrue under one
+  // CPU second. Poll until the probe moves or the burner has had ample time.
+  const burner = spawn(process.execPath, ["-e", "const s=Date.now();while(process.cpuUsage().user<2500000&&Date.now()-s<10000);"], { detached: true, stdio: "ignore" });
   try {
     const first = probeGroupCpuMs(burner.pid!);
-    await new Promise(resolve => setTimeout(resolve, 1600));
-    const later = probeGroupCpuMs(burner.pid!);
     expect(first).not.toBeUndefined();
+    let later = first;
+    for (const deadline = performance.now() + 8000; performance.now() < deadline && !(later! > first!);) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      later = probeGroupCpuMs(burner.pid!);
+    }
     expect(later).toBeGreaterThan(first!);
   } finally { try { process.kill(-burner.pid!, "SIGKILL"); } catch { /* test cleanup only */ } }
-});
+}, 15_000);
 test("a same-group helper that exits just after a clean close still releases custody promptly", async () => {
   const config = await options("draining-sibling");
   const process = await createGhostgetAutomationProcess(config);
