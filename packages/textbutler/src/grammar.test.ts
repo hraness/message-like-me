@@ -136,6 +136,8 @@ describe("commands --json", () => {
 // ── Human gates (plan § 8.4) ────────────────────────────────────────────────
 const DECIDE_ARGV: string[][] = [
   ["control", "install"], ["control", "uninstall"],
+  // The older names take the same gate, so they are no way around it.
+  ["daemon", "install"], ["daemon", "uninstall"],
   ["approvals", "decide", "draft-1", "--digest", DIGEST, "allow-once"],
   ["permissions", "set", "Alice Example", "--expected-revision", "7", "loosen"],
 ];
@@ -274,6 +276,21 @@ describe("doctor legacy login items", () => {
       expect(await legacyLoginItems(home)).toEqual([{ label: LEGACY_MENU_LOGIN_ITEM, state: "present" }]);
       expect((await readdir(agents)).sort()).toEqual([`${LEGACY_MENU_LOGIN_ITEM}.plist`, "other.plist"]);
     } finally { await rm(home, { recursive: true, force: true }); }
+  });
+  test("doctor --json exits 0 with readiness in data.ok and the next setup step", async () => {
+    const h = harness(null);
+    h.deps.readiness = async () => ({ ok: false, platform: "darwin", dataDir: "/x", initialized: false, daemonConnected: false, automaticReplies: "unavailable",
+      canReviewInbox: false, canGenerateReplies: false, snapshot: null,
+      steps: [{ id: "done", title: "Done", status: "done", detail: "", command: "textbutler nope" }, { id: "configuration", title: "Private settings", status: "action-needed", detail: "", command: "textbutler setup" }] });
+    const result = await run(h, ["doctor", "--json"]);
+    expect(result.code).toBe(0);
+    const json = result.json();
+    expect(json).toMatchObject({ ok: true, schema: "textbutler.readiness/1", data: { ok: false, legacyLoginItems: [] } });
+    expect(json.data.dataDir).toBeUndefined();
+    expect(json.next).toEqual([{ command: "textbutler setup", why: "Private settings", audience: "human" }]);
+    const ready = await run(harness(null), ["doctor", "--json"]);
+    expect(ready.code).toBe(0);
+    expect(ready.json().next).toBeUndefined();
   });
   test("digests are stable", () => {
     expect(digestOf({ a: 1 })).toBe(digestOf({ a: 1 }));

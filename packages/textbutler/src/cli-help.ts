@@ -160,7 +160,9 @@ xcb. A saved gateway key still powers web search.`,
   daemon status              Show whether it's running
   daemon run                 Run it in this terminal instead
 
-macOS shows a "Background Items Added" notice when you install it.` },
+Install and uninstall ask you to type a one-time code shown in your own
+terminal, like control install. macOS shows a "Background Items Added"
+notice when you install it.` },
   support: { usage: "textbutler support", summary: "See optional ways to support TextButler. Turn off: HRANESS_SUPPORT=off." },
   init: { usage: "textbutler init", summary: "Create private settings, paused, without the readiness checklist." },
   jobs: { usage: "textbutler jobs show <job>", summary: "Read the result of a long operation that was still running. Don't repeat\nthe original command: it may already have happened." },

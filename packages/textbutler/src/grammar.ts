@@ -181,8 +181,6 @@ export const PRODUCT_VERBS: readonly Verb<null, unknown>[] = [
   productVerb("providers local", "operate", "Write replies with a model on this Mac"),
   productVerb("providers list", "read", "Show connected AI accounts"),
   productVerb("providers check", "read", "Check that one AI account is ready"),
-  productVerb("daemon install", "decide-legacy", "Start the service now and at login (same as control install)"),
-  productVerb("daemon uninstall", "operate", "Stop the service and remove it from login"),
   productVerb("daemon status", "read", "Show whether the service is running"),
   productVerb("daemon run", "operate", "Run the service in this terminal (same as control serve)"),
   productVerb("jobs show", "read", "Read the result of a long operation"),
@@ -233,8 +231,14 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
         const legacy = await legacyLoginItems(deps.home ?? homedir());
         if (ctx.json) {
           const { snapshot: _snapshot, dataDir: _dataDir, ...report } = value;
-          ctx.io.stdout.write(`${JSON.stringify(okEnvelope("textbutler.readiness/1", { ...report, legacyLoginItems: legacy }, undefined, deps.now?.()))}\n`);
+          // doctor is a read verb: it answered, so the envelope is ok and the
+          // exit is 0. Readiness itself is data.ok, with the next step to run.
+          const next = value.ok ? [] : value.steps.filter(step => (step.status === "action-needed" || step.status === "blocked") && step.command).slice(0, 1)
+            .map(step => ({ command: step.command!, why: step.title, audience: "human" as const }));
+          ctx.io.stdout.write(`${JSON.stringify(okEnvelope("textbutler.readiness/1", { ...report, legacyLoginItems: legacy }, next, deps.now?.()))}\n`);
+          return 0;
         } else {
+          // Plain text keeps the old exit: 1 until setup is done (cli-parity.md).
           ctx.io.stdout.write(deps.readinessText(value));
           if (legacy.length) ctx.io.stdout.write(`\nAn old menu login item is still present. Reinstall with bun run textbutler:install to retire it.\n`);
         }
@@ -275,9 +279,14 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
       },
       text: (value: { state: string }) => value.state === "stopping" ? "The service is stopping. A login item starts it again at the next login." : "The service isn't running." },
   ];
-  for (const action of ["install", "uninstall"] as const) {
-    verbs.push({ path: ["control", action], opClass: "decide", schema: "textbutler.control/1",
-      summary: action === "install" ? "Start the service at login (a persistent login item)" : "Stop the service and remove its login item",
+  // `daemon install|uninstall` are the older names for the same login-item
+  // change. They run through the same person-only gate, so the older name is
+  // never a way around `control install` (docs/textbutler/cli-parity.md).
+  for (const [family, action] of [["control", "install"], ["control", "uninstall"], ["daemon", "install"], ["daemon", "uninstall"]] as const) {
+    verbs.push({ path: [family, action], opClass: "decide", schema: "textbutler.control/1",
+      summary: family === "daemon"
+        ? action === "install" ? "Start the service now and at login (same as control install)" : "Stop the service and remove it from login (same as control uninstall)"
+        : action === "install" ? "Start the service at login (a persistent login item)" : "Stop the service and remove its login item",
       input: none,
       gate: { tier: "T1T2", describe: () => ({ title: action === "install" ? "Start TextButler at login" : "Remove TextButler from login", digest: digestOf({ verb: `control ${action}`, label: "textbutler" }) }) },
       run: async () => {

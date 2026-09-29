@@ -10,8 +10,8 @@ the menu bar companion: Textbutler is controlled through its CLI and guided
 terminal only. Every command follows the shared desktop-foundation grammar
 (`packages/textbutler/src/grammar.ts`): `--json` prints the shared envelope,
 `commands --json` lists each verb's class, and `decide` verbs (approvals
-decide, permissions set loosen, control install/uninstall) need the person in
-their own terminal. Keep `docs/textbutler/cli-parity.md` in step with the
+decide, permissions set loosen, control install/uninstall and their older
+daemon install/uninstall names) need the person in their own terminal. Keep `docs/textbutler/cli-parity.md` in step with the
 registry. The owner also authorized a minimal native TextButler.app
 supervisor so macOS can grant Messages access to TextButler itself. Its fixed
 roles launch only the verified runtime's daemon or owner-invoked iMessage setup;

@@ -1,6 +1,6 @@
 bun test v1.3.14 (0d9b296a)
 
- 83 pass
+ 112 pass
  0 fail
- 24 snapshots, 1012 expect() calls
-Ran 83 tests across 5 files. [9.11s]
+ 24 snapshots, 1368 expect() calls
+Ran 112 tests across 6 files. [12.61s]

@@ -16,7 +16,7 @@
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
     "package.json": "15d95b72060a1c542370960781ca3ee24f58b37d46240179d7ddb8b3d1d2d292",
     "packages/control/src/index.ts": "afbdd297541a1196673ec07ee7cf554e84c573be8b02ad562252237c679e4593",
-    "packages/textbutler/src/cli.ts": "da7abfb87e20f1f3357743b7e27f94550bcbdc33e96ab5b35e84571f556aeefc",
+    "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
     "packages/textbutler/src/contact-habitat.ts": "8401a8114287cb4961aec53650d2175836675a43215af445b773f82b6fd09a33",
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
@@ -60,7 +60,7 @@
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "validation": {
-    "command": "bun test packages/textbutler/src/grammar.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/daemon.test.ts packages/textbutler/src/cli.test.ts scripts/install-textbutler.test.ts",
-    "receiptSha256": "246b3287dc48afbfcb7ce180067baede66f0fb9f0618a720fcf18a75d20c653b"
+    "command": "bun test packages/textbutler/src/grammar.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/daemon.test.ts packages/textbutler/src/cli.test.ts packages/textbutler/src/launch-agent.test.ts scripts/install-textbutler.test.ts",
+    "receiptSha256": "2fe8cc516c45c18339ebd3b7bcf58fb23a61bb7a2f29f625ce185832cfdc70fc"
   }
 }

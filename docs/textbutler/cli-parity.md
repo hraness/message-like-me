@@ -33,6 +33,17 @@ sends anything, so there is no separate socket for agents.
 login unless you run `textbutler control install` yourself.
 `textbutler control stop` asks the running service to finish and exit; it never
 sends a signal to a process.
+`textbutler daemon install` and `daemon uninstall` are older names for
+`control install` and `control uninstall`. They ask for the same one-time code,
+so an agent that is refused `control install` can't use the older name instead.
+One gap remains: the guided terminal (`textbutler tui` in your own terminal)
+still asks "Start the background service at login? [y/N]" during setup and
+installs the login item on "y" without the one-time code. It only opens on an
+interactive terminal, never with `--json` or `--snapshot`.
+
+`textbutler doctor --json` exits 0 whenever it can report: readiness is
+`data.ok`, and `next` names the first setup step still to do. Plain
+`textbutler doctor` in a terminal keeps exiting 1 until setup is done.
 
 ## Every command
 
@@ -76,8 +87,8 @@ sends a signal to a process.
 | `providers local` | operate | Write replies with a model on this Mac |
 | `providers list` | read | Show connected AI accounts |
 | `providers check` | read | Check that one AI account is ready |
-| `daemon install` | decide-legacy | Start the service now and at login (same as control install) |
-| `daemon uninstall` | operate | Stop the service and remove it from login |
+| `daemon install` | decide (person only) | Start the service now and at login (same as control install) |
+| `daemon uninstall` | decide (person only) | Stop the service and remove it from login (same as control uninstall) |
 | `daemon status` | read | Show whether the service is running |
 | `daemon run` | operate | Run the service in this terminal (same as control serve) |
 | `jobs show` | read | Read the result of a long operation |

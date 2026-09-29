@@ -3,26 +3,29 @@
   "scope": "Adopt the desktop-foundation v0.9.0 command grammar (status, commands, tui, doctor, control, approvals, permissions) with the shared envelope; person-gated decide verbs; owner.stop without signals; retire the removed menu bar login item through the foundation retire module; remove the orphaned menubar snapshot.",
   "reviewer": "Independent AI reviewer: two separate read-only Claude Code (Opus) processes, not the drafting session",
   "method": "Read-only review of the branch against origin/main, then a verification pass over the fixes for the first pass's blocking findings; no edits or tests by the reviewer.",
-  "result": "First pass: two blocking findings (a build test still read doctor --json at the top level; permissions set reported a turn-on as applied while its job was still running) and eight non-blocking. Fixed: the build test reads the envelope; permissions set waits on the job and reports pending; control stop only reports not-running for a missing or refused socket; a lost answer after approvals decide allow-once is indeterminate and never invites a retry. The verification pass confirmed all fixes with no new double-send path, gate bypass or weakened test. Decide verbs are gated before any control request; the one-time code is read only from the controlling terminal. After merging main (#263, public spelling TextButler), only product-name strings and their snapshots changed; the digests above are for the merged bytes.",
+  "result": "First pass: two blocking findings (a build test still read doctor --json at the top level; permissions set reported a turn-on as applied while its job was still running) and eight non-blocking. Fixed: the build test reads the envelope; permissions set waits on the job and reports pending; control stop only reports not-running for a missing or refused socket; a lost answer after approvals decide allow-once is indeterminate and never invites a retry. The verification pass confirmed all fixes with no new double-send path, gate bypass or weakened test. Decide verbs are gated before any control request; the one-time code is read only from the controlling terminal. After merging main (#263, public spelling TextButler), only product-name strings and their snapshots changed; the digests above are for the merged bytes. Third pass (after PR review): doctor --json now exits 0 with readiness in data.ok and the first open setup step as next, so the exit status agrees with the ok envelope; daemon install and daemon uninstall now go through the same person gate as control install and uninstall, so an agent refused control install cannot use the older name. A separate read-only Claude Code (Opus) process reviewed these fixes: no blocking findings; it confirmed the gate resolves before any login-item change and that the new tests fail on the previous code.",
   "reviewedSha256": {
     "packages/control/src/index.ts": "afbdd297541a1196673ec07ee7cf554e84c573be8b02ad562252237c679e4593",
-    "packages/textbutler/src/cli.ts": "da7abfb87e20f1f3357743b7e27f94550bcbdc33e96ab5b35e84571f556aeefc",
-    "packages/textbutler/src/cli-help.ts": "07374d7d6c38b992c8e5cf5666d1c798ada2399c010b44fa5958e39b588ab79a",
+    "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
+    "packages/textbutler/src/cli-help.ts": "f4189d657fb1e515e258256949a098139dcb334ce8baf482b6ba1189fb87c37c",
     "packages/textbutler/src/cli-style.ts": "10f0e5966b62b8110dddb66d6290efbab91eebf9f3a4d45e8f3ba60754d286b7",
     "packages/textbutler/src/control-service.ts": "4fa87b5505bf47f03a90efe984bc56730a803540839c6d530128c196c27f518b",
     "packages/textbutler/src/daemon.ts": "ae4a4ee76f1c9166bc109c2e08e34b1886b88634737ee2f5dc368da0a8fa2a17",
-    "packages/textbutler/src/grammar.ts": "f909a86aae355cee6c811255843c25a68ad99009f7978d66525c2f5a22e75e25",
+    "packages/textbutler/src/grammar.ts": "f4a0d66b56b1eed6a939ee6273cb5d816f8e5e8d13e58a8bf6d203a41caa6c08",
     "packages/textbutler/src/permission-copy.ts": "63a000c943857ab4df2287d0646ea04cba18355f57a7d3dc4fed076d8ad35f1c",
     "scripts/install-textbutler.ts": "9ffeb2c980e09aacb0bf806462367feaeaa1600b9698462ef8545aaff69ea034",
     "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
     "package.json": "15d95b72060a1c542370960781ca3ee24f58b37d46240179d7ddb8b3d1d2d292",
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
-    "packages/textbutler/src/grammar.test.ts": "23fdfad4d4ef6900c0ea23dfe92f04207fecb33f60017f8cb9d8f100986e55e9",
-    "packages/textbutler/src/cli-golden.test.ts": "e95acda91045ce4a154d630629a8448cc632323d7b9b460d8fef2fcfc760e2f8",
+    "packages/textbutler/src/grammar.test.ts": "e95b4b9d6524da1f0986458458253e904d02b80ce62ddd09cb741c08eaf7b5da",
+    "packages/textbutler/src/cli-golden.test.ts": "2ce5815fe9c046010d9934f083a5ecce1fd987eb14925af863ae03bc71d07ef9",
     "packages/textbutler/src/daemon.test.ts": "d7f2c716319b4b1537f34664a22762733a49c775548534eda1cccf5f4e9b1d5a",
     "packages/textbutler/src/cli.test.ts": "43d334967627b9e1c824adf421df54f8014672e58dcb0d54ba42ce1aaba736b1",
     "scripts/install-textbutler.test.ts": "bb0d159197d05cb967840fce662d7182c281cfd9f6a6864d5b96c72df139eb72",
-    "scripts/textbutler-build.test.ts": "e37acb11c89517d9c3cf9f2607a3cdf45d28a43402422be6902eb77468d06d94"
+    "scripts/textbutler-build.test.ts": "e37acb11c89517d9c3cf9f2607a3cdf45d28a43402422be6902eb77468d06d94",
+    "packages/textbutler/src/launch-agent.test.ts": "e7a6b9142d93d23f83e5e21b80901673a88317dc2a252de0e84006574865cd54",
+    "AGENTS.md": "0ae4f39b08efdf38599f304ac04ddfc96b2be89e75f2fb31b000023847c731b4",
+    "docs/textbutler/cli-parity.md": "b7efa381680153c3fbe7292a7c60c3efa6275e833ea8072aedd1457d9e132c96"
   },
-  "remainingLimit": "Older product verbs that change the same state (daemon install, contacts enable, replies send, resume) stay decide-legacy and still run for agents until they migrate. doctor --json exits 1 with an ok envelope when setup is not ready, matching the previous doctor exit code. The local-custody socket client reports every socket error with one message, so control stop cannot tell a permission error from a refused connection. The gate's terminal challenge was not exercised with a live person in this review."
+  "remainingLimit": "Older product verbs that change other state (contacts enable, replies send, resume) stay decide-legacy and still run for agents until they migrate. The guided terminal's setup prompt still installs the login item on 'y' without the one-time code; it opens only on an interactive terminal and is recorded in cli-parity.md. Plain-text doctor keeps exiting 1 until setup is done; doctor --json exits 0. The local-custody socket client reports every socket error with one message, so control stop cannot tell a permission error from a refused connection. The gate's terminal challenge was not exercised with a live person in this review."
 }

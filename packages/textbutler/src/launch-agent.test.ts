@@ -151,12 +151,15 @@ test("the lifecycle refuses another installation identity or data directory", as
 });
 
 test("CLI install, status, and uninstall use the lifecycle while reporting control health separately", async () => {
-  const f = await fixture(), lines: string[] = [], output = { write: (text: string): void => { lines.push(text); } }, options = { launchAgent: f.lifecycle };
-  expect(await runTextbutlerCli(["daemon", "install", "--data-dir", f.dataDir], output, options)).toBe(0);
-  expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: true, launchAgent: { installation: "installed" }, automaticReplies: "unavailable" });
+  // daemon install/uninstall take control install's person-only gate; this person passes it.
+  const gate = (async () => ({ ok: true, tier: "T1T2" })) as never;
+  const f = await fixture(), lines: string[] = [], output = { write: (text: string): void => { lines.push(text); } }, options = { launchAgent: f.lifecycle, gate, audience: "human" as const };
+  expect(await runTextbutlerCli(["daemon", "install", "--data-dir", f.dataDir, "--json"], output, options)).toBe(0);
+  expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: true, schema: "textbutler.control/1", data: { loginItem: { installation: "installed" } } });
   expect(await runTextbutlerCli(["daemon", "status", "--data-dir", f.dataDir], output, options)).toBe(1);
   expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: false, daemon: { status: "disconnected" }, launchAgent: { service: "running" } });
-  expect(await runTextbutlerCli(["daemon", "uninstall", "--data-dir", f.dataDir], output, options)).toBe(0);
+  expect(await runTextbutlerCli(["daemon", "uninstall", "--data-dir", f.dataDir, "--json"], output, options)).toBe(0);
+  expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: true, data: { loginItem: { installation: "absent" } } });
 });
 
 test("unsupported platforms never invoke launchctl", async () => {

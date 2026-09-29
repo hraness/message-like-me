@@ -193,7 +193,9 @@ Commands
   daemon status              Show whether it's running
   daemon run                 Run it in this terminal instead
 
-macOS shows a "Background Items Added" notice when you install it."
+Install and uninstall ask you to type a one-time code shown in your own
+terminal, like control install. macOS shows a "Background Items Added"
+notice when you install it."
 ,
   "doctor": 
 "Usage: textbutler doctor [--json]

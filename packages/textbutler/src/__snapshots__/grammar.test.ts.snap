@@ -629,6 +629,26 @@ exports[`commands --json every verb has an op class and every decide verb has a 
         "summary": "Stop the service and remove its login item",
       },
       {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "path": [
+          "daemon",
+          "install",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Start the service now and at login (same as control install)",
+      },
+      {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "path": [
+          "daemon",
+          "uninstall",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Stop the service and remove it from login (same as control uninstall)",
+      },
+      {
         "opClass": "read",
         "path": [
           "approvals",
@@ -896,24 +916,6 @@ exports[`commands --json every verb has an op class and every decide verb has a 
         ],
         "schema": "textbutler.providers/1",
         "summary": "Check that one AI account is ready",
-      },
-      {
-        "opClass": "decide-legacy",
-        "path": [
-          "daemon",
-          "install",
-        ],
-        "schema": "textbutler.daemon/1",
-        "summary": "Start the service now and at login (same as control install)",
-      },
-      {
-        "opClass": "operate",
-        "path": [
-          "daemon",
-          "uninstall",
-        ],
-        "schema": "textbutler.daemon/1",
-        "summary": "Stop the service and remove it from login",
       },
       {
         "opClass": "read",
