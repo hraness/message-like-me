@@ -6,6 +6,7 @@ import { CONTROL_PROTOCOL, type ControlRequest, type ControlResponse, type Deskt
 import { awaitOwnerJob, OwnerCliError, type OwnerControlClient } from "./owner-cli.ts";
 import { readOwnerInputFile } from "./messages-cli.ts";
 import { parseXcbJson } from "./xcb-client.ts";
+import { keywordPresent } from "./decision.ts";
 
 /**
  * Paced operator campaigns. Every message is the owner's own text, sent
@@ -71,13 +72,14 @@ const VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,39}$/u;
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/gu;
 
 /** Fills {{name}} placeholders from the entry's vars. Every placeholder must
- * be defined, and no braces may survive, so no half-rendered text is sent. */
+ * be defined, and no brace may survive, so no half-rendered text is sent: a
+ * single-brace typo such as {first} is refused, not sent literally. */
 export function renderTemplate(template: string, vars: Readonly<Record<string, string>>): string {
   const rendered = template.replace(PLACEHOLDER, (_, name: string) => {
     if (!VAR_NAME.test(name) || !Object.hasOwn(vars, name)) throw new OwnerCliError(`The template uses {{${name.slice(0, 40)}}} but the entry does not define it.`);
     return vars[name]!;
   });
-  if (/\{\{|\}\}/u.test(rendered)) throw new OwnerCliError("The rendered text still contains {{ or }}. Check the template.");
+  if (/[{}]/u.test(rendered)) throw new OwnerCliError("The rendered text still contains a { or }. Check the template for a stray brace.");
   return rendered;
 }
 
@@ -291,7 +293,9 @@ export function parseCampaignArgs(args: readonly string[], defaultTimeZone: stri
     burstPauseJitterMs: CAMPAIGN_DEFAULTS.burstPauseJitterMs, recipientGapMs, timeZone, campaign, statePath, dryRun } };
 }
 
-interface Planned { entry: CampaignEntry; contactId: string; name: string; text: string; key: string; timeZone: string }
+interface Planned { entry: CampaignEntry; contactId: string; name: string; text: string; key: string; timeZone: string;
+  /** The daemon refuses owner text holding the keyword of a contact whose butler is on. */
+  butlerKeyword: boolean }
 
 function recipient(state: CampaignState, contactId: string): RecipientState {
   return state.recipients[contactId] ??= { firstSentAt: null, lastSentAt: null, stopped: null };
@@ -309,7 +313,8 @@ function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, stat
     if (saved && saved.status !== "pending" && (saved.contactId !== contact.id || saved.textDigest !== digest(text)))
       throw new OwnerCliError(`Entry "${entry.id}" changed after it was attempted. Give changed messages a new id.`);
     if (!saved || saved.status === "pending") state.entries[entry.id] = { status: "pending", contactId: contact.id, textDigest: digest(text), key, attempts: saved?.attempts ?? 0, sentAt: null, runId: null, detail: null, attemptedAt: null };
-    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone };
+    const butlerKeyword = full?.settings.enabled === true && typeof full.settings.keyword === "string" && keywordPresent(text, full.settings.keyword);
+    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone, butlerKeyword };
   });
 }
 
@@ -326,31 +331,44 @@ async function snapshotOf(request: OwnerControlClient): Promise<DesktopSnapshot>
 }
 
 /** Any contact message after the campaign first reached them stops them. On a
- * first touch, an unanswered message from them holds the send for a hand reply. */
-async function replyCheck(ports: CampaignPorts, contactId: string, firstSentAt: number | null): Promise<string | null | "unreadable"> {
+ * first touch, an unanswered message from them holds the send for a hand reply.
+ * `lastOutgoingAt` is the newest message you or the butler sent them from any
+ * source, so the recipient gap also spans other campaign files and hand texts. */
+async function replyCheck(ports: CampaignPorts, contactId: string, firstSentAt: number | null): Promise<{ stop: string | null; lastOutgoingAt: number | null } | "unreadable"> {
   const response = await awaitOwnerJob({ protocol: CONTROL_PROTOCOL, command: "messages.history", contactId, limit: 30 }, ports.request);
   if (!response.ok || response.kind !== "message-history" || !response.ready) return "unreadable";
   const messages = [...response.messages].filter(message => message.kind === "message").sort((a, b) => a.at - b.at);
-  if (firstSentAt !== null && messages.some(message => message.author === "contact" && message.at >= firstSentAt)) return "replied";
-  if (firstSentAt === null && messages.at(-1)?.author === "contact") return "unanswered-inbound";
-  return null;
+  const outgoing = messages.filter(message => message.author === "owner" || message.author === "butler");
+  const lastOutgoingAt = outgoing.length ? outgoing.at(-1)!.at : null;
+  if (firstSentAt !== null && messages.some(message => message.author === "contact" && message.at >= firstSentAt)) return { stop: "replied", lastOutgoingAt };
+  if (firstSentAt === null && messages.at(-1)?.author === "contact") return { stop: "unanswered-inbound", lastOutgoingAt };
+  return { stop: null, lastOutgoingAt };
 }
 
 export async function runCampaignCommand(args: readonly string[], ports: CampaignPorts): Promise<number> {
   const defaultZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { verb, file, options } = parseCampaignArgs(args, defaultZone);
-  const source = await (ports.readCampaign ?? (async (path: string) => new TextDecoder("utf-8", { fatal: true }).decode(await readOwnerInputFile(path, LIMITS.maxFileBytes))))(file);
+  let source: string;
+  try { source = await (ports.readCampaign ?? (async (path: string) => new TextDecoder("utf-8", { fatal: true }).decode(await readOwnerInputFile(path, LIMITS.maxFileBytes))))(file); }
+  catch (error) {
+    // A missing or unreadable file is not a service outage; say which it is.
+    if (error instanceof OwnerCliError) throw error;
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    throw new OwnerCliError(code === "ENOENT" ? "The campaign file does not exist." : "The campaign file could not be read. Check that it is a readable UTF-8 text file.");
+  }
   const entries = parseCampaign(source);
   const load = ports.loadState ?? loadState, save = ports.saveState ?? saveState;
   if (verb === "status" || options.dryRun) {
     const state = await load(options.statePath, options.campaign);
     const planned = plan(entries, await snapshotOf(ports.request), state, options);
     ports.print({ ok: true, campaign: options.campaign, dryRun: options.dryRun, state: options.statePath, counts: summary(state, planned),
-      ...(options.dryRun ? { pacing: pacingView(options), estimate: estimate(planned, state, options) } : {}),
+      ...(options.dryRun ? { pacing: pacingView(options), estimate: estimate(planned, state, options),
+        wouldRefuse: planned.filter(item => item.butlerKeyword && state.entries[item.entry.id]!.status === "pending").length } : {}),
       entries: planned.map(item => {
         const saved = state.entries[item.entry.id]!, who = state.recipients[item.contactId];
         return { id: item.entry.id, contactId: item.contactId, name: item.name, status: saved.status, timeZone: item.timeZone,
           ...(who?.stopped ? { recipientStopped: who.stopped } : {}), ...(saved.detail ? { detail: saved.detail } : {}),
+          ...(options.dryRun && item.butlerKeyword && saved.status === "pending" ? { refusal: "butler-keyword" } : {}),
           ...(options.dryRun ? { text: item.text } : { sentAt: saved.sentAt === null ? null : new Date(saved.sentAt).toISOString() }) };
       }) });
     return 0;
@@ -383,6 +401,11 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     ports.print({ ok: false, status: "halted", reason, ...(item ? { id: item.entry.id, contactId: item.contactId } : {}), detail, counts: summary(state, planned) });
     return 1;
   };
+  // A recipient texted recently from outside this file waits out the gap too.
+  // Rebuilt from history on every run, so it needs no saved state.
+  const heldUntil = new Map<string, number>();
+  const releaseAt = (contactId: string): number =>
+    Math.max((state.recipients[contactId]?.lastSentAt ?? -Infinity) + options.recipientGapMs, heldUntil.get(contactId) ?? -Infinity);
   for (;;) {
     if (ports.signal?.aborted) return halt(null, "interrupted", "Stopped before the next send. Rerun the same command to resume.");
     const now = ports.now();
@@ -397,8 +420,7 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     // key and never dispatches. A key it never journaled returns to pending
     // and goes through pacing and the reply check like any fresh message.
     const next = planned.find(item => ["sending", "uncertain"].includes(state.entries[item.entry.id]!.status))
-      ?? planned.find(item => state.entries[item.entry.id]!.status === "pending"
-        && (state.recipients[item.contactId]?.lastSentAt ?? -Infinity) + options.recipientGapMs <= now)
+      ?? planned.find(item => state.entries[item.entry.id]!.status === "pending" && releaseAt(item.contactId) <= now)
       ?? null;
     const waiting = planned.filter(item => state.entries[item.entry.id]!.status === "pending");
     if (!next && !waiting.length) {
@@ -413,7 +435,7 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     if (!resolving) {
       at = Math.max(at, state.nextSlotAt ?? now, capsAllowAt(state.sends, now, options.maxPerHour, options.maxPerDay));
       if (next) at = quietHoursEnd(at, next.timeZone, options.quietStart, options.quietEnd);
-      else at = Math.max(at, Math.min(...waiting.map(item => (state.recipients[item.contactId]?.lastSentAt ?? 0) + options.recipientGapMs)));
+      else at = Math.max(at, Math.min(...waiting.map(item => releaseAt(item.contactId))));
     }
     if (at > now) {
       ports.print({ ok: true, status: "waiting", until: new Date(at).toISOString(), ...(next ? { next: next.entry.id } : {}) });
@@ -423,14 +445,20 @@ async function runLoop(entries: readonly CampaignEntry[], options: CampaignOptio
     if (!next || !saved) continue;
     const who = recipient(state, next.contactId);
     if (!resolving) {
-      let check: string | null | "unreadable";
+      let check: Awaited<ReturnType<typeof replyCheck>>;
       try { check = await replyCheck(ports, next.contactId, who.firstSentAt); }
       catch { check = "unreadable"; }
       if (check === "unreadable") return halt(next, "history-unavailable", "The conversation could not be read, so a reply could not be ruled out. Nothing was sent. Run textbutler doctor, then rerun.");
-      if (check !== null) {
-        who.stopped = check; saved.status = "skipped"; saved.detail = `recipient stopped: ${check}`;
+      if (check.stop !== null) {
+        who.stopped = check.stop; saved.status = "skipped"; saved.detail = `recipient stopped: ${check.stop}`;
         await save(options.statePath, state);
-        ports.print({ ok: true, status: "recipient-stopped", id: next.entry.id, contactId: next.contactId, reason: check });
+        ports.print({ ok: true, status: "recipient-stopped", id: next.entry.id, contactId: next.contactId, reason: check.stop });
+        continue;
+      }
+      if (check.lastOutgoingAt !== null && check.lastOutgoingAt + options.recipientGapMs > ports.now()) {
+        const until = check.lastOutgoingAt + options.recipientGapMs;
+        heldUntil.set(next.contactId, until);
+        ports.print({ ok: true, status: "recipient-deferred", id: next.entry.id, contactId: next.contactId, reason: "recent-message", until: new Date(until).toISOString() });
         continue;
       }
       saved.status = "sending"; saved.attempts++; saved.attemptedAt = ports.now(); await save(options.statePath, state);

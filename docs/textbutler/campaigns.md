@@ -19,8 +19,9 @@ Each line of the file is one message:
 - `id` names the message within the campaign. Keep it stable.
 - `contact` is a contact ID or an exact, unique contact name. The contact must
   be enrolled for sending and cannot be your own self chat.
-- `{{name}}` placeholders are filled from `vars`. A missing value, or a stray
-  brace, stops the run before anything is sent.
+- `{{name}}` placeholders are filled from `vars`. A missing value, or any
+  brace left after filling (such as a `{name}` typo), stops the run before
+  anything is sent.
 - `timeZone` is optional. Quiet hours use it, else `--time-zone`, else this
   Mac's zone.
 
@@ -36,7 +37,10 @@ textbutler campaign status /absolute/intro.jsonl
 ```
 
 `--dry-run` prints every rendered message, its recipient, the pacing and a
-rough duration, and sends nothing. Every command prints JSON lines.
+rough duration, and sends nothing. `wouldRefuse` counts messages the service
+would refuse because they contain the butler keyword for a person whose butler
+is on; each is marked `"refusal": "butler-keyword"`. Every command prints JSON
+lines.
 
 ## Pacing
 
@@ -49,6 +53,11 @@ rough duration, and sends nothing. Every command prints JSON lines.
 | `--burst`, `--burst-pause` | pause 10 to 25 minutes after 6 sends | burst at most 20, pause at least 5m |
 | `--recipient-gap` | 24h between two messages to one person | at least 1h |
 | `--quiet-hours` | 19:30-10:00 in the recipient's zone | at least 6 hours |
+
+The recipient gap counts any message you or the butler sent that person, so
+two campaign files that share people, or a text you typed by hand, never land
+closer together than the gap. The run prints `recipient-deferred` and moves on
+to other people meanwhile.
 
 The service also enforces the minimum interval between any two of your
 campaign texts, across every person and every campaign file. A rerun after a

@@ -12,7 +12,7 @@ const ZONE = "America/New_York";
 
 /** A simulated daemon: sends are keyed by idempotency key, exactly as the
  * journal keys them, so a repeated key reports the first outcome. */
-function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean }[]; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number>;
+function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean; butler?: boolean }[]; recentOwner?: Map<string, number>; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number>;
   /** A contact reply this many ms after the first dispatch to them, visible once the clock reaches it. */
   replyAfterSend?: Map<string, number>; runningKeys?: Set<string> } = {}) {
   const contacts = options.contacts ?? [{ id: "c-1", name: "Synthetic One" }, { id: "c-2", name: "Synthetic Two" }];
@@ -23,12 +23,13 @@ function daemon(options: { contacts?: { id: string; name: string; selfChat?: boo
   const request = async (item: ControlRequest): Promise<ControlResponse> => {
     requests.push(item);
     if (item.command === "snapshot") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot",
-      snapshot: { contacts: contacts.map(contact => ({ id: contact.id, name: contact.name, settings: { selfChat: contact.selfChat ?? false } })) } } as never;
+      snapshot: { contacts: contacts.map(contact => ({ id: contact.id, name: contact.name, settings: { selfChat: contact.selfChat ?? false, enabled: contact.butler ?? false, keyword: "butler" } })) } } as never;
     if (item.command === "messages.history") {
       const replyAt = options.replies?.get(item.contactId), delay = options.replyAfterSend?.get(item.contactId);
       const firstAt = dispatched.find(value => value.contactId === item.contactId)?.at;
       const messages = [
         ...(replyAt === undefined ? [] : [{ id: "r", at: replyAt, author: "contact", kind: "message", text: "hi" }]),
+        ...(options.recentOwner?.has(item.contactId) ? [{ id: "h", at: options.recentOwner.get(item.contactId)!, author: "owner", kind: "message", text: "earlier" }] : []),
         ...dispatched.filter(value => value.contactId === item.contactId).map((value, index) => ({ id: `o-${index}`, at: value.at, author: "owner", kind: "message", text: value.text })),
         ...(delay === undefined || firstAt === undefined || clock < firstAt + delay ? [] : [{ id: "r-late", at: firstAt + delay, author: "contact", kind: "message", text: "stop please" }]),
       ];
@@ -74,6 +75,9 @@ test("templates fill every placeholder or refuse to render", () => {
   expect(() => renderTemplate("Hi {{first}}", {})).toThrow(OwnerCliError);
   expect(() => renderTemplate("Hi {{first}", { first: "x" })).toThrow(OwnerCliError);
   expect(() => renderTemplate("Hi {{a}}", { a: "{{b}}" })).toThrow(OwnerCliError);
+  // A single-brace typo or a stray brace is refused rather than sent literally.
+  for (const bad of ["Hi {first}", "Hi {{first}} }", "Hi { there"]) expect(() => renderTemplate(bad, { first: "x" })).toThrow(OwnerCliError);
+  expect(() => renderTemplate("Hi {{a}}", { a: "{b}" })).toThrow(OwnerCliError);
 });
 
 test("campaign files are strict JSON lines with unique ids", () => {
@@ -308,4 +312,39 @@ test("an exhausted key retires its entry so reruns move on to the rest", async (
   const resumed = harness(file, fake, first.stateRef);
   expect(await runCampaignCommand(ARGS, resumed.ports)).toBe(0);
   expect(fake.dispatched.map(item => item.text)).toEqual(["Next"]);
+});
+
+test("a recipient texted recently from outside this file waits out the recipient gap", async () => {
+  // Another campaign file (or a hand text) reached c-1 ten minutes ago.
+  const fake = daemon({ recentOwner: new Map([["c-1", START - 600_000]]) });
+  const file = [line({ id: "a", contact: "c-1", text: "One" }), line({ id: "b", contact: "c-2", text: "Two" })].join("\n");
+  const run = harness(file, fake);
+  expect(await runCampaignCommand([...ARGS, "--recipient-gap", "1h"], run.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.contactId)).toEqual(["c-2", "c-1"]);
+  expect(fake.dispatched[1]!.at).toBeGreaterThanOrEqual(START - 600_000 + 3_600_000);
+  expect(run.printed.some(value => value.status === "recipient-deferred" && value.contactId === "c-1")).toBe(true);
+  // An older message outside the gap does not delay anything.
+  const old = daemon({ recentOwner: new Map([["c-1", START - 2 * 3_600_000]]) });
+  const again = harness(line({ id: "a", contact: "c-1", text: "One" }), old);
+  expect(await runCampaignCommand([...ARGS, "--recipient-gap", "1h"], again.ports)).toBe(0);
+  expect(old.dispatched[0]!.at).toBe(START);
+});
+
+test("a dry run flags texts the daemon would refuse for the butler keyword", async () => {
+  const fake = daemon({ contacts: [{ id: "c-1", name: "Synthetic One", butler: true }, { id: "c-2", name: "Synthetic Two" }] });
+  const file = [line({ id: "a", contact: "c-1", text: "Try the butler" }), line({ id: "b", contact: "c-2", text: "Try the butler" }), line({ id: "c", contact: "c-1", text: "Textbutler ships" })].join("\n");
+  const { ports, printed } = harness(file, fake);
+  expect(await runCampaignCommand([...ARGS, "--dry-run"], ports)).toBe(0);
+  expect(printed[0]).toMatchObject({ dryRun: true, wouldRefuse: 1, entries: [{ id: "a", refusal: "butler-keyword" }, { id: "b" }, { id: "c" }] });
+  const entries = (printed[0] as { entries: Record<string, unknown>[] }).entries;
+  expect(entries[1]).not.toHaveProperty("refusal");
+  expect(entries[2]).not.toHaveProperty("refusal");
+});
+
+test("a missing campaign file is reported as a file problem, not a service outage", async () => {
+  const fake = daemon();
+  const { ports } = harness("", fake);
+  ports.readCampaign = async () => { throw Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" }); };
+  await expect(runCampaignCommand([...ARGS, "--dry-run"], ports)).rejects.toThrow("The campaign file does not exist.");
+  expect(fake.requests).toEqual([]);
 });
