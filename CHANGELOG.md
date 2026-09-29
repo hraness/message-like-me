@@ -4,6 +4,14 @@ Each version's section is copied onto its GitHub Release page: a summary
 paragraph, then one bullet per change. Write the section in the version bump
 pull request.
 
+## 0.8.24 - 2026-09-29
+
+Release-path fix that completes the headless TextButler release.
+
+- Bind legacy installation to the exact public `@hraness/message-like-me@0.8.24` npm package, with the same reviewed bytes mirrored in the immutable GitHub Release. This does not install TextButler or enable automatic replies.
+- Accept npm's bare trusted-publisher configuration id in the post-publish provenance check. The registry dropped the `oidc:` prefix, which failed the 0.8.23 Release run after npm had already accepted the package with valid provenance.
+- Carries every change from 0.8.23: the headless TextButler control surface (shared command grammar, TUI snapshots, human-gated decisions) with the retired menubar companion.
+
 ## 0.8.23 - 2026-09-29
 
 TextButler is now headless: the menu bar companion is gone, and every action is reachable from one shared command grammar with JSON output, a snapshot-able terminal UI, and in-person approval for sends and chat enablement.

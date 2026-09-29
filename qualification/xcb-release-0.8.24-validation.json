@@ -1,18 +1,13 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Textbutler 0.8.24 version bump; package.json version field is receipt-covered. No product-behavior change.",
+  "toolchain": "Bun 1.3.14",
+  "command": "bun run check",
+  "result": {
+    "exitCode": 0,
+    "evidence": "Post-rebind bun run check captured in qualification/xcb-release-0.8.24-check.log exits 0 (853/853 Textbutler across 64 files, including dist, package smoke and isolated-installation admission). Site bun run test 87/87; changelogSection() parses 0.8.24. Required CI on the PR head is the final gate."
   },
-  "sources": {
+  "sourceSha256": {
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
     "package.json": "02ae445c64c8d10d12e14c36cd47d62345d4a25cfee9fd0442a53bba39549c1e",
     "packages/control/src/index.ts": "afbdd297541a1196673ec07ee7cf554e84c573be8b02ad562252237c679e4593",
@@ -59,8 +54,8 @@
     "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "bun run check",
-    "receiptSha256": "dd1c9733a9910d73da5cb89fdee7e7fa2cdf82f039de0d68507262b7832e157e"
-  }
+  "review": "qualification/xcb-release-0.8.24-review.json",
+  "reviewSha256": "6f397fe504403a9af83e0f4b6bc322ce1227f363e5b267b175b501ef0f8ca4f5",
+  "log": "qualification/xcb-release-0.8.24-check.log",
+  "logSha256": "d44c2db4374d28a42f3aa14130c58ffe5328b6f5fd1f606f78799202e3174135"
 }

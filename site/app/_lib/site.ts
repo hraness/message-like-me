@@ -48,7 +48,7 @@ export const SUBSCRIPTION_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/n
 export const GHOSTGET_SETUP_URL = 'https://ghostget.com/docs/tutorials/getting-started';
 export const XCB_URL = 'https://github.com/hraness/xcb';
 // The immutable legacy release coordinate; not a TextButler app version.
-export const SOFTWARE_VERSION = '0.8.23';
+export const SOFTWARE_VERSION = '0.8.24';
 export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;
 
 export const CANONICAL_PAGE_PATHS = [
