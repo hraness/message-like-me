@@ -5,7 +5,7 @@ import { messageAuthor, operatorHold, ownerInvocation, pendingCluster, type Mess
 import type { OwnerRuntimeState, TextbutlerControlService } from "./control-service.ts";
 import { boundedHistory } from "./enrollment.ts";
 import { searchHistory } from "./history-search.ts";
-import type { RunJournal } from "./journal.ts";
+import { OPERATOR_EVENT_PREFIX, type RunJournal } from "./journal.ts";
 import type { ContactSettings, Settings } from "./config.ts";
 import type { MessageEvent } from "./decision.ts";
 import type { Hooks } from "./hooks.ts";
@@ -207,7 +207,10 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       const reply = await byIntent(run.id);
       if (reply !== undefined && reply !== null && reply.enrollmentId === state.binding.enrollmentId) {
         if (reply.state === "accepted") {
-          journal.recordSentMessages(contact.id, run.id, reply.accepted.map(part => part.messageId), now());
+          // An operator send keeps its origin, so reconciling it after a restart
+          // never turns it into butler output and never lifts the operator hold.
+          journal.recordSentMessages(contact.id, run.id, reply.accepted.map(part => part.messageId), now(),
+            run.eventId.startsWith(OPERATOR_EVENT_PREFIX) ? "operator" : "butler");
           journal.reconcile(run.id, "submitted", "reconciled: provider recorded delivery", now());
           continue;
         }

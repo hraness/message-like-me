@@ -420,11 +420,31 @@ test("a suppress list without handles from the service fails closed", async () =
   expect(fake.dispatched).toEqual([]);
 });
 
+test("a WhatsApp recipient is suppressed by their phone number", async () => {
+  const fake = daemon({ contacts: [{ id: "c-1", name: "Synthetic One", handles: ["15555550101@s.whatsapp.net"] }, { id: "c-2", name: "Synthetic Two", handles: ["+15555550102"] }] });
+  const run = harness([line({ id: "a", contact: "c-1", text: "Hi" }), line({ id: "b", contact: "c-2", text: "Hi" })].join("\n"), fake, undefined,
+    { files: new Map([["/lists/suppress.txt", "+1 555 555 0101\n"]]) });
+  expect(await runCampaignCommand([...ARGS, "--suppress", "/lists/suppress.txt"], run.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.contactId)).toEqual(["c-2"]);
+  expect(run.printed.at(-1)).toMatchObject({ counts: { sent: 1, suppressed: 1 } });
+});
+
+test("a recipient handle the suppress list cannot compare stops the run before any send", async () => {
+  const fake = daemon({ contacts: [{ id: "c-1", name: "Synthetic One", handles: ["+15555550101"] }, { id: "c-2", name: "Synthetic Two", handles: ["matrix-room-id"] }] });
+  const run = harness([line({ id: "a", contact: "c-1", text: "Hi" }), line({ id: "b", contact: "c-2", text: "Hi" })].join("\n"), fake, undefined,
+    { files: new Map([["/lists/suppress.txt", "+15555550199\n"]]) });
+  await expect(runCampaignCommand([...ARGS, "--suppress", "/lists/suppress.txt"], run.ports)).rejects.toThrow(/cannot compare/u);
+  expect(fake.dispatched).toEqual([]);
+});
+
 test("suppress numbers normalize like recipients", () => {
   const list = parseSuppressList("+1 (555) 555-0101\n0015555550102\n555.555.0103\nSomeone@Example.com # email\n", "explicit");
   expect([...list.phones].sort()).toEqual(["+15555550101", "+15555550102", "5555550103"]);
   expect([...list.emails]).toEqual(["someone@example.com"]);
-  expect(normalizeHandle("tel:5555550101")).toBeNull();
+  expect(normalizeHandle("tel:5555550101")).toEqual({ kind: "phone", value: "5555550101" });
+  // WhatsApp chats are phone JIDs and compare as phone numbers.
+  expect(normalizeHandle("15555550101@s.whatsapp.net")).toEqual({ kind: "phone", value: "+15555550101" });
+  expect(normalizeHandle("matrix-room-id")).toBeNull();
   expect(() => parseCampaignArgs(["run", "/c.jsonl", "--suppress", "relative.txt"], ZONE)).toThrow(OwnerCliError);
   expect(parseCampaignArgs(["run", "/c.jsonl", "--suppress", "/l/s.txt"], ZONE).options.suppressPath).toBe("/l/s.txt");
 });

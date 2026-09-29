@@ -221,6 +221,24 @@ test("an operator send still in flight holds the thread before history shows it"
   await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toHaveLength(0);
 });
+test("an uncertain operator send reconciled after a restart stays operator text and keeps the thread with the owner", async () => {
+  const f = await fixture(); await f.loop.tick();
+  const runId = "operator-run:restart", startedAt = f.now();
+  expect(f.journal.claim(runId, "contact-1", "operator:campaign-key-0000000003", startedAt)).toBe(true);
+  f.journal.transition(runId, "running", "dispatching", "dispatching", startedAt, "d".repeat(64));
+  f.journal.transition(runId, "dispatching", "indeterminate", "lost confirmation", startedAt);
+  f.intentRuns.set(runId, { id: "run:upstream", planId: "plan:x", intentId: runId, enrollmentId: "enrollment:fixture", state: "accepted",
+    accepted: [{ messageId: "operator:late", providerReceiptId: null }], totalActions: 1, reason: null, retryable: false });
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.journal.hasUncertainSend("contact-1")).toBe(false);
+  expect(f.journal.messageOrigin("contact-1", "operator:late")).toBe("operator");
+  // The provider echo lands well after the start, outside any time window.
+  f.advance(600_000);
+  f.push({ id: "operator:late", coordinate: f.coordinate, direction: "outgoing", occurredAt: new Date(f.now()).toISOString(), text: "TextButler is live.", kind: "message", relatedMessageId: null, attachments: [] });
+  f.advance(600_000); f.add("butler, what is this?");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0);
+});
 test("hand-typed owner text hands the thread back after an operator send", async () => {
   const f = await fixture(); await f.loop.tick();
   operatorSent(f, "operator:1", "Plain hello", "campaign-key-0000000003");

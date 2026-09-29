@@ -327,7 +327,8 @@ function plan(entries: readonly CampaignEntry[], snapshot: DesktopSnapshot, stat
     if (saved && saved.status !== "pending" && (saved.contactId !== contact.id || saved.textDigest !== digest(text)))
       throw new OwnerCliError(`Entry "${entry.id}" changed after it was attempted. Give changed messages a new id.`);
     if (!saved || saved.status === "pending") state.entries[entry.id] = { status: "pending", contactId: contact.id, textDigest: digest(text), key, attempts: saved?.attempts ?? 0, sentAt: null, runId: null, detail: null, attemptedAt: null };
-    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone, suppressed: isSuppressed(suppress, full) };
+    return { entry, contactId: contact.id, name: contact.name, text, key, timeZone: entry.timeZone ?? options.timeZone, // Only messages that could still go out need the check.
+      suppressed: state.entries[entry.id]!.status === "pending" || state.entries[entry.id]!.status === "sending" || state.entries[entry.id]!.status === "uncertain" ? isSuppressed(suppress, full) : false };
   });
 }
 
@@ -348,8 +349,12 @@ const NO_SUPPRESS: SuppressList = { phones: new Set(), emails: new Set(), source
  * country code, and formatting such as spaces, dashes, dots and brackets is
  * ignored. Returns null for anything that is neither. */
 export function normalizeHandle(value: string): { kind: "phone" | "email"; value: string } | null {
-  const text = value.trim().normalize("NFKC");
+  let text = value.trim().normalize("NFKC");
   if (!text || text.length > 320 || /[\p{Cc}\p{Cf}]/u.test(text)) return null;
+  text = text.replace(/^(?:tel|mailto|sms|imessage):/iu, "");
+  // WhatsApp participants are phone JIDs; compare them as phone numbers.
+  const jid = /^\+?(\d{7,15})@(?:s\.whatsapp\.net|c\.us)$/iu.exec(text);
+  if (jid) return { kind: "phone", value: `+${jid[1]}` };
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(text)) return { kind: "email", value: text.toLowerCase() };
   const body = text.startsWith("+") ? text.slice(1) : text;
   if (!/^[0-9().\-\s]+$/u.test(body)) return null;
@@ -359,8 +364,9 @@ export function normalizeHandle(value: string): { kind: "phone" | "email"; value
   return { kind: "phone", value: international ? `+${canonical}` : canonical };
 }
 /** Two phone numbers match when equal, or, when either lacks a country code,
- * when their last ten digits (or all of the shorter one) agree. Leaning toward
- * a match only ever suppresses more. */
+ * when their last ten digits agree; a number shorter than ten digits matches
+ * any number ending in all of its digits. Leaning toward a match only ever
+ * suppresses more. */
 function phoneMatches(a: string, b: string): boolean {
   if (a === b) return true;
   if (a.startsWith("+") && b.startsWith("+")) return false;
@@ -385,7 +391,8 @@ function isSuppressed(list: SuppressList, contact: DesktopSnapshot["contacts"][n
   if (!contact?.handles?.length) throw new OwnerCliError(`The service did not report the handles for contact ${contact?.id ?? "unknown"}, so the suppress list cannot be checked. Nothing was sent. Update and restart the Textbutler daemon.`);
   return contact.handles.some(raw => {
     const handle = normalizeHandle(raw);
-    if (!handle) return false;
+    // A handle that cannot be compared could be a suppressed person: stop.
+    if (!handle) throw new OwnerCliError(`Contact ${contact.id} has a handle the suppress list cannot compare. Nothing was sent. Remove the entry or turn off the suppress file.`);
     return handle.kind === "email" ? list.emails.has(handle.value) : [...list.phones].some(phone => phoneMatches(phone, handle.value));
   });
 }

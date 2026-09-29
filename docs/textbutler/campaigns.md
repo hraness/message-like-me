@@ -51,7 +51,10 @@ A suppress file names people never to text: one phone number or email per
 line. `#` starts a comment, and blank lines are ignored. Numbers are compared
 the way Messages compares them, ignoring spaces, dashes, dots and brackets;
 `+` or `00` marks a country code, and a number written without one matches
-any number with the same last ten digits.
+any number with the same last ten digits (a number shorter than ten digits
+matches any number ending in it). WhatsApp chats are compared by their phone
+number. If a recipient has a handle that is neither a phone number nor an
+email, the run stops before sending anything.
 
 The run uses `--suppress /absolute/file.txt` when given. Otherwise it uses
 `suppress.txt` in the same folder as the campaign file, if that file exists.
@@ -118,7 +121,9 @@ After an operator or campaign text, that conversation is yours. If the
 person answers, the butler does not reply, even when it is on for them: you
 answer by hand. The butler's setting for that person does not change. It
 picks the conversation back up once you type there yourself, and you can call
-it at any time by typing the keyword, as before. The butler would otherwise
+it at any time by typing the keyword, as before. The person you texted
+typing the keyword does not bring the butler back; only you can. This lasts
+as long as the send's record is kept (about 400 days). The butler would otherwise
 answer a campaign reply in your name within a minute, which is rarely what a
 personal text invites; switching the butler off instead would silently change
 a setting you chose.
