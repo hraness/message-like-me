@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "scope": "Programmatic sends never involve the butler: operator and campaign text is never read as the butler keyword, never refused for naming it, never wrapped or branded, and a reply to it is left to the owner. Campaign suppress lists (--suppress and a default suppress.txt beside the campaign file) that fail closed.",
+  "reviewer": "Independent AI reviewer: a separate read-only Claude Code (Opus) process, not the drafting session",
+  "method": "Read-only review of the branch against origin/main, then a confirmation pass over the fixes for its blocking findings; no edits by the reviewer.",
+  "result": "First pass: two blocking findings. Suppress lists did not match WhatsApp phone JIDs and treated any handle they could not parse as not suppressed; an uncertain operator send reconciled from provider evidence after a restart was recorded as butler output, which lifted the owner hold. Fixed: WhatsApp JIDs compare as phone numbers, tel:/mailto: prefixes are stripped, an uncomparable handle stops the run before any send, suppression is checked only for entries that could still go out, and reconciled operator sends keep operator origin. Docs now state the short-number match rule and that the recipient's keyword does not bring the butler back. Confirmation pass: no blocking finding, no gate bypass, no double-send path, no weakened test.",
+  "reviewedSha256": {
+    "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
+    "packages/textbutler/src/attribution.ts": "afddd5469055a6906e43448c1ddeaea9ce88bc8686660343e99fb1bfd961e5da",
+    "packages/textbutler/src/campaign.ts": "e2ed7556567d92d3856dc9c2307d5cce15d9d371d1f086e5e4f36e8243be0577",
+    "packages/textbutler/src/campaign.test.ts": "4bbac9e78605c89fcc58ff7bae4b7b4ee07bf67ee679a90952fce02ad1ffc17e",
+    "packages/textbutler/src/control-service.ts": "6f811071df09514305c8e9dce5636c12f7b3cffec546e3b285c9db88a4891374",
+    "packages/textbutler/src/decision.ts": "0483a000331f6c79227ff19f1106cdd4cb69f43579216dad16008eea48b3a9da",
+    "packages/textbutler/src/journal.ts": "6251657ab11db9cdcc81959de727b6dafef63da18cf8e5ff5769b308717c2a29",
+    "packages/textbutler/src/owner-replies.ts": "d42d68ea95906913e39c9a29cb79c9a137b15393b5691e483ec5cd638282e403",
+    "packages/textbutler/src/owner-replies.test.ts": "06369a7e647e70d22f0e6abccc397f24f61950357a2571b0bb1eca63fef44a8e",
+    "packages/textbutler/src/reply-loop.ts": "0fafd1842035660aac898cfeab3899ae8a4b87972729051ebbdadef56c5abd5f",
+    "packages/textbutler/src/reply-loop.test.ts": "6ac6166ccbe148e0bdb6596151468026d75a5103d8f46d1ca974166dbc688fd9",
+    "docs/textbutler/campaigns.md": "ccd6f77cfe9dd12fafdcb175519e09bb92494df36e5b65656ecadb85d5bf47fa"
+  },
+  "remainingLimit": "An operator message without a recorded message id is recognised by a fixed window around the send's start (30s before to 120s after); a hand-typed owner message inside that window counts as operator text, and a very late unattributed echo counts as the owner's. A malformed default suppress.txt also blocks campaign status. The owner hold is not verified against a live provider."
+}
