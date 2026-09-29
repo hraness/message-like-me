@@ -121,10 +121,7 @@
 }
 .tb-fine code, .tb-pillars code, .tb-setup-extra code { font-family: var(--font-mono); font-size: 0.9em; }
 
-/* Diagrams exported by the diagram lane, swapped by theme. */
-.tb-diagram { max-inline-size: 1040px; margin: 0 auto 2rem; }
-/* On phones the numbered steps right below already tell this story. */
-@media (max-width: 599px) { .tb-diagram--wide-only { display: none; } }
+/* Diagram rules live in diagram-figure.css. */
 .tb-switch { display: grid; gap: 1rem; margin-block-start: 1rem; }
 .tb-switch__buttons { display: inline-flex; justify-self: center; gap: 0.25rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
 .tb-switch__buttons button { padding: 0.45rem 1rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 500 0.875rem/1.2 var(--font-text); cursor: pointer; }
@@ -132,16 +129,6 @@
 .tb-switch__buttons button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .tb-switch .tb-diagram { margin-block-end: 0; }
 .tb-switch__caption { margin: 0; color: var(--muted); font-size: 0.875rem; text-align: center; }
-.tb-diagram__picture { display: block; }
-.tb-diagram__img { display: block; inline-size: 100%; block-size: auto; border-radius: 16px; box-shadow: 0 0 0 1px var(--line); }
-.tb-diagram figcaption { margin-block-start: 0.75rem; color: var(--muted); font-size: 0.875rem; }
-.tb-theme-dark { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme]), [data-theme="system"]) .tb-theme-light { display: none; }
-  :root:where(:not([data-theme]), [data-theme="system"]) .tb-theme-dark { display: block; }
-}
-:root:where([data-theme="dark"]) .tb-theme-light { display: none; }
-:root:where([data-theme="dark"]) .tb-theme-dark { display: block; }
 
 /* Reply modes. */
 .tb-modes {
@@ -293,3 +280,4 @@
 
 /* Planned reply option: labeled as coming, set apart from the options you can pick today. */
 .tb-writer-coming { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.75rem; max-inline-size: 70ch; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.6; }
+.tb-agent-demo { display: grid; gap: 0.75rem; margin: 1.5rem 0 0; }
