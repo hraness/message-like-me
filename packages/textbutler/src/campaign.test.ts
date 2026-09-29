@@ -12,10 +12,12 @@ const ZONE = "America/New_York";
 
 /** A simulated daemon: sends are keyed by idempotency key, exactly as the
  * journal keys them, so a repeated key reports the first outcome. */
-function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean }[]; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number> } = {}) {
+function daemon(options: { contacts?: { id: string; name: string; selfChat?: boolean }[]; failKeys?: Set<string>; loseKeys?: Set<string>; busyOnce?: Set<string>; exhausted?: Set<string>; replies?: Map<string, number>;
+  /** A contact reply this many ms after the first dispatch to them, visible once the clock reaches it. */
+  replyAfterSend?: Map<string, number>; runningKeys?: Set<string> } = {}) {
   const contacts = options.contacts ?? [{ id: "c-1", name: "Synthetic One" }, { id: "c-2", name: "Synthetic Two" }];
   const journal = new Map<string, { runId: string; state: "submitted" | "failed" | "indeterminate"; text: string; contactId: string }>();
-  const dispatched: { contactId: string; text: string; key: string; minimumIntervalMs: number }[] = [];
+  const dispatched: { contactId: string; text: string; key: string; minimumIntervalMs: number; at: number }[] = [];
   const requests: ControlRequest[] = [];
   let clock = START;
   const request = async (item: ControlRequest): Promise<ControlResponse> => {
@@ -23,20 +25,26 @@ function daemon(options: { contacts?: { id: string; name: string; selfChat?: boo
     if (item.command === "snapshot") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot",
       snapshot: { contacts: contacts.map(contact => ({ id: contact.id, name: contact.name, settings: { selfChat: contact.selfChat ?? false } })) } } as never;
     if (item.command === "messages.history") {
-      const replyAt = options.replies?.get(item.contactId);
-      return { protocol: CONTROL_PROTOCOL, ok: true, kind: "message-history", contactId: item.contactId, provider: "imessage", ready: true,
-        messages: replyAt === undefined ? [] : [{ id: "r", at: replyAt, author: "contact", kind: "message", text: "hi" }] } as never;
+      const replyAt = options.replies?.get(item.contactId), delay = options.replyAfterSend?.get(item.contactId);
+      const firstAt = dispatched.find(value => value.contactId === item.contactId)?.at;
+      const messages = [
+        ...(replyAt === undefined ? [] : [{ id: "r", at: replyAt, author: "contact", kind: "message", text: "hi" }]),
+        ...dispatched.filter(value => value.contactId === item.contactId).map((value, index) => ({ id: `o-${index}`, at: value.at, author: "owner", kind: "message", text: value.text })),
+        ...(delay === undefined || firstAt === undefined || clock < firstAt + delay ? [] : [{ id: "r-late", at: firstAt + delay, author: "contact", kind: "message", text: "stop please" }]),
+      ];
+      return { protocol: CONTROL_PROTOCOL, ok: true, kind: "message-history", contactId: item.contactId, provider: "imessage", ready: true, messages } as never;
     }
     if (item.command === "replies.send" && "operator" in item) {
       const key = item.operator.idempotencyKey, prior = journal.get(key);
       if (prior) return { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-sent", contactId: prior.contactId, runId: prior.runId, state: prior.state, detail: "replayed" };
       if (item.operator.replayOnly) return { protocol: CONTROL_PROTOCOL, ok: false, code: "invalid-request", message: "Nothing was sent under this idempotency key." };
+      if (options.runningKeys?.has(key)) return { protocol: CONTROL_PROTOCOL, ok: false, code: "conflict", message: "A send under this idempotency key is still in progress." };
       if (options.exhausted?.has(key)) return { protocol: CONTROL_PROTOCOL, ok: false, code: "conflict", message: "This idempotency key has been attempted too many times." };
       if (options.busyOnce?.delete(key)) return { protocol: CONTROL_PROTOCOL, ok: false, code: "conflict", message: "This conversation already has a reply in progress." };
       const state = options.failKeys?.has(key) ? "failed" : "submitted";
       const runId = `run-${journal.size + 1}`;
       journal.set(key, { runId, state, text: item.text, contactId: item.contactId });
-      if (state === "submitted") dispatched.push({ contactId: item.contactId, text: item.text, key, minimumIntervalMs: item.operator.minimumIntervalMs });
+      if (state === "submitted") dispatched.push({ contactId: item.contactId, text: item.text, key, minimumIntervalMs: item.operator.minimumIntervalMs, at: clock });
       if (options.loseKeys?.has(key)) { options.loseKeys.delete(key); throw new Error("connection lost after dispatch"); }
       return { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-sent", contactId: item.contactId, runId, state, detail: "Reply sent." };
     }
@@ -200,6 +208,50 @@ test("a reply stops that recipient; an unanswered inbound holds the first touch"
   expect(fake.dispatched.map(item => item.contactId)).toEqual(["c-1"]);
   expect(run.stateRef.value!.recipients["c-2"]!.stopped).toBe("unanswered-inbound");
   expect(run.printed.at(-1)).toMatchObject({ status: "complete", counts: { sent: 1, skipped: 2 } });
+});
+
+test("a reply after the first message stops the rest of that recipient's messages", async () => {
+  const fake = daemon({ replyAfterSend: new Map([["c-1", 1000]]) });
+  const file = [line({ id: "a", contact: "c-1", text: "One" }), line({ id: "b", contact: "c-1", text: "One again" })].join("\n");
+  const run = harness(file, fake);
+  expect(await runCampaignCommand([...ARGS, "--recipient-gap", "1h"], run.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.text)).toEqual(["One"]);
+  expect(run.stateRef.value!.recipients["c-1"]!.stopped).toBe("replied");
+  expect(run.stateRef.value!.entries.b).toMatchObject({ status: "skipped", detail: "recipient stopped: replied" });
+});
+
+test("a reply between a lost-response send and the rerun still stops that recipient", async () => {
+  const fake = daemon({ loseKeys: new Set([idempotencyKey("launch", "a", "c-1")]), replyAfterSend: new Map([["c-1", 60_000]]) });
+  const file = [line({ id: "a", contact: "c-1", text: "One" }), line({ id: "b", contact: "c-1", text: "One again" })].join("\n");
+  const first = harness(file, fake);
+  expect(await runCampaignCommand([...ARGS, "--recipient-gap", "1h"], first.ports)).toBe(1);
+  // Hours pass before the rerun; the reply landed a minute after delivery.
+  fake.advance(3 * 3_600_000);
+  const resumed = harness(file, fake, first.stateRef);
+  expect(await runCampaignCommand([...ARGS, "--recipient-gap", "1h"], resumed.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.text)).toEqual(["One"]);
+  expect(resumed.stateRef.value!.recipients["c-1"]!.stopped).toBe("replied");
+});
+
+test("a replayed send paces the next message like a fresh one", async () => {
+  const fake = daemon({ loseKeys: new Set([idempotencyKey("launch", "a", "c-1")]) });
+  const file = [line({ id: "a", contact: "c-1", text: "One" }), line({ id: "b", contact: "c-2", text: "Two" })].join("\n");
+  const first = harness(file, fake);
+  expect(await runCampaignCommand(ARGS, first.ports)).toBe(1);
+  const resumed = harness(file, fake, first.stateRef);
+  expect(await runCampaignCommand(ARGS, resumed.ports)).toBe(0);
+  expect(fake.dispatched.map(item => item.text)).toEqual(["One", "Two"]);
+  expect(fake.dispatched[1]!.at - fake.dispatched[0]!.at).toBeGreaterThanOrEqual(CAMPAIGN_DEFAULTS.minIntervalMs);
+});
+
+test("a key still in progress at the daemon halts as in-progress and sends nothing", async () => {
+  const key = idempotencyKey("launch", "a", "c-1");
+  const fake = daemon({ runningKeys: new Set([key]) });
+  const run = harness(line({ id: "a", contact: "c-1", text: "One" }), fake);
+  expect(await runCampaignCommand(ARGS, run.ports)).toBe(1);
+  expect(run.printed.at(-1)).toMatchObject({ status: "halted", reason: "in-progress", id: "a" });
+  expect(fake.dispatched).toEqual([]);
+  expect(run.stateRef.value!.entries.a!.status).toBe("sending");
 });
 
 test("a failed send halts the campaign and skips that recipient on resume", async () => {

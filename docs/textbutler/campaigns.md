@@ -50,8 +50,9 @@ rough duration, and sends nothing. Every command prints JSON lines.
 | `--recipient-gap` | 24h between two messages to one person | at least 1h |
 | `--quiet-hours` | 19:30-10:00 in the recipient's zone | at least 6 hours |
 
-The minimum interval is also passed to the messaging grant, so the transport
-enforces it too.
+The service also enforces the minimum interval between any two of your
+campaign texts, across every person and every campaign file. A rerun after a
+lost confirmation waits out the interval from that send too.
 
 ## Resuming and stopping
 
@@ -74,7 +75,11 @@ The run halts when:
 - a send fails. Repeated failures can mean Messages is filtering the account,
   so the run stops rather than pushing on.
 - the service refuses before sending, for example because another reply to
-  that person is in flight. Nothing was sent; rerun later.
+  that person is in flight, or another campaign text went out less than the
+  minimum interval ago. Nothing was sent; rerun later.
+- a text contains the butler keyword for a person whose butler is on. The
+  butler would read that as you calling it and reply straight after. Reword
+  the text, or turn the butler off for that person first.
 - a conversation cannot be read, so a reply cannot be ruled out.
 
 ## What is recorded
