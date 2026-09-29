@@ -127,3 +127,12 @@ export const PAGE_LAST_MODIFIED = {
   '/about': '2026-09-28',
   '/compare/ghostreply': '2026-09-28',
 } as const;
+
+/** Builds a local copy from source; the same steps the getting-started guide lists. */
+export const INSTALL_COMMAND = 'git clone https://github.com/hraness/textbutler.git && cd textbutler && bun install --frozen-lockfile --ignore-scripts && bun run textbutler:install';
+/** TextButler automates Messages.app, so only the macOS tab has a command. */
+export const INSTALL_PLATFORMS = [
+  { id: 'macos', command: INSTALL_COMMAND, shell: 'Terminal', note: 'Requires Bun 1.3.14 and GhostGet' },
+  { id: 'linux', unavailable: true, unavailableNote: 'Uses Messages.app, so it runs on macOS only.' },
+  { id: 'windows', unavailable: true, unavailableNote: 'Uses Messages.app, so it runs on macOS only.' },
+] as const;

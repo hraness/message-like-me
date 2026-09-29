@@ -248,6 +248,9 @@
 .tb-setup-extra { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); margin-block-start: 2.5rem; }
 .tb-setup-extra h3 { margin: 0 0 0.4rem; font-size: 1.0625rem; font-weight: 600; }
 .tb-setup-extra > div > p { margin: 0 0 1rem; color: var(--muted); }
+.tb-install { display: grid; gap: 0.75rem; margin-block-start: 2.5rem; min-inline-size: 0; }
+.tb-install h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.tb-install > p { margin: 0; color: var(--muted); }
 .tb-tile { align-self: start; display: grid; align-content: start; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--hraness-marketing-radius, 0.625rem); background: var(--surface); }
 .tb-tile p { margin: 0 !important; }
 
