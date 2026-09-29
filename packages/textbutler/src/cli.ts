@@ -6,7 +6,9 @@ import { createLaunchAgentLifecycle, defaultLaunchAgentHost, type LaunchAgentLif
 import type { ClaudeApiAdapterOptions } from "@hraness/agentmixer";
 import type { ControlRequest, ControlResponse } from "../../control/src/index.ts";
 import { awaitOwnerJob, handleOwnerCommand, OwnerCliError, pendingJobOutput, resolveOwnerContact } from "./owner-cli.ts";
-import { runDoctor, runSetup } from "./onboarding.ts";
+import { readReadiness, readinessText, runSetup } from "./onboarding.ts";
+import type { CliIO } from "@hraness/desktop-foundation/registry";
+import { GRAMMAR_FAMILIES, runGrammar } from "./grammar.ts";
 import { runTextbutlerTui } from "./tui.ts";
 import { runIMessageSetup } from "./imessage-setup.ts";
 import { handleMessagesCommand } from "./messages-cli.ts";
@@ -24,6 +26,8 @@ import { DEFAULT_REPLY_MODEL, localSearchCredential, saveGatewayKey } from "./de
 
 type CliOptions = { launchAgent?: LaunchAgentLifecycle; entrypoint?: string; providerArtifact?: ClaudeApiAdapterOptions["runtimeArtifact"];
   supportEnv?: Readonly<Record<string, string | undefined>>; audience?: Audience; env?: Readonly<Record<string, string | undefined>>;
+  /** Test seam for the shared human gate; production uses the foundation's terminal gate. */
+  gate?: CliIO["gate"];
   /** Test seam for piped secret input; production reads descriptor 0 and refuses a terminal. */
   readSecret?: () => string };
 
@@ -76,6 +80,31 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
   const command = args.join(" ");
   const print = (value: unknown): void => { output.write(`${JSON.stringify(value)}\n`); };
   const request = (request: ControlRequest): Promise<ControlResponse> => requestDaemon({ dataDir, request });
+  const lifecycle = (): LaunchAgentLifecycle => options.launchAgent ?? createLaunchAgentLifecycle(defaultLaunchAgentHost(options.entrypoint));
+  const serve = async (): Promise<number> => {
+    if (process.platform !== "darwin") throw new Error("The Textbutler foreground daemon is supported on macOS only.");
+    const daemon = await startDaemon({ dataDir, ...(options.providerArtifact === undefined ? {} : { providerArtifact: options.providerArtifact }) });
+    const state = await daemon.service.snapshot();
+    print({ ok: true, status: "running", socketPath: daemon.socketPath, automation: state.automation?.state ?? "unavailable", detail: state.automation?.detail ?? state.detail });
+    let stopped!: () => void;
+    const signalled = new Promise<void>(resolve_ => { stopped = resolve_; });
+    const onSignal = (): void => stopped();
+    process.once("SIGINT", onSignal); process.once("SIGTERM", onSignal);
+    try { await Promise.race([signalled, daemon.stopRequested]); }
+    finally { process.off("SIGINT", onSignal); process.off("SIGTERM", onSignal); }
+    await daemon.close();
+    return 0;
+  };
+  // `daemon install|uninstall` share `control install|uninstall`'s person-only gate.
+  if (GRAMMAR_FAMILIES.has(args[0]!) || args[0] === "daemon" && (args[1] === "install" || args[1] === "uninstall")) {
+    return await runGrammar(args, machine, {
+      request, awaitJob: input => awaitOwnerJob(input, request), dataDir, launchAgent: lifecycle, serve,
+      readiness: () => readReadiness(dataDir),
+      readinessText: value => readinessText(value, { symbols }),
+      interactiveTui: () => runTextbutlerTui(dataDir, output, { ...(options.entrypoint ? { entrypoint: options.entrypoint } : {}) }),
+      stdoutIsTerminal: output === process.stdout && process.stdout.isTTY === true,
+    }, { stdout: output, stderr: process.stderr, env: env as NodeJS.ProcessEnv, audience, ...options.gate ? { gate: options.gate } : {} });
+  }
   if (args[0] === "setup") return await runSetup(args.slice(1), dataDir, output, { symbols });
   // Hidden: TextButler.app runs this role itself (see the setup guide).
   if (command === "app imessage-setup") {
@@ -83,8 +112,6 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     const result = await runIMessageSetup(dataDir); print(result); return result.ok ? 0 : 1;
   }
   if (args[0] === "app") throw new CliUsageError(`Unknown command ${quoteInput(args.join(" "))}.`, "textbutler --help", "unknown-command");
-  if (command === "tui") return await runTextbutlerTui(dataDir, output, { ...(options.entrypoint ? { entrypoint: options.entrypoint } : {}) });
-  if (command === "doctor") return await runDoctor(dataDir, output, { json: machine, symbols });
   if (args[0] === "messages") {
     try { return (await handleMessagesCommand(args, { request, print, dataDir }))!; }
     catch (error) {
@@ -126,7 +153,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     ? { contact: args[2]!, resolution: args[3] === "--sent" ? "sent" as const : args[3] === "--failed" ? "failed" as const : undefined } : undefined;
   const replies = inbox || repliesSuggest !== undefined || repliesShow !== undefined || repliesSendDraft !== undefined || repliesSendText !== undefined || repliesDiscard !== undefined || repliesReconcile !== undefined;
   if (args[0] === "replies" && !replies) throw usage(args);
-  if (!["init", "doctor", "providers list", "providers gateway-key", "daemon run", "daemon install", "daemon uninstall", "daemon status"].includes(command) && !checkAccount && !replies && !(args[0] === "providers" && args[1] === "local")) throw usage(args);
+  if (!["init", "doctor", "providers list", "providers gateway-key", "daemon run", "daemon status"].includes(command) && !checkAccount && !replies && !(args[0] === "providers" && args[1] === "local")) throw usage(args);
   /** Job-backed control call: poll until the stored result arrives. */
   const job = (input: ControlRequest): Promise<ControlResponse> => awaitOwnerJob(input, request);
   const unresolved = (response: ControlResponse): void => { print(response.ok && response.kind === "job" ? pendingJobOutput(response) : response); };
@@ -224,33 +251,16 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
     print({ ok: true, status: "initialized", dataDir: state.dataDir, automation: "unchanged", detail: "New settings start private and paused; existing settings and activation are preserved. This command does not connect accounts or install login startup. Run textbutler doctor for next steps." });
     return 0;
   }
-  if (command === "daemon install" || command === "daemon uninstall") {
-    const lifecycle = options.launchAgent ?? createLaunchAgentLifecycle(defaultLaunchAgentHost(options.entrypoint));
-    const launchAgent = command === "daemon install" ? await lifecycle.install(dataDir) : await lifecycle.uninstall(dataDir);
-    const ok = launchAgent.installation === (command === "daemon install" ? "installed" : "absent");
-    const daemon = await request({ protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" }).catch(() => null);
-    print({ ok, launchAgent, automaticReplies: daemon?.ok && daemon.kind === "snapshot" ? daemon.snapshot.automation?.state ?? "unavailable" : "unavailable" }); return ok ? 0 : 1;
-  }
   if (command === "daemon status") {
-    const lifecycle = options.launchAgent ?? createLaunchAgentLifecycle(defaultLaunchAgentHost(options.entrypoint));
     const [launchAgent, daemon] = await Promise.all([
-      lifecycle.status(dataDir),
+      lifecycle().status(dataDir),
       requestDaemon({ dataDir, request: { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" } }).catch(() => null),
     ]);
     print({ ok: daemon?.ok ?? false, daemon: daemon ?? { ok: false, status: "disconnected" }, launchAgent,
       automaticReplies: daemon?.ok && daemon.kind === "snapshot" ? daemon.snapshot.automation?.state ?? "unavailable" : "unavailable" });
     return daemon?.ok ? 0 : 1;
   }
-  if (process.platform !== "darwin") throw new Error("The Textbutler foreground daemon is supported on macOS only.");
-  const daemon = await startDaemon({ dataDir, ...(options.providerArtifact === undefined ? {} : { providerArtifact: options.providerArtifact }) });
-  const state = await daemon.service.snapshot();
-  print({ ok: true, status: "running", socketPath: daemon.socketPath, automation: state.automation?.state ?? "unavailable", detail: state.automation?.detail ?? state.detail });
-  await new Promise<void>(resolve_ => {
-    const stopped = (): void => { process.off("SIGINT", stopped); process.off("SIGTERM", stopped); resolve_(); };
-    process.once("SIGINT", stopped); process.once("SIGTERM", stopped);
-  });
-  await daemon.close();
-  return 0;
+  return await serve();
 }
 /** Render a thrown error per SPEC § D5: one sentence and one next command on
  * stderr, or the JSON error object on stdout for --json and agents. */

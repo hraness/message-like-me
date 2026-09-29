@@ -4,7 +4,7 @@
  *
  * Nothing here triggers a macOS prompt. Opening System Settings happens only
  * for an explicit owner keypress, and only for the allowlisted URLs below. */
-import { renderPrePrompt as kitPrePrompt, renderRecovery as kitRecovery, settingsPath as kitPath, settingsUrl as kitUrl, type PermissionNeed as KitNeed } from "@hraness/desktop-foundation";
+import { renderPrePrompt as kitPrePrompt, renderRecovery as kitRecovery, settingsPath as kitPath, settingsUrl as kitUrl, type PermissionNeed as KitNeed } from "@hraness/desktop-foundation/permissions";
 import type { Symbols } from "./cli-style.ts";
 
 export type TextbutlerPermissionKind = "full-disk-access" | "automation";

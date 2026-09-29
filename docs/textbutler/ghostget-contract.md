@@ -3,8 +3,8 @@
 TextButler owns reply policy and contact memory. GhostGet owns messaging
 accounts, native permissions, synchronization, event storage and outward
 actions. TextButler communicates with its own GhostGet owner process through
-`ghostget messaging automation serve --stdio`; it does not share the GhostGet
-menu companion's private helper or open provider databases.
+`ghostget messaging automation serve --stdio`; it does not share another
+GhostGet process's private helper or open provider databases.
 
 The automation contract was first admitted with
 [GhostGet 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2).

@@ -105,12 +105,28 @@ describe("Textbutler CLI style contract", () => {
     expect(text.text.trimEnd().split("\n").slice(-2)).toEqual(["6 steps left.", "→ textbutler setup"]);
     expect(text.text).not.toContain("{");
     for (const json of [await run(["doctor", "--json", "--data-dir", dataDir]), await run(["doctor", "--data-dir", dataDir, "--json"]), await run(["doctor", "--data-dir", dataDir], { audience: "agent" })]) {
-      expect(json.code).toBe(1);
-      expect(JSON.parse(json.text)).toMatchObject({ ok: false, initialized: false, daemonConnected: false });
+      // A read verb that answered: ok envelope, exit 0, readiness in data.ok (error-codes.json).
+      expect(json.code).toBe(0);
+      expect(JSON.parse(json.text)).toMatchObject({ ok: true, schema: "textbutler.readiness/1", data: { ok: false, initialized: false, daemonConnected: false },
+        next: [{ command: "textbutler setup", audience: "human" }] });
     }
     const ascii = await run(["doctor", "--data-dir", dataDir], { env: { TERM: "dumb" } });
     expect(ascii.text).toContain("WARN Private settings");
     expect(ascii.text).toContain("-> textbutler setup");
+  });
+  test("daemon install and uninstall refuse an agent like control install and change nothing", async () => {
+    const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-golden-")); roots.push(dataDir);
+    const touched: string[] = [];
+    const launchAgent = { status: async () => { throw new Error("unused"); }, install: async () => { touched.push("install"); throw new Error("must not install"); },
+      uninstall: async () => { touched.push("uninstall"); throw new Error("must not uninstall"); } };
+    for (const action of ["install", "uninstall"]) {
+      let text = "";
+      const code = await runTextbutlerCli(["daemon", action, "--data-dir", dataDir], { write: value => { text += value; } },
+        { env: { CLAUDECODE: "1", PATH: "", HOME: dataDir }, audience: "agent", launchAgent: launchAgent as never });
+      expect(code).toBe(3);
+      expect(JSON.parse(text)).toMatchObject({ ok: false, error: { code: "human-required" } });
+    }
+    expect(touched).toEqual([]);
   });
   test("a trailing --json is never taken from the text of a literal reply", async () => {
     const dataDir = await mkdtemp(join(await realpath("/tmp"), "textbutler-golden-")); roots.push(dataDir);

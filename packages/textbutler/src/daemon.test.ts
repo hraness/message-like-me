@@ -16,7 +16,7 @@ describe("foreground owner-only control socket", () => {
   test("CLI help is a successful read-only command", async () => {
     const lines: string[] = [];
     expect(await runTextbutlerCli(["--help"], { write: text => lines.push(text) })).toBe(0);
-    expect(lines[0]).toContain("daemon install");
+    expect(lines[0]).toContain("control install");
     lines.length = 0;
     expect(await runTextbutlerCli(["help", "daemon"], { write: text => lines.push(text) })).toBe(0);
     expect(lines[0]).toContain("daemon run");
@@ -74,8 +74,9 @@ describe("foreground owner-only control socket", () => {
     expect(JSON.parse(lines.pop()!)).toMatchObject({ status: "initialized", automation: "unchanged" });
     expect(await runTextbutlerCli(["daemon", "status", "--data-dir", dataDir], output)).toBe(1);
     await start(dataDir);
-    expect(await runTextbutlerCli(["doctor", "--json", "--data-dir", dataDir], output)).toBe(process.platform === "darwin" ? 0 : 1);
-    expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: process.platform === "darwin", daemonConnected: true, automaticReplies: "unavailable" });
+    expect(await runTextbutlerCli(["doctor", "--json", "--data-dir", dataDir], output)).toBe(0);
+    // Readiness is data.ok; the envelope and exit agree even when setup is not ready.
+    expect(JSON.parse(lines.pop()!)).toMatchObject({ ok: true, schema: "textbutler.readiness/1", data: { ok: process.platform === "darwin", daemonConnected: true, automaticReplies: "unavailable" } });
   });
   test("configured Ghostget automation runs supervised and reports its messaging detail", async () => {
     const dataDir = await root();

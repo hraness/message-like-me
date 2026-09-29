@@ -2,7 +2,8 @@
  * audience detection from the kit, status symbols with ASCII fallbacks, and
  * the one-line error shape. Textbutler prints no color, so NO_COLOR needs no
  * handling here. */
-import { CLI_SYMBOLS, detectAudience as kitAudience, type Audience } from "@hraness/desktop-foundation";
+import { CLI_SYMBOLS } from "@hraness/desktop-foundation/cli-style";
+import { detectAudience as kitAudience, type Audience } from "@hraness/desktop-foundation/audience";
 
 export type { Audience };
 type Env = Readonly<Record<string, string | undefined>>;

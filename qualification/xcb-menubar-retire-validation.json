@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "scope": "Verify the shared command grammar, TUI goldens, person-gated decisions, owner.stop and the retired menu login item.",
+  "toolchain": "Bun 1.3.14",
+  "command": "bun test packages/textbutler/src/grammar.test.ts packages/textbutler/src/cli-golden.test.ts packages/textbutler/src/daemon.test.ts packages/textbutler/src/cli.test.ts packages/textbutler/src/launch-agent.test.ts scripts/install-textbutler.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 112,
+    "failed": 0,
+    "files": 6,
+    "assertions": 1368
+  },
+  "typecheck": {
+    "command": "node_modules/.bin/tsc --noEmit -p packages/textbutler/tsconfig.json",
+    "exitCode": 0,
+    "log": "qualification/xcb-menubar-retire-typecheck.log",
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceSha256": {
+    "packages/control/src/index.ts": "afbdd297541a1196673ec07ee7cf554e84c573be8b02ad562252237c679e4593",
+    "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
+    "packages/textbutler/src/cli-help.ts": "f4189d657fb1e515e258256949a098139dcb334ce8baf482b6ba1189fb87c37c",
+    "packages/textbutler/src/cli-style.ts": "10f0e5966b62b8110dddb66d6290efbab91eebf9f3a4d45e8f3ba60754d286b7",
+    "packages/textbutler/src/control-service.ts": "4fa87b5505bf47f03a90efe984bc56730a803540839c6d530128c196c27f518b",
+    "packages/textbutler/src/daemon.ts": "ae4a4ee76f1c9166bc109c2e08e34b1886b88634737ee2f5dc368da0a8fa2a17",
+    "packages/textbutler/src/grammar.ts": "f4a0d66b56b1eed6a939ee6273cb5d816f8e5e8d13e58a8bf6d203a41caa6c08",
+    "packages/textbutler/src/permission-copy.ts": "63a000c943857ab4df2287d0646ea04cba18355f57a7d3dc4fed076d8ad35f1c",
+    "scripts/install-textbutler.ts": "9ffeb2c980e09aacb0bf806462367feaeaa1600b9698462ef8545aaff69ea034",
+    "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
+    "package.json": "15d95b72060a1c542370960781ca3ee24f58b37d46240179d7ddb8b3d1d2d292",
+    "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
+    "packages/textbutler/src/grammar.test.ts": "e95b4b9d6524da1f0986458458253e904d02b80ce62ddd09cb741c08eaf7b5da",
+    "packages/textbutler/src/cli-golden.test.ts": "2ce5815fe9c046010d9934f083a5ecce1fd987eb14925af863ae03bc71d07ef9",
+    "packages/textbutler/src/daemon.test.ts": "09563846d108a786434598ebc95145996c88af9d0097ae47db22511413e4e15f",
+    "packages/textbutler/src/cli.test.ts": "43d334967627b9e1c824adf421df54f8014672e58dcb0d54ba42ce1aaba736b1",
+    "scripts/install-textbutler.test.ts": "bb0d159197d05cb967840fce662d7182c281cfd9f6a6864d5b96c72df139eb72",
+    "scripts/textbutler-build.test.ts": "e37acb11c89517d9c3cf9f2607a3cdf45d28a43402422be6902eb77468d06d94",
+    "packages/textbutler/src/launch-agent.test.ts": "e7a6b9142d93d23f83e5e21b80901673a88317dc2a252de0e84006574865cd54"
+  },
+  "review": "qualification/xcb-menubar-retire-review.json",
+  "reviewSha256": "a554820d409de08210437bd46102605f81dbcb7eefad00a822e538be8575c18e",
+  "log": "qualification/xcb-menubar-retire-focused.log",
+  "logSha256": "d854924b57d0db7348eccd2144bc463e82d0ae9b13f024c4bcbd5ac2e75b0a56"
+}

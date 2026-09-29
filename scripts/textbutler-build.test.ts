@@ -39,7 +39,7 @@ test("the real bundle runs from an isolated installation without node_modules or
     const doctor = await run(["doctor", "--json", "--data-dir", data]);
     expect(doctor.stdout).not.toContain("UNSAFE-PRELOAD");
     expect(doctor.stderr).not.toContain("local installation");
-    expect(JSON.parse(doctor.stdout)).toMatchObject({ canGenerateReplies: false, daemonConnected: false });
+    expect(JSON.parse(doctor.stdout)).toMatchObject({ schema: "textbutler.readiness/1", data: { canGenerateReplies: false, daemonConnected: false } });
     const status = await run(["daemon", "status", "--data-dir", data]);
     expect(status.code).toBe(1); expect(status.stderr).toBe("");
     expect(JSON.parse(status.stdout)).toMatchObject({ daemon: { ok: false, status: "disconnected" }, automaticReplies: "unavailable" });

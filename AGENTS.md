@@ -7,7 +7,12 @@ The historical constraints below continue to govern the legacy `src/`, `dist/`,
 published message contracts, and their existing release machinery. They do not
 prohibit the explicitly requested new runtime in `packages/`. The owner removed
 the menu bar companion: Textbutler is controlled through its CLI and guided
-terminal only. The owner also authorized a minimal native TextButler.app
+terminal only. Every command follows the shared desktop-foundation grammar
+(`packages/textbutler/src/grammar.ts`): `--json` prints the shared envelope,
+`commands --json` lists each verb's class, and `decide` verbs (approvals
+decide, permissions set loosen, control install/uninstall and their older
+daemon install/uninstall names) need the person in their own terminal. Keep `docs/textbutler/cli-parity.md` in step with the
+registry. The owner also authorized a minimal native TextButler.app
 supervisor so macOS can grant Messages access to TextButler itself. Its fixed
 roles launch only the verified runtime's daemon or owner-invoked iMessage setup;
 opening the app itself starts nothing. Preserve exact

@@ -173,6 +173,12 @@ paused, and each person’s state. `pause` stops everything at once, and
 `contacts disable` turns one person off. Uninstalling with `daemon uninstall`
 keeps your settings and contact notes.
 
+Every command also takes `--json`. `textbutler tui --snapshot` prints the
+guided terminal's views as plain text, and `textbutler commands --json` lists
+every command with who may run it. Commands that send a reply or turn a chat on
+need you in person: an agent gets `human-required` and nothing changes. See
+[the command reference](docs/textbutler/cli-parity.md).
+
 For AI replies, start the service from the installed copy instead:
 `~/.local/bin/textbutler daemon install`. A service started with
 `bun run textbutler` from the checkout doesn’t write AI replies.

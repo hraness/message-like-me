@@ -372,9 +372,10 @@ unregisters the background service and keeps your data.
 
 If you open `TextButler.app` itself, it starts nothing and exits: the app exists
 so macOS can grant iMessage access to TextButler, and launchd runs its
-background roles. Upgrading with `bun run textbutler:install --upgrade` removes
-the retired menu bar companion from your login items if an earlier version
-added it.
+background roles. Upgrading with `bun run textbutler:install --upgrade` moves
+the retired menu bar companion's login item aside if an earlier version added
+it. It renames the file and never deletes it. Every menu item it had is now a
+command; [the command reference](cli-parity.md) lists where each one went.
 
 ## Turn on automatic replies only when ready
 

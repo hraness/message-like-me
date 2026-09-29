@@ -34,7 +34,15 @@ export function daemonSocketPath(dataDir = defaultDataDirectory()): string {
   return path;
 }
 function unavailable(message: string): ControlResponse { return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: false, code: "unavailable", message }; }
-export interface RunningDaemon { readonly socketPath: string; readonly service: TextbutlerControlService; readonly extensions: LoadedExtensions; close(): Promise<void> }
+export interface RunningDaemon { readonly socketPath: string; readonly service: TextbutlerControlService; readonly extensions: LoadedExtensions;
+  /** Settles once an owner.stop request was answered over the socket. */
+  readonly stopRequested: Promise<void>; close(): Promise<void> }
+/** A well-formed `owner.stop` request; anything else goes to the control service. */
+function isOwnerStop(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length === 2 && (value as Record<string, unknown>).protocol === TEXTBUTLER_CONTROL_PROTOCOL && (value as Record<string, unknown>).command === "owner.stop";
+}
 
 /** Foreground owner daemon. Explicit configured messaging accounts may start a
  * Ghostget control process; only enabled contacts with grants can run replies. */
@@ -53,15 +61,21 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
   let activity: MessagesActivity | undefined;
   let nativeSubscriptions: NativeSubscriptionHost | undefined;
   const server = createServer();
+  let requestStop!: () => void;
+  const stopRequested = new Promise<void>(resolve_ => { requestStop = resolve_; });
   const transport = attachControlSocket(server, {
     maximumFrameBytes: MAX_CONTROL_FRAME_BYTES,
     maximumConnections: MAX_CONNECTIONS,
     maximumRequestsPerConnection: MAX_REQUESTS_PER_CONNECTION,
     headerTimeoutMs: SOCKET_TIMEOUT_MS,
     idleTimeoutMs: SOCKET_TIMEOUT_MS,
-    onRequest: (value) => service === undefined
-      ? unavailable("The control daemon is not ready or is at capacity.")
-      : service.request(value),
+    onRequest: (value) => {
+      if (service === undefined) return unavailable("The control daemon is not ready or is at capacity.");
+      if (!isOwnerStop(value)) return service.request(value);
+      // Answer first, then let the caller of startDaemon close in order.
+      setTimeout(requestStop, 50);
+      return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "stopping" } satisfies ControlResponse;
+    },
     failureResponse: (reason) => reason === "invalid-request"
       ? { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: false, code: "invalid-request", message: "A bounded UTF-8 JSON control request is required." }
       : unavailable(reason === "limit"
@@ -131,7 +145,7 @@ export async function startDaemon(options: { dataDir?: string; initialSettings?:
     throw error;
   }
   let closePromise: Promise<void> | undefined;
-  return { socketPath: path, service, extensions: extensions!, close() {
+  return { socketPath: path, service, extensions: extensions!, stopRequested, close() {
     closePromise ??= (async () => {
       const failures: unknown[] = [];
       for (const cleanup of [
