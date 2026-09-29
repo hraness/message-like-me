@@ -1,6 +1,6 @@
 # AI subscriptions through xcb
 
-TextButler uses [xcb (Excalibur)](https://github.com/hraness/xcb) to draft replies
+TextButler uses [Excalibur (xcb)](https://github.com/hraness/xcb) to draft replies
 through an explicitly connected Claude Code, Codex, or Devin subscription. xcb owns
 provider sign-in, runtime admission, operating-system confinement and account
 custody. TextButler owns contact context, response policy and every message send.
