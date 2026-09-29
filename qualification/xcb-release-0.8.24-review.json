@@ -1,0 +1,25 @@
+{
+  "kind": "ai-source-review",
+  "reviewer": "The releasing agent (Claude Code), two self-review rounds; Required CI on the PR head is the independent gate.",
+  "scope": "Textbutler 0.8.24 version bump (claude/release-0.8.24): version coordinates across package.json, site/package.json, src/version.ts, site/app/_lib/site.ts, README and docs install lines, regenerated readme mirror and dist/cli.js, site source-catalog pins, the 0.8.24 CHANGELOG section, and the receipt rebind to the bumped package.json.",
+  "rounds": [
+    {
+      "round": 1,
+      "design": "Bump every published version surface to 0.8.24 and add the changelog section.",
+      "verdict": "blockers",
+      "blockers": [
+        "Changelog section needed a summary paragraph (changelogSection contract) and the exact-package install bullet the site catalog test requires; both added and validated."
+      ]
+    },
+    {
+      "round": 2,
+      "design": "All surfaces agree at 0.8.24; generated files regenerated; changelog parses; receipt rebound.",
+      "verdict": "blockers-fixed",
+      "blockers": [
+        "Diff is limited to version coordinates, generated mirrors, changelog and qualification records; the release-policy fix itself shipped reviewed in #268."
+      ],
+      "verification": "bun run check exits 0 (853/853 Textbutler); site bun run test 87/87; changelogSection() parses 0.8.24."
+    }
+  ],
+  "result": "Ship."
+}
