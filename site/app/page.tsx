@@ -7,9 +7,11 @@ import {
   MarketingRelated,
   MarketingSection,
   ProductHero,
+  PlatformBadges,
   ProviderMarkChip,
   SyntaxCode,
 } from '@hraness/design-kit/react/server';
+import { PlatformInstall } from '@hraness/design-kit/react/platform-install';
 import { product, type PortfolioProductId } from '@hraness/design-kit/portfolio';
 import Link from 'next/link';
 
@@ -43,6 +45,7 @@ import {
   ARCHITECTURE_URL,
   GETTING_STARTED_URL,
   GHOSTGET_SETUP_URL,
+  INSTALL_PLATFORMS,
   pageMetadata,
   REPLY_CREDITS_NOTE,
   REPLY_WRITERS_PRECEDENCE,
@@ -293,7 +296,13 @@ export default function Home() {
               </figcaption>
               <pre aria-label="Setup prompt for your coding agent" tabIndex={0}><code>{AGENT_SETUP_PROMPT}</code></pre>
             </figure>
-            <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. There’s no one-line installer and no TextButler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
+            <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. There’s no TextButler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
+            <div className="tb-install" id="install">
+              <h3>Install it yourself</h3>
+              <p>This builds a local copy from source and checks it against the reviewed record. It starts no services and connects no accounts.</p>
+              <PlatformBadges platforms={['macos']} />
+              <PlatformInstall platforms={INSTALL_PLATFORMS} />
+            </div>
             <DiagramFigure alt="Who does what. Your agent clones and installs TextButler, connects your apps, and runs textbutler doctor. You turn on the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper if you use them, pick what writes replies, and turn on one person." name={DIAGRAMS.whoDoesWhat} />
             <div className="tb-setup-extra">
               <div>

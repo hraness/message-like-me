@@ -152,7 +152,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).toContain('Leave every chat turned off and don&#x27;t send any messages.');
 });
 
-test('binds Design Kit v0.24.0 to the portable Paper palette', async () => {
+test('binds Design Kit v0.29.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -164,7 +164,7 @@ test('binds Design Kit v0.24.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.24.0');
+    .toBe('github:hraness/design-kit#v0.29.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
@@ -239,4 +239,14 @@ test('offers guided source setup without implying a released AI engine or a menu
   expect(home).toContain(`${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`);
   expect(discovery).toContain('replies show DRAFT');
   expect(discovery).toContain('replies send DRAFT DIGEST');
+});
+
+test('offers the source install on macOS only, with Linux and Windows unavailable', () => {
+  const html = renderToStaticMarkup(<Home />);
+  const install = html.slice(html.indexOf('id="install"'));
+  const tabs = [...install.matchAll(/<button\b[^>]*data-platform="([a-z]+)"[^>]*role="tab"/gu)].map((match) => match[1]);
+  expect(tabs).toEqual(['macos', 'linux', 'windows']);
+  expect(install).toContain('git clone https://github.com/hraness/textbutler.git &amp;&amp; cd textbutler &amp;&amp; bun install --frozen-lockfile --ignore-scripts &amp;&amp; bun run textbutler:install');
+  expect(install.split('Uses Messages.app, so it runs on macOS only.').length - 1).toBe(2);
+  expect(install).toContain('Runs on');
 });
