@@ -255,9 +255,6 @@
 .tb-example--folder .workspace-example pre { padding: 0.9rem 0.75rem; font-size: 0.75rem; line-height: 1.7; white-space: pre-wrap; }
 /* Supporting phones keep a real iPhone's proportions and crop the empty bottom of the screen. */
 .tb-phone-crop { inline-size: min(100%, var(--crop-max, 22rem)); margin-inline: auto; aspect-ratio: 412 / var(--crop-h); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
-.tb-pause { justify-self: center; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font: 500 0.8125rem/1.2 var(--font-text); cursor: pointer; }
-.tb-pause:hover { color: var(--foreground); }
-.tb-pause:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .tb-example--solo { justify-items: center; }
 .tb-example--solo > :first-child { inline-size: min(100%, 22rem); }
 

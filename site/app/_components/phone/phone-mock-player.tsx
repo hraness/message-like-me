@@ -1,5 +1,7 @@
 'use client';
 
+import './pause.css';
+
 import { useEffect, useRef, useState } from 'react';
 
 import type { Conversation, Perspective } from './conversations';
