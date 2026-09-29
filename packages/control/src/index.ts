@@ -100,6 +100,9 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.enroll"; candidateId: string; expectedRevision: number; initializeHistory: boolean }
   | { protocol: typeof CONTROL_PROTOCOL; command: "owner.job.read"; jobId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot" }
+  /** Asks the running owner to finish its work and exit cleanly. The owner
+   * answers before it closes; nothing is signalled. */
+  | { protocol: typeof CONTROL_PROTOCOL; command: "owner.stop" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.check"; accountId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.login.start"; accountId: string; method: "chatgpt" | "chatgptDeviceCode" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "provider.accounts.login.cancel"; accountId: string; loginId: string }
@@ -134,6 +137,7 @@ export type ControlRequest =
 export type ControlResponse =
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "provider-login"; accountId: string; challenge: ProviderLoginChallenge; snapshot: DesktopSnapshot }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "job"; jobId: string }
+  | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "stopping" }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "conversations"; candidates: ConversationCandidate[]; detail: string; diagnostics?: readonly ConversationDiscoveryDiagnostic[] }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "enrolled"; snapshot: DesktopSnapshot; contactId: string; historyCount: number; historyOmittedCount: number; historyShortenedCount: number; historyInitialized: boolean }
   | { protocol: typeof CONTROL_PROTOCOL; ok: true; kind: "snapshot"; snapshot: DesktopSnapshot }
@@ -357,6 +361,7 @@ export function parseControlResponse(value: unknown): ControlResponse {
     return { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-sent", contactId: text(row.contactId, 256), runId: text(row.runId, 120),
       state: oneOf(row.state, ["submitted", "failed", "partial", "indeterminate", "cancelled"]), detail: text(row.detail, 512) };
   }
+  if (row.kind === "stopping") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "stopping" };
   if (row.kind === "reply-discarded") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-discarded", discarded: bool(row.discarded) };
   if (row.kind === "reply-reconciled") {
     return { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-reconciled", contactId: text(row.contactId, 256), resolved: bool(row.resolved), detail: text(row.detail, 512),

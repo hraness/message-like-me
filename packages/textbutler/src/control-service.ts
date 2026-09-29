@@ -72,7 +72,7 @@ function parseUiSettings(value: unknown) {
 export function parseControlRequest(value: unknown): ControlRequest {
   const item = record(value);
   if (item.protocol !== TEXTBUTLER_CONTROL_PROTOCOL) fail("invalid-request", "Unsupported control protocol.");
-  if (item.command === "snapshot" || item.command === "activity.list" || item.command === "conversations.list") {
+  if (item.command === "snapshot" || item.command === "activity.list" || item.command === "conversations.list" || item.command === "owner.stop") {
     exact(item, ["protocol", "command"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command };
   }
   if (item.command === "owner.job.read") {
@@ -633,6 +633,8 @@ export class TextbutlerControlService {
   }
   private async execute(request: ControlRequest): Promise<ControlResponse> {
     if (this.closed) fail("unavailable", "The control service is closing.");
+    // Only the daemon that owns the socket can stop; it answers before this service.
+    if (request.command === "owner.stop") fail("unavailable", "This control service cannot stop its owner.");
     const current = await this.current();
     if (request.command === "snapshot" || request.command === "activity.list") return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
     if (request.command === "owner.job.read") {

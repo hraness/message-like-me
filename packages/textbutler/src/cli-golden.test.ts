@@ -106,7 +106,7 @@ describe("Textbutler CLI style contract", () => {
     expect(text.text).not.toContain("{");
     for (const json of [await run(["doctor", "--json", "--data-dir", dataDir]), await run(["doctor", "--data-dir", dataDir, "--json"]), await run(["doctor", "--data-dir", dataDir], { audience: "agent" })]) {
       expect(json.code).toBe(1);
-      expect(JSON.parse(json.text)).toMatchObject({ ok: false, initialized: false, daemonConnected: false });
+      expect(JSON.parse(json.text)).toMatchObject({ ok: true, schema: "textbutler.readiness/1", data: { ok: false, initialized: false, daemonConnected: false } });
     }
     const ascii = await run(["doctor", "--data-dir", dataDir], { env: { TERM: "dumb" } });
     expect(ascii.text).toContain("WARN Private settings");

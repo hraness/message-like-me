@@ -85,7 +85,7 @@ describe("owner CLI entrypoint", () => {
     expect(resume.json()).toMatchObject({ snapshot: { settings: { paused: false }, contacts: [{ settings: { enabled: false } }] } });
     const pause = await run(["pause", "--data-dir", dataDir]);
     expect(pause.json()).toMatchObject({ snapshot: { settings: { paused: true } } });
-    expect((await run(["status", "--data-dir", dataDir])).json()).toMatchObject({ kind: "snapshot" });
+    expect((await run(["status", "--json", "--data-dir", dataDir])).json()).toMatchObject({ ok: true, schema: "textbutler.status/1", data: { owner: { state: "running" } } });
   });
   test("owner commands report disconnected control without inventing completed changes", async () => {
     const dataDir = await root();

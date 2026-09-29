@@ -1,0 +1,1094 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`tui goldens for every former menu bar state stopped snapshot at 40 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────┐
+│Service: stopped                      │
+│Automatic replies: unavailable        │
+│Messaging: none connected             │
+│Chats: 0 added, 0 answering           │
+│Waiting: 0 messages, 0 suggestions    │
+│Next: textbutler control serve (or dae│
+└──────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conv
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state stopped snapshot at 80 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+│Service: stopped                                                              │
+│Automatic replies: unavailable                                                │
+│Messaging: none connected                                                     │
+│Chats: 0 added, 0 answering                                                   │
+│Waiting: 0 messages, 0 suggestions                                            │
+│Next: textbutler control serve (or daemon install)                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state stopped snapshot at 120 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Service: stopped                                                                                                      │
+│Automatic replies: unavailable                                                                                        │
+│Messaging: none connected                                                                                             │
+│Chats: 0 added, 0 answering                                                                                           │
+│Waiting: 0 messages, 0 suggestions                                                                                    │
+│Next: textbutler control serve (or daemon install)                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state stopped tui --json equals status --json 1`] = `
+{
+  "data": {
+    "accounts": [],
+    "activity": [],
+    "approvals": [],
+    "automaticReplies": "unavailable",
+    "contacts": [],
+    "messaging": [],
+    "owner": {
+      "detail": "The background service isn't running.",
+      "state": "stopped",
+    },
+    "paused": null,
+    "waiting": [],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "textbutler.status/1",
+}
+`;
+
+exports[`tui goldens for every former menu bar state running-empty snapshot at 40 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────┐
+│Service: running                      │
+│Automatic replies: running            │
+│Messaging: none connected             │
+│Chats: 0 added, 0 answering           │
+│Waiting: 0 messages, 0 suggestions    │
+└──────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conv
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state running-empty snapshot at 80 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+│Service: running                                                              │
+│Automatic replies: running                                                    │
+│Messaging: none connected                                                     │
+│Chats: 0 added, 0 answering                                                   │
+│Waiting: 0 messages, 0 suggestions                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state running-empty snapshot at 120 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Service: running                                                                                                      │
+│Automatic replies: running                                                                                            │
+│Messaging: none connected                                                                                             │
+│Chats: 0 added, 0 answering                                                                                           │
+│Waiting: 0 messages, 0 suggestions                                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state running-empty tui --json equals status --json 1`] = `
+{
+  "data": {
+    "accounts": [],
+    "activity": [],
+    "approvals": [],
+    "automaticReplies": "running",
+    "contacts": [],
+    "messaging": [],
+    "owner": {
+      "detail": "Synthetic owner state",
+      "state": "running",
+    },
+    "paused": false,
+    "waiting": [],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "textbutler.status/1",
+}
+`;
+
+exports[`tui goldens for every former menu bar state paused snapshot at 40 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────┐
+│Service: running                      │
+│Automatic replies: paused             │
+│Messaging: none connected             │
+│Chats: 0 added, 0 answering           │
+│Waiting: 0 messages, 0 suggestions    │
+└──────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conv
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state paused snapshot at 80 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+│Service: running                                                              │
+│Automatic replies: paused                                                     │
+│Messaging: none connected                                                     │
+│Chats: 0 added, 0 answering                                                   │
+│Waiting: 0 messages, 0 suggestions                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state paused snapshot at 120 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Service: running                                                                                                      │
+│Automatic replies: paused                                                                                             │
+│Messaging: none connected                                                                                             │
+│Chats: 0 added, 0 answering                                                                                           │
+│Waiting: 0 messages, 0 suggestions                                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state paused tui --json equals status --json 1`] = `
+{
+  "data": {
+    "accounts": [],
+    "activity": [],
+    "approvals": [],
+    "automaticReplies": "paused",
+    "contacts": [],
+    "messaging": [],
+    "owner": {
+      "detail": "Synthetic owner state",
+      "state": "running",
+    },
+    "paused": true,
+    "waiting": [],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "textbutler.status/1",
+}
+`;
+
+exports[`tui goldens for every former menu bar state access-needed snapshot at 40 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────┐
+│Service: running                      │
+│Automatic replies: unavailable        │
+│Messaging: none connected             │
+│Chats: 0 added, 0 answering           │
+│Waiting: 0 messages, 0 suggestions    │
+└──────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conv
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state access-needed snapshot at 80 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+│Service: running                                                              │
+│Automatic replies: unavailable                                                │
+│Messaging: none connected                                                     │
+│Chats: 0 added, 0 answering                                                   │
+│Waiting: 0 messages, 0 suggestions                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state access-needed snapshot at 120 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Service: running                                                                                                      │
+│Automatic replies: unavailable                                                                                        │
+│Messaging: none connected                                                                                             │
+│Chats: 0 added, 0 answering                                                                                           │
+│Waiting: 0 messages, 0 suggestions                                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+No chats added. Add one: textbutler conversations list
+
+== Suggestions ==
+No suggestions waiting.
+
+== AI accounts ==
+No AI accounts yet.
+
+== Recent activity ==
+Nothing yet.
+"
+`;
+
+exports[`tui goldens for every former menu bar state access-needed tui --json equals status --json 1`] = `
+{
+  "data": {
+    "accounts": [],
+    "activity": [],
+    "approvals": [],
+    "automaticReplies": "unavailable",
+    "contacts": [],
+    "messaging": [],
+    "owner": {
+      "detail": "Synthetic owner state",
+      "state": "running",
+    },
+    "paused": false,
+    "waiting": [],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "textbutler.status/1",
+}
+`;
+
+exports[`tui goldens for every former menu bar state populated snapshot at 40 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────┐
+│Service: running                      │
+│Automatic replies: running            │
+│Messaging: iMessage, WhatsApp, Beeper │
+│Chats: 3 added, 2 answering           │
+│Waiting: 2 messages, 1 suggestions    │
+└──────────────────────────────────────┘
+
+== Chats ==
+Chat        Replies  Mode     Account
+Alice Exa…  on       smart    owner-api
+Bob evil…   off      keyword  owner-api
+A very lo…  on       smart    owner-api
+
+== Suggestions ==
+Id       Chat      Expires           Sum
+draft-1  Alice E…  2026-09-29 12:30  Say
+
+== AI accounts ==
+Account    AI      Status
+Owner API  claude  ready
+
+== Recent activity ==
+When              What
+2026-09-29 11:59  Reply sent: Alice Exam
+"
+`;
+
+exports[`tui goldens for every former menu bar state populated snapshot at 80 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────┐
+│Service: running                                                              │
+│Automatic replies: running                                                    │
+│Messaging: iMessage, WhatsApp, Beeper                                         │
+│Chats: 3 added, 2 answering                                                   │
+│Waiting: 2 messages, 1 suggestions                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+Chat                              Replies  Mode     Account
+Alice Example                     on       smart    owner-api
+Bob evil Example                  off      keyword  owner-api
+A very long synthetic contact n…  on       smart    owner-api
+
+== Suggestions ==
+Id       Chat           Expires           Summary
+draft-1  Alice Example  2026-09-29 12:30  Say yes to dinner at eight
+
+== AI accounts ==
+Account    AI      Status
+Owner API  claude  ready
+
+== Recent activity ==
+When              What
+2026-09-29 11:59  Reply sent: Alice Example
+"
+`;
+
+exports[`tui goldens for every former menu bar state populated snapshot at 120 columns 1`] = `
+"== Status ==
+┌ Textbutler ──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│Service: running                                                                                                      │
+│Automatic replies: running                                                                                            │
+│Messaging: iMessage, WhatsApp, Beeper                                                                                 │
+│Chats: 3 added, 2 answering                                                                                           │
+│Waiting: 2 messages, 1 suggestions                                                                                    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+== Chats ==
+Chat                              Replies  Mode     Account
+Alice Example                     on       smart    owner-api
+Bob evil Example                  off      keyword  owner-api
+A very long synthetic contact n…  on       smart    owner-api
+
+== Suggestions ==
+Id       Chat           Expires           Summary
+draft-1  Alice Example  2026-09-29 12:30  Say yes to dinner at eight
+
+== AI accounts ==
+Account    AI      Status
+Owner API  claude  ready
+
+== Recent activity ==
+When              What
+2026-09-29 11:59  Reply sent: Alice Example
+"
+`;
+
+exports[`tui goldens for every former menu bar state populated tui --json equals status --json 1`] = `
+{
+  "data": {
+    "accounts": [
+      {
+        "id": "owner-api",
+        "label": "Owner API",
+        "provider": "claude",
+        "status": "ready",
+      },
+    ],
+    "activity": [
+      {
+        "at": "2026-09-29T11:59:00.000Z",
+        "detail": "Alice Example",
+        "title": "Reply sent",
+      },
+    ],
+    "approvals": [
+      {
+        "actions": 1,
+        "contactId": "contact-1",
+        "expiresAt": "2026-09-29T12:30:00.000Z",
+        "id": "draft-1",
+        "name": "Alice Example",
+        "summary": 
+"Say yes to dinner
+at eight"
+,
+      },
+    ],
+    "automaticReplies": "running",
+    "contacts": [
+      {
+        "account": "owner-api",
+        "id": "contact-1",
+        "mode": "smart",
+        "name": "Alice Example",
+        "provider": "imessage",
+        "replies": "on",
+      },
+      {
+        "account": "owner-api",
+        "id": "contact-2",
+        "mode": "keyword",
+        "name": "Bob ‮evil‬ Example",
+        "provider": "imessage",
+        "replies": "off",
+      },
+      {
+        "account": "owner-api",
+        "id": "contact-3",
+        "mode": "smart",
+        "name": "A very long synthetic contact name that must be cut to fit its column",
+        "provider": "imessage",
+        "replies": "on",
+      },
+    ],
+    "messaging": [
+      "imessage",
+      "whatsapp",
+      "beeper",
+    ],
+    "owner": {
+      "detail": "Synthetic owner state",
+      "state": "running",
+    },
+    "paused": false,
+    "waiting": [
+      {
+        "contactId": "contact-1",
+        "name": "Alice Example",
+        "pending": 2,
+        "sendable": true,
+      },
+    ],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "textbutler.status/1",
+}
+`;
+
+exports[`commands --json every verb has an op class and every decide verb has a gate 1`] = `
+{
+  "data": {
+    "product": "textbutler",
+    "verbs": [
+      {
+        "opClass": "read",
+        "path": [
+          "status",
+        ],
+        "schema": "textbutler.status/1",
+        "summary": "One-screen health: service, chats, suggestions, accounts",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "tui",
+        ],
+        "schema": "textbutler.status/1",
+        "summary": "Guided terminal; --snapshot or --json print the views without a terminal",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "doctor",
+        ],
+        "schema": "textbutler.readiness/1",
+        "summary": "Check setup, macOS access, the service and legacy login items",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "control",
+          "serve",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Run the background service in this terminal until control stop",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "control",
+          "status",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Show whether the service is running and whether it starts at login",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "control",
+          "stop",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Ask the running service to finish and exit; never signals a process",
+      },
+      {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "path": [
+          "control",
+          "install",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Start the service at login (a persistent login item)",
+      },
+      {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "path": [
+          "control",
+          "uninstall",
+        ],
+        "schema": "textbutler.control/1",
+        "summary": "Stop the service and remove its login item",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "approvals",
+          "list",
+        ],
+        "schema": "textbutler.approvals/1",
+        "summary": "List reply suggestions waiting for a decision",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "approvals",
+          "show",
+        ],
+        "schema": "textbutler.approval/1",
+        "summary": "Show every action in a suggestion and the digest to decide it",
+      },
+      {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "operateWhen": "deny discards the suggestion and needs no person",
+        "path": [
+          "approvals",
+          "decide",
+        ],
+        "schema": "textbutler.approval/1",
+        "summary": "Send a reviewed suggestion exactly as shown (allow-once), or discard it (deny)",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "permissions",
+          "list",
+        ],
+        "schema": "textbutler.permissions/1",
+        "summary": "Show which chats may get automatic replies",
+      },
+      {
+        "gate": "T1T2",
+        "opClass": "decide",
+        "operateWhen": "tighten turns replies off and needs no person",
+        "path": [
+          "permissions",
+          "set",
+        ],
+        "schema": "textbutler.permissions/1",
+        "summary": "Turn one chat's automatic replies on (loosen) or off (tighten)",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "setup",
+        ],
+        "schema": "textbutler.setup/1",
+        "summary": "Create private settings (paused) or add a connection",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "init",
+        ],
+        "schema": "textbutler.init/1",
+        "summary": "Create private settings without the checklist",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "pause",
+        ],
+        "schema": "textbutler.pause/1",
+        "summary": "Pause automatic replies for every chat",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "resume",
+        ],
+        "schema": "textbutler.resume/1",
+        "summary": "Resume automatic replies (chats that are off stay off)",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "inbox",
+        ],
+        "schema": "textbutler.inbox/1",
+        "summary": "List chats waiting for your reply",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "replies",
+          "suggest",
+        ],
+        "schema": "textbutler.replies/1",
+        "summary": "Write a reply suggestion (spends model credits); never sends",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "replies",
+          "show",
+        ],
+        "schema": "textbutler.replies/1",
+        "summary": "Show every action and the digest of a suggestion",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "replies",
+          "send",
+        ],
+        "schema": "textbutler.replies/1",
+        "summary": "Send a reviewed suggestion by digest, or your own text",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "replies",
+          "discard",
+        ],
+        "schema": "textbutler.replies/1",
+        "summary": "Throw a suggestion away",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "replies",
+          "reconcile",
+        ],
+        "schema": "textbutler.replies/1",
+        "summary": "Record whether an uncertain send arrived",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "conversations",
+          "list",
+        ],
+        "schema": "textbutler.conversations/1",
+        "summary": "List recent one-to-one chats you can add",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "contacts",
+          "list",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Show added chats and their settings",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "contacts",
+          "add",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Add a chat with automatic replies off",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "contacts",
+          "enable",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Turn on automatic replies for a chat",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "contacts",
+          "disable",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Turn off automatic replies and remove send access",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "contacts",
+          "account",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Choose the AI account for a chat",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "contacts",
+          "mode",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Answer everything (smart) or only on a keyword",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "contacts",
+          "self",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Mark a chat with yourself",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "contacts",
+          "label",
+        ],
+        "schema": "textbutler.contacts/1",
+        "summary": "Rename a chat",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "messaging",
+          "list",
+        ],
+        "schema": "textbutler.messaging/1",
+        "summary": "Show configured messaging apps",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "messaging",
+          "start",
+        ],
+        "schema": "textbutler.messaging/1",
+        "summary": "Connect iMessage, WhatsApp or Beeper",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "providers",
+          "gateway-key",
+        ],
+        "schema": "textbutler.providers/1",
+        "summary": "Save a Vercel AI Gateway key from a pipe",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "providers",
+          "local",
+        ],
+        "schema": "textbutler.providers/1",
+        "summary": "Write replies with a model on this Mac",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "providers",
+          "list",
+        ],
+        "schema": "textbutler.providers/1",
+        "summary": "Show connected AI accounts",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "providers",
+          "check",
+        ],
+        "schema": "textbutler.providers/1",
+        "summary": "Check that one AI account is ready",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "daemon",
+          "install",
+        ],
+        "schema": "textbutler.daemon/1",
+        "summary": "Start the service now and at login (same as control install)",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "daemon",
+          "uninstall",
+        ],
+        "schema": "textbutler.daemon/1",
+        "summary": "Stop the service and remove it from login",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "daemon",
+          "status",
+        ],
+        "schema": "textbutler.daemon/1",
+        "summary": "Show whether the service is running",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "daemon",
+          "run",
+        ],
+        "schema": "textbutler.daemon/1",
+        "summary": "Run the service in this terminal (same as control serve)",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "jobs",
+          "show",
+        ],
+        "schema": "textbutler.jobs/1",
+        "summary": "Read the result of a long operation",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "habitats",
+          "show",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Show a chat's reply style, memory and budget",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "habitats",
+          "configure",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Replace a chat's habitat (replies paused)",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "habitats",
+          "rollback",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Go back to an earlier habitat revision",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "habitats",
+          "memory-clear",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Forget a chat's learned excerpts",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "habitats",
+          "task-stage",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Stage a shadow task (replies paused)",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "habitats",
+          "task-rollback",
+        ],
+        "schema": "textbutler.habitats/1",
+        "summary": "Roll back a shadow task",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "messages",
+          "history",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Read one chat's recent messages",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "messages",
+          "summarize",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Summarize one chat (spends model credits)",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "messages",
+          "capabilities",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Show what a chat can send",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "messages",
+          "compose",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Draft a reply from text or actions",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "messages",
+          "react",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Draft a reaction",
+      },
+      {
+        "opClass": "operate",
+        "path": [
+          "messages",
+          "attach",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Draft an attachment",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "messages",
+          "send",
+        ],
+        "schema": "textbutler.messages/1",
+        "summary": "Send your own text in a chat",
+      },
+      {
+        "opClass": "decide-legacy",
+        "path": [
+          "campaign",
+          "run",
+        ],
+        "schema": "textbutler.campaign/1",
+        "summary": "Send your own texts at a slow pace",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "campaign",
+          "status",
+        ],
+        "schema": "textbutler.campaign/1",
+        "summary": "Show a campaign's progress",
+      },
+      {
+        "opClass": "read",
+        "path": [
+          "support",
+        ],
+        "schema": "textbutler.support/1",
+        "summary": "See optional ways to support Textbutler",
+      },
+    ],
+  },
+  "generatedAt": "<generatedAt>",
+  "ok": true,
+  "schema": "hraness.commands/1",
+}
+`;

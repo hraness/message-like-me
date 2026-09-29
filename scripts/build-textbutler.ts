@@ -8,7 +8,7 @@ import { DISTRIBUTION_FILES, MAX_RUNTIME_BYTES, physicalDirectory, publishArtifa
 const ROOT = resolve(import.meta.dir, "..");
 const PINNED_INPUTS = {
   "@hraness/agentmixer": "https://github.com/hraness/xcb/releases/download/v0.3.0/hraness-agentmixer-0.3.0.tgz",
-  "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.8.0/hraness-desktop-foundation-0.8.0.tgz",
+  "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.9.0/hraness-desktop-foundation-0.9.0.tgz",
   "@anthropic-ai/sdk": "0.125.0",
 } as const;
 
@@ -24,9 +24,9 @@ export async function buildTextbutler(options: { outdir?: string } = {}): Promis
   const lockfile = await readFile(join(ROOT, "bun.lock"));
   const bun = await validateBun(process.execPath);
   const desktopRoot = join(ROOT, "node_modules/@hraness/desktop-foundation");
-  const companionManifest = await readFile(join(desktopRoot, "release-manifest.json"), "utf8");
+  const foundationManifest = await readFile(join(desktopRoot, "release-manifest.json"), "utf8");
   const desktopClient = join(desktopRoot, "dist/src/client.js");
-  const inputs = new Map<string, string>([["package.json", sha256(packageBytes)], ["bun.lock", sha256(lockfile)], ["desktop-foundation/release-manifest.json", sha256(companionManifest)]]);
+  const inputs = new Map<string, string>([["package.json", sha256(packageBytes)], ["bun.lock", sha256(lockfile)], ["desktop-foundation/release-manifest.json", sha256(foundationManifest)]]);
   for (const input of ["scripts/build-textbutler.ts", "scripts/textbutler-distribution.ts", "scripts/support-runtime-policy.ts", "scripts/xcb-integration-admission.ts", XCB_INTEGRATION_RECEIPT, "LICENSE", "docs/support-foundation-notice.md"]) inputs.set(input, sha256(await readFile(join(ROOT, input))));
   const completePlugin: Bun.BunPlugin = { name: "textbutler-complete-local-artifact", setup(builder) {
       builder.onLoad({ filter: /\.(?:[cm]?js|[cm]?ts|tsx|json)$/u }, async args => {
@@ -38,8 +38,8 @@ export async function buildTextbutler(options: { outdir?: string } = {}): Promis
         let contents = original;
         if (path === desktopClient) {
           const source = "await readFile(new URL('../../release-manifest.json', import.meta.url))";
-          if (contents.split(source).length !== 2) throw new Error("The pinned companion manifest load changed; review bundling before building.");
-          contents = contents.replace(source, JSON.stringify(companionManifest));
+          if (contents.split(source).length !== 2) throw new Error("The pinned desktop-foundation manifest load changed; review bundling before building.");
+          contents = contents.replace(source, JSON.stringify(foundationManifest));
         }
         const extension = extname(path);
         const loader: Bun.Loader = extension === ".json" ? "json" : extension === ".tsx" ? "tsx" : extension.endsWith("ts") ? "ts" : "js";

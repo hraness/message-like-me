@@ -3,6 +3,7 @@ import { constants, type Stats } from "node:fs";
 import { lstat, open, readdir, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { launches, retireLegacyLoginItem } from "@hraness/desktop-foundation/retire";
 import { buildTextbutler } from "./build-textbutler.ts";
 import { DISTRIBUTION_FILES, physicalDirectory, publishArtifact, readArtifact, recoverPublishedStage, sealDistribution, shellQuote, validateBun, verifyDistribution } from "./textbutler-distribution.ts";
 
@@ -125,29 +126,19 @@ export async function installTextbutler(options: { from: string; prefix: string;
 }
 
 /** Textbutler is headless: the menu companion was removed. An upgrade retires
- * the menu's old login item so login no longer starts it. Only a regular file
- * at the companion's exact label that launches Textbutler's `menubar` role or
- * TextButler.app is touched: it is booted out and renamed aside (launchd
- * ignores the non-.plist name), never deleted. */
-export async function retireMenuLoginItem(home: string, bootout: (label: string) => Promise<void> = defaultBootout): Promise<"retired" | null> {
-  const label = "app.hraness.companion.textbutler";
-  const path = join(home, "Library", "LaunchAgents", `${label}.plist`);
-  let text: string;
-  try {
-    const info = await lstat(path);
-    if (!info.isFile() || info.size > 65_536 || info.uid !== process.getuid?.()) return null;
-    text = (await readArtifact(path, 65_536)).toString("utf8");
-  } catch { return null; }
-  const menuRole = text.includes("textbutler.mjs</string>") && text.includes("<string>menubar</string>");
-  if (!menuRole && !text.includes("/TextButler.app/Contents/MacOS/TextButler<")) return null;
-  await bootout(label);
-  await rename(path, `${path}.retired-${Date.now()}`);
-  return "retired";
+ * the menu's old login item with the desktop-foundation retire module. Only a
+ * small regular file owned by this user at the companion's exact label that
+ * launches Textbutler's `menubar` role or TextButler.app is touched: it is
+ * booted out and renamed aside (launchd ignores the non-.plist name), never
+ * deleted, and no other process is signalled. */
+export const MENU_LOGIN_ITEM_LABEL = "app.hraness.companion.textbutler";
+export function isMenuLoginItem({ text }: { text: string }): boolean {
+  return launches(/\/textbutler\.mjs$/u, "menubar")({ label: MENU_LOGIN_ITEM_LABEL, path: "", text })
+    || launches(/\/TextButler\.app\/Contents\/MacOS\/TextButler$/u)({ label: MENU_LOGIN_ITEM_LABEL, path: "", text });
 }
-async function defaultBootout(label: string): Promise<void> {
-  // A login item that isn't loaded right now is the common case; that is fine.
-  const child = Bun.spawn(["/bin/launchctl", "bootout", `gui/${process.getuid!()}/${label}`], { env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, stdin: "ignore", stdout: "ignore", stderr: "ignore", timeout: 20_000, killSignal: "SIGKILL" });
-  await child.exited;
+export async function retireMenuLoginItem(home: string, bootout?: (label: string) => Promise<void>): Promise<"retired" | null> {
+  const retired = await retireLegacyLoginItem({ home, labels: [MENU_LOGIN_ITEM_LABEL], accepts: isMenuLoginItem, ...(bootout ? { bootout } : {}) });
+  return retired ? "retired" : null;
 }
 
 if (import.meta.main) {

@@ -52,8 +52,12 @@ AI replies
   providers list             Show connected AI accounts
   providers check <account>  Check that one account is ready
 
-Background service
-  daemon install | status    Start at login, or see whether it's running
+Decisions and the service
+  approvals list | show      Review suggestions; decide needs you in person
+  permissions list | set     See or change which chats get automatic replies
+  control serve | stop       Run the service here, or ask it to exit
+  control install            Start the service at login (you run this)
+  commands --json            List every command and who may run it
 
 Options
   -h, --help                 Show help (also: textbutler help <topic>)
@@ -61,8 +65,8 @@ Options
   --json                     Print machine-readable output
   --data-dir <path>          Use another private data folder (absolute path)
 
-Topics: setup, contacts, replies, messaging, providers, daemon,
-permissions, advanced. Most commands print JSON so agents can read them.
+Topics: setup, contacts, replies, messaging, providers, daemon, control,
+approvals, permissions, advanced. Add --json to any command for agents.
 
 ${supportHelpLine({ command: ["textbutler"], env: HELP_ENV })}`;
 
@@ -87,11 +91,11 @@ Use absolute paths. Sign in with Ghostget and xcb first; Textbutler stores
 only references and pins the xcb file's checksum. Stop the service before
 adding a connection, then start it again.`,
     example: "textbutler setup --ghostget /opt/ghostget/ghostget --account imessage:messages" },
-  tui: { usage: "textbutler tui", summary: "Open the guided terminal. It walks through setup, connecting apps,\nadding chats and reviewing replies. Quitting leaves the service running." },
+  tui: { usage: "textbutler tui [--snapshot | --json] [--width <n>]", summary: "Open the guided terminal. It walks through setup, connecting apps,\nadding chats and reviewing replies. Quitting leaves the service running.\n--snapshot prints every view as plain text; --json prints the same data\nas textbutler status --json. Neither needs a terminal." },
   doctor: { usage: "textbutler doctor [--json]", summary: "Check each setup step and show the one thing to do next.\nDoctor only reads local settings; it never reads messages or spends credits.",
     body: `Options
   --json                     Print the full readiness report as JSON` },
-  status: { usage: "textbutler status", summary: "Print the background service's current state as JSON." },
+  status: { usage: "textbutler status [--json]", summary: "Show the service, chats, suggestions and AI accounts." },
   pause: { usage: "textbutler pause", summary: "Pause automatic replies for every chat. Replies you send yourself still work." },
   resume: { usage: "textbutler resume", summary: "Resume automatic replies. Chats that are off stay off." },
   inbox: { usage: "textbutler inbox", summary: "Check the chats you added and list the ones waiting for your reply." },
@@ -186,6 +190,29 @@ See docs/textbutler/agent-cli.md.` },
   campaign: { usage: "textbutler campaign run | status <file.jsonl> [options]", summary: CAMPAIGN_HELP.split("\n")[0]!.replace(/ \(JSON output\):$/u, "."),
     body: CAMPAIGN_HELP.split("\n").slice(1).join("\n").trimEnd(),
     example: "textbutler campaign run ~/launch/intro.jsonl --dry-run" },
+  control: { usage: "textbutler control serve | status | stop | install | uninstall", summary: "Run and stop the background service. It starts only when you ask.",
+    body: `Commands
+  control serve              Run the service in this terminal
+  control status             Show whether it's running and starts at login
+  control stop               Ask it to finish and exit (never a signal)
+  control install            Start it at login; you run this yourself
+  control uninstall          Stop it and remove it from login
+
+install and uninstall change what runs at login, so an agent can't run
+them. From your own terminal, they ask you to type a short code first.`,
+    example: "textbutler control status --json" },
+  approvals: { usage: "textbutler approvals list | show <id> | decide <id> --digest <d> <v>",
+    summary: "Review the reply suggestions waiting for you, then send or discard one.",
+    body: `Commands
+  approvals list             Suggestions waiting for a decision
+  approvals show <id>        Every action in one, and its digest
+  approvals decide <id> ...  <v> is allow-once (send it exactly as
+                             shown) or deny (discard it)
+
+decide needs you in person: an agent gets human-required and nothing
+changes. The digest makes sure you send what you reviewed. replies send
+still works as before.`,
+    example: "textbutler approvals show draft-1" },
   permissions: { usage: "textbutler help permissions", summary: "iMessage works through the Textbutler app on this Mac, and macOS needs\ntwo settings for it. Textbutler never changes them for you.",
     body: `Full Disk Access: read your Messages
   macOS doesn't ask for this. Turn on Textbutler in System Settings ›
@@ -198,7 +225,12 @@ Automation: send replies through Messages
 
 Install the app and run app setup from a source checkout: see "Give
 iMessage access" in docs/textbutler/getting-started.md. Then run
-textbutler doctor to check both.` },
+textbutler doctor to check both.
+
+Which chats get automatic replies
+  permissions list           Each chat and whether it's on
+  permissions set <chat> --expected-revision <n> <loosen|tighten>
+                             Turn one chat on (you, in person) or off` },
   advanced: { usage: "textbutler <command>", summary: "Commands for agents and for fixing unusual states.",
     body: `Commands
   init                       Create private settings without the checklist
@@ -224,5 +256,5 @@ export function topicHelp(name: string): string | undefined {
 }
 
 /** The known command words, for "did you mean" and help routing. */
-export const COMMANDS: readonly string[] = ["setup", "tui", "doctor", "status", "pause", "resume", "inbox", "replies", "contacts", "conversations",
+export const COMMANDS: readonly string[] = ["setup", "tui", "doctor", "status", "commands", "control", "approvals", "permissions", "pause", "resume", "inbox", "replies", "contacts", "conversations",
   "messaging", "providers", "daemon", "support", "init", "jobs", "habitats", "messages", "campaign", "help", "version"];
