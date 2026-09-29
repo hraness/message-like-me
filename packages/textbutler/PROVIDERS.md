@@ -1,7 +1,15 @@
 # Set up an agent account
 
-Textbutler keeps **Claude API**, **Claude Code** and **Codex** as separate account
-choices. Claude Code and Codex use an explicitly configured
+Most people don't need an agent account. Replies can be written by a local
+model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI
+Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.
+The first two need no account here: see
+[Pick what writes replies](../../docs/textbutler/getting-started.md#pick-what-writes-replies).
+This page covers the subscription route and the separately billed Claude API
+choice, which no build of this repository can run yet.
+
+Textbutler keeps **Claude API**, **Claude Code**, **Codex** and **Devin** as separate account
+choices. Claude Code, Codex and Devin use an explicitly configured
 [xcb](https://github.com/hraness/xcb) native runtime. Selecting either never
 borrows an API credential or starts separately billed API work. xcb owns
 subscription sign-in, confinement and provider custody; Textbutler owns contact

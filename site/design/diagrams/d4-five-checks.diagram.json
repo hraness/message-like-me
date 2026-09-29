@@ -1,0 +1,289 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hraness/slopcamera/main/schema/diagram.schema.json",
+  "version": 1,
+  "name": "d4-five-checks",
+  "canvas": {
+    "width": 440,
+    "height": 692,
+    "padding": 0
+  },
+  "shapes": [
+    {
+      "id": "msg-0",
+      "type": "ellipse",
+      "x": 136,
+      "y": 28,
+      "width": 12,
+      "height": 12,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "opacity": 1.0
+    },
+    {
+      "id": "msg-1",
+      "type": "ellipse",
+      "x": 162,
+      "y": 28,
+      "width": 12,
+      "height": 12,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "opacity": 0.88
+    },
+    {
+      "id": "msg-2",
+      "type": "ellipse",
+      "x": 188,
+      "y": 28,
+      "width": 12,
+      "height": 12,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "opacity": 0.76
+    },
+    {
+      "id": "msg-3",
+      "type": "ellipse",
+      "x": 214,
+      "y": 28,
+      "width": 12,
+      "height": 12,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "opacity": 0.64
+    },
+    {
+      "id": "msg-4",
+      "type": "ellipse",
+      "x": 240,
+      "y": 28,
+      "width": 12,
+      "height": 12,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "opacity": 0.52
+    },
+    {
+      "id": "spine",
+      "type": "line",
+      "x": 200,
+      "y": 52,
+      "x2": 200,
+      "y2": 508,
+      "tone": "blue",
+      "strokeWidth": 1.75
+    },
+    {
+      "id": "gate-0",
+      "type": "rect",
+      "x": 52.0,
+      "y": 76,
+      "width": 296,
+      "height": 48,
+      "radius": 24,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "Turned on?",
+      "labelFontSize": 14,
+      "labelWeight": 600
+    },
+    {
+      "id": "drop-0",
+      "type": "ellipse",
+      "x": 386.0,
+      "y": 116.0,
+      "width": 12,
+      "height": 12,
+      "tone": "red",
+      "strokeWidth": 0
+    },
+    {
+      "id": "gate-1",
+      "type": "rect",
+      "x": 52.0,
+      "y": 160,
+      "width": 296,
+      "height": 48,
+      "radius": 24,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "One-to-one?",
+      "labelFontSize": 14,
+      "labelWeight": 600
+    },
+    {
+      "id": "drop-1",
+      "type": "ellipse",
+      "x": 386.0,
+      "y": 200.0,
+      "width": 12,
+      "height": 12,
+      "tone": "red",
+      "strokeWidth": 0
+    },
+    {
+      "id": "gate-2",
+      "type": "rect",
+      "x": 52.0,
+      "y": 244,
+      "width": 296,
+      "height": 48,
+      "radius": 24,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "Said “butler”?",
+      "labelFontSize": 14,
+      "labelWeight": 600
+    },
+    {
+      "id": "drop-2",
+      "type": "ellipse",
+      "x": 386.0,
+      "y": 284.0,
+      "width": 12,
+      "height": 12,
+      "tone": "red",
+      "strokeWidth": 0
+    },
+    {
+      "id": "gate-3",
+      "type": "rect",
+      "x": 52.0,
+      "y": 328,
+      "width": 296,
+      "height": 48,
+      "radius": 24,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "You’ve been quiet 5 minutes?",
+      "labelFontSize": 14,
+      "labelWeight": 600
+    },
+    {
+      "id": "drop-3",
+      "type": "ellipse",
+      "x": 386.0,
+      "y": 368.0,
+      "width": 12,
+      "height": 12,
+      "tone": "red",
+      "strokeWidth": 0
+    },
+    {
+      "id": "gate-4",
+      "type": "rect",
+      "x": 52.0,
+      "y": 412,
+      "width": 296,
+      "height": 48,
+      "radius": 24,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "Under 12 this hour?",
+      "labelFontSize": 14,
+      "labelWeight": 600
+    },
+    {
+      "id": "drop-4",
+      "type": "ellipse",
+      "x": 386.0,
+      "y": 452.0,
+      "width": 12,
+      "height": 12,
+      "tone": "red",
+      "strokeWidth": 0
+    },
+    {
+      "id": "eyes",
+      "type": "rect",
+      "x": 140,
+      "y": 508,
+      "width": 120,
+      "height": 40,
+      "radius": 20,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "label": "🤖{ 👀 }",
+      "labelFontSize": 15,
+      "labelWeight": 500
+    },
+    {
+      "id": "reply",
+      "type": "rect",
+      "x": 140,
+      "y": 564,
+      "width": 120,
+      "height": 40,
+      "radius": 20,
+      "tone": "purple",
+      "strokeWidth": 0,
+      "label": "🤖{ … }",
+      "labelFontSize": 15,
+      "labelWeight": 500
+    },
+    {
+      "id": "caption",
+      "type": "text",
+      "x": 20,
+      "y": 640,
+      "text": "Most of the time, it does nothing.",
+      "fontSize": 16,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 400
+    }
+  ],
+  "edges": [
+    {
+      "id": "dash-fall-0",
+      "from": "gate-0",
+      "to": "drop-0",
+      "tone": "orange",
+      "start": "right",
+      "end": "top",
+      "bend": -18,
+      "arrowhead": "none"
+    },
+    {
+      "id": "dash-fall-1",
+      "from": "gate-1",
+      "to": "drop-1",
+      "tone": "orange",
+      "start": "right",
+      "end": "top",
+      "bend": -18,
+      "arrowhead": "none"
+    },
+    {
+      "id": "dash-fall-2",
+      "from": "gate-2",
+      "to": "drop-2",
+      "tone": "orange",
+      "start": "right",
+      "end": "top",
+      "bend": -18,
+      "arrowhead": "none"
+    },
+    {
+      "id": "dash-fall-3",
+      "from": "gate-3",
+      "to": "drop-3",
+      "tone": "orange",
+      "start": "right",
+      "end": "top",
+      "bend": -18,
+      "arrowhead": "none"
+    },
+    {
+      "id": "dash-fall-4",
+      "from": "gate-4",
+      "to": "drop-4",
+      "tone": "orange",
+      "start": "right",
+      "end": "top",
+      "bend": -18,
+      "arrowhead": "none"
+    }
+  ]
+}

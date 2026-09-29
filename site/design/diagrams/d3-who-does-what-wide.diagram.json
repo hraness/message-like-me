@@ -1,0 +1,371 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hraness/slopcamera/main/schema/diagram.schema.json",
+  "version": 1,
+  "name": "d3-who-does-what-wide",
+  "canvas": {
+    "width": 1200,
+    "height": 500,
+    "padding": 0
+  },
+  "shapes": [
+    {
+      "id": "under-lane-agent",
+      "type": "rect",
+      "x": 40,
+      "y": 72,
+      "width": 1120,
+      "height": 136,
+      "radius": 16,
+      "tone": "blue",
+      "strokeWidth": 0
+    },
+    {
+      "id": "under-lane-you",
+      "type": "rect",
+      "x": 40,
+      "y": 226,
+      "width": 1120,
+      "height": 250,
+      "radius": 16,
+      "tone": "yellow",
+      "strokeWidth": 0
+    },
+    {
+      "id": "divider-0",
+      "type": "line",
+      "x": 500,
+      "y": 72,
+      "x2": 500,
+      "y2": 476,
+      "tone": "orange",
+      "strokeWidth": 1,
+      "opacity": 0.35
+    },
+    {
+      "id": "divider-1",
+      "type": "line",
+      "x": 860,
+      "y": 72,
+      "x2": 860,
+      "y2": 476,
+      "tone": "orange",
+      "strokeWidth": 1,
+      "opacity": 0.35
+    },
+    {
+      "id": "step-0",
+      "type": "text",
+      "x": 40,
+      "y": 32,
+      "text": "1  Ask your agent",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 460
+    },
+    {
+      "id": "step-1",
+      "type": "text",
+      "x": 500,
+      "y": 32,
+      "text": "2  Say yes to your Mac",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 360
+    },
+    {
+      "id": "step-2",
+      "type": "text",
+      "x": 860,
+      "y": 32,
+      "text": "3  Turn on one person",
+      "fontSize": 15,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "middle",
+      "width": 300
+    },
+    {
+      "id": "lane-agent-label",
+      "type": "text",
+      "x": 60,
+      "y": 86,
+      "text": "Your agent",
+      "fontSize": 13,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start"
+    },
+    {
+      "id": "lane-you-label",
+      "type": "text",
+      "x": 60,
+      "y": 242,
+      "text": "You",
+      "fontSize": 13,
+      "weight": 700,
+      "tone": "neutral",
+      "align": "start"
+    },
+    {
+      "id": "clone",
+      "type": "rect",
+      "x": 70,
+      "y": 118,
+      "width": 150,
+      "height": 64,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "clone + install",
+      "labelFontSize": 13,
+      "labelWeight": 500
+    },
+    {
+      "id": "connect",
+      "type": "rect",
+      "x": 316,
+      "y": 118,
+      "width": 150,
+      "height": 64,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "connect apps",
+      "labelFontSize": 13,
+      "labelWeight": 500
+    },
+    {
+      "id": "doctor-1",
+      "type": "rect",
+      "x": 580,
+      "y": 118,
+      "width": 200,
+      "height": 64,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "textbutler doctor ✓",
+      "labelFontSize": 13,
+      "labelWeight": 500,
+      "labelFontFamily": "mono"
+    },
+    {
+      "id": "doctor-2",
+      "type": "rect",
+      "x": 910,
+      "y": 118,
+      "width": 200,
+      "height": 64,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "textbutler doctor ✓",
+      "labelFontSize": 13,
+      "labelWeight": 500,
+      "labelFontFamily": "mono"
+    },
+    {
+      "id": "you-card",
+      "type": "rect",
+      "x": 520,
+      "y": 278,
+      "width": 320,
+      "height": 164,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25
+    },
+    {
+      "id": "ghost-toggle-0",
+      "type": "rect",
+      "x": 540,
+      "y": 302,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-0",
+      "type": "ellipse",
+      "x": 554,
+      "y": 304,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-0",
+      "type": "text",
+      "x": 584,
+      "y": 302,
+      "text": "Full Disk Access switch",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 248
+    },
+    {
+      "id": "ghost-toggle-1",
+      "type": "rect",
+      "x": 540,
+      "y": 334,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-1",
+      "type": "ellipse",
+      "x": 554,
+      "y": 336,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-1",
+      "type": "text",
+      "x": 584,
+      "y": 334,
+      "text": "Allow Messages",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 248
+    },
+    {
+      "id": "ghost-toggle-2",
+      "type": "rect",
+      "x": 540,
+      "y": 366,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-2",
+      "type": "ellipse",
+      "x": 554,
+      "y": 368,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-2",
+      "type": "text",
+      "x": 584,
+      "y": 366,
+      "text": "pair WhatsApp or Beeper (optional)",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 248
+    },
+    {
+      "id": "ghost-toggle-3",
+      "type": "rect",
+      "x": 540,
+      "y": 398,
+      "width": 30,
+      "height": 18,
+      "radius": 9,
+      "tone": "purple",
+      "strokeWidth": 0
+    },
+    {
+      "id": "knob-3",
+      "type": "ellipse",
+      "x": 554,
+      "y": 400,
+      "width": 14,
+      "height": 14,
+      "tone": "neutral",
+      "strokeWidth": 0
+    },
+    {
+      "id": "you-3",
+      "type": "text",
+      "x": 584,
+      "y": 398,
+      "text": "pick what writes replies",
+      "fontSize": 13,
+      "weight": 500,
+      "tone": "neutral",
+      "align": "start",
+      "width": 248
+    },
+    {
+      "id": "turn-on",
+      "type": "rect",
+      "x": 910,
+      "y": 278,
+      "width": 200,
+      "height": 64,
+      "radius": 12,
+      "tone": "neutral",
+      "strokeWidth": 1.25,
+      "label": "turn on one person",
+      "labelFontSize": 13,
+      "labelWeight": 500
+    }
+  ],
+  "edges": [
+    {
+      "id": "in-clone",
+      "from": "clone",
+      "to": "connect",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    },
+    {
+      "id": "in-connect",
+      "from": "connect",
+      "to": "doctor-1",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    },
+    {
+      "id": "in-doctor",
+      "from": "doctor-1",
+      "to": "doctor-2",
+      "tone": "blue",
+      "start": "right",
+      "end": "left"
+    },
+    {
+      "id": "handoff-1",
+      "from": "doctor-1",
+      "to": "you-card",
+      "tone": "blue",
+      "start": "bottom",
+      "end": "top"
+    },
+    {
+      "id": "handoff-2",
+      "from": "doctor-2",
+      "to": "turn-on",
+      "tone": "blue",
+      "start": "bottom",
+      "end": "top"
+    }
+  ]
+}

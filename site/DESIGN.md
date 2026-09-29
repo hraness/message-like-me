@@ -34,13 +34,27 @@ transparency and forced colors remove decorative effects. No material is applied
 to logos, documentation, or the inert preview. Paper retains its
 incoming/outgoing bubble colors, links and focus.
 
-The opening pairs a direct outcome with a contact folder and visibly disclosed
-reply. The example is synthetic and carries a caption. Subsequent sections use a
-sequence for contact setup, an ordinary file tree for memory, definition rows for
-architecture, and a clear account of the setup required before replies. Native
-coding-agent execution and signed distribution remain unavailable; synthetic
-tests do not establish live account delivery. Shared questions and source and
-documentation actions close the page.
+The opening leads with the outcome, “AI in your messages.”, beside a coded
+iPhone-class phone (`app/_components/phone/`) showing one synthetic iMessage
+exchange: a friend says “butler”, the butler sends `🤖{ 👀 }`, then a marked
+reply drawn only from that chat's visible history. The phone is a drawing, not
+a screenshot; it carries a caption and hairline callouts outside the device.
+Butler bubbles are never preceded by typing dots, and no example recalls another
+chat, invents the owner's whereabouts, or promises a skipped request later.
+
+`SITE_STATUS` renders once, directly under the hero. The page then runs: How it
+works (the D1 diagram, seven steps, and the three reply modes); What it works
+with (messaging apps and the Mac, each limit beside its feature); Pick what
+writes replies (three cards with a status chip, one command, and what leaves the
+Mac, then the precedence note and the D2 diagram); Setup (three steps, the agent
+prompt with a Copy button, the D3 diagram, the manual guided-terminal frame and
+the JSON command line); You stay in charge (three pillars with synthetic
+WhatsApp and Beeper examples and the contact folder); Ask it yourself; FAQ; and a
+closing call to action. Diagrams come from `public/diagrams/` in light and dark,
+wide and narrow, and a slot renders nothing until its file exists. The launch
+film slot works the same way with `public/launch/`. A setup skill, a one-line
+installer, and signed distribution remain unavailable and are said so beside
+the setup steps; synthetic tests do not establish live account delivery.
 
 The website remains informational. No message or contact collection, sign-in,
 agent execution, live dashboard, or signed app download is present. Historical
@@ -48,8 +62,8 @@ Message Like Me artifacts keep their immutable coordinates and are explicitly
 labeled legacy. Their history source support does not imply Textbutler transport
 support.
 
-At narrow widths, the contact frame, architecture rows, and status sections stack
-in reading order. Links keep visible focus and underlines in prose. Shared FAQ
+At narrow widths, the phone, the support blocks, the reply-writer cards, and the
+setup steps stack in reading order, with no horizontal page scroll. Links keep visible focus and underlines in prose. Shared FAQ
 controls retain keyboard operation. Frames contain no fabricated live controls.
 The social image is an original, code-generated typographic asset, with its SVG
 source retained beside the PNG.

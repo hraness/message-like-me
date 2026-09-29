@@ -12,6 +12,8 @@ import {
   serializeJsonLd,
 } from '@hraness/web-discovery';
 
+import { LaunchVideo } from '../../_components/landing/launch-video';
+import { LAUNCH_FILM_SECONDS, launchFilmSources } from '../../_components/landing/public-assets';
 import { SiteFooter, SiteHeader } from '../../_components/site-chrome';
 import {
   admissionFor,
@@ -57,6 +59,8 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
   const post = blogPostBySlug((await params).slug);
   if (post === undefined) notFound();
   const body = bodyFor(post);
+  // The launch post opens with the launch film once it exists.
+  const film = post.slug === 'introducing-textbutler' ? launchFilmSources() : null;
   const admission = admissionFor(post);
   const related = relatedProductsFor(post);
   const toc = body.headings.length >= 4
@@ -104,6 +108,12 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
             </>
           )}
         >
+          {film === null ? null : (
+            <figure className="tb-film-figure">
+              <LaunchVideo sources={film} title="Introducing Textbutler" />
+              <figcaption>Textbutler in {LAUNCH_FILM_SECONDS} seconds. No sound needed. Every name in the film is made up.</figcaption>
+            </figure>
+          )}
           <div dangerouslySetInnerHTML={{ __html: body.html }} />
         </MarketingArticle>
       </main>

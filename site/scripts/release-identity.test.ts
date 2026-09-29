@@ -52,8 +52,9 @@ describe("release identity", () => {
     ]);
 
     expect(readme).toContain(exactInstall);
-    expect(page).toContain("<a href={RELEASE_URL}>Textbutler v{SOFTWARE_VERSION}</a> release.");
-    expect(page).toContain("It does not install Textbutler or enable automatic replies.");
+    // The home page never names the legacy package version as a Textbutler release.
+    expect(page).not.toContain("Textbutler v{SOFTWARE_VERSION}");
+    expect(page).toContain("Installing them doesn’t install Textbutler or turn on automatic replies.");
     expect(page).not.toContain("Message Like Me v{SOFTWARE_VERSION}");
     expect(page).not.toContain("bun add --global");
     expect(readme).not.toContain("github:hraness/message-like-me#");

@@ -2,7 +2,7 @@
   "name": "@hraness/textbutler",
   "version": "0.1.0-alpha.1",
   "private": true,
-  "description": "Textbutler is an AI butler for the iMessage, WhatsApp, and Beeper chats you choose. It runs on your Mac and answers as a clearly marked assistant.",
+  "description": "Textbutler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”.",
   "license": "MIT",
   "type": "module",
   "homepage": "https://textbutler.app",

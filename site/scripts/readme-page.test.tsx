@@ -14,24 +14,17 @@ test('renders the complete README with one source-owned heading and working anch
 
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(html).toContain('<h1 id="textbutler">Textbutler</h1>');
-  expect(html).toContain('src="https://skills.sh/b/hraness/message-like-me"');
-  expect(html).toContain('href="#install-and-first-run"');
-  expect(html).toContain('<h2 id="install-and-first-run">Install and first run</h2>');
-  expect(html).toMatch(
-    /Beeper users can bring a bounded observation from supported connected accounts\s+into the same private evidence layer as Apple Messages\./u,
-  );
-  expect(html).toContain(
-    '<td>A finished local bundle from Ghostget v0.17.1 and adapter 2.4.0; its reviewed surface has 32 operations: 26 through one pinned Beeper CLI 0.6.2 executable, including supported actions and writes, plus six fixed Desktop loopback reads</td>',
-  );
-  expect(html).toContain(
-    'Message Like Me receives no provider credentials, never calls Ghostget or a Beeper operation, and never sends',
-  );
+  // The legacy Message Like Me reference moved to docs/message-like-me.md.
+  expect(html).not.toContain('skills.sh');
+  expect(html).not.toContain('id="install-and-first-run"');
+  expect(html).toContain('href="https://github.com/hraness/textbutler/blob/main/docs/message-like-me.md"');
+  for (const fragment of html.matchAll(/href="#([^"]+)"/gu)) expect(html).toContain(`id="${fragment[1]}"`);
   expect(html).toContain('"headline":"Textbutler"');
   expect(html).toContain('"dateModified":"2026-09-28"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 
-test('puts guided setup and complete draft review before the legacy installation', () => {
+test('leads with the agent setup prompt, then the guided terminal and complete draft review', () => {
   const html = renderToStaticMarkup(<DocsPage />);
   expect(html).toContain('<h2 id="open-the-guided-terminal">Open the guided terminal</h2>');
   expect(html).toContain('bun run textbutler tui');
@@ -41,11 +34,12 @@ test('puts guided setup and complete draft review before the legacy installation
   expect(text(html)).toContain(SITE_STATUS.replace(/\s+/gu, ' '));
   expect(html).toContain('bun run textbutler:install');
   expect(html).toContain('href="https://github.com/hraness/xcb"');
-  expect(text(html)).toContain('Running from source never writes AI replies');
-  expect(text(html)).toContain('match the reviewed record in qualification/');
+  expect(text(html)).toContain('~/.local/bin/textbutler');
+  expect(text(html)).toContain('The installer refuses to build if the code doesn’t match the last reviewed version.');
   expect(html).toContain('bun run textbutler replies show DRAFT');
   expect(html).toContain('bun run textbutler replies send DRAFT DIGEST');
-  expect(html.indexOf('id="open-the-guided-terminal"')).toBeLessThan(html.indexOf('id="install-and-first-run"'));
+  expect(html.indexOf('id="set-it-up-with-your-agent"')).toBeLessThan(html.indexOf('id="open-the-guided-terminal"'));
+  expect(html).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
 });
 
 test.each([

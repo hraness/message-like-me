@@ -1,7 +1,11 @@
 # Textbutler runtime
 
-This source package contains the macOS message-butler daemon. The owner
-selects contacts and an explicit agent account. Trusted runtime code admits
+This source package contains the macOS message-butler daemon. Replies can be
+written by a local model through Ollama (in testing), by Qwen 3.5 Flash through
+your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin
+subscription through xcb; only the subscription route needs `providers check`.
+The owner selects contacts and, for the subscription route, an explicit agent
+account. Trusted runtime code admits
 replies, isolates contact memory, adds disclosure, and journals outward intent.
 
 The automation connection polls Ghostget's durable incoming-message feed and
@@ -9,7 +13,7 @@ uses recipient-bound grants for enabled contacts. New installations start paused
 Only configured, ready messaging connections and admitted agent accounts can
 run replies. Subscription inference requires a verified Textbutler bundle with
 reviewed source composition admission; source daemon startup remains unadmitted.
-Claude Code and Codex subscription inference uses an explicitly
+Claude Code, Codex, and Devin subscription inference uses an explicitly
 configured [xcb](https://github.com/hraness/xcb) native `generate` process.
 xcb keeps credentials and provider custody; Textbutler interprets structured
 proposals through its contact broker. This MIT-licensed package is a reference

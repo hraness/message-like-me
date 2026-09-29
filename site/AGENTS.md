@@ -37,6 +37,10 @@ below until their reviewed publication-identity migration is complete.
 - Describe the legacy Message Like Me CLI as local-first, bring-your-own-agent,
   source-aware, and drafts-only. Never imply that the site analyzes data or that
   Message Like Me sends messages.
+- Share images come only from the shared `@hraness/web-discovery`
+  social-image template via the site's single `defineSocialImageSite`
+  declaration in `app/_lib/social.ts`. Pages pass copy only (headline,
+  description, eyebrow); add no per-site drawing code or static OG images.
 - Use synthetic examples only. Do not publish real counts, labels, handles,
   excerpts, identities, private paths, or derived personal profiles.
 - Use Bun 1.3.14 for installation and scripts and Node 24 for Next.js. Run

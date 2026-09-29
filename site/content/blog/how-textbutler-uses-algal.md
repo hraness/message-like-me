@@ -16,7 +16,7 @@ Each run leaves a record of every step and its result, so someone can see later 
 
 ## How Textbutler runs a habitat on ALGAL
 
-Textbutler status: {{SITE_STATUS_LABEL}}. It runs from source. Habitats are an opt-in part of it and stay off unless the owner turns them on in Textbutler's host settings. Once they are on, each enrolled conversation gets its own habitat, stored in Textbutler's private journal on the Mac. Habitats share nothing, even two threads with the same person.
+Textbutler status: {{SITE_STATUS_LABEL}}. It runs from source. Replies use a habitat by default once a reply model is set up; its learning step is opt-in and stays off unless the owner sets an evolution model in Textbutler's host settings. Each enrolled conversation gets its own habitat, stored in Textbutler's private journal on the Mac. Habitats share nothing, even two threads with the same person.
 
 A habitat does its model work in three kinds of runs. Each is a small ALGAL program with a single model step and limits fixed in code:
 

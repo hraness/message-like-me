@@ -12,58 +12,73 @@ const REVIEW = {
   reviewerType: 'ai',
   reviewedOn: REVIEWED_ON,
 } as const;
+// The launch rewrite was reviewed on its own date by claims and clarity
+// reviewer runs separate from the drafting run (launch workflow, 2026-09-28).
+const LAUNCH_REVIEWED_ON: ArticleIsoDate = '2026-09-28';
+const LAUNCH_REASSESS_ON: ArticleIsoDate = '2026-11-09';
+const LAUNCH_REVIEW = {
+  reviewer: 'Claude Opus 5.5 (claude-opus-5-5) independent claims and clarity review',
+  reviewerType: 'ai',
+  reviewedOn: LAUNCH_REVIEWED_ON,
+} as const;
 
 type Repository = 'textbutler' | 'ghostget' | 'algal' | 'xcb' | 'design-kit';
 
-function source(title: string, repository: Repository, path: string): ArticleSourceRecord {
+function source(title: string, repository: Repository, path: string, checkedOn: ArticleIsoDate = REVIEWED_ON): ArticleSourceRecord {
   const kind = path.endsWith('/') ? 'tree' : 'blob';
   return {
     title,
     url: `https://github.com/hraness/${repository}/${kind}/main/${path.replace(/\/$/u, '')}`,
-    checkedOn: REVIEWED_ON,
+    checkedOn,
   };
 }
+const launchSource = (title: string, repository: Repository, path: string) => source(title, repository, path, LAUNCH_REVIEWED_ON);
 
 export const BLOG_ADMISSIONS = [
   {
     href: '/blog/introducing-textbutler',
     lifecycle: 'indexable',
-    readerJob: 'Decide whether Textbutler fits how I want help with personal messages on my Mac, what it will send without me, and how to start.',
-    nonObviousAnswer: 'A draft sends only when you pass back the digest of the exact review you read, and it is refused if the conversation moved on, disclosure changed or fifteen minutes passed; a per-conversation habitat plan is style data that cannot change recipients, provider or disclosure, and code rejects a candidate that alters your tool switches or fixed core text.',
-    originalContribution: 'Explains the reply flow and the habitat direction from the source code, including the digest-bound send, draft expiry, and which plan fields code refuses to change.',
-    hostFit: 'The product introduction on the product host. It links the three integration posts and PeopleBlade along the registered shared-bundle relation.',
+    readerJob: 'Understand what Textbutler does in my chats, what writes its replies and what leaves my Mac, how much setup my coding agent can do for me, and what works today.',
+    nonObviousAnswer: 'It answers only when someone says “butler” (whole word, any capitalization) in a one-to-one chat you turned on, sends 🤖{ 👀 } first as a plain text message because tapbacks are unavailable on a stock Mac, skips rather than queues a request that arrives within 5 minutes of your own message, and searches chat history only in the owner’s own chat unless the owner enables it for another person; with a local Ollama model the reply is written on the Mac, but a saved Gateway key still wins unless you choose local explicitly, and web search needs a saved Gateway key and is on for turned-on people once one is saved.',
+    originalContribution: 'Explains the trigger, checks, acknowledgment, reply-writer precedence and privacy map, and the split between what an agent can set up and what macOS makes a person do, from the source code.',
+    hostFit: 'The product launch post on the product host. It links the xcb and ALGAL integration posts and the Ghostget and xcb hubs along registered relations.',
     nearestUrls: [
-      { url: 'https://textbutler.app/', distinction: 'The home page lists features; this post explains why the product works this way and walks through one day of use.' },
-      { url: 'https://textbutler.app/docs', distinction: 'The docs page is the full README; this post is the short narrative a new reader starts with.' },
+      { url: 'https://textbutler.app/', distinction: 'The home page shows the product at a glance; this post walks through one conversation, the reasoning behind each default, and what is live versus coming.' },
+      { url: 'https://textbutler.app/docs', distinction: 'The docs page is the README reference; this post is the short narrative a new reader starts with.' },
     ],
     sources: [
-      source('Textbutler architecture: contact data, owner reply triage, contact habitats', 'textbutler', 'docs/textbutler/architecture.md'),
-      source('Textbutler status sentence (SITE_STATUS)', 'textbutler', 'site/app/_lib/site.ts'),
-      source('Habitat program instructions and limits', 'textbutler', 'packages/textbutler/src/habitat-program.ts'),
-      source('xcb client: tool-free generation contract', 'textbutler', 'packages/textbutler/src/xcb-client.ts'),
-      source('Getting started', 'textbutler', 'docs/textbutler/getting-started.md'),
-      source('messagelikeme.com permanent redirects', 'textbutler', 'site/next.config.ts'),
-      source('Portfolio relation: Textbutler and PeopleBlade shared bundle format', 'design-kit', 'src/portfolio.generated.json'),
+      launchSource('Contact defaults: keyword, cooldown, debounce, hourly cap, disclosure marker', 'textbutler', 'packages/textbutler/src/config.ts'),
+      launchSource('Reply decision: keyword match, owner invocation, smart-mode confidence', 'textbutler', 'packages/textbutler/src/decision.ts'),
+      launchSource('Acknowledgment and send path', 'textbutler', 'packages/textbutler/src/runtime.ts'),
+      launchSource('Reply writer precedence, local model pin, Gateway daily budget', 'textbutler', 'packages/textbutler/src/default-reply-model.ts'),
+      launchSource('Textbutler status sentence (SITE_STATUS)', 'textbutler', 'site/app/_lib/site.ts'),
+      launchSource('xcb client: tool-free generation contract', 'textbutler', 'packages/textbutler/src/xcb-client.ts'),
+      launchSource('Getting started', 'textbutler', 'docs/textbutler/getting-started.md'),
+      launchSource('Messaging apps and live limitations', 'textbutler', 'docs/textbutler/messaging-apps.md'),
+      launchSource('Agent JSON CLI', 'textbutler', 'docs/textbutler/agent-cli.md'),
+      launchSource('messagelikeme.com permanent redirects', 'textbutler', 'site/next.config.ts'),
     ],
     observations: [
-      'Draft expiry is fifteen minutes (DRAFT_TTL_MS in owner-replies.ts), and a stale or expired draft is refused at send time rather than resent.',
-      'A new contact starts disabled with a 300-second cooldown and a 12-per-hour cap in config.ts, and a new install starts paused.',
+      'The acknowledgment is the marked text 🤖{ 👀 }, not a tapback, and a request inside the 5-minute owner cooldown is skipped rather than deferred.',
+      'Local Ollama auto-detection applies only when no Gateway key is saved; the post keeps the local route tagged as in testing until it becomes the default on main.',
+      'History search is on in the owner’s own chat and off for other contacts unless the plan enables it; the examples answer only from messages visible in the same chat.',
+      'Learning (habitat evolution) and its 64-entry memory run only when an evolution model is configured, which no default sets; the post presents it as optional and off by default.',
     ],
-    scores: { readerUtility: 2, originalEvidence: 2, factualConfidence: 2, hostFit: 1, voiceIntegrity: 2, maintenanceValue: 1 },
+    scores: { readerUtility: 2, originalEvidence: 2, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: REVIEW,
+    review: LAUNCH_REVIEW,
     humanReview: null,
-    reassessOn: REASSESS_ON,
-    harmIfWrong: 'A reader could expect Textbutler to send nothing without approval when a contact they switched on can reply on its own, or trust a disclosure marker they have cleared.',
+    reassessOn: LAUNCH_REASSESS_ON,
+    harmIfWrong: 'A reader could expect the local model to be used even with a Gateway key saved, expect a skipped request to be answered later, or trust a marker they have removed for a person.',
     refreshTriggers: [
-      'Textbutler release tag bump or change to SITE_STATUS',
-      'Change to draft expiry, digest send, auto-reply cooldown, hourly cap or contact limit (owner-replies.ts, config.ts)',
-      'Change to history import cap or media handling (enrollment.ts)',
-      'Change to habitat plan, promotion rule or protected fields (contact-habitat.ts, habitat-program.ts)',
-      'Change to the default disclosure marker',
+      'Change to SITE_STATUS or the reply-writer precedence (the local model becoming the default)',
+      'A Textbutler setup Agent Skill or one-line installer ships',
+      'Change to keyword, cooldown, debounce, hourly cap, smart-mode threshold or disclosure marker (config.ts, decision.ts)',
+      'Change to the acknowledgment, draft expiry or digest send (runtime.ts, owner-replies.ts)',
+      'Change to the pinned local model or the Gateway daily budget (default-reply-model.ts)',
+      'WhatsApp or Beeper automatic replies gain live testing comparable to iMessage',
       'Registration or change of the Textbutler relations to xcb, ALGAL, Ghostget or PeopleBlade',
-      'Ghostget live link verification completes or a signed app ships',
       'Bun version pin changes in package.json',
     ],
   },
@@ -72,7 +87,7 @@ export const BLOG_ADMISSIONS = [
     // portfolio facts since @hraness/design-kit v0.18.2.
     href: '/blog/how-textbutler-uses-xcb',
     lifecycle: 'indexable',
-    readerJob: 'Decide whether to connect an existing Claude Code or Codex subscription to Textbutler through xcb, and know what each side holds before setting it up.',
+    readerJob: 'Decide whether to use an existing Claude Code, Codex, or Devin subscription as Textbutler\'s reply writer through xcb, and know what each side holds before setting it up.',
     nonObviousAnswer: 'xcb holds the login and runs a tool-free model; Textbutler pins the xcb executable by SHA-256, sends prompts on stdin, rejects replies whose account, model or JSON keys do not match, and carries out every contact action itself. A failed subscription call waits and never falls through to the billed Claude API.',
     originalContribution: 'Traces the xcb call path from Textbutler source: hash pin, stdin prompt, duplicate-key rejection, step limits, and the separate API route.',
     hostFit: 'A "How Textbutler uses xcb" post on the consumer host. The registered runtime:message-like-me:xcb:drafts-replies-through relation carries the detail sentence this post explains.',
@@ -85,22 +100,22 @@ export const BLOG_ADMISSIONS = [
       source('Textbutler build record for the xcb route: classify and respond profiles, source hashes', 'textbutler', 'qualification/xcb-textbutler-v1.json'),
       source('Textbutler architecture: xcb application contract, subscription and API routes', 'textbutler', 'docs/textbutler/architecture.md'),
       source('AI subscriptions through xcb: setup, step limits, recovery', 'textbutler', 'docs/textbutler/native-subscription.md'),
-      source('Agent account setup: Claude Code, Codex and the separately billed Claude API', 'textbutler', 'packages/textbutler/PROVIDERS.md'),
-      source('Accepted xcb account providers (claude, codex)', 'textbutler', 'packages/textbutler/src/host-config.ts'),
+      source('Agent account setup and the unavailable Claude API route', 'textbutler', 'packages/textbutler/PROVIDERS.md'),
+      source('Accepted xcb account providers (claude, codex, devin)', 'textbutler', 'packages/textbutler/src/host-config.ts'),
       source('Pinned AgentMixer compatibility library', 'textbutler', 'package.json'),
       source('Textbutler status sentence', 'textbutler', 'site/app/_lib/site.ts'),
       source('xcb application API: tool-free generation for applications', 'xcb', 'docs/application-api.md'),
     ],
     observations: [
-      'Textbutler host config accepts only claude and codex xcb accounts, although xcb itself lists Devin as a candidate provider.',
+      'Textbutler host config accepts claude, codex and devin xcb accounts; the subscription is one of three reply writers alongside a local Ollama model and a Vercel AI Gateway key.',
       'The disclosure marker is on by default but clearable: config.ts returns no marker once the owner clears all three symbols.',
     ],
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: REVIEW,
+    review: LAUNCH_REVIEW,
     humanReview: null,
-    reassessOn: REASSESS_ON,
+    reassessOn: LAUNCH_REASSESS_ON,
     harmIfWrong: 'A reader could assume a failed subscription call falls back to paid API use, or that xcb gives the model file or messaging tools.',
     refreshTriggers: [
       'Change to XCB_LIMITS, stdin input, duplicate-key parsing or verifyXcbExecutable in packages/textbutler/src/xcb-client.ts',
@@ -120,7 +135,7 @@ export const BLOG_ADMISSIONS = [
     // portfolio facts since @hraness/design-kit v0.18.2.
     href: '/blog/how-textbutler-uses-algal',
     lifecycle: 'indexable',
-    readerJob: 'Decide whether to turn on Textbutler\'s per-contact habitats, and know what the learning can change, what it cannot, and how to undo it.',
+    readerJob: 'Understand Textbutler\'s per-contact habitats, decide whether to turn on their learning step, and know what the learning can change, what it cannot, and how to undo it.',
     nonObviousAnswer: 'The plan schema has no field for recipient, provider, permissions or disclosure, so no learned plan can express a change to them; a candidate plan wins only if a blinded judge marks it safe on both replayed cases, scores it no lower on either, and finds an average gain of at least 0.1, and replays run no tools, so tool choice is never measured.',
     originalContribution: 'Lays out the habitat plan schema, run limits, and promotion rule from Textbutler source, and states what the replay does not measure.',
     hostFit: 'A "How Textbutler uses ALGAL" post on the consumer host. The registered runtime:message-like-me:algal:runs-reply-habitats-on relation carries the detail sentence this post explains.',
@@ -130,9 +145,10 @@ export const BLOG_ADMISSIONS = [
     ],
     sources: [
       source('Habitat programs: respond, reflect and judge phases run as ALGAL organisms with fixed budgets', 'textbutler', 'packages/textbutler/src/habitat-program.ts'),
-      source('Contact habitats: opt-in via host.json, per-conversation isolation, promotion rule, owner controls', 'textbutler', 'docs/textbutler/architecture.md'),
+      source('Contact habitats: default reply route, opt-in evolution via host.json, per-conversation isolation, promotion rule, owner controls', 'textbutler', 'docs/textbutler/architecture.md'),
       source('Habitat plan schema, default plan and promotion checks', 'textbutler', 'packages/textbutler/src/contact-habitat.ts'),
       source('Habitat host configuration (habitat.enabled)', 'textbutler', 'packages/textbutler/src/host-config.ts'),
+      source('Default habitat config: enabled with evolutionModel null', 'textbutler', 'packages/textbutler/src/default-reply-model.ts', '2026-09-28'),
       source('Tool-free, non-replayable evolution call', 'textbutler', 'packages/textbutler/src/habitat-evolution.ts'),
       source('Live reply runs, blinded replay, judge and run records', 'textbutler', 'packages/textbutler/src/habitat-agent.ts'),
       source('habitats CLI and the pause requirement', 'textbutler', 'packages/textbutler/src/owner-cli.ts'),
@@ -147,9 +163,9 @@ export const BLOG_ADMISSIONS = [
     scores: { readerUtility: 2, originalEvidence: 1, factualConfidence: 2, hostFit: 1, voiceIntegrity: 2, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: REVIEW,
+    review: LAUNCH_REVIEW,
     humanReview: null,
-    reassessOn: REASSESS_ON,
+    reassessOn: LAUNCH_REASSESS_ON,
     harmIfWrong: 'A reader could believe learned plans can change who receives messages or which tools run, or that the replay proves replies got better.',
     refreshTriggers: [
       '@hraness/algal pin change in package.json or ALGAL README change to how organisms, budgets or the open question are described',

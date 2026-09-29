@@ -28,6 +28,11 @@ describe("renderReadmeHtml", () => {
     expect(html).not.toContain("<script>");
   });
 
+  test("serves the site's own public images from the site", () => {
+    const html = renderReadmeHtml("![Hero](site/public/launch/hero%402x.png#gh-light-mode-only)");
+    expect(html).toContain('src="/launch/hero%402x.png#gh-light-mode-only"');
+  });
+
   test.each([
     "[unsafe](javascript:alert(1))",
     "[unsafe](data:text/html,hello)",

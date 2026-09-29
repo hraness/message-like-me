@@ -1,9 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CodeBlock } from "../app/_components/code-block.tsx";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const REPOSITORY_BLOB_ROOT = "https://github.com/hraness/textbutler/blob/main/";
 const REPOSITORY_RAW_ROOT = "https://raw.githubusercontent.com/hraness/textbutler/main/";
+const SITE_PUBLIC_PREFIX = "site/public/";
 
 function decodeCharacterReferences(value: string): string {
   return value
@@ -44,8 +47,30 @@ function rewriteRelativeTargets(html: string): string {
     ) {
       return attribute;
     }
+    // Images the site itself serves (site/public/…) load from this site, so
+    // /docs shows them in every preview before they reach main.
+    if (name === "src" && target.startsWith(SITE_PUBLIC_PREFIX)) {
+      return `${name}="/${target.slice(SITE_PUBLIC_PREFIX.length)}"`;
+    }
     const root = name === "src" ? REPOSITORY_RAW_ROOT : REPOSITORY_BLOB_ROOT;
     return `${name}="${root}${target}"`;
+  });
+}
+
+const PUBLIC_ROOT = resolve(import.meta.dir, "..", "public");
+
+// Local PNGs get their intrinsic CSS size (half the pixels for @2x files) and
+// lazy loading, so images reserve their box and the hidden theme copy never loads.
+function sizeLocalImages(html: string): string {
+  return html.replace(/<img ([^>]*?)src="(\/[^"#]+\.png)(#[^"]*)?"([^>]*?)\s*\/?>/gu, (tag, before: string, path: string, fragment: string | undefined, after: string) => {
+    const file = join(PUBLIC_ROOT, decodeURIComponent(path));
+    if (!file.startsWith(PUBLIC_ROOT) || !existsSync(file)) return tag;
+    const header = readFileSync(file).subarray(0, 24);
+    if (header.toString("ascii", 1, 4) !== "PNG") return tag;
+    const scale = /@2x\.png$/u.test(decodeURIComponent(path)) ? 2 : /@3x\.png$/u.test(decodeURIComponent(path)) ? 3 : 1;
+    const width = Math.round(header.readUInt32BE(16) / scale);
+    const height = Math.round(header.readUInt32BE(20) / scale);
+    return `<img ${before}src="${path}${fragment ?? ""}"${after} width="${width}" height="${height}" loading="lazy" decoding="async">`;
   });
 }
 
@@ -121,7 +146,7 @@ export function renderReadmeHtml(source: string): string {
     const target = match[1];
     if (target !== undefined) assertSafeTarget(target);
   }
-  const rendered = rewriteRelativeTargets(addHeadingIds(html));
+  const rendered = sizeLocalImages(rewriteRelativeTargets(addHeadingIds(html)));
   assertFragmentsResolve(rendered);
   return rendered;
 }
