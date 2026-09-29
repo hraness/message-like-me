@@ -73,7 +73,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('iMessage, WhatsApp, and Beeper');
   expect(html).toContain(REPLY_WRITERS_SENTENCE);
   expect(html).toContain('In testing');
-  expect(html).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
   expect(html).toContain('pbpaste | textbutler providers gateway-key');
   expect(html).toContain('Spending stops at $1 a day.');
   expect(html).toContain('If you choose one with a command, that choice wins.');

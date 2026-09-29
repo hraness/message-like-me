@@ -27,7 +27,7 @@ test('renders the complete README with one source-owned heading and working anch
 test('leads with the agent setup prompt, then the guided terminal and complete draft review', () => {
   const html = renderToStaticMarkup(<DocsPage />);
   expect(html).toContain('<h2 id="open-the-guided-terminal">Open the guided terminal</h2>');
-  expect(html).toContain('bun run textbutler tui');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('bun run textbutler tui');
   expect(html).toContain('docs/textbutler/getting-started.md');
   // README.md repeats SITE_STATUS word for word, so the site and the README
   // state one development status.
