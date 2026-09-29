@@ -34,6 +34,8 @@ export const LEGACY_MENU_LOGIN_ITEM = "app.hraness.companion.textbutler";
 
 export interface GrammarDeps {
   request(request: ControlRequest): Promise<ControlResponse>;
+  /** Sends one request and waits for a job it starts (bounded), like the product CLI. */
+  awaitJob(request: ControlRequest): Promise<ControlResponse>;
   launchAgent(): LaunchAgentLifecycle;
   dataDir: string;
   readiness(): Promise<Readiness>;
@@ -118,6 +120,12 @@ async function ask(deps: GrammarDeps, request: ControlRequest): Promise<Exclude<
   if (response.code === "disconnected" || response.code === "unavailable") throw new HranessError("owner-unavailable", response.message);
   if (response.code === "conflict") throw new HranessError("conflict", response.message, undefined, [{ command: "textbutler status --json", why: "Read the current revision", audience: "agent" }]);
   throw new HranessError(`textbutler.${response.code}`, response.message);
+}
+/** True when the socket is missing or refuses connections: no owner is listening. */
+export function socketAbsent(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ECONNREFUSED" || error.message === "The control socket is unavailable.";
 }
 async function snapshotOrNull(deps: GrammarDeps): Promise<DesktopSnapshot | null> {
   try { const response = await deps.request({ protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot" }); return response.ok && response.kind === "snapshot" ? response.snapshot : null; }
@@ -255,7 +263,13 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
       run: async () => {
         let response: ControlResponse;
         try { response = await deps.request({ protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "owner.stop" }); }
-        catch { return { state: "not-running" }; }
+        catch (error) {
+          // Only a missing or refused socket means nothing is running; a timeout
+          // or permission problem leaves the service's state unknown.
+          if (socketAbsent(error)) return { state: "not-running" };
+          throw new HranessError("owner-unavailable", "Couldn't reach the Textbutler service, so it may still be running.", undefined,
+            [{ command: "textbutler control status --json", why: "Check the service", audience: "agent" }]);
+        }
         if (response.ok && response.kind === "stopping") return { state: "stopping" };
         throw new HranessError("owner-unavailable", response.ok ? "The service answered with an unexpected shape." : response.message);
       },
@@ -309,8 +323,17 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
           const response = await ask(deps, { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "replies.discard", draftId: input.draftId });
           return { decision: "deny", discarded: response.kind === "reply-discarded" && response.discarded };
         }
-        const response = await ask(deps, { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "replies.send", draftId: input.draftId, expectedDigest: input.digest });
-        if (response.kind === "job") return { decision: "allow-once", state: "pending", jobId: response.jobId };
+        // After the send request leaves, a lost answer is an unknown outcome,
+        // never "not running": repeating it could send twice.
+        let sent: ControlResponse;
+        try { sent = await deps.awaitJob({ protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "replies.send", draftId: input.draftId, expectedDigest: input.digest }); }
+        catch {
+          throw new HranessError("textbutler.indeterminate", "The send request left but no answer came back. Don't repeat it; check whether it arrived.", undefined,
+            [{ command: "textbutler inbox --json", why: "See whether the chat still waits", audience: "agent" }, { command: "textbutler replies reconcile --help", why: "Record whether it arrived", audience: "human" }]);
+        }
+        if (!sent.ok) throw new HranessError(`textbutler.${sent.code}`, sent.message);
+        const response = sent;
+        if (response.kind === "job") return { decision: "allow-once", state: "pending", jobId: response.jobId, nextCommand: ["textbutler", "jobs", "show", response.jobId] };
         if (response.kind !== "reply-sent") throw new HranessError("internal", "The service answered with an unexpected shape.");
         return { decision: "allow-once", state: response.state, detail: response.detail };
       },
@@ -340,11 +363,22 @@ export function textbutlerRegistry(deps: GrammarDeps): Registry {
         const state = await snapshot(deps);
         const contact = contactFor(state, input.contact);
         if (state.revision !== input.revision) throw new HranessError("conflict", "Settings changed since you read them. Nothing changed.", undefined, [{ command: "textbutler permissions list --json", why: "Read the current revision", audience: "agent" }]);
-        const response = await ask(deps, { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "contact.settings.update", contactId: contact.id, expectedRevision: input.revision,
-          settings: { ...contact.settings, enabled: input.change === "loosen" } });
-        return { contactId: contact.id, automaticReplies: input.change === "loosen" ? "on" : "off", revision: response.kind === "snapshot" ? response.snapshot.revision : null };
+        const request: ControlRequest = { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "contact.settings.update", contactId: contact.id, expectedRevision: input.revision,
+          settings: { ...contact.settings, enabled: input.change === "loosen" } };
+        let response: ControlResponse;
+        try { response = await deps.awaitJob(request); } catch { throw ownerUnavailable(); }
+        if (!response.ok) {
+          if (response.code === "conflict") throw new HranessError("conflict", response.message, undefined, [{ command: "textbutler permissions list --json", why: "Read the current revision", audience: "agent" }]);
+          throw new HranessError(`textbutler.${response.code}`, response.message);
+        }
+        const automaticReplies = input.change === "loosen" ? "on" : "off";
+        // Turning a chat on runs as a job; report it pending until it finishes.
+        if (response.kind === "job") return { contactId: contact.id, automaticReplies, state: "pending", jobId: response.jobId, nextCommand: ["textbutler", "jobs", "show", response.jobId] };
+        return { contactId: contact.id, automaticReplies, state: "applied", revision: "snapshot" in response ? response.snapshot.revision : null };
       },
-      text: (value: { automaticReplies: string }) => `Automatic replies ${value.automaticReplies}.` },
+      text: (value: { automaticReplies: string; state: string; jobId?: string }) => value.state === "pending"
+        ? `Turning automatic replies ${value.automaticReplies} is still running. Check it with textbutler jobs show ${value.jobId}.`
+        : `Automatic replies ${value.automaticReplies}.` },
     ...PRODUCT_VERBS,
   );
   return defineRegistry(PRODUCT, verbs);

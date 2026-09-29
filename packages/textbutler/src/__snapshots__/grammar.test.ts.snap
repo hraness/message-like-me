@@ -507,7 +507,7 @@ at eight"
         "id": "contact-1",
         "mode": "smart",
         "name": "Alice Example",
-        "provider": "imessage",
+        "provider": "claude",
         "replies": "on",
       },
       {
@@ -515,7 +515,7 @@ at eight"
         "id": "contact-2",
         "mode": "keyword",
         "name": "Bob ‮evil‬ Example",
-        "provider": "imessage",
+        "provider": "claude",
         "replies": "off",
       },
       {
@@ -523,7 +523,7 @@ at eight"
         "id": "contact-3",
         "mode": "smart",
         "name": "A very long synthetic contact name that must be cut to fit its column",
-        "provider": "imessage",
+        "provider": "claude",
         "replies": "on",
       },
     ],

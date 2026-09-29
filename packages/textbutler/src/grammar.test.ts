@@ -19,7 +19,7 @@ function base(): DesktopSnapshot {
     automation: { state: "running", detail: "Automatic replies are running." }, messagingProviders: [] };
 }
 const contact = (id: string, name: string, enabled: boolean, responseMode: "smart" | "keyword" = "smart") => ({ id, name, subtitle: "Synthetic contact",
-  settings: { enabled, responseMode, keyword: "butler", provider: "imessage" as const, accountId: "owner-api", disclosure: { character: "🤖", begin: "{", end: "}" } } });
+  settings: { enabled, responseMode, keyword: "butler", provider: "claude" as const, accountId: "owner-api", disclosure: { character: "🤖", begin: "{", end: "}" } } });
 function populated(): DesktopSnapshot {
   return { ...base(), messagingProviders: ["imessage", "whatsapp", "beeper"],
     contacts: [contact("contact-1", "Alice Example", true), contact("contact-2", "Bob ‮evil‬ Example", false, "keyword"),
@@ -49,12 +49,13 @@ function harness(state: DesktopSnapshot | null, respond?: (request: ControlReque
     dataDir: "/nonexistent/textbutler", now: () => AT, home: "/nonexistent/home", stdoutIsTerminal: false,
     request: async request => {
       h.calls.push(request);
-      if (state === null) throw new Error("ECONNREFUSED");
+      if (state === null) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
       const custom = respond?.(request);
       if (custom) return custom;
       if (request.command === "snapshot") return { protocol: CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: state };
       throw new Error(`unexpected ${request.command}`);
     },
+    awaitJob: request => h.deps.request(request),
     launchAgent: () => agent,
     readiness: async () => ({ ok: true, steps: [] } as unknown as Readiness),
     readinessText: () => "ready\n",
@@ -72,7 +73,7 @@ const run = async (h: Harness, argv: string[], extra: Partial<CliIO> = {}) => {
   const sink = io(extra);
   const code = await runGrammar(argv, false, h.deps, sink);
   // generatedAt is the only field that varies between runs (plan § 8.2).
-  return { code, out: sink.out(), err: sink.err(), json: () => ({ ...JSON.parse(sink.out()) as Record<string, any>, generatedAt: "<generatedAt>" }) };
+  return { code, out: sink.out(), err: sink.err(), json: (): Record<string, any> => ({ ...JSON.parse(sink.out()) as Record<string, any>, generatedAt: "<generatedAt>" }) };
 };
 const mutations = (h: Harness) => h.calls.filter(call => call.command !== "snapshot" && call.command !== "replies.draft.read");
 
@@ -162,7 +163,7 @@ describe("human gates", () => {
     expect(deny.json().data).toEqual({ decision: "deny", discarded: true });
     const tighten = await run(h, ["permissions", "set", "Alice Example", "--expected-revision", "7", "tighten", "--json"], { env: { CLAUDECODE: "1" } });
     expect(tighten.code).toBe(0);
-    expect(tighten.json().data).toEqual({ contactId: "contact-1", automaticReplies: "off", revision: 8 });
+    expect(tighten.json().data).toEqual({ contactId: "contact-1", automaticReplies: "off", state: "applied", revision: 8 });
     expect(mutations(h).map(call => call.command)).toEqual(["replies.discard", "contact.settings.update"]);
     expect((mutations(h)[1] as { settings: { enabled: boolean } }).settings.enabled).toBe(false);
   });
@@ -180,6 +181,24 @@ describe("human gates", () => {
     const result = await run(h, ["control", "install", "--json"], { audience: "human", gate: passed });
     expect(result.code).toBe(0);
     expect(h.lifecycle).toEqual(["install"]);
+  });
+  test("a loosen that is still running is reported pending, not applied", async () => {
+    const h = harness(populated(), request => request.command === "contact.settings.update" ? { protocol: CONTROL_PROTOCOL, ok: true, kind: "job", jobId: "job-1" } as ControlResponse : undefined);
+    const passed = (async () => ({ ok: true, tier: "T1T2" })) as unknown as NonNullable<CliIO["gate"]>;
+    const result = await run(h, ["permissions", "set", "Alice Example", "--expected-revision", "7", "loosen", "--json"], { audience: "human", gate: passed });
+    expect(result.code).toBe(0);
+    expect(result.json().data).toEqual({ contactId: "contact-1", automaticReplies: "on", state: "pending", jobId: "job-1", nextCommand: ["textbutler", "jobs", "show", "job-1"] });
+    expect((mutations(h)[0] as { settings: { enabled: boolean } }).settings.enabled).toBe(true);
+  });
+  test("a lost answer after allow-once is indeterminate, never a retry invitation", async () => {
+    const draft = { id: "draft-1", contactId: "contact-1", name: "Alice", provider: "imessage", conversationId: "c", summary: "s", actions: [], assets: [], digest: DIGEST, expiresAt: "x" } as ReplyDraftDetail;
+    const h = harness(populated(), request => request.command === "replies.draft.read" ? { protocol: CONTROL_PROTOCOL, ok: true, kind: "reply-draft", draft } : undefined);
+    h.deps.awaitJob = async request => { h.calls.push(request); throw new Error("Control request timed out."); };
+    const passed = (async () => ({ ok: true, tier: "T1T2" })) as unknown as NonNullable<CliIO["gate"]>;
+    const result = await run(h, ["approvals", "decide", "draft-1", "--digest", DIGEST, "allow-once", "--json"], { audience: "human", gate: passed });
+    expect(result.code).toBe(1);
+    expect(result.json().error.code).toBe("textbutler.indeterminate");
+    expect(mutations(h).map(call => call.command)).toEqual(["replies.send"]);
   });
   test("permissions set refuses a stale revision", async () => {
     const h = harness(populated());
@@ -215,6 +234,18 @@ describe("control", () => {
     const result = await run(h, ["control", "stop", "--json"]);
     expect(result.json().data).toEqual({ state: "stopping" });
     expect(h.calls.map(call => call.command)).toEqual(["owner.stop"]);
+  });
+  test("control stop with no socket reports not running", async () => {
+    const result = await run(harness(null), ["control", "stop", "--json"]);
+    expect(result.code).toBe(0);
+    expect(result.json().data).toEqual({ state: "not-running" });
+  });
+  test("control stop that times out does not claim the service stopped", async () => {
+    const h = harness(base());
+    h.deps.request = async () => { throw new Error("Control request timed out."); };
+    const result = await run(h, ["control", "stop", "--json"]);
+    expect(result.code).toBe(4);
+    expect(result.json().error.code).toBe("owner-unavailable");
   });
   test("control status only reads", async () => {
     const h = harness(null);

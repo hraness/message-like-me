@@ -94,7 +94,7 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
   };
   if (GRAMMAR_FAMILIES.has(args[0]!)) {
     return await runGrammar(args, machine, {
-      request, dataDir, launchAgent: lifecycle, serve,
+      request, awaitJob: input => awaitOwnerJob(input, request), dataDir, launchAgent: lifecycle, serve,
       readiness: () => readReadiness(dataDir),
       readinessText: value => readinessText(value, { symbols }),
       interactiveTui: () => runTextbutlerTui(dataDir, output, { ...(options.entrypoint ? { entrypoint: options.entrypoint } : {}) }),
