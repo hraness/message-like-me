@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { createPrivateFileOnce, publishPrivateFile } from "@hraness/local-custody/atomic-publish";
 import { ensurePrivateDirectory, readPrivateFile } from "@hraness/local-custody/private-paths";
 import type { ControlRequest, ControlResponse, DesktopSnapshot } from "../../control/src/index.ts";
+import { historyAuthor } from "./attribution.ts";
 import { configureContact, newContact, DEFAULT_ACTIVE_LIMIT, parseRepoUrl, parseSettings, type ContactSettings, type Settings } from "./config.ts";
 import { ContactWorkspace } from "./workspace.ts";
 import { RunJournal } from "./journal.ts";
@@ -13,7 +14,7 @@ import type { AccountLeaseStore } from "@hraness/agentmixer";
 import { selectButlerModel } from "./routed-agent.ts";
 import { parseAutomationBinding, type AutomationBinding, type AutomationCandidate, type OwnerAutomationPort } from "./automation-owner.ts";
 import { automationBindingDigest, parseAutomationGrant, STATUS_REUSE_MS, type AutomationGrant, type AutomationProvider, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
-import { OwnerReplies, type PendingObservation } from "./owner-replies.ts";
+import { OPERATOR_KEY_PATTERN, OPERATOR_MAX_INTERVAL_MS, OwnerReplies, type PendingObservation } from "./owner-replies.ts";
 import { OwnerMessages } from "./owner-messages.ts";
 import { parseActionIntent } from "../../transport/src/index.ts";
 import { Hooks } from "./hooks.ts";
@@ -147,6 +148,16 @@ export function parseControlRequest(value: unknown): ControlRequest {
       const expectedDigest = text(item.expectedDigest, 64);
       if (!/^[a-f0-9]{64}$/u.test(expectedDigest)) fail("invalid-request", "Review the complete draft and use its exact digest before sending.");
       return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, draftId: text(item.draftId, 120), expectedDigest };
+    }
+    if (Object.hasOwn(item, "operator")) {
+      exact(item, ["protocol", "command", "contactId", "text", "operator"]);
+      if (typeof item.text !== "string" || !item.text.trim() || Buffer.byteLength(item.text) > 16_384 || item.text.includes("\0")) fail("invalid-request", "Reply text must be 1-16,384 bytes without NUL.");
+      const operator = record(item.operator);
+      exact(operator, Object.hasOwn(operator, "replayOnly") ? ["idempotencyKey", "minimumIntervalMs", "replayOnly"] : ["idempotencyKey", "minimumIntervalMs"]);
+      if (typeof operator.idempotencyKey !== "string" || !OPERATOR_KEY_PATTERN.test(operator.idempotencyKey)) fail("invalid-request", "Operator sends need a 16-80 character idempotency key.");
+      if (Object.hasOwn(operator, "replayOnly") && operator.replayOnly !== true) fail("invalid-request", "replayOnly is either true or absent.");
+      return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command, contactId: contactId(item.contactId), text: item.text,
+        operator: { idempotencyKey: operator.idempotencyKey, minimumIntervalMs: integer(operator.minimumIntervalMs, 0, OPERATOR_MAX_INTERVAL_MS), ...(operator.replayOnly ? { replayOnly: true } : {}) } };
     }
     exact(item, ["protocol", "command", "contactId", "text", ...(Object.hasOwn(item, "expectedRevision") ? ["expectedRevision"] : [])]);
     if (typeof item.text !== "string" || !item.text.trim() || Buffer.byteLength(item.text) > 16_384 || item.text.includes("\0")) fail("invalid-request", "Reply text must be 1-16,384 bytes without NUL.");
@@ -395,10 +406,12 @@ export class TextbutlerControlService {
     if (!self) return;
     try { await this.replies.send({ contactId: self.id, text }, AbortSignal.timeout(120_000)); } catch { /* The pending request remains discoverable. */ }
   }
-  /** Journal provenance reclassifies disclosure-free sends that the history
-   * reader could only mark owner-authored. */
+  /** History readers mark every outgoing message owner-authored. The send
+   * journal is the authority: butler sends become butler, operator sends stay
+   * the owner's own words. Only unjournaled text in the default visible wrap,
+   * from sends that predate the journal, falls back to butler. */
   private reauthor(messages: HistoryMessage[]): HistoryMessage[] {
-    return messages.map(message => message.author === "owner" && this.journal.knownSentMessage(message.id) ? { ...message, author: "butler" as const } : message);
+    return messages.map(message => message.author === "owner" && historyAuthor(message, this.journal.sentMessageOrigin(message.id)) === "butler" ? { ...message, author: "butler" as const } : message);
   }
   /** Owner-initiated sends publish or retract their scoped grant through the
    * same serialized settings write as every other grant change. */
@@ -731,13 +744,15 @@ export class TextbutlerControlService {
     }
     if (request.command === "replies.send") {
       const replies = this.replies ?? fail("unavailable", "Messaging automation is not configured. Replies need an exact Ghostget enrollment.");
-      if (!("draftId" in request) && request.expectedRevision !== undefined && request.expectedRevision !== current.state.revision)
+      if (!("draftId" in request) && !("operator" in request) && request.expectedRevision !== undefined && request.expectedRevision !== current.state.revision)
         fail("conflict", "Settings changed since the reply preview. Review the reply again before sending.");
       return this.startJob(async signal => {
         const result = "draftId" in request
           ? await replies.send({ draftId: request.draftId, expectedDigest: request.expectedDigest }, signal)
-          : await replies.send({ contactId: request.contactId, text: request.text,
-            ...(request.expectedRevision === undefined ? {} : { expectedRevision: request.expectedRevision }) }, signal);
+          : "operator" in request
+            ? await replies.send({ contactId: request.contactId, text: request.text, operator: request.operator }, signal)
+            : await replies.send({ contactId: request.contactId, text: request.text,
+              ...(request.expectedRevision === undefined ? {} : { expectedRevision: request.expectedRevision }) }, signal);
         // Sending journals cancellation and dispatch uncertainty itself. A job
         // deadline during grant cleanup must not replace its terminal receipt.
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "reply-sent", ...result };

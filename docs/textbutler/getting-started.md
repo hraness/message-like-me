@@ -239,6 +239,9 @@ removal. Repeating setup preserves an already linked account and its identity.
 For JSON commands to read, summarize, compose and send messages from another
 agent, see the [agent CLI guide](agent-cli.md).
 
+To send your own words to several people at a slow, safe pace, see
+[campaigns](campaigns.md).
+
 ## Pick what writes replies
 
 Choose one of the three options below. You can switch later.

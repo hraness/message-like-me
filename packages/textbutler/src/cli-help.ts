@@ -1,4 +1,5 @@
 import { supportAdvancedHelp, supportHelpLine } from "@hraness/support-foundation/node";
+import { CAMPAIGN_HELP } from "./campaign.ts";
 import { TEXTBUTLER_VERSION } from "./version.ts";
 
 /** UTF-8 pins the shared support copy the way the rest of static help reads. */
@@ -182,6 +183,9 @@ macOS shows a "Background Items Added" notice when you install it.` },
 
 Compose, react and attach create drafts; send one with replies send.
 See docs/textbutler/agent-cli.md.` },
+  campaign: { usage: "textbutler campaign run | status <file.jsonl> [options]", summary: CAMPAIGN_HELP.split("\n")[0]!.replace(/ \(JSON output\):$/u, "."),
+    body: CAMPAIGN_HELP.split("\n").slice(1).join("\n").trimEnd(),
+    example: "textbutler campaign run ~/launch/intro.jsonl --dry-run" },
   permissions: { usage: "textbutler help permissions", summary: "iMessage works through the Textbutler app on this Mac, and macOS needs\ntwo settings for it. Textbutler never changes them for you.",
     body: `Full Disk Access: read your Messages
   macOS doesn't ask for this. Turn on Textbutler in System Settings ›
@@ -201,6 +205,7 @@ textbutler doctor to check both.` },
   jobs show <job>            Read the result of a long operation
   habitats <command>         A chat's reply style, memory and budget
   messages <command>         JSON commands for agents (help messages)
+  campaign run <file>        Send your own texts at a slow pace (help campaign)
   daemon run                 Run the service in this terminal
   support                    Optional ways to support Textbutler
 
@@ -220,4 +225,4 @@ export function topicHelp(name: string): string | undefined {
 
 /** The known command words, for "did you mean" and help routing. */
 export const COMMANDS: readonly string[] = ["setup", "tui", "doctor", "status", "pause", "resume", "inbox", "replies", "contacts", "conversations",
-  "messaging", "providers", "daemon", "support", "init", "jobs", "habitats", "messages", "help", "version"];
+  "messaging", "providers", "daemon", "support", "init", "jobs", "habitats", "messages", "campaign", "help", "version"];

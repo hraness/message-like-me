@@ -10,6 +10,7 @@ import { runDoctor, runSetup } from "./onboarding.ts";
 import { runTextbutlerTui } from "./tui.ts";
 import { runIMessageSetup } from "./imessage-setup.ts";
 import { handleMessagesCommand } from "./messages-cli.ts";
+import { runCampaignCommand } from "./campaign.ts";
 import { BARE_INTRO, COMMANDS, HELP_TOPICS, ROOT_HELP, topicHelp } from "./cli-help.ts";
 import { CliUsageError, closest, detectAudience, jsonError, quoteInput, renderError, symbolsFor, type Audience } from "./cli-style.ts";
 import { TEXTBUTLER_VERSION } from "./version.ts";
@@ -29,7 +30,7 @@ type CliOptions = { launchAgent?: LaunchAgentLifecycle; entrypoint?: string; pro
 /** A malformed form of a known command points at that command's help. */
 function usage(args: readonly string[]): CliUsageError {
   const family = args[0] ?? "";
-  const shown = args.slice(0, family === "replies" || family === "daemon" || family === "providers" ? 2 : 1).filter(word => /^[a-z-]{1,24}$/u.test(word)).join(" ");
+  const shown = args.slice(0, family === "replies" || family === "daemon" || family === "providers" || family === "campaign" ? 2 : 1).filter(word => /^[a-z-]{1,24}$/u.test(word)).join(" ");
   return new CliUsageError(`Missing or invalid arguments for "${shown || family}".`, `textbutler help ${topicHelp(family) ? family : ""}`.trim());
 }
 
@@ -90,6 +91,21 @@ export async function runTextbutlerCli(argv: readonly string[], output: { write(
       if (error instanceof OwnerCliError) { print({ ok: false, code: "invalid-request", message: error.message }); return 1; }
       print({ ok: false, code: "unconfirmed", message: "The messaging operation could not be confirmed. Check its job or current state before repeating a send." }); return 1;
     }
+  }
+  if (args[0] === "campaign") {
+    const controller = new AbortController(), stop = (): void => controller.abort();
+    process.once("SIGINT", stop); process.once("SIGTERM", stop);
+    try {
+      return await runCampaignCommand(args.slice(1), { request, print, now: Date.now, random: Math.random, signal: controller.signal,
+        sleep: (milliseconds, signal) => new Promise(resolve => {
+          const timer = setTimeout(done, milliseconds);
+          function done(): void { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); }
+          signal?.addEventListener("abort", done, { once: true });
+        }) });
+    } catch (error) {
+      if (error instanceof OwnerCliError) throw error;
+      print({ ok: false, status: "halted", reason: "disconnected", detail: "The campaign stopped because the service could not be reached. Nothing unconfirmed will be sent again. Run textbutler doctor, then rerun." }); return 1;
+    } finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); }
   }
   try {
     const handled = await handleOwnerCommand(args, { request, print });

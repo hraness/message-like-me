@@ -22,7 +22,8 @@ test("public R1 CLI uses exact coordinates, incarnation before/after, and never 
   expect(calls.every(call => !call.args.includes("messaging.read") && !call.args.includes("messaging.send"))).toBe(true);
   expect(calls[3].input).toEqual({ chat_guid: "synthetic-chat", observed_chat_row_id: 42, service: "iMessage" });
   const history = await port.read(binding, true, signal);
-  expect(history.messages.map(value => value.author)).toEqual(["contact", "contact", "butler"]);
+  // The reader leaves outgoing authorship to the send journal (control-service reauthor).
+  expect(history.messages.map(value => value.author)).toEqual(["contact", "contact", "owner"]);
   expect(history.messages[1]?.text).toBe("");
   calls = (await readFile(join(stateHome, "calls.jsonl"), "utf8")).trim().split("\n").map(value => JSON.parse(value));
   expect(calls.at(-1).input.limit).toBe(200);

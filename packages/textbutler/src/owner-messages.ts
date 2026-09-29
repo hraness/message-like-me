@@ -1,7 +1,7 @@
 import type { MessageCapabilitiesResult, MessageHistoryResult, MessageSummaryResult, OwnerMessage } from "../../control/src/index.ts";
 import { AUTOMATION_ACTIONS, automationHash, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import { assertAutomationBinding } from "./automation-owner.ts";
-import { messageAuthor } from "./attribution.ts";
+import { historyAuthor, messageAuthor } from "./attribution.ts";
 import type { ContactSettings } from "./config.ts";
 import { ControlFailure, type OwnerBinding, type OwnerRuntimeState } from "./control-service.ts";
 import { assertSameConversation, type OwnerConversationReadPort } from "./enrollment.ts";
@@ -66,7 +66,8 @@ export class OwnerMessages {
       const enrollment = this.ports.enrollment(); if (!enrollment) fail("unavailable", "Read-only Messages access is not configured.");
       const page = await enrollment.read(binding, true, signal); assertSameConversation(binding, page.conversation);
       if (page.messages.length > 200) fail("unavailable", "The conversation reader exceeded its history limit.");
-      messages = page.messages.slice(-limit).map(message => ({ id: message.id, at: message.at, author: message.author, ...normalizeText(message.text), kind: "message", relatedMessageId: null, attachments: [] }));
+      messages = page.messages.slice(-limit).map(message => ({ id: message.id, at: message.at,
+        author: historyAuthor(message, this.ports.journal.messageOrigin(contact.id, message.id) ?? null, contact.disclosure), ...normalizeText(message.text), kind: "message", relatedMessageId: null, attachments: [] }));
     }
     if (messages.length > limit || new Set(messages.map(message => message.id)).size !== messages.length
       || messages.some(message => !message.id || Buffer.byteLength(message.id) > 512 || !Number.isSafeInteger(message.at) || message.at < 0))

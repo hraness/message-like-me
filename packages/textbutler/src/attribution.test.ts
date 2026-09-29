@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { disclose, newContact, parseContact, type ContactSettings } from "./config.ts";
-import { messageAuthor, pendingCluster } from "./attribution.ts";
+import { historyAuthor, messageAuthor, pendingCluster } from "./attribution.ts";
 import { RunJournal } from "./journal.ts";
 import type { AutomationMessage } from "../../transport/src/automation.ts";
 
@@ -73,4 +73,29 @@ test("self chat correlates text-less inbound echoes by recent send time", () => 
   expect(messageAuthor(row("echo", "incoming", null, NOW - 9_000), me, log)).toBe("butler");
   expect(messageAuthor(row("later", "incoming", null, NOW + 90_000), me, log)).toBe("contact");
   expect(messageAuthor(row("plain", "incoming", null, NOW), contact(false), log)).toBe("contact");
+});
+
+test("journal provenance decides authorship; operator text stays the owner's", () => {
+  const person = contact(false), log = journal();
+  log.recordSentMessages(person.id, "run-op", ["op"], NOW, "operator");
+  log.recordSentMessages(person.id, "run-b", ["bare"], NOW);
+  // Operator text is the owner's, even when it quotes the visible wrap.
+  expect(messageAuthor(row("op", "outgoing", disclose("quoted"), NOW), person, log)).toBe("owner");
+  // Butler provenance covers text sent with the wrap cleared.
+  expect(messageAuthor(row("bare", "outgoing", "plain", NOW), person, log)).toBe("butler");
+  // An operator send is an answer: it ends the pending run.
+  expect(pendingCluster([row("a", "incoming", "hi", NOW - 1), row("op", "outgoing", disclose("quoted"), NOW)], person, log)).toBeNull();
+});
+
+test("bootstrap history authorship follows the journal before the legacy wrap", () => {
+  const wrapped = disclose("hello"), plain = "hello";
+  for (const author of ["owner", "contact", "butler"] as const)
+    for (const text of [wrapped, plain])
+      for (const origin of [null, "butler", "operator"] as const) {
+        const result = historyAuthor({ author, text }, origin);
+        if (author !== "owner") expect(result).toBe(author);
+        else if (origin === "operator") expect(result).toBe("owner");
+        else if (origin === "butler") expect(result).toBe("butler");
+        else expect(result).toBe(text === wrapped ? "butler" : "owner");
+      }
 });

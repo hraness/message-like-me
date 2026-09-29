@@ -5,7 +5,7 @@ import { type ContactSettings, type Disclosure } from "./config.ts";
 import { assertAutomationBinding, type AutomationBinding, type OwnerAutomationPort } from "./automation-owner.ts";
 import { messageAuthor, pendingCluster } from "./attribution.ts";
 import { boundedHistory, type OwnerConversationReadPort } from "./enrollment.ts";
-import type { RunJournal } from "./journal.ts";
+import { OPERATOR_EVENT_PREFIX, type RunJournal } from "./journal.ts";
 import type { Hooks, HookContext } from "./hooks.ts";
 import type { ProviderHost } from "./provider-host.ts";
 import type { ContactWorkspace } from "./workspace.ts";
@@ -70,6 +70,15 @@ interface ReplyDraft {
   readonly bindingDigest: string;
   readonly review: ReplyDraftDetail;
 }
+/** An owner-authored send: the owner is the author, so the text goes out
+ * verbatim without the butler disclosure, keyed for exactly-once dispatch. */
+export interface OperatorSend {
+  readonly idempotencyKey: string; readonly minimumIntervalMs: number;
+  /** Report the journaled outcome for this key and never dispatch. */
+  readonly replayOnly?: boolean;
+}
+export const OPERATOR_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{15,79}$/u;
+export const OPERATOR_MAX_INTERVAL_MS = 86_400_000;
 export interface PendingObservation { readonly count: number; readonly lastAt: number; readonly preview: string | null; readonly ready: boolean; readonly observedAt?: number }
 
 const DRAFT_TTL_MS = 15 * 60_000;
@@ -98,6 +107,19 @@ export interface OwnerRepliesPorts {
   readonly now: () => number;
 }
 
+/** A run that settled before any dispatch intent was recorded never reached
+ * the provider, so its operator key may be attempted again. */
+function neverDispatched(run: { state: string; planDigest: string | null }): boolean {
+  return run.planDigest === null && (run.state === "abandoned" || run.state === "failed" || run.state === "cancelled");
+}
+/** The receipt for an operator key that already has a journaled run. */
+function operatorReplay(run: { id: string; contactId: string; state: string }): ReplySendResult {
+  if (run.state === "submitted") return { contactId: run.contactId, runId: run.id, state: "submitted", detail: "Already sent under this idempotency key. Nothing was sent again." };
+  if (run.state === "failed" || run.state === "cancelled")
+    return { contactId: run.contactId, runId: run.id, state: run.state === "cancelled" ? "cancelled" : "failed", detail: "This idempotency key already ended without delivery. Nothing was sent again." };
+  if (run.state === "running" || run.state === "dispatching") fail("conflict", "A send under this idempotency key is still in progress.");
+  return { contactId: run.contactId, runId: run.id, state: "indeterminate", detail: "This idempotency key has an uncertain send. Reconcile it before continuing. Nothing was sent again." };
+}
 function preview(text: string | null): string | null {
   if (text === null) return null;
   const value = text.replaceAll("\0", "").trim();
@@ -343,6 +365,10 @@ export class OwnerReplies {
     const run = uncertain[0]!;
     const binding = state.bindings[contact.id], client = this.ports.client();
     let outcome = resolution, observedId: string | null = null;
+    // Operator text carries no wrap, so history cannot tell it from the
+    // owner's own typing. Only the owner's attestation resolves it.
+    if (outcome === undefined && run.eventId.startsWith(OPERATOR_EVENT_PREFIX)) return { contactId: contact.id, runId: run.id, resolved: false,
+      detail: "This was an operator send. Check Messages for this conversation, then reconcile with --sent or --failed." };
     if (outcome === undefined) {
       if (binding?.version !== 2 || !client) return { contactId: contact.id, runId: run.id, resolved: false,
         detail: "Check Messages for this conversation, then reconcile with --sent or --failed." };
@@ -380,8 +406,14 @@ export class OwnerReplies {
 
   /** Explicit owner send: binds the exact draft or literal text to a fresh
    * plan, a live recipient grant and the journaled send transaction. */
-  async send(input: { draftId: string; expectedDigest: string } | { contactId: string; text: string; expectedRevision?: number }, signal: AbortSignal): Promise<ReplySendResult> {
+  async send(input: { draftId: string; expectedDigest: string } | { contactId: string; text: string; expectedRevision?: number; operator?: OperatorSend }, signal: AbortSignal): Promise<ReplySendResult> {
     const state = await this.ports.state();
+    const operator = "contactId" in input ? input.operator : undefined;
+    if (operator !== undefined) {
+      if (!OPERATOR_KEY_PATTERN.test(operator.idempotencyKey) || !Number.isSafeInteger(operator.minimumIntervalMs) || operator.minimumIntervalMs < 0 || operator.minimumIntervalMs > OPERATOR_MAX_INTERVAL_MS)
+        fail("invalid-request", "Operator sends need a 16-80 character idempotency key and a bounded minimum interval.");
+      if ("contactId" in input && input.expectedRevision !== undefined) fail("invalid-request", "Operator sends do not take a settings revision.");
+    }
     if ("contactId" in input && input.expectedRevision !== undefined && input.expectedRevision !== state.revision)
       fail("conflict", "Settings changed since the reply preview. Review the reply again before sending.");
     let contact: ContactSettings, actions: readonly ActionIntent[], draft: ReplyDraft | undefined, eventId: string;
@@ -401,7 +433,19 @@ export class OwnerReplies {
       if (!selected) fail("invalid-request", "This contact is not configured by the owner.");
       const parsed = parseActionIntent({ kind: "text", text: input.text });
       if (parsed === null) fail("invalid-request", "The reply text is not a supported messaging action.");
-      contact = selected; actions = [parsed]; eventId = `owner:text:${randomUUID()}`;
+      if (operator && selected.selfChat) fail("invalid-request", "Operator sends go to other people, not your own self chat.");
+      contact = selected; actions = [parsed];
+      eventId = operator ? `${OPERATOR_EVENT_PREFIX}${operator.idempotencyKey}` : `owner:text:${randomUUID()}`;
+    }
+    if (operator) {
+      // Exactly once per key: a repeated key reports the journaled run and
+      // never dispatches again, including after a crash or lost response. Only
+      // a run that ended before dispatch (no recorded plan) may be attempted again.
+      const prior = this.ports.journal.operatorRuns(contact.id, operator.idempotencyKey);
+      if (prior[0] && !neverDispatched(prior[0])) return operatorReplay(prior[0]);
+      if (operator.replayOnly) fail("invalid-request", "Nothing was sent under this idempotency key.");
+      if (prior.length >= 8) fail("conflict", "This idempotency key has been attempted too many times.");
+      if (prior.length) eventId = `${eventId}:${prior.length + 1}`;
     }
     const binding = state.bindings[contact.id];
     if (binding?.version !== 2) fail("unavailable", "This contact has no messaging enrollment that can send. Re-enroll it through messaging.");
@@ -417,7 +461,9 @@ export class OwnerReplies {
     if (!enrollment.ready) fail("unavailable", "Messaging catchup is incomplete. The reply stays queued until the conversation is current.");
     const contextId = automationContextId(enrollment);
     if (draft && draft.contextId !== contextId) fail("conflict", "The conversation changed since this suggestion. Request a fresh one.");
-    const disclosed = draft?.review.actions ?? discloseReplyActions(actions, "", contact.disclosure);
+    // Disclosure stays the default. Only an owner-authored operator send is
+    // dispatched verbatim, and its journal provenance says so.
+    const disclosed = draft?.review.actions ?? (operator ? actions : discloseReplyActions(actions, "", contact.disclosure));
     const kinds = [...new Set(disclosed.map(action => action.kind))];
     if (disclosed.some(action => (action.kind === "reaction" || action.kind === "sticker") && action.messageId !== null)) {
       const page = await client.history(binding.enrollmentId, 200, signal); assertAutomationBinding(binding, page.enrollment);
@@ -430,7 +476,11 @@ export class OwnerReplies {
     signal.throwIfAborted();
     if (this.ports.grantWork.has(contact.id)) fail("conflict", "This conversation's messaging grant is changing. Wait for it to settle.");
     if (this.pendingGrantRecovery(contact.id)) fail("conflict", "A previous messaging grant needs reconciliation before another reply.");
-    if (!this.ports.journal.claim(runId, contact.id, eventId, this.ports.now())) fail("conflict", "This conversation already has a reply in progress.");
+    if (!this.ports.journal.claim(runId, contact.id, eventId, this.ports.now())) {
+      const prior = operator ? this.ports.journal.operatorRuns(contact.id, operator.idempotencyKey)[0] : undefined;
+      if (prior && prior.eventId === eventId) return operatorReplay(prior);
+      fail("conflict", "This conversation already has a reply in progress.");
+    }
     const journal = this.ports.journal, now = this.ports.now;
     let phase: "running" | "dispatching" = "running";
     const hook: HookContext = { contactId: contact.id, runId, eventId, signal };
@@ -452,7 +502,7 @@ export class OwnerReplies {
             if (!reviewed || reviewed.sha256 !== asset.sha256 || reviewed.bytes !== asset.bytes.length) throw new Error("The reviewed attachment changed");
             return asset;
           }, now });
-        const grant = await this.sendGrant(automation, contact, binding, kinds, disclosed.length, signal);
+        const grant = await this.sendGrant(automation, contact, binding, kinds, disclosed.length, signal, operator?.minimumIntervalMs ?? 0);
         ephemeral = grant.ephemeral;
         const plan = await transport.prepare({ intentId: runId, conversationId: binding.enrollmentId, contextId, actions: disclosed });
         if (!plan.ok) { if (plan.error.code === "stale-context") fail("conflict", "The conversation changed. Request a fresh suggestion."); fail("unavailable", "The messaging plan could not be prepared."); }
@@ -465,7 +515,7 @@ export class OwnerReplies {
         phase = "dispatching";
         const receipt = await transport.submit(plan.value, { mode: "delegated", grantId: grant.grantId }, signal);
         if (!receipt.ok) return finish("indeterminate", "The send outcome is unknown. Reconcile the journaled intent before another reply.");
-        if (receipt.value.acceptedMessageIds) journal.recordSentMessages(contact.id, receipt.value.runId, receipt.value.acceptedMessageIds, now());
+        if (receipt.value.acceptedMessageIds) journal.recordSentMessages(contact.id, receipt.value.runId, receipt.value.acceptedMessageIds, now(), operator ? "operator" : "butler");
         const result = finish(receipt.value.state, receipt.value.state === "submitted" ? "Reply sent." : receipt.value.state === "failed" ? "The provider rejected this reply." : "The send needs reconciliation.");
         if (result.state === "submitted") {
           if (draft) this.drafts.delete(draft.id);
@@ -490,8 +540,10 @@ export class OwnerReplies {
   }
 
   /** Reuse a live standing grant or issue a tightly scoped owner-send grant.
-   * The caller's work registration keeps recovery from revoking mid-dispatch. */
-  private async sendGrant(automation: OwnerAutomationPort, contact: ContactSettings, binding: AutomationBinding, kinds: readonly ActionIntent["kind"][], actionCount: number, signal: AbortSignal): Promise<{ grantId: string; ephemeral: AutomationGrant | null }> {
+   * The caller's work registration keeps recovery from revoking mid-dispatch.
+   * An operator's minimum interval goes on the scoped grant; a standing grant
+   * keeps its own pacing, since replacing it would change the contact's setup. */
+  private async sendGrant(automation: OwnerAutomationPort, contact: ContactSettings, binding: AutomationBinding, kinds: readonly ActionIntent["kind"][], actionCount: number, signal: AbortSignal, minimumIntervalMs = 0): Promise<{ grantId: string; ephemeral: AutomationGrant | null }> {
     const state = await this.ports.state();
     const existing = state.grants[contact.id];
     if (existing) {
@@ -505,7 +557,7 @@ export class OwnerReplies {
     const intentId = randomUUID();
     this.ports.journal.recordGrantIntent({ id: intentId, contactId: contact.id, enrollmentId: binding.enrollmentId, bindingDigest: binding.bindingDigest });
     const created = await automation.grantScoped(binding, { enrollmentId: binding.enrollmentId, expectedBindingDigest: binding.bindingDigest,
-      actions: kinds, expiresAt: new Date(this.ports.now() + 600_000).toISOString(), maximumActions: actionCount, minimumIntervalMs: 0 }, intentId, signal);
+      actions: kinds, expiresAt: new Date(this.ports.now() + 600_000).toISOString(), maximumActions: actionCount, minimumIntervalMs }, intentId, signal);
     this.ports.journal.recordPendingGrant(contact.id, created, intentId);
     try {
       await this.ports.publishGrant(contact.id, created);

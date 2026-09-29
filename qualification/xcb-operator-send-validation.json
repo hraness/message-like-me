@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "scope": "Verify operator sends, operator journal provenance, journal-based history authorship and the campaign runner.",
+  "toolchain": "Bun 1.3.14",
+  "command": "bun test packages/textbutler/src/campaign.test.ts packages/textbutler/src/journal.test.ts packages/textbutler/src/owner-replies.test.ts packages/textbutler/src/attribution.test.ts packages/textbutler/src/owner-messages.test.ts packages/textbutler/src/ghostget-owner-read.test.ts packages/textbutler/src/cli-golden.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 110,
+    "failed": 0,
+    "files": 7,
+    "assertions": 11519
+  },
+  "typecheck": {
+    "command": "node_modules/.bin/tsc --noEmit -p packages/textbutler/tsconfig.json",
+    "exitCode": 0,
+    "log": "qualification/xcb-operator-send-typecheck.log",
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceSha256": {
+    "packages/control/src/index.ts": "587b670e635c3d0263de55bf8cb957e29fe97464c2c9bcfe44cbb77e6b6d8763",
+    "packages/textbutler/src/attribution.ts": "6ae6ace32b0c2ec0085ea20e49b5e9ada3ff586ca5c67fd3e4ef49765c1a5fe6",
+    "packages/textbutler/src/automation-owner.ts": "0548164472d351f33478eb2d832c836a2d9ea1697650ccaa0e6a47a790450801",
+    "packages/textbutler/src/campaign.ts": "e014143ea72995c0081b407189349c185d0609f9128fcf70c0b08f8699a0677a",
+    "packages/textbutler/src/cli.ts": "696939581916f67abe2a20613082110a3f5f15d7e3c5a00ffefa42bd6ee7807c",
+    "packages/textbutler/src/cli-help.ts": "77dd2d73eaa7d7178da55daace5a409b22bf5a912bbb19133361131b8a232a49",
+    "packages/textbutler/src/control-service.ts": "904e59ec82130209af0822cf922283d0bb1c6c3ba4e2e49bc7ebbfef4966d851",
+    "packages/textbutler/src/ghostget-owner-read.ts": "ddec0488ff5aaaa6ef2b5701832eb54ad51eecdc43fc01cd0ba2e352b4f6753a",
+    "packages/textbutler/src/journal.ts": "4f0688710fc8243dd7047314a84ebc24c02113f6839c15eda853727edeae2f3c",
+    "packages/textbutler/src/owner-messages.ts": "65fe8a1bea6dcf00d86b445e642b7d92ea13a7270ee9ff7746ba8d537884ea6d",
+    "packages/textbutler/src/owner-replies.ts": "abb4e81cd86fadf5db0436d2672f57d86620783e8b206d2a5c84fc02ce5aadad",
+    "packages/textbutler/src/campaign.test.ts": "21fceca98f2735df8f00e89909e323af33a2ec2e8086810ed87a7b50e20a0ad7",
+    "packages/textbutler/src/journal.test.ts": "6cf269fc047e84a1086d2a7b01798f2e8d87455bf505b238e385a6b3efc5fce0",
+    "packages/textbutler/src/owner-replies.test.ts": "a481b09cff2fa47942ae8b7796538b7038d1b19baf7ce63b447916147cf70176",
+    "packages/textbutler/src/attribution.test.ts": "c62efa8cc84d4445f89052f94ca32eadb30b4fa87edafe3923f784faa3a25de8",
+    "packages/textbutler/src/owner-messages.test.ts": "50a9a54d388355c0683784dcfa28b6d172ef8d8660e1b7cbf76c755f71598fec",
+    "packages/textbutler/src/ghostget-owner-read.test.ts": "32fb60a6ba516cc7e0208d4605a505de174ba6261d7f3bcbd641637e7925efbf"
+  },
+  "review": "qualification/xcb-operator-send-review.json",
+  "reviewSha256": "50523dc581be8fadd5ae96064047a109293e4d686fd2ecb2c18fe3f9975967a6",
+  "log": "qualification/xcb-operator-send-focused.log",
+  "logSha256": "3fb95a26f4f7688dee56cdbc8a1d77d79fc4db18ec3e6e68855a68349b1f4ead"
+}

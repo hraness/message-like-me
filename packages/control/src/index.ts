@@ -125,6 +125,9 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "replies.draft.read"; draftId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "replies.send"; draftId: string; expectedDigest: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "replies.send"; contactId: string; text: string; expectedRevision?: number }
+  /** Owner-authored text sent verbatim, without the butler disclosure. The
+   * idempotency key makes a repeated request report its first outcome. */
+  | { protocol: typeof CONTROL_PROTOCOL; command: "replies.send"; contactId: string; text: string; operator: { idempotencyKey: string; minimumIntervalMs: number; replayOnly?: boolean } }
   | { protocol: typeof CONTROL_PROTOCOL; command: "replies.discard"; draftId: string }
   | { protocol: typeof CONTROL_PROTOCOL; command: "replies.reconcile"; contactId: string; resolution?: "sent" | "failed" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "activity.list" };

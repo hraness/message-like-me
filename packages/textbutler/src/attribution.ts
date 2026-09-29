@@ -1,9 +1,20 @@
-import { disclosedText, type ContactSettings } from "./config.ts";
+import { DEFAULT_DISCLOSURE, disclosedText, type ContactSettings } from "./config.ts";
 import { keywordPresent } from "./decision.ts";
-import type { RunJournal } from "./journal.ts";
+import type { RunJournal, SendOrigin } from "./journal.ts";
 import type { AutomationMessage } from "../../transport/src/automation.ts";
 
 export type MessageAuthor = "contact" | "owner" | "butler" | "self" | "unknown";
+
+/** Bootstrap history has no contact settings yet, so the journal decides:
+ * butler provenance is butler, operator provenance is the owner's own text.
+ * Unjournaled text in the default visible wrap predates the journal and stays
+ * butler output; everything else outgoing is the owner's. */
+export function historyAuthor(message: { author: "owner" | "contact" | "butler"; text: string | null }, origin: SendOrigin | null,
+  disclosure: ContactSettings["disclosure"] = DEFAULT_DISCLOSURE): "owner" | "contact" | "butler" {
+  if (message.author !== "owner") return message.author;
+  if (origin !== null) return origin === "butler" ? "butler" : "owner";
+  return message.text !== null && disclosedText(message.text, disclosure) ? "butler" : "owner";
+}
 
 /** Trusted journal provenance covers disclosure-free sends; the configured
  * visible wrap covers sends that predate this journal. With every marker
@@ -23,8 +34,11 @@ export function messageAuthor(message: { id: string; direction: "incoming" | "ou
     return "contact";
   }
   if (message.direction !== "outgoing") return "unknown";
-  if (journal?.isButlerMessage(contact.id, message.id)) return "butler";
-  if (message.text !== null && disclosedText(message.text, contact.disclosure)) return "butler";
+  const origin = journal?.messageOrigin(contact.id, message.id) ?? null;
+  if (origin === "butler") return "butler";
+  // Operator sends are the owner's own words: never butler output for loop
+  // guards or style, whatever their text looks like.
+  if (origin === null && message.text !== null && disclosedText(message.text, contact.disclosure)) return "butler";
   return contact.selfChat ? "self" : "owner";
 }
 
