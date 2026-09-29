@@ -1,0 +1,28 @@
+{
+  "kind": "ai-source-review",
+  "scope": "Textbutler 0.8.23 version bump (claude/release-0.8.23): per-release coordinate agreement across package.json, site/package.json, src/version.ts, site/app/_lib/site.ts, the README and docs/message-like-me.md install lines, regenerated site/app/readme.generated.ts and dist/cli.js, site source-catalog pins, and the new CHANGELOG.md section, plus the receipt rebind because package.json is receipt-covered.",
+  "rounds": [
+    {
+      "round": 1,
+      "design": "Bump every published version surface to 0.8.23 and add the changelog section the Release workflow reads.",
+      "verdict": "blockers",
+      "blockers": [
+        "Version agreement: package.json, src/version.ts, site/package.json, site/app/_lib/site.ts SOFTWARE_VERSION, the README install line and docs/message-like-me.md must all read 0.8.23; a repo-wide scan finds no other live 0.8.22 reference (remaining hits are historical changelog/qualification records and a release-policy test fixture).",
+        "site/app/readme.generated.ts and dist/cli.js embed the README and version; regenerated with sync:readme and bun run build, not hand-edited.",
+        "The changelog section must satisfy the strict changelogSection() contract and must not describe the menu companion as shipping; validated with the real parser."
+      ]
+    },
+    {
+      "round": 2,
+      "design": "All surfaces agree at 0.8.23; generated files regenerated; changelog parses; receipt rebound to the bumped package.json (bun.lock unchanged).",
+      "verdict": "blockers-fixed",
+      "blockers": [
+        "Diff is limited to version coordinates, generated mirrors, the changelog section and qualification records; no product-behavior change.",
+        "Receipt binding: only package.json among the covered sources changed; validation.receiptSha256 is re-pinned to this release's validation record."
+      ],
+      "verification": "changelogSection() parses 0.8.23; bun run check exits 0 (493/493 legacy, 853/853 Textbutler); site bun run test 87/87."
+    }
+  ],
+  "result": "Ship. Pure version-coordinate change consistent across all surfaces with the receipt rebound to the bumped manifest.",
+  "reviewer": "The releasing agent (Claude Code), two self-review rounds; Required CI on the PR head is the independent gate."
+}

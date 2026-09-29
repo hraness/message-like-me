@@ -296,6 +296,6 @@ these commands don’t sign you up or charge anyone.
 MIT.
 
 Looking for the Message Like Me history tools? TextButler replaced Message Like
-Me, and its published package (`bun add --global @hraness/message-like-me@0.8.22`)
+Me, and its published package (`bun add --global @hraness/message-like-me@0.8.23`)
 installs those legacy tools, not TextButler. See
 [docs/message-like-me.md](docs/message-like-me.md).
