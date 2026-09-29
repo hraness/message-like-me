@@ -154,7 +154,7 @@ jobs:
       # Runs the package tests as balanced parallel lanes plus both typechecks
       # (scripts/check-textbutler.ts); the job name stays in the site
       # promotion's CI inventory.
-      - run: bun run check:textbutler
+      - run: bun scripts/check-textbutler.ts
 
   site:
     name: Site
@@ -254,7 +254,7 @@ jobs:
       # The package typechecks are platform-independent and run in the Linux
       # "Textbutler packages" job, so macOS runs only the package tests.
       - name: Test Textbutler owner controls and native custody with synthetic data
-        run: bun run check:textbutler --tests-only
+        run: bun scripts/check-textbutler.ts --tests-only
       - name: Verify native app supervision with synthetic data
         run: bun scripts/verify-textbutler-macos-app.ts
 

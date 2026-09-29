@@ -79,7 +79,7 @@
     "check:package": "bun scripts/package-smoke.ts",
     "check:cost-surfaces": "bun ./scripts/check-cost-surfaces.mjs",
     "check": "bun run check:cost-surfaces && bun run typecheck && bun run check:effect && bun run test && bun run check:skill && bun run check:standalone && bun run build && bun run check:public-graphs && bun run check:dist && bun run check:package && bun run check:textbutler",
-    "check:textbutler": "bun scripts/check-textbutler.ts",
+    "check:textbutler": "bun test packages && tsc --noEmit -p packages/transport/tsconfig.json && tsc --noEmit -p packages/textbutler/tsconfig.json",
     "textbutler": "bun packages/textbutler/src/cli.ts",
     "textbutler:build": "bun scripts/build-textbutler.ts",
     "textbutler:install": "bun scripts/install-textbutler.ts",
