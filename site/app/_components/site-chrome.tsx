@@ -9,10 +9,6 @@ import {
   GITHUB_URL,
 } from '../_lib/site';
 
-// The shared footer contract pins the canonical generated icon element exactly.
-// eslint-disable-next-line @next/next/no-img-element
-const productMark = <img alt="" height={20} src="/icon.png" width={20} />;
-
 export function SiteHeader() {
   return (
     <>
@@ -47,7 +43,8 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
       )}
       <MarketingSiteFooter
         ariaLabel="Textbutler"
-        brand={productMark}
+        brand={null}
+        brandMark="/marks/message-like-me.svg"
         brandHref="/"
         brandLabel="Textbutler home"
         links={[
