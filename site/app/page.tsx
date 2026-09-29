@@ -2,15 +2,18 @@ import {
   MarketingCallToAction,
   MarketingFlow,
   MarketingPage,
+  MarketingProofFrame,
   MarketingQuestionList,
   MarketingRelated,
   MarketingSection,
   ProductHero,
   ProviderMarkChip,
+  SyntaxCode,
 } from '@hraness/design-kit/react/server';
 import { product, type PortfolioProductId } from '@hraness/design-kit/portfolio';
 import Link from 'next/link';
 
+import { CodeBlock } from './_components/code-block';
 import { CopyButton } from './_components/landing/copy-button';
 import { DiagramFigure } from './_components/landing/diagram-figure';
 import { DiagramSwitch } from './_components/landing/diagram-switch';
@@ -142,13 +145,9 @@ function Chip({ children }: Readonly<{ children: SupportChip }>) {
 
 function TerminalProof() {
   return (
-    <figure className="tb-terminal">
-      <figcaption className="tb-terminal__caption">
-        <span>Terminal</span>
-        <span>First run on a new install</span>
-      </figcaption>
-      <pre aria-label="The guided terminal's first screen" tabIndex={0}><code><span className="tb-terminal__prompt">$ bun run textbutler tui</span>{'\n\n'}{TERMINAL_FIRST_RUN.join('\n')}</code></pre>
-    </figure>
+    <MarketingProofFrame caption="First run on a new install" className="tb-terminal" title="Terminal">
+      <pre aria-label="The guided terminal's first screen" tabIndex={0}><SyntaxCode code="$ bun run textbutler tui" language="shell" styles="classes" />{'\n\n'}<SyntaxCode code={TERMINAL_FIRST_RUN.join('\n')} language="text" styles="classes" /></pre>
+    </MarketingProofFrame>
   );
 }
 
@@ -223,7 +222,7 @@ export default function Home() {
 
           <FilmSlot />
 
-          <MarketingSection heading="What it works with" headingId="supports-title" id="supports" label="Supports" summary="The chats you already use, on the Mac you already have. Each limit sits right next to the thing it limits.">
+          <MarketingSection heading="What it works with" headingId="supports-title" id="supports" label="Supports" summary="Connect your messaging apps and choose which conversations it can answer.">
             <div className="tb-support">
               <div className="tb-support__block">
                 <h3>Messaging apps</h3>
@@ -261,7 +260,7 @@ export default function Home() {
                   </div>
                   {writer.id === 'key' ? <p className="provider-marks"><ProviderMarkChip mark="qwen" size={20} /></p> : null}
                   {writer.id === 'subscription' ? <p className="provider-marks"><ProviderMarkChip mark="claudecode" size={20} /><ProviderMarkChip mark="codex" size={20} /><ProviderMarkChip mark="devin" size={20} /></p> : null}
-                  <pre tabIndex={0}><code>{writer.command}</code></pre>
+                  <CodeBlock code={writer.command} />
                   <dl className="tb-writer__facts">
                     <div><dt>What leaves your Mac</dt><dd>{writer.leaves}</dd></div>
                     <div><dt>Good to know</dt><dd>{writer.note}</dd></div>
@@ -277,7 +276,7 @@ export default function Home() {
             ]} />
           </MarketingSection>
 
-          <MarketingSection heading="Your agent does the setup. You approve what only you can." headingId="setup-title" id="setup" label="Setup" summary="Textbutler has no installer and no app store page. Paste one prompt into the coding agent you already use. It follows the setup guide and runs the checks, and it stops for the few things macOS makes you do yourself.">
+          <MarketingSection heading="Your agent sets it up. You stay in charge." headingId="setup-title" id="setup" label="Setup" summary="Paste this prompt into your coding agent. It follows the setup guide and stops when you need to grant access, sign in, or choose a contact.">
             <ol className="tb-setup-steps">
               {SETUP_STEPS.map((step) => (
                 <li key={step.label}><h3>{step.label}</h3><p>{step.detail}</p></li>
@@ -296,12 +295,12 @@ export default function Home() {
               <div>
                 <h3>Prefer to do it yourself?</h3>
                 <p><code>$ bun run textbutler tui</code> walks you through the same steps, one screen at a time.</p>
-                <TerminalProof />
+                <details className="tb-details"><summary>See the first terminal screen</summary><TerminalProof /></details>
               </div>
               <div className="tb-tile">
                 <h3>Your agent speaks its language</h3>
                 <p>The JSON command line lets your agent list conversations, summarize a thread, draft a reply, and send it only with the review code that draft shows.</p>
-                <pre tabIndex={0}><code>{'textbutler conversations list\ntextbutler replies suggest CONTACT\ntextbutler replies show DRAFT\ntextbutler replies send DRAFT DIGEST'}</code></pre>
+                <CodeBlock code={'textbutler conversations list\ntextbutler replies suggest CONTACT\ntextbutler replies show DRAFT\ntextbutler replies send DRAFT DIGEST'} />
                 <a href={AGENT_CLI_URL}>Read the agent CLI guide</a>
               </div>
             </div>

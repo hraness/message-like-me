@@ -10,6 +10,10 @@ describe("renderReadmeHtml", () => {
       "[Security](SECURITY.md)",
       "",
       "![Architecture](docs/architecture.png)",
+      "",
+      "```json",
+      '{"literal":"&lt;safe&gt;","html":"<script>"}',
+      "```",
     ].join("\n"));
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
     expect(html).toContain(
@@ -19,6 +23,9 @@ describe("renderReadmeHtml", () => {
       'src="https://raw.githubusercontent.com/hraness/textbutler/main/docs/architecture.png"',
     );
     expect(html).not.toContain("<img src=x");
+    expect(html).toContain('data-language="json"');
+    expect(html).toContain("&amp;lt;safe&amp;gt;");
+    expect(html).not.toContain("<script>");
   });
 
   test("serves the site's own public images from the site", () => {

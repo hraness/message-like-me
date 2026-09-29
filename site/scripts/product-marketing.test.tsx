@@ -73,8 +73,8 @@ test('renders Textbutler with the shared grammar and one development status', ()
   expect(html).toContain('iMessage, WhatsApp, and Beeper');
   expect(html).toContain(REPLY_WRITERS_SENTENCE);
   expect(html).toContain('In testing');
-  expect(html).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
-  expect(html).toContain('pbpaste | textbutler providers gateway-key');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('pbpaste | textbutler providers gateway-key');
   expect(html).toContain('Spending stops at $1 a day.');
   expect(html).toContain('If you choose one with a command, that choice wins.');
   expect(html).toContain('That copy writes the AI replies');
@@ -95,7 +95,7 @@ test('renders Textbutler with the shared grammar and one development status', ()
 
 test('keeps the hero outcome-led and free of contract vocabulary', () => {
   const html = renderToStaticMarkup(<Home />);
-  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<div\b[^>]*class="[^"]*\bhraness-marketing-hero__frame\b[^"]*"[^>]*>/u.exec(html);
+  const hero = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<\/header>/u.exec(html);
   expect(hero).not.toBeNull();
   const heroCopy = (hero?.[0] ?? '').replace(/<[^>]+>/gu, ' ').toLowerCase();
   const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
@@ -129,7 +129,10 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   for (const line of TERMINAL_FIRST_RUN) {
     if (line) expect(tui, line).toContain(JSON.stringify(line));
   }
-  expect(html).toContain('$ bun run textbutler tui');
+  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('$ bun run textbutler tui');
+  expect(html).toContain('data-hraness-marketing="proof-frame"');
+  expect(html).toContain('data-language="shell"');
+  expect(html).toContain('syntax-token--command');
   expect(html).not.toContain('Illustration only.');
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   // The marker is literal text with one space inside each brace.
@@ -211,7 +214,7 @@ test('keeps machine-readable setup and conditional subscription admission consis
 });
 
 test('offers guided source setup without implying a released AI engine or a menu bar app', async () => {
-  const home = renderToStaticMarkup(<Home />);
+  const home = renderToStaticMarkup(<Home />).replace(/<\/?span\b[^>]*>/gu, '');
   const about = renderToStaticMarkup(<About />);
   const discovery = await getDiscoveryText().text();
   // The full status renders on the home page and in llms.txt; About links to it.

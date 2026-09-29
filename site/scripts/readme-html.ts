@@ -1,3 +1,6 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CodeBlock } from "../app/_components/code-block.tsx";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -116,11 +119,29 @@ function assertFragmentsResolve(html: string): void {
 }
 
 export function renderReadmeHtml(source: string): string {
-  const html = Bun.markdown.html(source, {
+  const options = {
     noHtmlBlocks: true,
     noHtmlSpans: true,
     tagFilter: true,
-  });
+  } as const;
+  // Recover literal code with the Markdown parser so entity-like text is never
+  // decoded twice. Natural-language and directory blocks keep their text hint.
+  const codeBlocks: { code: string; language: string }[] = [];
+  Bun.markdown.render(source, {
+    code(code, metadata) {
+      codeBlocks.push({ code, language: metadata?.language ?? "text" });
+      return "";
+    },
+  }, options);
+  let blockIndex = 0;
+  const html = new HTMLRewriter().on("pre", {
+    element(element) {
+      const block = codeBlocks[blockIndex++];
+      if (block === undefined) throw new Error("README code block parsers disagree");
+      element.replace(renderToStaticMarkup(createElement(CodeBlock, block)), { html: true });
+    },
+  }).transform(Bun.markdown.html(source, options));
+  if (blockIndex !== codeBlocks.length) throw new Error("README code block parsers disagree");
   for (const match of html.matchAll(/\s(?:href|src)="([^"]*)"/gu)) {
     const target = match[1];
     if (target !== undefined) assertSafeTarget(target);

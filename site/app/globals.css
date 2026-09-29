@@ -3,6 +3,7 @@
 /* The complete Design Kit export includes compiled React slot recipes and
  * the marketing foundation. The raw HTML grammar alone omits those atoms. */
 @import '@hraness/design-kit/styles.css';
+@import '@hraness/design-kit/syntax-highlighting.css';
 @import '@hraness/site-footer/styles.css';
 @import '../styles/vendor/hraness-paper/paper-theme.css';
 @import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
@@ -889,25 +890,14 @@ nav.message-like-me-ask-ai + footer {
 ::selection { background: var(--primary); color: var(--primary-foreground); }
 html { scrollbar-color: var(--muted) var(--paper); }
 
-/* Landing proof: the guided terminal's real first screen on an opaque surface. */
+/* Shared terminal frame, with the guided terminal's real first screen. */
 .tb-terminal {
-  margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 0.625rem;
+  margin: 1rem 0;
+  min-inline-size: 0;
   background: var(--surface);
 }
-.tb-terminal__caption {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.25rem 1rem;
-  padding: 0.6rem 1rem;
-  border-block-end: 1px solid var(--line);
-  color: var(--muted);
-  font: 500 0.75rem/1.4 var(--font-mono);
-}
-.tb-terminal pre {
+.tb-terminal pre,
+.tb-code-frame .tb-code {
   margin: 0;
   padding: 1.1rem 1.25rem 1.25rem;
   overflow-x: auto;
@@ -915,8 +905,11 @@ html { scrollbar-color: var(--muted) var(--paper); }
   color: var(--ink);
   font: 0.8125rem/1.6 var(--font-mono);
   tab-size: 2;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  max-inline-size: 100%;
 }
-.tb-terminal__prompt { color: var(--primary); }
 @media (max-width: 30rem) {
   /* Phones wrap terminal lines instead of hiding their ends off-screen. */
   .tb-terminal pre { padding-inline: 1rem; font-size: 0.75rem; white-space: pre-wrap; }
@@ -964,8 +957,15 @@ html { scrollbar-color: var(--muted) var(--paper); }
 .tb-steps > li::before { content: counter(tb-step); position: absolute; inset: 1.55rem auto auto 0; color: var(--primary); font: 500 0.85rem/1.4 var(--font-mono); }
 .tb-steps h3 { margin: 0; font-family: var(--hraness-type-h3-font); font-size: var(--hraness-type-h3-size); font-weight: var(--hraness-type-h3-weight); }
 .tb-steps p { margin: 0.6rem 0 0; color: var(--muted); max-width: 62ch; }
-.tb-steps pre { margin: 1rem 0; max-width: 40rem; padding: 0.9rem 1.1rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--surface); color: var(--ink); font: 0.8125rem/1.6 var(--font-mono); overflow-x: auto; }
 .tb-steps code { font-family: var(--font-mono); font-size: 0.9em; }
+.tb-code-frame { min-inline-size: 0; max-inline-size: 40rem; margin: 1rem 0; }
+.tb-code { max-inline-size: 100%; overflow-x: auto; font: 0.875rem/1.6 var(--font-mono); }
+.readme-prose .tb-code { background: var(--surface); color: var(--foreground); }
+.readme-prose .tb-code-frame .tb-code { background: transparent; }
+.tb-code code, .tb-terminal pre code { font: inherit; }
+.tb-details { margin-block-start: 1rem; }
+.tb-details summary { cursor: pointer; min-block-size: 2.75rem; align-content: center; color: var(--muted); }
+.tb-details summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .provider-marks { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; align-items: center; }
 .tb-steps .provider-marks, .about-grid .provider-marks { margin: 0.6rem 0 0; color: inherit; }
 .legacy-note { margin-block: 1.5rem 0; color: var(--muted); font-size: 0.95rem; max-width: 75ch; }
