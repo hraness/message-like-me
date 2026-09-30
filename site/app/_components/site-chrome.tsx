@@ -5,6 +5,7 @@ import { AskAiAboutThis } from '@hraness/ui';
 
 import {
   absoluteUrl,
+  SITE_NAME,
   type SitePath,
   GITHUB_URL,
 } from '../_lib/site';
@@ -16,8 +17,8 @@ export function SiteHeader() {
       <MarketingSiteHeader
         action={{ href: '/#setup', label: 'Set up' }}
         ariaLabel="Primary navigation"
-        brand="TextButler"
-        brandLabel="TextButler home"
+        brand={SITE_NAME}
+        brandLabel={`${SITE_NAME} home`}
         brandMark="/marks/message-like-me.svg"
         className="site-header"
         trailing={<ThemeMenuButton aria-label="Appearance" />}
@@ -42,11 +43,11 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
         />
       )}
       <MarketingSiteFooter
-        ariaLabel="TextButler"
+        ariaLabel={SITE_NAME}
         brand={null}
         brandMark="/marks/message-like-me.svg"
         brandHref="/"
-        brandLabel="TextButler home"
+        brandLabel={`${SITE_NAME} home`}
         links={[
           { href: '/about', label: 'About' },
           { href: '/sources', label: 'Legacy history tools' },
@@ -55,13 +56,13 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
           { href: '/blog', label: 'Blog' },
           { href: GITHUB_URL, label: 'GitHub' },
         ]}
-        name="TextButler"
+        name={SITE_NAME}
       >
         <p>AI in your messages · Mac only · MIT source · in development</p>
       </MarketingSiteFooter>
       <HranessSiteFooter
         mailingList={{ kind: "none" }}
-        support={{ id: "textbutler", name: "TextButler", updates: false, valueProposition: "Support ongoing development of TextButler." }}
+        support={{ id: "textbutler", name: SITE_NAME, updates: false, valueProposition: `Support ongoing development of ${SITE_NAME}.` }}
       />
     </>
   );

@@ -207,7 +207,7 @@ describe('supported source presentation', () => {
       ]);
 
     expect(home).toContain('<ProductHero');
-    expect(home).toContain("{ href: '#how-it-works', label: 'See how it works', emphasis: 'secondary' }");
+    expect(renderedHomePage).toMatch(/href="#how-it-works"[^>]*>[\s\S]*?See how it works/);
     expect(renderedHomePage).toContain('data-hraness-marketing="hero"');
     expect(renderedHomePage).toContain('View legacy history sources.');
     expect(renderedHomePage).not.toContain('messagelikeme ingest');

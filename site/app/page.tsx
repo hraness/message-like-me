@@ -1,3 +1,4 @@
+import { marketing, marketingHeading, product } from "../portfolio-copy";
 import {
   MarketingCallToAction,
   MarketingFlow,
@@ -12,7 +13,7 @@ import {
   SyntaxCode,
 } from '@hraness/design-kit/react/server';
 import { PlatformInstall } from '@hraness/design-kit/react/platform-install';
-import { product, type PortfolioProductId } from '@hraness/design-kit/portfolio';
+import type { PortfolioProductId } from '@hraness/design-kit/portfolio';
 import Link from 'next/link';
 
 import { CodeBlock } from './_components/code-block';
@@ -80,8 +81,8 @@ export const metadata = publicAssetExists(LAUNCH_ASSETS.film)
   : baseMetadata;
 
 // Related cards take each product's link, mark, and one-liner from the portfolio facts.
-const related = (id: PortfolioProductId, name: string) => {
-  const { canonicalUrl, mark, oneLiner } = product(id);
+const related = (id: PortfolioProductId) => {
+  const { canonicalUrl, mark, name, oneLiner } = product(id);
   return { href: canonicalUrl, mark, name, role: oneLiner };
 };
 
@@ -180,7 +181,7 @@ function FilmSlot() {
   if (sources === null) return null;
   return (
     <section aria-labelledby="film-title" className="tb-film" id="film">
-      <h2 className="tb-film__title" id="film-title">TextButler in {LAUNCH_FILM_SECONDS} seconds</h2>
+      <h2 className="tb-film__title" id="film-title">{marketing.names.name} in {LAUNCH_FILM_SECONDS} seconds</h2>
       <LaunchVideo sources={sources} title="AI in your messages" />
       <p className="tb-caption">No sound needed. Every name in the film is made up.</p>
     </section>
@@ -198,23 +199,23 @@ export default function Home() {
           <ProductHero
             backdrop={false}
             align="start"
-            actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: '#how-it-works', label: 'See how it works', emphasis: 'secondary' }]}
+            actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: '#how-it-works', label: marketing.hero.secondaryAction, emphasis: 'secondary' }]}
             boundary={HERO_BOUNDARY}
             className="mlm-marketing-hero tb-hero"
             eyebrow="iMessage and WhatsApp today, more apps through Beeper, on Mac"
             frame={<HeroStage />}
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
-            name="TextButler"
-            summary="When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. It writes with a local model or the AI subscription you already pay for. Claude Code, Codex, or Devin can set it up for you."
+            name={marketing.names.name}
+            summary={marketing.hero.summary}
           />
 
           <section aria-labelledby="status-title" className="tb-status-band" id="status">
-            <h2 className="tb-status-band__label" id="status-title">Where it stands</h2>
+            <h2 className="tb-status-band__label" id="status-title">{marketingHeading("where-it-stands")}</h2>
             <p className="tb-status">{SITE_STATUS}</p>
           </section>
 
-          <MarketingSection heading="From “butler” to a marked reply." headingId="how-title" id="how-it-works" label="How it works" summary="Most of the time, it does nothing. When someone you’ve turned on asks for it, it says so right away, reads your notes and your chat, and answers in a bubble nobody could mistake for you.">
+          <MarketingSection heading={marketingHeading("how-title")} headingId="how-title" id="how-it-works" label="How it works" summary="Most of the time, it does nothing. When someone you’ve turned on asks for it, it says so right away, reads your notes and your chat, and answers in a bubble nobody could mistake for you.">
             <DiagramFigure alt="One message, start to finish: a friend’s message reaches GhostGet on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." className="tb-diagram--wide-only" name={DIAGRAMS.oneMessage} />
             <MarketingFlow ariaLabel="What happens to one message" steps={HOW_IT_WORKS_STEPS} />
             <dl className="tb-modes" aria-label="When it answers">
@@ -229,10 +230,10 @@ export default function Home() {
 
           <FilmSlot />
 
-          <MarketingSection heading="What it works with" headingId="supports-title" id="supports" label="Supports" summary="Connect your messaging apps and choose which conversations it can answer.">
+          <MarketingSection heading={marketingHeading("supports-title")} headingId="supports-title" id="supports" label="Supports" summary="Connect your messaging apps and choose which conversations it can answer.">
             <div className="tb-support">
               <div className="tb-support__block">
-                <h3>Messaging apps</h3>
+                <h3>{marketingHeading("messaging-apps")}</h3>
                 <ul className="tb-support__list">
                   {MESSAGING_APPS.map((app) => (
                     <li key={app.name}>
@@ -246,7 +247,7 @@ export default function Home() {
                 <p className="tb-fine">Messages reach TextButler through GhostGet, a separate Mac tool you install first. <a href={GHOSTGET_SETUP_URL}>Set up GhostGet</a></p>
               </div>
               <div className="tb-support__block">
-                <h3>Your Mac</h3>
+                <h3>{marketingHeading("your-mac")}</h3>
                 <ul className="tb-support__list">
                   <li><div className="tb-support__head"><strong>Mac only</strong></div><p>It runs quietly in the background, with no window and no menu bar icon. There’s no iPhone, Windows, or Linux version.</p></li>
                   <li><div className="tb-support__head"><strong>Built on your Mac</strong></div><p>Setup builds a small helper app on your Mac so macOS can grant iMessage access. The helper has no window.</p></li>
@@ -257,7 +258,7 @@ export default function Home() {
             </div>
           </MarketingSection>
 
-          <MarketingSection heading="Pick what writes replies" headingId="models-title" id="models" label="Reply writers" summary={REPLY_WRITERS_SENTENCE}>
+          <MarketingSection heading={marketingHeading("models-title")} headingId="models-title" id="models" label="Reply writers" summary={REPLY_WRITERS_SENTENCE}>
             <ol className="tb-writers" aria-label="Reply writers, pick one">
               {REPLY_WRITERS.map((writer) => (
                 <li className="tb-writer" data-writer={writer.id} key={writer.id}>
@@ -284,7 +285,7 @@ export default function Home() {
             ]} />
           </MarketingSection>
 
-          <MarketingSection heading="Your agent sets it up. You stay in charge." headingId="setup-title" id="setup" label="Setup" summary="Paste this prompt into your coding agent. It follows the setup guide and stops when you need to grant access, sign in, or choose a contact.">
+          <MarketingSection heading={marketingHeading("setup-title")} headingId="setup-title" id="setup" label="Setup" summary="Paste this prompt into your coding agent. It follows the setup guide and stops when you need to grant access, sign in, or choose a contact.">
             <ol className="tb-setup-steps">
               {SETUP_STEPS.map((step) => (
                 <li key={step.label}><h3>{step.label}</h3><p>{step.detail}</p></li>
@@ -303,7 +304,7 @@ export default function Home() {
             </figure>
             <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. There’s no TextButler setup skill yet (coming), so your agent follows the <a href={GETTING_STARTED_URL}>written guide</a>. Permission switches, pairing, and pasting a key are always yours to do.</p>
             <div className="tb-install" id="install">
-              <h3>Install it yourself</h3>
+              <h3>{marketingHeading("install-it-yourself")}</h3>
               <p>This builds a local copy from source and checks it against the reviewed record. It starts no services and connects no accounts.</p>
               <PlatformBadges platforms={['macos']} />
               <PlatformInstall platforms={INSTALL_PLATFORMS} />
@@ -311,12 +312,12 @@ export default function Home() {
             <DiagramFigure alt="Who does what. Your agent clones and installs TextButler, connects your apps, and runs textbutler doctor. You turn on the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper if you use them, pick what writes replies, and turn on one person." name={DIAGRAMS.whoDoesWhat} />
             <div className="tb-setup-extra">
               <div>
-                <h3>Prefer to do it yourself?</h3>
+                <h3>{marketingHeading("prefer-to-do-it-yourself")}</h3>
                 <p><code>$ bun run textbutler tui</code> walks you through the same steps, one screen at a time.</p>
                 <details className="tb-details"><summary>See the first terminal screen</summary><TerminalProof /></details>
               </div>
               <div className="tb-tile">
-                <h3>Your agent speaks its language</h3>
+                <h3>{marketingHeading("your-agent-speaks-its-language")}</h3>
                 <p>The JSON command line lets your agent list conversations, summarize a thread, draft a reply, and send it only with the review code that draft shows.</p>
                 <CodeBlock code={'textbutler conversations list\ntextbutler replies suggest CONTACT\ntextbutler replies show DRAFT\ntextbutler replies send DRAFT DIGEST'} />
                 <a href={AGENT_CLI_URL}>Read the agent CLI guide</a>
@@ -324,20 +325,20 @@ export default function Home() {
             </div>
           </MarketingSection>
 
-          <MarketingSection heading="You stay in charge" headingId="control-title" id="control" label="Control" summary="An assistant in your messages only works if it knows when to stay out of them.">
+          <MarketingSection heading={marketingHeading("control-title")} headingId="control-title" id="control" label="Control" summary="An assistant in your messages only works if it knows when to stay out of them.">
             <div className="tb-pillars">
               <article>
-                <h3>It’s there when you aren’t.</h3>
+                <h3>{marketingHeading("it-s-there-when-you-aren-t")}</h3>
                 <p>It answers the people you choose, when they ask, in the chats they already use.</p>
                 <p className="tb-proof">Marked automatic replies have worked end to end over iMessage in our testing. 👀 goes out first. It stays out of group chats.</p>
               </article>
               <article>
-                <h3>It never pretends to be you.</h3>
+                <h3>{marketingHeading("it-never-pretends-to-be-you")}</h3>
                 <p>Everything it sends is wrapped in <code>{'🤖{ }'}</code>, including the 👀.</p>
                 <p className="tb-proof">The marker is on by default. You can remove it only per person, and never in your own chat. New installs start paused, every person starts off, and setup never sends a message. <code>textbutler pause</code> stops everything, and <code>textbutler contacts disable</code> turns one person off.</p>
               </article>
               <article>
-                <h3>It runs on your Mac.</h3>
+                <h3>{marketingHeading("it-runs-on-your-mac")}</h3>
                 <p>No server of ours sits in the middle. Your notes about each person are plain files you can read and edit. With a local model, the reply is written on your Mac too (in testing).</p>
                 <p className="tb-proof">Gateway spending stops at $1 a day. Web search needs a saved Gateway key, and it refuses any search that reuses words from your private messages. Through <a href={XCB_URL}>xcb</a>, the model can’t run commands on your Mac.</p>
               </article>
@@ -367,28 +368,28 @@ export default function Home() {
             </div>
           </MarketingSection>
 
-          <MarketingSection heading="Ask it yourself" headingId="self-title" id="ask-yourself" label="Your own chat" layout="split" summary="Say “butler” in your own chat and it works for you, searching that chat’s history. The marker can’t be turned off here.">
+          <MarketingSection heading={marketingHeading("self-title")} headingId="self-title" id="ask-yourself" label="Your own chat" layout="split" summary="Say “butler” in your own chat and it works for you, searching that chat’s history. The marker can’t be turned off here.">
             <figure className="tb-example tb-example--solo">
               <PhoneSlot conversation={askYourselfConversation} crop={640} maxWidth={340} />
               <figcaption className="tb-caption">Example conversation. The details are made up.</figcaption>
             </figure>
           </MarketingSection>
 
-          <MarketingQuestionList className="mlm-marketing-questions" heading="Questions" headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, link, question }) => ({ answer: link ? <><p>{answer}</p><p><Link href={link.href}>{link.label}</Link></p></> : <p>{answer}</p>, question }))} />
-          <MarketingRelated heading="From the same workshop" headingId="related-title" label="Related" summary="More Hraness tools that work on your Mac and keep the agent’s access limited." groups={[
+          <MarketingQuestionList className="mlm-marketing-questions" heading={marketingHeading("questions-title")} headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, link, question }) => ({ answer: link ? <><p>{answer}</p><p><Link href={link.href}>{link.label}</Link></p></> : <p>{answer}</p>, question }))} />
+          <MarketingRelated heading={marketingHeading("related-title")} headingId="related-title" label="Related" summary="More Hraness tools that work on your Mac and keep the agent’s access limited." groups={[
             {
-              heading: 'The personal apps',
+              heading: marketingHeading("home-related-apps"),
               headingId: 'related-apps',
-              items: [related('peopleblade', 'PeopleBlade'), related('soulscrape', 'Soulscrape'), related('kb', 'Wordcell')],
+              items: [related('peopleblade'), related('soulscrape'), related('kb')],
             },
             {
-              heading: 'The agent platform',
+              heading: marketingHeading("home-related-tools"),
               headingId: 'related-tools',
               summary: 'The connections, subscription, and model comparisons around the butler.',
-              items: [related('wrench', 'GhostGet'), related('xcb', 'Excalibur (xcb)'), related('aicharts', 'aicharts')],
+              items: [related('wrench'), related('xcb'), related('aicharts')],
             },
           ]} />
-          <MarketingCallToAction actions={[{ href: '#setup', label: 'Have your agent set it up' }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading="Start with one person" headingId="closing-title" id="closing" summary="Paste the prompt, approve what your Mac asks for, and turn on someone who knows you’re trying it. Everyone else stays off." />
+          <MarketingCallToAction actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading={marketingHeading("closing-title")} headingId="closing-title" id="closing" summary="Paste the prompt, approve what your Mac asks for, and turn on someone who knows you’re trying it. Everyone else stays off." />
           <p className="legacy-note">Looking for the Message Like Me history tools? <Link href="/sources">View legacy history sources.</Link></p>
         </MarketingPage>
       </main>

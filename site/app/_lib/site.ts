@@ -1,13 +1,14 @@
+import { marketing, marketingHeading } from "../../portfolio-copy";
 import type { Metadata } from 'next';
 
 import { SOCIAL_IMAGE_ALT } from './social';
 
-export const SITE_NAME = 'TextButler';
+export const SITE_NAME = marketing.names.name;
 export const SITE_ORIGIN = 'https://textbutler.app';
-export const SITE_TITLE = 'TextButler: an AI butler for iMessage and WhatsApp on Mac';
-export const SITE_HEADLINE = 'An AI butler in your messaging apps.';
+export const SITE_TITLE = marketingHeading("site-title");
+export const SITE_HEADLINE = marketing.hero.heading;
 export const SITE_DESCRIPTION =
-  'An AI butler in your messaging apps. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac, in iMessage and WhatsApp, and in more apps through Beeper (text only). Claude Code, Codex, or Devin can set it up for you.';
+  marketing.meta;
 // The one-sentence "what it is": README line 5, the launch post, and the CLI
 // description use the same words.
 export const SITE_WHAT_IT_IS =
