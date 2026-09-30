@@ -278,7 +278,7 @@ export function assertPresentation(value, sample) {
     assert.equal(value.headerWidth, Math.min(1216, sample.width));
     assert.equal(value.gutter, sample.width < 761 ? '20px' : '32px');
     const h2Size = Math.min(40, Math.max(28, 21.6 + sample.width * 0.016));
-    assert.equal(value.sections.length, 8);
+    assert.equal(value.sections.length, 9);
     for (const section of value.sections) {
       assert.match(section.font, /Nebula Sans/u);
       assert.equal(section.weight, '550');

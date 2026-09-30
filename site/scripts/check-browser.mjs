@@ -275,7 +275,8 @@ try {
           workspaceInk: workspace && getComputedStyle(workspace).color,
           workspaceBackground: workspace && getComputedStyle(workspace).backgroundColor,
           terminalBackground: terminal && getComputedStyle(terminal).backgroundColor,
-          sections: [...document.querySelectorAll('.textbutler-marketing h2')].map((element) => {
+          // Section titles share the marketing scale; the status band and film use compact labels.
+          sections: [...document.querySelectorAll('.textbutler-marketing :is(.hraness-marketing-section__heading, .hraness-marketing-questions__heading, .hraness-marketing-related__heading, .hraness-marketing-cta__heading)')].map((element) => {
             const style = getComputedStyle(element);
             return { font: style.fontFamily, weight: style.fontWeight, size: Number.parseFloat(style.fontSize),
               leading: Number.parseFloat(style.lineHeight), tracking: Number.parseFloat(style.letterSpacing) };
