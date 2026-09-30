@@ -21,7 +21,7 @@ const OTHER_APPS = {
   },
   beeper: {
     conversation: beeperConversation,
-    label: 'Illustration: the same chat in a Beeper-style app, not yet tested live. Maya asks the butler what time Sam said, and a marked reply answers. Names are made up.',
+    label: 'Illustration: a Beeper-style chat, not yet tested live. Marcus asks the butler for Sam’s work address, and a marked reply declines. Names are made up.',
   },
 } as const;
 

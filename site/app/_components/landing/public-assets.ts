@@ -1,6 +1,8 @@
 import { existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { launchFacts } from '../../launch/facts';
+
 // Launch media and diagrams land in public/ from their own lanes. A slot shows
 // its asset only when the file is really there, so the page never renders a
 // broken image while an asset is still being made.
@@ -30,8 +32,8 @@ export const LAUNCH_ASSETS = {
   film: 'launch/textbutler-launch.mp4',
 } as const;
 
-/** The film's length, said in reader terms beside it. */
-export const LAUNCH_FILM_SECONDS = 42;
+/** The film's length, said in reader terms beside it, from the launch facts. */
+export const LAUNCH_FILM_SECONDS = Number(launchFacts.filmSeconds.value);
 
 /**
  * Sources for <LaunchVideo>, or null while the poster or film is missing, so

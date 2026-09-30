@@ -32,7 +32,16 @@ function source(title: string, repository: Repository, path: string, checkedOn: 
     checkedOn,
   };
 }
-const launchSource = (title: string, repository: Repository, path: string) => source(title, repository, path, LAUNCH_REVIEWED_ON);
+// The launch post was reviewed again after its beats, facts and social kit
+// changed, by an AI reviewer run separate from the run that edits the post.
+const INTRODUCING_REVIEWED_ON: ArticleIsoDate = '2026-09-30';
+const INTRODUCING_REASSESS_ON: ArticleIsoDate = '2026-11-11';
+const INTRODUCING_REVIEW = {
+  reviewer: 'Claude Opus 5.5 (claude-opus-5-5) independent launch review',
+  reviewerType: 'ai',
+  reviewedOn: INTRODUCING_REVIEWED_ON,
+} as const;
+const introducingSource = (title: string, repository: Repository, path: string) => source(title, repository, path, INTRODUCING_REVIEWED_ON);
 
 export const BLOG_ADMISSIONS = [
   {
@@ -47,32 +56,33 @@ export const BLOG_ADMISSIONS = [
       { url: 'https://textbutler.app/docs', distinction: 'The docs page is the README reference; this post is the short narrative a new reader starts with.' },
     ],
     sources: [
-      launchSource('Contact defaults: keyword, cooldown, debounce, hourly cap, disclosure marker', 'textbutler', 'packages/textbutler/src/config.ts'),
-      launchSource('Reply decision: keyword match, owner invocation, smart-mode confidence', 'textbutler', 'packages/textbutler/src/decision.ts'),
-      launchSource('Acknowledgment and send path', 'textbutler', 'packages/textbutler/src/runtime.ts'),
-      launchSource('Reply writer precedence, local model pin, Gateway daily budget', 'textbutler', 'packages/textbutler/src/default-reply-model.ts'),
-      launchSource('Textbutler status sentence (SITE_STATUS)', 'textbutler', 'site/app/_lib/site.ts'),
-      launchSource('xcb client: tool-free generation contract', 'textbutler', 'packages/textbutler/src/xcb-client.ts'),
-      launchSource('Getting started', 'textbutler', 'docs/textbutler/getting-started.md'),
-      launchSource('Messaging apps and live limitations', 'textbutler', 'docs/textbutler/messaging-apps.md'),
-      launchSource('Agent JSON CLI', 'textbutler', 'docs/textbutler/agent-cli.md'),
-      launchSource('messagelikeme.com permanent redirects', 'textbutler', 'site/next.config.ts'),
-      launchSource('Draft review and expiry (terminal and agent CLI)', 'textbutler', 'packages/textbutler/src/owner-replies.ts'),
-      launchSource('Launch facts behind the beats and social kit', 'textbutler', 'site/app/launch/facts.ts'),
+      introducingSource('Contact defaults: keyword, cooldown, debounce, hourly cap, disclosure marker', 'textbutler', 'packages/textbutler/src/config.ts'),
+      introducingSource('Reply decision: keyword match, owner invocation, smart-mode confidence', 'textbutler', 'packages/textbutler/src/decision.ts'),
+      introducingSource('Acknowledgment and send path', 'textbutler', 'packages/textbutler/src/runtime.ts'),
+      introducingSource('Reply writer precedence, local model pin, Gateway daily budget', 'textbutler', 'packages/textbutler/src/default-reply-model.ts'),
+      introducingSource('Textbutler status sentence (SITE_STATUS)', 'textbutler', 'site/app/_lib/site.ts'),
+      introducingSource('xcb client: tool-free generation contract', 'textbutler', 'packages/textbutler/src/xcb-client.ts'),
+      introducingSource('Getting started', 'textbutler', 'docs/textbutler/getting-started.md'),
+      introducingSource('Messaging apps and live limitations', 'textbutler', 'docs/textbutler/messaging-apps.md'),
+      introducingSource('Agent JSON CLI', 'textbutler', 'docs/textbutler/agent-cli.md'),
+      introducingSource('messagelikeme.com permanent redirects', 'textbutler', 'site/next.config.ts'),
+      introducingSource('Draft review and expiry (terminal and agent CLI)', 'textbutler', 'packages/textbutler/src/owner-replies.ts'),
+      introducingSource('Launch facts behind the beats, social kit and post body', 'textbutler', 'site/app/launch/facts.ts'),
+      introducingSource('Learning memory limit (HABITAT_LIMITS.memoryEntries)', 'textbutler', 'packages/textbutler/src/contact-habitat.ts'),
     ],
     observations: [
-      'The post opens with short beats, each with one illustration; every number in them comes from site/app/launch/facts.ts, which scripts/launch.test.tsx pins to the source files above. The mockups are labelled illustrations with made-up people and unbranded third-party apps.',
+      'The post opens with short beats, each with one illustration; every number in them and in the longer body comes from site/app/launch/facts.ts, which scripts/launch.test.tsx pins to the source files above and scripts/blog.test.tsx checks against the rendered body. The mockups are labelled illustrations with made-up people and unbranded third-party apps.',
       'The acknowledgment is the marked text 🤖{ 👀 }, not a tapback, and a request inside the 5-minute owner cooldown is skipped rather than deferred.',
       'Local Ollama auto-detection applies only when no Gateway key is saved; the post keeps the local route tagged as in testing until it becomes the default on main.',
       'History search is on in the owner’s own chat and off for other contacts unless the plan enables it; the examples answer only from messages visible in the same chat.',
       'Learning (habitat evolution) and its 64-entry memory run only when an evolution model is configured, which no default sets; the post presents it as optional and off by default.',
     ],
-    scores: { readerUtility: 2, originalEvidence: 2, factualConfidence: 2, hostFit: 2, voiceIntegrity: 2, maintenanceValue: 1 },
+    scores: { readerUtility: 2, originalEvidence: 2, factualConfidence: 2, hostFit: 2, voiceIntegrity: 1, maintenanceValue: 1 },
     owner: 'Hraness',
     drafting: 'ai-from-source',
-    review: LAUNCH_REVIEW,
+    review: INTRODUCING_REVIEW,
     humanReview: null,
-    reassessOn: LAUNCH_REASSESS_ON,
+    reassessOn: INTRODUCING_REASSESS_ON,
     harmIfWrong: 'A reader could expect the local model to be used even with a Gateway key saved, expect a skipped request to be answered later, or trust a marker they have removed for a person.',
     refreshTriggers: [
       'Change to SITE_STATUS or the reply-writer precedence (the local model becoming the default)',
@@ -83,6 +93,7 @@ export const BLOG_ADMISSIONS = [
       'WhatsApp or Beeper automatic replies gain live testing comparable to iMessage',
       'Registration or change of the Textbutler relations to xcb, ALGAL, Ghostget or PeopleBlade',
       'Bun version pin changes in package.json',
+      'Change to site/app/launch/beats.ts or facts.ts, or LAUNCH_FILM_SECONDS',
     ],
   },
   {
