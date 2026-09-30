@@ -16,7 +16,7 @@ describe("site typography", () => {
     };
 
     expect(manifest.dependencies?.["@hraness/design-kit"])
-      .toBe("github:hraness/design-kit#v0.31.0");
+      .toBe("github:hraness/design-kit#v0.32.0");
     expect(layout).toContain("import '@hraness/design-kit/fonts.css';");
     expect(layout.indexOf("@hraness/design-kit/fonts.css"))
       .toBeLessThan(layout.indexOf("./globals.css"));

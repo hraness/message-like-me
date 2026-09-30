@@ -203,35 +203,7 @@
 .tb-setup-steps > li::before { content: counter(tb-setup, decimal-leading-zero); display: block; margin-block-end: 0.5rem; color: var(--primary); font: 500 0.8125rem/1 var(--font-mono); }
 .tb-setup-steps h3 { margin: 0 0 0.4rem; font-size: 1.0625rem; font-weight: 600; }
 .tb-setup-steps p { margin: 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.55; }
-.tb-prompt { margin: 0; border: 1px solid var(--line); border-radius: var(--hraness-marketing-frame-radius, 0.875rem); background: var(--surface); overflow: hidden; }
-.tb-prompt__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem 0.6rem 1.1rem;
-  border-block-end: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-.tb-prompt pre { margin: 0; padding: 1.1rem 1.25rem 1.25rem; font: 0.8125rem/1.7 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.tb-prompt pre:focus-visible, .tb-writer pre:focus-visible, .tb-tile pre:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.tb-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-block-size: 2.25rem;
-  padding: 0 0.9rem;
-  border: 0;
-  border-radius: 4px;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font: 600 0.8125rem/1 var(--font-text);
-  cursor: pointer;
-}
-.tb-copy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.tb-copy[data-state="copied"] { background: var(--foreground); color: var(--background); }
+.tb-writer pre:focus-visible, .tb-tile pre:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .tb-setup-extra { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); margin-block-start: 2.5rem; }
 .tb-setup-extra h3 { margin: 0 0 0.4rem; font-size: 1.0625rem; font-weight: 600; }
 .tb-setup-extra > div > p { margin: 0 0 1rem; color: var(--muted); }
@@ -268,11 +240,9 @@
 }
 @media (max-width: 30rem) {
   .tb-callouts { grid-template-columns: minmax(0, 1fr); }
-  .tb-prompt pre { padding-inline: 1rem; font-size: 0.75rem; }
 }
 @media (forced-colors: active) {
-  .tb-chip, .tb-writer, .tb-prompt, .tb-tile, .tb-modes { border: 1px solid CanvasText; }
-  .tb-copy { border: 1px solid ButtonText; }
+  .tb-chip, .tb-writer, .tb-tile, .tb-modes { border: 1px solid CanvasText; }
 }
 
 /* Planned reply option: labeled as coming, set apart from the options you can pick today. */

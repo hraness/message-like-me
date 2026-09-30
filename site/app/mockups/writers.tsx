@@ -9,7 +9,6 @@ import { WRITERS, type WriterId } from './samples';
 export function WritersShowcase({ initial = 'local' }: Readonly<{ initial?: WriterId }>) {
   return (
     <StepThrough
-      caption="Illustration. Pick one of the three; the commands are the ones TextButler ships."
       initial={initial}
       label="Reply writers"
       steps={WRITERS.map((writer) => ({

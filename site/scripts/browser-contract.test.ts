@@ -1,6 +1,105 @@
 import { expect, test } from 'bun:test';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import type { Browser } from 'playwright-core';
 import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, browserEnvironment, browserMediaFeatures, browserOwner,
-  deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, isSyntheticConsentRegion, routeTasks } from './browser-contract.mjs';
+  browserLaunchArgs, deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, isSyntheticConsentRegion,
+  ownedChromiumLaunchOptions, pinnedBrowserExecutable, routeTasks, verifyOwnedChromium } from './browser-contract.mjs';
+
+test('browser selection admits only the provisioned version and rejects system Chrome through overrides or cache links', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'textbutler-browser-selection-'));
+  const pinned = join(root, 'chromium-1234', 'chrome');
+  const other = join(root, 'chromium-5678', 'chrome');
+  const system = join(root, 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome');
+  try {
+    for (const executable of [pinned, other, system]) {
+      await mkdir(dirname(executable), { recursive: true });
+      await writeFile(executable, 'synthetic browser fixture', { mode: 0o755 });
+    }
+    const alias = join(root, 'pinned-browser');
+    await symlink(pinned, alias);
+    expect(await pinnedBrowserExecutable(pinned)).toBe(await realpath(pinned));
+    expect(await pinnedBrowserExecutable(pinned, alias)).toBe(await realpath(pinned));
+    await expect(pinnedBrowserExecutable(pinned, other)).rejects.toThrow('must resolve to this site’s pinned Chromium');
+    await expect(pinnedBrowserExecutable(pinned, system)).rejects.toThrow('never use system Chrome');
+    await expect(pinnedBrowserExecutable(pinned, 'chrome')).rejects.toThrow('absolute path');
+    await rm(pinned);
+    await symlink(other, pinned);
+    await expect(pinnedBrowserExecutable(pinned)).rejects.toThrow('pinned revision');
+    await rm(pinned);
+    await symlink(system, pinned);
+    await expect(pinnedBrowserExecutable(pinned)).rejects.toThrow('never use system Chrome');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('owned browser launch preserves pinned defaults and caller arguments with one merged feature switch', () => {
+  const defaults = ['--no-first-run', '--disable-features=DefaultA,DefaultB', '--headless'];
+  const featureSets = [[], ['Custom'], ['PaintHolding'], ['MacAppCodeSignClone', 'Custom'], ['Custom', 'Custom', 'PaintHolding']];
+  for (const features of featureSets) for (const muted of [false, true]) {
+    const args = [...browserLaunchArgs, ...features.map(feature => '--disable-features=' + feature),
+      ...(muted ? ['--mute-audio'] : []), '--blink-settings=pointer'];
+    const options = ownedChromiumLaunchOptions('/fixture', defaults, args);
+    const physical = [...defaults.filter(arg => !options.ignoreDefaultArgs.includes(arg)), ...options.args];
+    const disabled = physical.filter(arg => arg.startsWith('--disable-features='));
+    expect(disabled).toHaveLength(1);
+    expect(new Set(disabled[0]!.split('=')[1]!.split(','))).toEqual(new Set(['DefaultA', 'DefaultB', ...features, 'PaintHolding', 'MacAppCodeSignClone']));
+    expect(physical.filter(arg => arg === '--mute-audio')).toHaveLength(1);
+    expect(physical.filter(arg => arg === '--enable-automation')).toHaveLength(1);
+    for (const preserved of ['--no-first-run', '--headless', '--blink-settings=pointer']) expect(physical).toContain(preserved);
+  }
+});
+
+test('command-line verification capability is added only when the defaults and caller omit it', () => {
+  for (const inDefaults of [false, true]) for (const inCaller of [false, true]) {
+    const defaults = ['--disable-features=DefaultA', ...(inDefaults ? ['--enable-automation'] : [])];
+    const options = ownedChromiumLaunchOptions('/fixture', defaults, inCaller ? ['--enable-automation'] : []);
+    const physical = [...defaults.filter(arg => !options.ignoreDefaultArgs.includes(arg)), ...options.args];
+    expect(physical.filter(arg => arg === '--enable-automation')).toHaveLength(inDefaults && inCaller ? 2 : 1);
+    expect(options.args.filter(arg => arg === '--enable-automation')).toHaveLength(inDefaults && !inCaller ? 0 : 1);
+  }
+  const complete = ['--mute-audio', '--enable-automation', '--disable-features=DefaultA,PaintHolding,MacAppCodeSignClone'];
+  expect(ownedChromiumLaunchOptions('/fixture', complete, ['--mute-audio']).ignoreDefaultArgs).toEqual([]);
+  expect(ownedChromiumLaunchOptions('/fixture', complete, ['--mute-audio']).args).toEqual([]);
+});
+
+test('ambiguous pinned or bare caller feature switches fail before browser launch', () => {
+  expect(() => ownedChromiumLaunchOptions('/fixture', [])).toThrow('disable-features');
+  expect(() => ownedChromiumLaunchOptions('/fixture', ['--disable-features=A', '--disable-features=B'])).toThrow('disable-features');
+  expect(() => ownedChromiumLaunchOptions('/fixture', ['--disable-features=A'], ['--disable-features', 'Custom'])).toThrow('value');
+});
+
+test('runtime verification records physical browser identity and argv and rejects missing safeguards', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'textbutler-browser-proof-')));
+  const pinned = join(root, 'chrome');
+  const other = join(root, 'other-chrome');
+  await writeFile(pinned, 'synthetic browser fixture');
+  await writeFile(other, 'other synthetic browser fixture');
+  const flags = ['--enable-automation', '--mute-audio', '--disable-features=PaintHolding,MacAppCodeSignClone'];
+  let detached = 0;
+  const verify = async (args: string[], version = '123.0', executable = pinned) => {
+    const browser = { version: () => version, newBrowserCDPSession: async () => ({
+      send: async (command: string) => {
+        expect(command).toBe('Browser.getBrowserCommandLine');
+        if (!args.includes('--enable-automation')) throw new Error('Browser.getBrowserCommandLine requires --enable-automation.');
+        return { arguments: [executable, ...args] };
+      },
+      detach: async () => { detached++; },
+    }) } as unknown as Pick<Browser, 'version' | 'newBrowserCDPSession'>;
+    return verifyOwnedChromium(browser, pinned, '123.0');
+  };
+  try {
+    expect(await verify(flags)).toEqual({ executable: pinned, browserVersion: '123.0', args: [pinned, ...flags] });
+    await expect(verify(flags, '456.0')).rejects.toThrow('version');
+    await expect(verify(flags, '123.0', other)).rejects.toThrow('resolved pinned executable');
+    await expect(verify(flags.filter(arg => arg !== '--enable-automation'))).rejects.toThrow('--enable-automation');
+    await expect(verify(['--enable-automation', '--mute-audio', '--disable-features=PaintHolding', '--disable-features=MacAppCodeSignClone'])).rejects.toThrow('one merged');
+    await expect(verify(['--enable-automation', '--mute-audio', '--disable-features=PaintHolding'])).rejects.toThrow('missing required');
+    await expect(verify(flags.filter(arg => arg !== '--mute-audio'))).rejects.toThrow('mute audio');
+    await expect(verify([...flags, '--mute-audio'])).rejects.toThrow('one switch');
+    expect(detached).toBe(7);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test('the native matrix covers six separate surfaces, both themes and touch', () => {
   const cases = browserCases();
@@ -162,7 +261,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],
     headingFont: '"Nebula Sans", sans-serif', headingSize: 64, headingLeading: 67.84, headingTracking: -1.92, headingWeight: '550', headerMinHeight: '52px',
     headerWidth: 1216, gutter: '32px',
-    sections: Array.from({ length: 8 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
+    sections: Array.from({ length: 9 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
     workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', terminalBackground: 'rgb(255, 253, 249)',
     actionHeights: [42, 42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
