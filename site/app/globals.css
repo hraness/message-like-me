@@ -214,7 +214,7 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   .mlm-section-link
 ) a {
   color: var(--primary);
-  text-decoration: underline;
+  text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
 }
@@ -580,7 +580,7 @@ nav.message-like-me-ask-ai + footer {
 }
 .document-page a:not(.button) {
   color: var(--primary);
-  text-decoration: underline;
+  text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
 }
@@ -941,12 +941,12 @@ html { scrollbar-color: var(--muted) var(--paper); }
   overflow-x: auto;
 }
 .workspace-example p { margin: 0.9rem 0 0; color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
-.workspace-example a, .tb-steps a, .legacy-note a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.workspace-example a, .tb-steps a, .legacy-note a { color: var(--primary); text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 
 .architecture-rows { margin: 0; border-block-end: 1px solid var(--line); }
 .architecture-rows > div { display: grid; grid-template-columns: minmax(10rem, 0.4fr) minmax(0, 1fr); gap: 2rem; padding-block: 1.25rem; border-block-start: 1px solid var(--line); }
 .architecture-rows dt { font-size: 1.05rem; font-weight: 600; }
-.architecture-rows dt a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.architecture-rows dt a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 .architecture-rows dd { margin: 0; color: var(--muted); max-width: 62ch; }
 .mlm-section-link { margin-block-start: 1.25rem; }
 
@@ -1007,3 +1007,12 @@ html { scrollbar-color: var(--muted) var(--paper); }
   /* Preserve the selected tab’s paired system colors without text backplates. */
   .hraness-platform-install__tab[aria-selected="true"] { forced-color-adjust: none; }
 }
+
+/* Shared studio convention for text links; controls retain their own decoration line. */
+a[href] {
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+a[href]:where(:hover, :focus-visible) { text-decoration-color: currentColor; }

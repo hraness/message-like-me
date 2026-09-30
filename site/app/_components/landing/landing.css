@@ -13,19 +13,8 @@
   white-space: nowrap;
 }
 
-/* Hero: copy and phone side by side on wide screens, stacked in reading order below. */
-@media (min-width: 64rem) {
-  .textbutler-marketing .tb-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(22rem, 30rem);
-    column-gap: clamp(2.5rem, 5vw, 5rem);
-    align-items: center;
-  }
-  .textbutler-marketing .tb-hero .hraness-marketing-hero__copy { grid-column: 1; grid-row: 1; align-self: center; padding-block-end: 4rem; }
-  .textbutler-marketing .tb-hero .hraness-marketing-hero__frame { grid-column: 2; grid-row: 1; max-inline-size: none; }
-}
-.textbutler-marketing .tb-hero .hraness-marketing-hero__heading { max-inline-size: 12ch; }
-.textbutler-marketing .tb-hero .hraness-marketing-hero__summary { max-inline-size: 34rem; }
+/* The shared hero keeps copy, install, and product proof in reading order. */
+.textbutler-marketing .tb-hero .hraness-marketing-hero__frame { max-inline-size: 30rem; }
 
 .tb-hero-stage {
   position: relative;
@@ -115,7 +104,7 @@
 .tb-fine { max-inline-size: 70ch; margin: 1.25rem 0 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
 .tb-fine a, .tb-support a, .tb-tile a, .tb-pillars a, .tb-example a, .textbutler-marketing .legacy-note a {
   color: var(--primary);
-  text-decoration: underline;
+  text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
 }
