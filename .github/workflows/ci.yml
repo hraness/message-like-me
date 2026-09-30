@@ -205,6 +205,26 @@ jobs:
         working-directory: site
       - run: bun run build
         working-directory: site
+      - name: Install the pinned candidate browser
+        working-directory: site
+        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+      - name: Check the committed informational site in Chromium
+        working-directory: site
+        run: |
+          export TEXTBUTLER_NODE_EXECUTABLE="$(command -v node)"
+          export TEXTBUTLER_BROWSER_EXECUTABLE="$(bun -e 'import { chromium } from "playwright-core"; process.stdout.write(chromium.executablePath())')"
+          bun run check:browser
+      - name: Retain candidate screenshots and receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: informational-site-browser
+          path: |
+            site/.browser-artifacts/*/*.png
+            site/.browser-artifacts/*/receipt.json
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: error
       # Main saves the warm compile cache that PRs and the site promotion
       # restore; PR runs never save, so they cannot churn or evict it.
       - name: Save Next.js build cache on main
