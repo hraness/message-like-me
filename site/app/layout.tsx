@@ -38,6 +38,7 @@ export const metadata: Metadata = {
       { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
     ],
     shortcut: '/icon.png',
+    apple: { url: '/apple-icon.png', type: 'image/png', sizes: '180x180' },
   },
   robots: {
     index: true,
