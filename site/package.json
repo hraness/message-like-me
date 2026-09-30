@@ -7,6 +7,7 @@
   },
   "scripts": {
     "check:browser": "bun --no-env-file scripts/check-browser.mjs",
+    "check:production-image-fixture": "bun --no-env-file scripts/production-image-settlement.fixture.mjs",
     "check:theme": "bun scripts/check-paper-theme.mjs",
     "sync:readme": "bun scripts/sync-readme.ts",
     "test": "bun run check:theme && bun test scripts",
