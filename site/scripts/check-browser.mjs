@@ -326,11 +326,16 @@ try {
         assert.ok((await howHeading.innerText()).trim(), 'The action destination must have a visible heading.');
         item.interaction = 'Keyboard FAQ opened and closed; how-it-works action reached its real section.';
       } else if (sample.path === '/docs') {
-        const link = page.locator('.document-prose a[href^="#"]').first();
-        const target = await link.getAttribute('href');
-        await link.click();
-        await page.waitForURL((url) => url.hash === target);
-        item.interaction = 'Generated documentation anchor navigated to its source-owned section.';
+        const heading = page.locator('.document-prose h2[id]').first();
+        const target = await heading.getAttribute('id');
+        assert.ok(target, 'Generated documentation headings must have fragment IDs.');
+        await page.goto(`${origin}${sample.path}#${encodeURIComponent(target)}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForURL((url) => decodeURIComponent(url.hash.slice(1)) === target);
+        await page.waitForFunction((id) => {
+          const bounds = document.getElementById(id)?.getBoundingClientRect();
+          return bounds && bounds.top >= 0 && bounds.bottom <= innerHeight;
+        }, target);
+        item.interaction = 'Generated documentation fragment URL reached its visible source-owned heading.';
       }
       if (sample.path !== '/preview') {
         await page.locator('.skip-link').focus();
