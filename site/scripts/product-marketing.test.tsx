@@ -138,7 +138,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).not.toMatch(/data-hraness-hero-item|hraness-hero-backdrop|conversation-field/u);
   // The marker is literal text with one space inside each brace.
   expect(html).toContain('🤖{ 👀 }');
-  expect(html).toContain('TextButler runs on Sam’s Mac; the people are made up.');
+  expect(html).toContain('TextButler runs on your Mac.');
   expect(html).not.toContain('Happy to help');
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');

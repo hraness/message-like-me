@@ -174,7 +174,7 @@ function HeroStage() {
         <li>The answer comes from this chat</li>
         <li>Every butler message is marked</li>
       </ul>
-      <figcaption className="tb-caption">Example conversation on Sam’s iPhone. TextButler runs on Sam’s Mac; the people are made up.</figcaption>
+      <figcaption className="tb-caption">TextButler runs on your Mac.</figcaption>
     </figure>
   );
 }
@@ -186,7 +186,6 @@ function FilmSlot() {
     <section aria-labelledby="film-title" className="tb-film" id="film">
       <h2 className="tb-film__title" id="film-title">{marketing.names.name} in {LAUNCH_FILM_SECONDS} seconds</h2>
       <LaunchVideo sources={sources} title="AI in your messages" />
-      <p className="tb-caption">No sound needed. Every name in the film is made up.</p>
     </section>
   );
 }
@@ -367,7 +366,6 @@ export default function Home() {
           <MarketingSection heading={marketingHeading("self-title")} headingId="self-title" id="ask-yourself" label="Your own chat" layout="split" summary="Say “butler” in your own chat and it works for you, searching that chat’s history. The marker can’t be turned off here.">
             <figure className="tb-example tb-example--solo">
               <PhoneSlot conversation={askYourselfConversation} crop={640} maxWidth={340} />
-              <figcaption className="tb-caption">Example conversation. The details are made up.</figcaption>
             </figure>
           </MarketingSection>
 

@@ -73,8 +73,6 @@ Here’s what staying out of it looks like on WhatsApp:
 >
 > **Jordan:** butler can you remind Sam I owe him for last time
 
-*An example conversation. The people are made up.*
-
 No reply. Jordan’s first message didn’t ask, and by the time he did, Sam had just written.
 
 ## Your agent sets it up

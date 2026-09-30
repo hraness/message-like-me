@@ -17,13 +17,12 @@ own account, especially over WhatsApp or Beeper, before you rely on them.
 > **Sam’s Mac:** 🤖{ On Monday Sam said Friday at 6:30 at the gym, and that
 > he’d bring the spare harness for you. Nothing here has changed since. }
 >
-> *An example conversation. The people are made up. The first message gets no
+> *The first message gets no
 > answer because it doesn’t say “butler”; the reply comes only from what Sam
 > wrote earlier in the same chat.*
 
 See it on [textbutler.app](https://textbutler.app), or watch the
-[launch film](https://textbutler.app/launch/textbutler-launch.mp4) (no sound;
-every name in it is made up).
+[launch film](https://textbutler.app/launch/textbutler-launch.mp4).
 
 ## What it works with
 
