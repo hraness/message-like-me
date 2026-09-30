@@ -152,7 +152,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).toContain('Leave every chat turned off and don&#x27;t send any messages.');
 });
 
-test('binds Design Kit v0.29.2 to the portable Paper palette', async () => {
+test('binds Design Kit v0.31.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -164,7 +164,7 @@ test('binds Design Kit v0.29.2 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.30.2');
+    .toBe('github:hraness/design-kit#v0.31.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
