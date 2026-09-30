@@ -317,10 +317,14 @@ try {
         await page.locator('details[open]').first().waitFor({ state: 'visible' });
         await summary.press('Enter');
         assert.equal(await page.locator('details[open]').count(), 0);
-        await page.getByRole('link', { name: 'How replies work', exact: true }).click();
-        await page.waitForURL((url) => url.hash === '#replies');
-        await page.getByRole('heading', { name: 'It answers only when you let it', exact: true }).waitFor({ state: 'visible' });
-        item.interaction = 'Keyboard FAQ opened and closed; replies action reached its real section.';
+        const howAction = page.locator('.tb-hero a[href="#how-it-works"]');
+        assert.ok((await howAction.innerText()).trim(), 'The hero action must have a visible label.');
+        await howAction.click();
+        await page.waitForURL((url) => url.hash === '#how-it-works');
+        const howHeading = page.locator('#how-it-works').getByRole('heading', { level: 2 });
+        await howHeading.waitFor({ state: 'visible' });
+        assert.ok((await howHeading.innerText()).trim(), 'The action destination must have a visible heading.');
+        item.interaction = 'Keyboard FAQ opened and closed; how-it-works action reached its real section.';
       } else if (sample.path === '/docs') {
         const link = page.locator('.document-prose a[href^="#"]').first();
         const target = await link.getAttribute('href');
