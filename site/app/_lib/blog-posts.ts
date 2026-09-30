@@ -39,7 +39,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     dek: 'AI in your messages. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you.',
     eyebrow: 'Launch',
     published: '2026-09-24',
-    updated: '2026-09-28',
+    updated: '2026-09-30',
     tags: ['textbutler', 'messaging', 'imessage', 'local-models', 'ollama', 'macos', 'coding-agents', 'xcb'],
     relationIds: [
       'contract:wrench:message-like-me:exports-private-bundles',

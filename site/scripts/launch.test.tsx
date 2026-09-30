@@ -8,6 +8,8 @@ import { launchFacts, LAUNCH_STATUS } from '../app/launch/facts.ts';
 import { LaunchPostBeats } from '../app/launch/launch-post.tsx';
 import { SURFACE_COMPONENTS, WRITERS } from '../app/mockups/index.ts';
 import { AGENT_SETUP_PROMPT, SITE_STATUS_LABEL } from '../app/_lib/site.ts';
+import { LAUNCH_FILM_SECONDS } from '../app/_components/landing/public-assets.ts';
+import { launchFactTokens } from './blog-html.ts';
 
 const repo = resolve(import.meta.dir, '../..');
 const source = (path: string) => readFile(resolve(repo, path), 'utf8');
@@ -27,6 +29,7 @@ test('launch facts match the product source', async () => {
   expect(await source('packages/textbutler/src/default-reply-model.ts')).toContain('dailyBudgetUsd: 1 ');
   expect(launchFacts.gatewayBudget.value).toBe('$1');
   expect(await source('README.md')).toContain(`About ${launchFacts.localModelSize.value}`);
+  expect(await source('packages/textbutler/src/contact-habitat.ts')).toContain(`memoryEntries: ${launchFacts.memoryEntries.value},`);
   expect(WRITERS).toHaveLength(3);
   expect(launchFacts.replyWriters.value).toBe('three');
 });
@@ -60,4 +63,28 @@ test('the launch post renders every beat and the social kit links back to it', (
   for (const beat of launchBeats) expect(html).toContain(beat.id);
   expect(JSON.stringify(socialKit)).toContain(LAUNCH_POST_PATH);
   expect(JSON.stringify(socialKit)).not.toMatch(/mastodon/i);
+});
+
+test('the film length is the launch fact, in whole seconds of the real mp4', async () => {
+  const { statSync } = await import('node:fs');
+  expect(LAUNCH_FILM_SECONDS).toBe(42);
+  expect(String(LAUNCH_FILM_SECONDS)).toBe(launchFacts.filmSeconds.value);
+  expect(statSync(resolve(import.meta.dir, '../public/launch/textbutler-launch.mp4')).size).toBeGreaterThan(0);
+});
+
+// The article body takes its numbers from the facts too, so a config change
+// cannot leave the longer version stale while the beats move on.
+test('the launch post body uses fact tokens, not typed numbers', async () => {
+  const body = await source('site/content/blog/introducing-textbutler.md');
+  const tokens = launchFactTokens();
+  for (const token of ['COOLDOWN', 'HOURLY_CAP', 'DEBOUNCE', 'SMART_CONFIDENCE', 'DRAFT_EXPIRY', 'GATEWAY_BUDGET', 'LOCAL_MODEL_SIZE', 'MEMORY_ENTRIES']) {
+    expect(tokens[token]).toBeDefined();
+    expect(body).toContain(`{{${token}}}`);
+  }
+  for (const typed of ['5 minutes', '8 seconds', '85%', '15 minutes', '$1 a day', '2.5 GB', '64 notes', 'under 12']) expect(body).not.toContain(typed);
+});
+
+test('social posts carry no caveats', () => {
+  const text = JSON.stringify(socialKit);
+  for (const caveat of ['in testing', 'in our testing', 'once testing', 'not yet tested', 'coming soon', '—']) expect(text.toLowerCase()).not.toContain(caveat);
 });

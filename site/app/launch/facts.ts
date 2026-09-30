@@ -43,6 +43,14 @@ export const launchFacts = {
     value: '2.5 GB',
     source: 'README.md reply-writer table and docs/textbutler/getting-started.md: the pinned qwen3:4b-instruct-2507-q4_K_M model is about 2.5 GB',
   },
+  memoryEntries: {
+    value: '64',
+    source: 'packages/textbutler/src/contact-habitat.ts HABITAT_LIMITS.memoryEntries: 64',
+  },
+  filmSeconds: {
+    value: '42',
+    source: 'site/public/launch/textbutler-launch.mp4, 42.07 seconds long (ffprobe), said in whole seconds beside the film',
+  },
   replyWriters: {
     value: 'three',
     source: 'site/app/_lib/site.ts REPLY_WRITERS_SENTENCE: a local model, your own Vercel AI Gateway key, or your subscription through xcb',

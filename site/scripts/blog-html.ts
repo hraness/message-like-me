@@ -1,4 +1,5 @@
 import { SITE_STATUS, SITE_STATUS_LABEL } from '../app/_lib/site.ts';
+import { launchFacts } from '../app/launch/facts.ts';
 import { renderReadmeHtml } from './readme-html.ts';
 
 export type BlogPostBody = Readonly<{
@@ -26,11 +27,23 @@ export function blogReleaseValues(rootPackage: unknown): Readonly<Record<string,
     : undefined;
   if (agentmixer === undefined) throw new Error('Root package.json must pin @hraness/agentmixer to a release');
   return {
+    ...launchFactTokens(),
     SITE_STATUS,
     SITE_STATUS_LABEL,
     BUN_VERSION: bun,
     AGENTMIXER_VERSION: agentmixer,
   };
+}
+
+/**
+ * Every launch fact as a post token: `hourlyCap` becomes {{HOURLY_CAP}}. Post
+ * prose uses these instead of typing the numbers, so a config change reaches
+ * the article body along with the beats.
+ */
+export function launchFactTokens(): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    Object.entries(launchFacts).map(([key, fact]) => [key.replace(/[A-Z]/gu, (letter) => `_${letter}`).toUpperCase(), fact.value]),
+  );
 }
 
 export function resolveBlogTokens(source: string, values: Readonly<Record<string, string>>): string {

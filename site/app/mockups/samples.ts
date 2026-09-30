@@ -1,4 +1,4 @@
-import { heroConversation, marked, whatsappReplyConversation, type Conversation } from '../_components/phone';
+import { boundariesConversation, marked, whatsappReplyConversation, type Conversation } from '../_components/phone';
 import type { TerminalLine } from '@hraness/design-kit/mockups';
 
 import { launchFacts } from '../launch/facts';
@@ -9,13 +9,14 @@ import { launchFacts } from '../launch/facts';
  * README.md). Numbers come from ../launch/facts.
  */
 
-/** The hero exchange in a neutral Beeper-style app, as the apps beat shows it. */
+/**
+ * The boundaries exchange in a neutral Beeper-style app, as the apps beat
+ * shows it: its own scene, so the page does not repeat the hero chat.
+ */
 export const beeperConversation: Conversation = {
-  ...heroConversation,
-  id: 'beeper-plans',
-  app: 'neutral',
+  ...boundariesConversation,
+  id: 'beeper-boundaries',
   via: 'via Beeper · not yet tested live',
-  preset: 0,
 };
 
 /** The WhatsApp reply from the phone kit, labelled as not yet tested live. */
