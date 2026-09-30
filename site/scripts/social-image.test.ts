@@ -10,7 +10,7 @@ import * as postImage from '../app/blog/[slug]/opengraph-image.tsx';
 import { SOCIAL_ICON_SVG } from '../app/_lib/social-icon.ts';
 import { SOCIAL_IMAGE_ALT, socialSite } from '../app/_lib/social.ts';
 import { BLOG_INDEX_SOCIAL_PAGE, BLOG_POSTS, socialPageFor } from '../app/_lib/blog.ts';
-import { SITE_NAME } from '../app/_lib/site.ts';
+import { SITE_HEADLINE, SITE_NAME } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -45,21 +45,32 @@ describe('social images', () => {
     expect(response.headers.get('content-type')).toBe('image/png');
   });
 
-  test('every page card fits as written', () => {
-    for (const page of [BLOG_INDEX_SOCIAL_PAGE, ...BLOG_POSTS.map(socialPageFor)]) {
+  test('every card fits as written with no review findings', () => {
+    const cards = [undefined, BLOG_INDEX_SOCIAL_PAGE, ...BLOG_POSTS.map(socialPageFor)];
+    for (const page of cards) {
       const fit = socialImageFit(socialImageSiteDetails(socialSite, page));
-      expect({ headline: page.headline, issues: fit.issues }).toEqual({ headline: page.headline, issues: [] });
-      expect(fit.eyebrow).toBe(page.eyebrow);
+      expect({ headline: page?.headline, findings: fit.findings }).toEqual({ headline: page?.headline, findings: [] });
     }
   });
 
-  test('the home card shows the registry one-liner', () => {
+  test('every page card shows its eyebrow', () => {
+    for (const page of [BLOG_INDEX_SOCIAL_PAGE, ...BLOG_POSTS.map(socialPageFor)]) {
+      const fit = socialImageFit(socialImageSiteDetails(socialSite, page));
+      expect(typeof page.eyebrow).toBe('string');
+      expect(fit.eyebrow).toBe(page.eyebrow as string);
+    }
+  });
+
+  test('the blog card does not repeat its eyebrow in the headline', () => {
+    expect(BLOG_INDEX_SOCIAL_PAGE.eyebrow).toBe('Blog');
+    expect(BLOG_INDEX_SOCIAL_PAGE.headline?.toLowerCase()).not.toContain('blog');
+  });
+
+  test('the home card shows the home page headline whole', () => {
+    expect(socialSite.description).toBe(SITE_HEADLINE);
     const fit = socialImageFit(socialImageSiteDetails(socialSite));
     expect(fit.headline.lines).toEqual([SITE_NAME]);
-    // web-discovery v0.11.0 does not fit the one-liner on two lines and cuts it
-    // at its first comma, which opens a list ("AI butler for the iMessage").
-    // The registry owns this copy, so the template fix belongs upstream; drop
-    // this expectation when a release draws the whole line.
-    expect(fit.issues).toEqual(['description was shortened to its last whole clause that fits']);
+    expect(fit.description?.cut).toBe('none');
+    expect(fit.description?.lines.join(' ')).toBe(SITE_HEADLINE);
   });
 });

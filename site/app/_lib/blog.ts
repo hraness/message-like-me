@@ -20,6 +20,7 @@ import { blogPostBodies } from '../blog/posts.generated';
 import { blogAdmission } from './blog-admissions';
 import {
   BLOG_CARD_DESCRIPTION,
+  BLOG_CARD_HEADLINE,
   BLOG_DESCRIPTION,
   BLOG_FEED_PATH,
   BLOG_PATH,
@@ -83,7 +84,7 @@ export function bodyFor(post: BlogPost) {
 // Share-card copy: the card itself comes from the site's one social declaration.
 export const BLOG_INDEX_SOCIAL_PAGE: SocialImagePage = {
   eyebrow: 'Blog',
-  headline: BLOG_TITLE,
+  headline: BLOG_CARD_HEADLINE,
   description: BLOG_CARD_DESCRIPTION,
 };
 

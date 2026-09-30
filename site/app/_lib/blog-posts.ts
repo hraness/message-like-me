@@ -10,7 +10,10 @@ export const BLOG_TITLE = 'TextButler blog';
 export const BLOG_DESCRIPTION =
   'Posts about TextButler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
 // The blog share card's copy, written to fit the card as drawn (see scripts/social-image.test.ts).
-export const BLOG_CARD_DESCRIPTION = 'How TextButler decides when to answer, what writes its replies, and the tools it runs on.';
+// The page's own heading is "Blog", which the card shows as its eyebrow, so the
+// card headline names what the posts are about instead of repeating it.
+export const BLOG_CARD_HEADLINE = 'Posts about TextButler';
+export const BLOG_CARD_DESCRIPTION = 'How it decides when to answer, what writes its replies, and the tools it runs on.';
 
 // Share-card copy for a post, written to fit the card without being shortened.
 // Fields left out fall back to the post's own title, dek, and eyebrow.
@@ -55,7 +58,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     relationIds: [],
     card: {
       headline: 'How TextButler uses xcb',
-      description: 'One of its three reply writers is the Claude Code, Codex, or Devin subscription you already pay for.',
+      description: 'One reply writer is your AI subscription.',
     },
   },
   {
@@ -69,7 +72,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     relationIds: [],
     card: {
       headline: 'How TextButler uses ALGAL',
-      description: 'A contact’s reply plan changes only after a blinded ALGAL replay scores the new plan higher.',
+      description: 'A new reply plan must win a blinded replay.',
     },
   },
   {
@@ -83,7 +86,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
     relationIds: ['contract:wrench:message-like-me:exports-private-bundles'],
     card: {
       headline: 'How TextButler uses GhostGet',
-      description: 'TextButler reads and sends live messages through GhostGet automation on your Mac.',
+      description: 'It reads and sends live messages via GhostGet.',
       eyebrow: 'Integration',
     },
   },
