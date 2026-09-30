@@ -14,7 +14,7 @@ export const socialSite = defineSocialImageSite({
   icon: { kind: 'app', src: `data:image/svg+xml,${encodeURIComponent(SOCIAL_ICON_SVG)}` },
   // The site's gruvbox light palette from @hraness/design-kit. The crimson wash keeps the card apart from the other cream and sage
   // portfolio cards in a feed (web-discovery v0.12.0 README).
-  theme: { accent: '#076678', background: '#FBF1C7', foreground: '#3C3836', muted: '#665C54', wash: '#C3224B' },
+  theme: { accent: '#076678', background: '#FBF1C7', foreground: '#3C3836', muted: '#665C54', wash: '#E0309A' },
   keepTogether: ['Claude Code', 'Message Like Me'],
 });
 
