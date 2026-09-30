@@ -14,6 +14,8 @@ export const textbutlerPostHogSite = {
   canonicalDomain: 'textbutler.app',
   allowedHosts: ['textbutler.app', 'www.textbutler.app'],
   schemaVersion: POSTHOG_SCHEMA_VERSION,
+  excludedPaths: ['/api', '/auth', '/account', '/dashboard', '/login', '/sign-in', '/oauth', '/callback', '/checkout', '/billing', '/invite']
+    .map(path => ({ match: 'prefix' as const, path })),
   routes: [
     { match: 'exact', path: '/', pageKind: 'landing' },
     { match: 'exact', path: '/about', pageKind: 'about' },
@@ -26,7 +28,6 @@ export const textbutlerPostHogSite = {
     { match: 'prefix', path: '/blog', pageKind: 'post', contentGroup: 'blog', captureSlug: true },
     { match: 'prefix', path: '/compare', pageKind: 'compare', contentGroup: 'compare', captureSlug: true },
   ],
-  customEvents: [TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT],
-  stripQueryAttribution: true,
+  customEvents: ["outbound link opened", 'page not found', TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT],
   unknownCanonicalPath: '/other',
 } as const satisfies PostHogSiteDefinition;

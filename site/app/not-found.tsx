@@ -1,3 +1,4 @@
+import { NotFoundAnalytics } from "./not-found-analytics";
 import type { Metadata } from 'next';
 import { RouteNotFoundPage } from '@hraness/design-kit/react';
 
@@ -38,6 +39,7 @@ const knownPages = sitemap().map(({ url }) => {
 export default function NotFound() {
   return (
     <>
+      <NotFoundAnalytics />
       <SiteHeader />
       <main id="main-content" tabIndex={-1}>
         <RouteNotFoundPage
