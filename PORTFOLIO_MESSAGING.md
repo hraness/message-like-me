@@ -9,14 +9,16 @@ From this repository root, with `PORTFOLIO_SOURCE_CHECKOUT` pointing to a valida
 ```sh
 bun "${PORTFOLIO_SOURCE_CHECKOUT}/scripts/sync-product-messaging.ts" \
   --portfolio "${PORTFOLIO_SOURCE_CHECKOUT}/portfolio.public.generated.json" \
-  --product message-like-me --output site/portfolio-messaging.generated.json --write
+  --product message-like-me --output site/portfolio-messaging.generated.json \
+  --package-json packages/textbutler/package.json --write
 ```
 
 Drop `--write` to verify the checked snapshot against that catalog. Commit the snapshot and the generated artifacts after the site checks pass.
 
 `site/portfolio-copy.ts` supplies marketing metadata, the home hero, section headings, social copy, and related-card copy.
 
+The private `@hraness/textbutler` runtime manifest takes its product description from this projection. The published `@hraness/message-like-me` history-reader manifest retains its distinct legacy description and immutable version.
+
 Validate changes with `cd site && bun run check`. Production still advances through the existing immutable-release website admission workflow.
 
 Technical documentation, research records, release evidence, and runtime copy retain their existing owners.
-

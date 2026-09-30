@@ -3,6 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
+import { settleProductionImages } from './production-image-settlement.mjs';
+import { productionBrowserLaunchOptions, verifyProductionBrowserLaunch } from './production-browser-launch.mjs';
 
 // Only public read-only production pages: no application commands, credentials,
 // personal data, form submission, or deployment operations are used here.
@@ -50,8 +52,10 @@ const terminate = reason => terminating ??= (async () => {
 const timer = setTimeout(() => { void terminate('Eight-minute deadline exceeded'); }, 480_000);
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { void terminate(`Interrupted: ${signal}`); });
 try {
-  launching = chromium.launch({ executablePath, headless: true, timeout: 20_000 });
+  launching = chromium.launch({ executablePath, headless: true, timeout: 20_000,
+    ...await productionBrowserLaunchOptions() });
   browser = await launching;
+  report.launch = await verifyProductionBrowserLaunch(browser);
   for (const width of [360, 390, 1440]) for (const theme of ['light', 'dark']) {
     const mobile = width < 500;
     const context = await browser.newContext({ viewport: { width, height: width === 360 ? 740 : width === 390 ? 844 : 900 },
@@ -113,6 +117,7 @@ try {
         const label = `${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-').replace(/-$/u, '')}-${width}-${theme}`;
         // Chromium's captureBeyondViewport can reset touch emulation. Capture
         // overlapping viewport tiles instead, checking real phone media at each tile.
+        const imageSettlement = await settleProductionImages(page, label);
         const metrics = await measure();
         const captures = [];
         const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -134,7 +139,7 @@ try {
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const afterCapture = await measure();
-        report.records.push({ path, width, theme, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        report.records.push({ path, width, theme, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
         assert.deepEqual(afterCapture, metrics, `${label}: layout and pointer media preserved through captures`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);
