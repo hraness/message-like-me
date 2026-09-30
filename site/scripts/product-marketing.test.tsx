@@ -147,12 +147,23 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).toContain('SMS and RCS aren’t supported.');
   expect(html).toContain('under its own data policies');
   // The agent prompt is shown verbatim, copied by a button, never submitted.
-  expect(html).toContain('Copy prompt');
+  expect(html).toContain('aria-label="Copy setup prompt"');
   for (const line of AGENT_SETUP_PROMPT.split('\n')) expect(html).toContain(line.replaceAll("'", '&#x27;'));
   expect(html).toContain('Leave every chat turned off and don&#x27;t send any messages.');
 });
 
-test('binds Design Kit v0.31.0 to the portable Paper palette', async () => {
+test('offers local coding apps for setup on the reader’s Mac', () => {
+  const html = renderToStaticMarkup(<Home />);
+  const targets: string[] = [];
+  new HTMLRewriter().on('#setup a[data-agent-target]', {
+    element(element) { targets.push(element.getAttribute('data-agent-target') ?? ''); },
+  }).transform(html);
+  expect(targets).toEqual(['cursor', 'codex-app']);
+  expect(html).toContain('Use a coding agent on that Mac');
+  expect(html).toContain('aria-label="Copy setup prompt"');
+});
+
+test('binds Design Kit v0.32.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -164,7 +175,7 @@ test('binds Design Kit v0.31.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.31.0');
+    .toBe('github:hraness/design-kit#v0.32.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");

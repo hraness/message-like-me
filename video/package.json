@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hraness/design-kit": "github:hraness/design-kit#v0.29.2",
+    "@hraness/design-kit": "github:hraness/design-kit#v0.32.0",
     "@hraness/slopcamera": "3.8.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"

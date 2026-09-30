@@ -7,15 +7,17 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, browserEnvironment, browserMediaFeatures, browserOwner,
-  deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, isSyntheticConsentRegion, routeTasks } from './browser-contract.mjs';
+  browserLaunchArgs, deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, isSyntheticConsentRegion,
+  ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, routeTasks, verifyOwnedChromium } from './browser-contract.mjs';
 
 // This gate serves only the built informational website. It never runs the CLI,
 // Mac application, messaging providers, account checks, or personal-data readers.
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const executablePath = process.env.TEXTBUTLER_BROWSER_EXECUTABLE;
+const executablePath = await pinnedBrowserExecutable(chromium.executablePath(), process.env.TEXTBUTLER_BROWSER_EXECUTABLE);
+const { defaultArgs, expectedVersion } = pinnedChromiumDefinition();
+const launchOptions = ownedChromiumLaunchOptions(executablePath, defaultArgs, browserLaunchArgs);
 const node = process.env.TEXTBUTLER_NODE_EXECUTABLE;
-assert.ok(executablePath?.startsWith('/'), 'Set TEXTBUTLER_BROWSER_EXECUTABLE to an installed Chromium executable.');
 assert.ok(node?.startsWith('/'), 'Set TEXTBUTLER_NODE_EXECUTABLE to an installed Node 24 executable.');
 for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
   const present = await access(join(root, name)).then(() => true, () => false);
@@ -41,7 +43,7 @@ const beforeBuild = await sourceInputs();
 assert.equal(beforeBuild.head, head);
 assert.equal(beforeBuild.tree, tree);
 const report = { head, tree, dirty: false, nodeVersion, bunVersion: process.versions.bun,
-  browserSha256: await digest(executablePath), lockfileSha256: beforeBuild.lock,
+  browserExecutable: executablePath, browserSha256: await digest(executablePath), lockfileSha256: beforeBuild.lock,
   profile, cases: [], passed: false, cleanup: { build: false, browser: false, server: false } };
 const next = join(root, 'node_modules/next/dist/bin/next');
 let build;
@@ -76,8 +78,8 @@ async function stopChild(owned, name) {
   } finally { clearTimeout(force); }
 }
 const owner = browserOwner({
-  launch: () => chromium.launchPersistentContext(profile, { executablePath, env, headless: true,
-    args: ['--mute-audio'], timeout: 20_000, handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false }),
+  launch: () => chromium.launchPersistentContext(profile, { ...launchOptions, env,
+    timeout: 20_000, handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false }),
   close: async (context) => { await deadline(context.close(), 'Browser cleanup'); report.cleanup.browser = true; },
   stopServer: async () => {
     const errors = [];
@@ -134,7 +136,9 @@ try {
   const persistent = await owner.start();
   const browser = persistent.browser();
   assert.ok(browser);
-  report.browserVersion = browser.version();
+  report.browserProof = await deadline(verifyOwnedChromium(browser, executablePath, expectedVersion), 'Browser launch verification');
+  report.browserVersion = report.browserProof.browserVersion;
+  console.log(JSON.stringify({ browserProof: report.browserProof }));
   const census = await deadline(browser.newBrowserCDPSession(), 'Browser census session');
   report.browserPid = (await deadline(census.send('SystemInfo.getProcessInfo'), 'Browser process census')).processInfo.find((item) => item.type === 'browser')?.id;
   await deadline(census.detach(), 'Browser census detach');
