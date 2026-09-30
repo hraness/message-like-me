@@ -72,6 +72,11 @@ function parseUiSettings(value: unknown) {
 export function parseControlRequest(value: unknown): ControlRequest {
   const item = record(value);
   if (item.protocol !== TEXTBUTLER_CONTROL_PROTOCOL) fail("invalid-request", "Unsupported control protocol.");
+  if (item.command === "snapshot" && item.includeHandles !== undefined) {
+    exact(item, ["protocol", "command", "includeHandles"]);
+    if (item.includeHandles !== true) fail("invalid-request", "includeHandles must be true when present.");
+    return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: "snapshot", includeHandles: true };
+  }
   if (item.command === "snapshot" || item.command === "activity.list" || item.command === "conversations.list" || item.command === "owner.stop") {
     exact(item, ["protocol", "command"]); return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, command: item.command };
   }
@@ -505,7 +510,9 @@ export class TextbutlerControlService {
     this.activeJob = { controller, promise };
     return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "job", jobId };
   }
-  async snapshot(): Promise<DesktopSnapshot> {
+  /** Handles (phone numbers, emails) are private: only a request that asks
+   * for them, such as a campaign checking its suppress list, receives them. */
+  async snapshot(options: { includeHandles?: boolean } = {}): Promise<DesktopSnapshot> {
     const { state } = await this.current();
     const observed = this.automation?.observedCapabilities().filter(value => value.observedAt <= Date.now() && value.observedAt > Date.now() - 60_000) ?? [];
     const richCapability = (id: "attachments" | "reactions" | "stickers" | "links" | "polls" | "mini-apps", actions: readonly ("attachment" | "reaction" | "sticker" | "link" | "poll" | "app-clip" | "experience")[]) => {
@@ -529,6 +536,7 @@ export class TextbutlerControlService {
       settings: { paused: state.settings.paused, activeContactLimit: state.settings.maxActiveContacts },
       contacts: state.settings.contacts.map(contact => { const binding = state.bindings[contact.id], grant = state.grants[contact.id], recovering = this.grantFailures.has(contact.id) || this.pendingGrant(contact.id); return { id: contact.id, name: contact.label,
         subtitle: binding?.version === 2 ? `${providerName(binding.identity.provider)} · ${contact.enabled && grant && Date.parse(grant.expiresAt) > Date.now() && !recovering ? "Contact grant active" : "Butler off or grant unavailable"}` : binding ? "Selected Messages conversation · sending unavailable" : "Owner-configured workspace · sending unavailable",
+        ...(binding && options.includeHandles ? { handles: (binding.version === 2 ? binding.conversation.participants : binding.participants).slice(0, 20).map(handle => handle.slice(0, 320)) } : {}),
         ...(binding?.version !== 2 ? {} : { messaging: { provider: binding.identity.provider,
           state: this.grantWork.has(contact.id) ? "revocation-pending" as const : recovering || !contact.enabled && grant ? "recovery-required" as const : contact.enabled && grant && Date.parse(grant.expiresAt) > Date.now() ? "active" as const : "missing" as const,
           detail: this.grantWork.has(contact.id) ? "The messaging grant is changing. New dispatches wait until it settles."
@@ -636,7 +644,7 @@ export class TextbutlerControlService {
     // Only the daemon that owns the socket can stop; it answers before this service.
     if (request.command === "owner.stop") fail("unavailable", "This control service cannot stop its owner.");
     const current = await this.current();
-    if (request.command === "snapshot" || request.command === "activity.list") return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
+    if (request.command === "snapshot" || request.command === "activity.list") return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot({ includeHandles: request.command === "snapshot" && request.includeHandles === true }) };
     if (request.command === "owner.job.read") {
       const job = this.jobs.get(request.jobId);
       if (!job || job.expires < Date.now()) fail("invalid-request", "This owner job has expired. Reload before retrying.");

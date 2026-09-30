@@ -35,6 +35,9 @@ export interface ContactHabitatPlan {
   repoAccess?: boolean;
 }
 export interface Contact { id: string; name: string; subtitle: string; settings: ContactSettings;
+  /** The bound conversation's participant handles (phone numbers or emails),
+   * present only when the snapshot request asked for them. */
+  handles?: readonly string[];
   messaging?: { provider: "imessage" | "whatsapp" | "beeper"; state: "active" | "missing" | "revocation-pending" | "recovery-required"; detail: string; grantExpiresAt: string | null } }
 export interface Activity { id: string; at: string; contactId: string | null; title: string; detail: string }
 export type ConversationDiscoveryDiagnostic = AutomationFailure & Readonly<{ provider: AutomationProvider }>;
@@ -99,7 +102,9 @@ export type ControlRequest =
   | { protocol: typeof CONTROL_PROTOCOL; command: "conversations.list" }
   | { protocol: typeof CONTROL_PROTOCOL; command: "contact.enroll"; candidateId: string; expectedRevision: number; initializeHistory: boolean }
   | { protocol: typeof CONTROL_PROTOCOL; command: "owner.job.read"; jobId: string }
-  | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot" }
+  | { protocol: typeof CONTROL_PROTOCOL; command: "snapshot";
+      /** Adds each contact's conversation handles; only campaign suppression asks. */
+      includeHandles?: true }
   /** Asks the running owner to finish its work and exit cleanly. The owner
    * answers before it closes; nothing is signalled. */
   | { protocol: typeof CONTROL_PROTOCOL; command: "owner.stop" }
@@ -375,6 +380,7 @@ export function parseControlResponse(value: unknown): ControlResponse {
     protocol: CONTROL_PROTOCOL, revision: integer(source.revision), connection: oneOf(source.connection, ["connected", "disconnected", "demo"]),
     detail: text(source.detail), settings: { paused: bool(global.paused), activeContactLimit: integer(global.activeContactLimit, 1, 50) },
     contacts: list(source.contacts, 1_000).map(value => { const row = record(value); return { id: text(row.id, 256), name: text(row.name, 256), subtitle: text(row.subtitle, 512), settings: settings(row.settings),
+      ...(row.handles === undefined ? {} : { handles: list(row.handles, 20).map(handle => text(handle, 320)) }),
       ...(row.messaging === undefined ? {} : { messaging: { provider: oneOf(record(row.messaging).provider, ["imessage", "whatsapp", "beeper"]), state: oneOf(record(row.messaging).state, ["active", "missing", "revocation-pending", "recovery-required"]), detail: text(record(row.messaging).detail, 512), grantExpiresAt: record(row.messaging).grantExpiresAt === null ? null : text(record(row.messaging).grantExpiresAt, 32) } }) }; }),
     capabilities: list(source.capabilities, 9).map(value => { const row = record(value); return { id: oneOf(row.id, ["messages", "contacts", "agent", "attachments", "reactions", "stickers", "links", "polls", "mini-apps"]), status: oneOf(row.status, ["available", "setup-required", "unsupported"]), detail: text(row.detail) }; }),
     activity: list(source.activity, 200).map(value => { const row = record(value); return { id: text(row.id, 256), at: text(row.at, 64), contactId: row.contactId === null ? null : text(row.contactId, 256), title: text(row.title, 256), detail: text(row.detail) }; }),

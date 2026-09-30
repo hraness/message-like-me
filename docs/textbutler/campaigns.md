@@ -5,6 +5,12 @@ time, at a slow pace. You are the author, so each text goes out exactly as
 written, with no `🤖{ }` wrap. Everything the butler composes keeps its
 disclosure, and this command never runs a model.
 
+A campaign text, like any `textbutler replies send` operator text, is plain
+text from you. Its words are never read as the butler keyword or a command,
+so a text that says "butler", or a product name such as "TextButler", goes out
+unchanged and never switches the butler on, calls it, or is refused. Nothing
+is added to it: no 🤖, no `{ }`, no signature or branding.
+
 Only use it for words you wrote and would send by hand. If an agent drafted a
 message, it goes through `textbutler messages send`, which keeps the wrap.
 
@@ -37,10 +43,31 @@ textbutler campaign status /absolute/intro.jsonl
 ```
 
 `--dry-run` prints every rendered message, its recipient, the pacing and a
-rough duration, and sends nothing. `wouldRefuse` counts messages the service
-would refuse because they contain the butler keyword for a person whose butler
-is on; each is marked `"refusal": "butler-keyword"`. Every command prints JSON
-lines.
+rough duration, and sends nothing. Every command prints JSON lines.
+
+## Suppress list
+
+A suppress file names people never to text: one phone number or email per
+line. `#` starts a comment, and blank lines are ignored. Numbers are compared
+the way Messages compares them, ignoring spaces, dashes, dots and brackets;
+`+` or `00` marks a country code, and a number written without one matches
+any number with the same last ten digits (a number shorter than ten digits
+matches any number ending in it). WhatsApp chats are compared by their phone
+number. If a recipient has a handle that is neither a phone number nor an
+email, the run stops before sending anything.
+
+The run uses `--suppress /absolute/file.txt` when given. Otherwise it uses
+`suppress.txt` in the same folder as the campaign file, if that file exists.
+It is read the same way as the campaign file: an owned regular file without
+links or group or public write access.
+
+A suppressed person is never sent to, in a dry run or a real run, and their
+conversation is not read. Each such message is printed as `suppressed` and
+counted under `suppressed`; a dry run shows it without its text. If a suppress
+file is named or present but cannot be read, has a line that is not a phone
+number or email, or the service cannot report a contact's handles to compare,
+the run stops before anything is sent. Keep the file private; it holds phone
+numbers.
 
 ## Pacing
 
@@ -86,10 +113,20 @@ The run halts when:
 - the service refuses before sending, for example because another reply to
   that person is in flight, or another campaign text went out less than the
   minimum interval ago. Nothing was sent; rerun later.
-- a text contains the butler keyword for a person whose butler is on. The
-  butler would read that as you calling it and reply straight after. Reword
-  the text, or turn the butler off for that person first.
 - a conversation cannot be read, so a reply cannot be ruled out.
+
+## Replies to a campaign text
+
+After an operator or campaign text, that conversation is yours. If the
+person answers, the butler does not reply, even when it is on for them: you
+answer by hand. The butler's setting for that person does not change. It
+picks the conversation back up once you type there yourself, and you can call
+it at any time by typing the keyword, as before. The person you texted
+typing the keyword does not bring the butler back; only you can. This lasts
+as long as the send's record is kept (about 400 days). The butler would otherwise
+answer a campaign reply in your name within a minute, which is rarely what a
+personal text invites; switching the butler off instead would silently change
+a setting you chose.
 
 ## What is recorded
 

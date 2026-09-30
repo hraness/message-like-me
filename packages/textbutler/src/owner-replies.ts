@@ -12,7 +12,7 @@ import type { ContactWorkspace } from "./workspace.ts";
 import { ControlFailure, type OwnerBinding, type OwnerRuntimeState } from "./control-service.ts";
 import { createRoutedButlerAgent } from "./routed-agent.ts";
 import { NoReplyNeeded, type AgentRequest, type ButlerAgent } from "./runtime.ts";
-import { keywordPresent, type MessageEvent } from "./decision.ts";
+import type { MessageEvent } from "./decision.ts";
 import { discloseReplyActions } from "./reply-actions.ts";
 import type { ReplyDraftDetail } from "../../control/src/index.ts";
 
@@ -445,10 +445,8 @@ export class OwnerReplies {
       if (prior[0] && !neverDispatched(prior[0])) return operatorReplay(prior[0]);
       if (operator.replayOnly) fail("invalid-request", "Nothing was sent under this idempotency key.");
       if (prior.length >= 8) fail("conflict", "This idempotency key has been attempted too many times.");
-      // An operator send is owner-authored, so the reply loop would read the
-      // contact's keyword in it as the owner summoning the butler.
-      if (contact.enabled && "text" in input && keywordPresent(input.text, contact.keyword))
-        fail("invalid-request", `This message contains "${contact.keyword}", which would make the butler reply right after it. Reword it or turn the butler off for this contact.`);
+      // Operator text is plain owner text: its words are never read as the
+      // butler keyword, so it is never refused for naming the butler.
       this.refuseUnpacedOperatorSend(operator.minimumIntervalMs);
       if (prior.length) eventId = `${eventId}:${prior.length + 1}`;
     }

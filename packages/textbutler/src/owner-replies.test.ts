@@ -617,17 +617,22 @@ test("the daemon paces operator sends across contacts; a replay is never refused
   expect(await fixture.replies.send(operatorSend("First", OPERATOR_KEY, { replayOnly: true }), AbortSignal.timeout(5000))).toMatchObject({ state: "submitted", runId: first.runId });
 });
 
-test("an operator send containing the butler keyword is refused while the butler is on", async () => {
+test("an operator send naming the butler goes out verbatim while the butler is on and leaves it on", async () => {
   const fixture = await setup();
-  const text = `I built an AI ${fixture.contact.keyword} this week, want to see it?`;
-  await expect(fixture.replies.send(operatorSend(text), AbortSignal.timeout(5000)))
-    .rejects.toMatchObject({ code: "invalid-request", message: expect.stringContaining("would make the butler reply") });
-  expect(fixture.sent).toEqual([]); expect(fixture.grantRequests).toEqual([]);
-  expect(fixture.journal.operatorRuns("contact-1", OPERATOR_KEY)).toEqual([]);
-  // With the butler off for this contact nothing can be invoked, so it sends.
-  (fixture.contact as { enabled: boolean }).enabled = false;
-  expect((await fixture.replies.send(operatorSend(text), AbortSignal.timeout(5000))).state).toBe("submitted");
-  expect(fixture.sent).toEqual([[{ kind: "text", text }]]);
+  expect(fixture.contact.enabled).toBe(true);
+  const keyword = fixture.contact.keyword, before = structuredClone(fixture.contact);
+  const texts = [`I built an AI ${keyword} this week, want to see it?`, "TextButler ships today.", `${keyword} off`, `${keyword.toUpperCase()} help`];
+  for (const [index, text] of texts.entries()) {
+    // Pacing is covered elsewhere; a zero interval lets the fixed clock send all four.
+    const request = { contactId: "contact-1", text, operator: { idempotencyKey: `campaign-key-000000000${index + 1}`, minimumIntervalMs: 0 } };
+    expect((await fixture.replies.send(request, AbortSignal.timeout(5000))).state).toBe("submitted");
+  }
+  // Exactly the owner's words: no robot, no braces, no butler signature.
+  expect(fixture.sent).toEqual(texts.map(text => [{ kind: "text", text }]));
+  for (const [action] of fixture.sent as { text: string }[][]) { expect(action!.text).not.toContain("🤖"); expect(action!.text).not.toMatch(/[{}]/u); }
+  expect(fixture.sent.map((_actions, index) => fixture.journal.messageOrigin("contact-1", `sent:${index + 1}:0`))).toEqual(texts.map(() => "operator"));
+  // The words are never a command: the butler's settings did not change.
+  expect(fixture.contact).toEqual(before);
 });
 
 test("disclosure stays the default for literal owner text", async () => {
