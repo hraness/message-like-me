@@ -1,3 +1,4 @@
+import { checkPostHogContract } from "@hraness/posthog/testing";
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { classifyAnalyticsRoute, isAllowedCustomEvent } from '@hraness/posthog';
@@ -23,8 +24,8 @@ test('analytics uses the shared small-sites convention for textbutler.app only',
   expect(classifyAnalyticsRoute(textbutlerPostHogSite, 'https://textbutler.app/private/thing')?.canonical_path).toBe('/other');
 });
 
-test('only the two conventional custom events are allowed', () => {
-  expect<readonly string[]>([...textbutlerPostHogSite.customEvents].sort()).toEqual([TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT].sort());
+test('only conventional launch and health events are allowed', () => {
+  expect<readonly string[]>([...textbutlerPostHogSite.customEvents].sort()).toEqual([TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT, 'outbound link opened', 'page not found'].sort());
   expect(isAllowedCustomEvent(textbutlerPostHogSite, 'cta clicked')).toBe(true);
   expect(isAllowedCustomEvent(textbutlerPostHogSite, 'install command copied')).toBe(true);
   for (const name of ['signup started', 'checkout started', 'cta_clicked']) expect(isAllowedCustomEvent(textbutlerPostHogSite, name)).toBe(false);
@@ -50,4 +51,8 @@ test('credits stay labeled as coming soon and are not offered as a reply writer'
 test('every event textbutler.app sends is registered in the repo cost registry', () => {
   const surfaces = (JSON.parse(readFileSync(new URL('../../costs.json', import.meta.url), 'utf8')) as { surfaces: Record<string, { kind: string }> }).surfaces;
   for (const name of ['$pageview', ...textbutlerPostHogSite.customEvents]) expect(surfaces[`posthog:${name}`]?.kind).toBe('telemetry');
+});
+
+test("installed SDK satisfies the observability and private-route contract", () => {
+  expect(checkPostHogContract({ site: textbutlerPostHogSite, sensitivePath: "/auth/callback" }).violations).toEqual([]);
 });

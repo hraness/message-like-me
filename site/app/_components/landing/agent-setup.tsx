@@ -6,7 +6,7 @@ import { AGENT_SETUP_PROMPT } from '../../_lib/site';
 import { captureInstallCopied } from '../analytics';
 
 function onPromptCopied(): void {
-  captureInstallCopied('agent-setup-prompt');
+  captureInstallCopied();
 }
 
 export function AgentSetup({ targets }: Readonly<{ targets: readonly AgentSetupTarget[] }>) {

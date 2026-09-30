@@ -1,10 +1,10 @@
 'use client';
 
-import { capturePostHogEvent } from '@hraness/posthog/client';
+import { capturePostHogCtaClicked, capturePostHogInstallCommandCopied } from '@hraness/posthog/client';
 import { PostHogAnalytics } from '@hraness/posthog/react';
 import { useEffect } from 'react';
 
-import { TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT, textbutlerPostHogSite } from '../_lib/analytics';
+import { textbutlerPostHogSite } from '../_lib/analytics';
 
 /**
  * Names a call-to-action link without its query or path details: an in-page
@@ -21,8 +21,8 @@ export function ctaTarget(href: string, origin: string): string | null {
 }
 
 /** Records that the setup prompt was copied. Returns false when analytics is off. */
-export function captureInstallCopied(target: string): boolean {
-  return capturePostHogEvent(textbutlerPostHogSite, TEXTBUTLER_INSTALL_COPY_EVENT, { copy_target: target });
+export function captureInstallCopied(): boolean {
+  return capturePostHogInstallCommandCopied(textbutlerPostHogSite, { installMethod: 'other', placement: 'inline' });
 }
 
 function CtaClicks() {
@@ -34,7 +34,7 @@ function CtaClicks() {
       const target = ctaTarget(link.getAttribute('href') ?? '', window.location.origin);
       if (target === null) return;
       const location = link.closest('[data-hraness-marketing]')?.getAttribute('data-hraness-marketing') ?? 'page';
-      capturePostHogEvent(textbutlerPostHogSite, TEXTBUTLER_CTA_EVENT, { cta_target: target, cta_location: location });
+      capturePostHogCtaClicked(textbutlerPostHogSite, { cta: target.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'home', placement: location === 'hero' || location === 'footer' ? location : location === 'header' ? 'nav' : 'inline' });
     };
     document.addEventListener('click', onClick, { capture: true });
     return () => document.removeEventListener('click', onClick, { capture: true });
@@ -49,7 +49,7 @@ function CtaClicks() {
 export function Analytics() {
   return (
     <>
-      <PostHogAnalytics apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY} site={textbutlerPostHogSite} />
+      <PostHogAnalytics captureOutboundLinks apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY} site={textbutlerPostHogSite} />
       <CtaClicks />
     </>
   );
