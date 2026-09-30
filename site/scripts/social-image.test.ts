@@ -25,6 +25,7 @@ describe('social images', () => {
       appIcon.trim().replace('viewBox="0 0 1024 1024" width="1024" height="1024"', 'viewBox="100 100 824 824" width="824" height="824"'),
     );
     expect(socialSite.theme?.accent).toBe('#076678');
+    expect(socialSite.theme?.wash).toBe('#E0309A');
   });
 
   test('every route declares the shared size and content type', () => {
