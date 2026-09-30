@@ -80,7 +80,7 @@ async function fixture(fast = false) {
   } });
   cleanup.push(async () => { await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); });
   return { loop, journal, sent, acks, statuses, coordinate: conversation.coordinate, stats: () => ({ compositions, classifications }), advance(ms: number) { time += ms; }, replaceAgent(next: ButlerAgent) { agent = next; },
-    intentRuns,
+    intentRuns, now: () => time,
     change(next: Settings) { settings = next; for (const listener of listeners) listener(next); }, settings: () => settings,
     habitatChanged(id: string) { for (const listener of habitatListeners) listener(id); }, habitatListenerCount: () => habitatListeners.size,
     beforeSubmit(callback: () => Promise<void>) { beforeSubmit = callback; },
@@ -183,6 +183,69 @@ test("an owner keyword invocation replies; plain owner text still answers", asyn
   f.add("I am answering this", "outgoing"); f.add("butler one more");
   await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toHaveLength(2);
+});
+/** Journals a submitted operator send with its provider message ID, as the
+ * owner send path does, and lands the outgoing text in history. */
+function operatorSent(f: Awaited<ReturnType<typeof fixture>>, id: string, text: string, key: string) {
+  const runId = `operator-run:${id}`, at = f.now();
+  expect(f.journal.claim(runId, "contact-1", `operator:${key}`, at)).toBe(true);
+  f.journal.transition(runId, "running", "dispatching", "dispatching", at, "d".repeat(64));
+  f.journal.transition(runId, "dispatching", "submitted", "submitted", at);
+  f.journal.recordSentMessages("contact-1", runId, [id], at, "operator");
+  f.push({ id, coordinate: f.coordinate, direction: "outgoing", occurredAt: new Date(at).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] });
+}
+test("an operator text naming the butler never invokes it, and the reply to it is left to the owner", async () => {
+  const f = await fixture(); await f.loop.tick();
+  const before = structuredClone(f.settings());
+  operatorSent(f, "operator:1", "TextButler is live. Ask the butler anything, or say butler off.", "campaign-key-0000000001");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0); expect(f.stats().compositions).toBe(0);
+  // Past the owner cooldown, the contact's answer (even one naming the
+  // butler) stays with the owner.
+  f.advance(600_000); f.add("butler, what is this?");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0); expect(f.stats().compositions).toBe(0);
+  expect(f.settings()).toEqual(before);
+  // The owner can still call the butler by hand; its reply keeps the wrap.
+  f.add("butler answer that please", "outgoing");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1); expect(f.sent[0]![0]).toEqual({ kind: "text", text: "🤖{ Hello }" });
+});
+test("an operator send still in flight holds the thread before history shows it", async () => {
+  const f = await fixture(); await f.loop.tick();
+  expect(f.journal.claim("operator-run:pending", "contact-1", "operator:campaign-key-0000000002", f.now())).toBe(true);
+  f.journal.transition("operator-run:pending", "running", "dispatching", "dispatching", f.now(), "d".repeat(64));
+  f.journal.transition("operator-run:pending", "dispatching", "indeterminate", "lost confirmation", f.now());
+  f.journal.reconcile("operator-run:pending", "submitted", "owner attested", f.now());
+  f.advance(600_000); f.add("butler hello?");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0);
+});
+test("an uncertain operator send reconciled after a restart stays operator text and keeps the thread with the owner", async () => {
+  const f = await fixture(); await f.loop.tick();
+  const runId = "operator-run:restart", startedAt = f.now();
+  expect(f.journal.claim(runId, "contact-1", "operator:campaign-key-0000000003", startedAt)).toBe(true);
+  f.journal.transition(runId, "running", "dispatching", "dispatching", startedAt, "d".repeat(64));
+  f.journal.transition(runId, "dispatching", "indeterminate", "lost confirmation", startedAt);
+  f.intentRuns.set(runId, { id: "run:upstream", planId: "plan:x", intentId: runId, enrollmentId: "enrollment:fixture", state: "accepted",
+    accepted: [{ messageId: "operator:late", providerReceiptId: null }], totalActions: 1, reason: null, retryable: false });
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.journal.hasUncertainSend("contact-1")).toBe(false);
+  expect(f.journal.messageOrigin("contact-1", "operator:late")).toBe("operator");
+  // The provider echo lands well after the start, outside any time window.
+  f.advance(600_000);
+  f.push({ id: "operator:late", coordinate: f.coordinate, direction: "outgoing", occurredAt: new Date(f.now()).toISOString(), text: "TextButler is live.", kind: "message", relatedMessageId: null, attachments: [] });
+  f.advance(600_000); f.add("butler, what is this?");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(0);
+});
+test("hand-typed owner text hands the thread back after an operator send", async () => {
+  const f = await fixture(); await f.loop.tick();
+  operatorSent(f, "operator:1", "Plain hello", "campaign-key-0000000003");
+  f.advance(1000); f.add("typed by hand", "outgoing");
+  f.advance(600_000); f.add("butler help me");
+  await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1);
 });
 test("global pause immediately cancels an in-progress composition", async () => {
   const f = await fixture(); await f.loop.tick();

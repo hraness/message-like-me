@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import { automationContextId, createGhostgetAutomationTransport, type AutomationEnrollment, type AutomationEvent, type AutomationMessage, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import { assertAutomationBinding, type AutomationBinding } from "./automation-owner.ts";
-import { messageAuthor, pendingCluster, type MessageAuthor } from "./attribution.ts";
+import { messageAuthor, operatorHold, ownerInvocation, pendingCluster, type MessageAuthor } from "./attribution.ts";
 import type { OwnerRuntimeState, TextbutlerControlService } from "./control-service.ts";
 import { boundedHistory } from "./enrollment.ts";
 import { searchHistory } from "./history-search.ts";
-import type { RunJournal } from "./journal.ts";
+import { OPERATOR_EVENT_PREFIX, type RunJournal } from "./journal.ts";
 import type { ContactSettings, Settings } from "./config.ts";
-import { keywordPresent, type MessageEvent } from "./decision.ts";
+import type { MessageEvent } from "./decision.ts";
 import type { Hooks } from "./hooks.ts";
 import { ButlerRuntime, type ButlerAgent, type ConversationSnapshot } from "./runtime.ts";
 import { createRoutedButlerAgent } from "./routed-agent.ts";
@@ -182,7 +182,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     // second provider session; history still re-reads and re-asserts the live row.
     const enrollment = current ?? state.lastEnrollment ?? await client.poll(state.binding.enrollmentId); assertAutomationBinding(state.binding, enrollment);
     const page = await client.history(state.binding.enrollmentId, 200); assertAutomationBinding(state.binding, page.enrollment);
-    for (const message of page.messages) if (author(message, contact) === "owner" && !(message.kind === "message" && message.text !== null && keywordPresent(message.text, contact.keyword))) state.lastOwnerAt = Math.max(state.lastOwnerAt ?? 0, Date.parse(message.occurredAt));
+    for (const message of page.messages) if (author(message, contact) === "owner" && !(message.kind === "message" && ownerInvocation(message, contact, journal))) state.lastOwnerAt = Math.max(state.lastOwnerAt ?? 0, Date.parse(message.occurredAt));
     if (state.historyRevision !== page.enrollment.revision) {
       const history = boundedHistory(page.messages.filter(message => message.kind === "message" && message.direction !== "unknown").flatMap(message => {
         const who = author(message, contact);
@@ -193,7 +193,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     }
     const cluster = pendingCluster(page.messages, contact, journal);
     service.notePending(contact.id, cluster === null ? null : { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: page.enrollment.ready, observedAt: now() });
-    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), relatedMessageIds: new Map(page.messages.filter(message => message.kind === "message" && message.relatedMessageId !== null).map(message => [message.id, message.relatedMessageId!])), state: { latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000) } };
+    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), relatedMessageIds: new Map(page.messages.filter(message => message.kind === "message" && message.relatedMessageId !== null).map(message => [message.id, message.relatedMessageId!])), state: { latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000), operatorThread: operatorHold(page.messages, contact, journal) } };
   }
   /** Settles a wedged send only from positive provider evidence. A terminal
    * upstream row is a receipt; no reply row beside a settled ack row proves
@@ -207,7 +207,10 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       const reply = await byIntent(run.id);
       if (reply !== undefined && reply !== null && reply.enrollmentId === state.binding.enrollmentId) {
         if (reply.state === "accepted") {
-          journal.recordSentMessages(contact.id, run.id, reply.accepted.map(part => part.messageId), now());
+          // An operator send keeps its origin, so reconciling it after a restart
+          // never turns it into butler output and never lifts the operator hold.
+          journal.recordSentMessages(contact.id, run.id, reply.accepted.map(part => part.messageId), now(),
+            run.eventId.startsWith(OPERATOR_EVENT_PREFIX) ? "operator" : "butler");
           journal.reconcile(run.id, "submitted", "reconciled: provider recorded delivery", now());
           continue;
         }
@@ -254,7 +257,9 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       if (state.pending && Number(event.revision) > Number(state.pending.revision)) state.pending = { ...state.pending, revision: String(event.revision) };
       return;
     }
-    const invoked = who === "owner" && event.message.kind === "message" && keywordPresent(event.message.text ?? "", contact.keyword);
+    // Operator and campaign sends are the owner's plain text: never a keyword
+    // invocation, whatever words they contain.
+    const invoked = who === "owner" && event.message.kind === "message" && ownerInvocation(event.message, contact, journal);
     if (who === "owner" && !invoked) state.lastOwnerAt = Math.max(state.lastOwnerAt ?? 0, Date.parse(event.message.occurredAt));
     // Reactions, edits, deletes and deliveries never answer a pending inbound or
     // revoke work in flight; only a fresh text supersedes it. The revision still

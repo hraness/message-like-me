@@ -249,6 +249,16 @@ export class RunJournal {
       AND (state IN ('running','dispatching','submitted','partial','indeterminate') OR planDigest IS NOT NULL) ORDER BY updatedAt DESC LIMIT 1`).get();
     return row?.updatedAt ?? null;
   }
+  /** The newest operator send to this contact that is in flight, reached the
+   * provider or may have, and whether the journal knows its message IDs. The
+   * reply loop leaves the thread after such a send to the owner. */
+  lastOperatorSend(contactId: string): { startedAt: number; attributed: boolean } | null {
+    const row = this.database.query<{ id: string; startedAt: number }, [string]>(`SELECT id, startedAt FROM runs WHERE contactId = ?
+      AND eventId GLOB 'operator:*' AND state IN ('running','dispatching','submitted','partial','indeterminate') ORDER BY startedAt DESC, rowid DESC LIMIT 1`).get(contactId);
+    if (!row) return null;
+    const sent = this.database.query<{ count: number }, [string, string]>("SELECT COUNT(*) AS count FROM sent_messages WHERE contactId = ? AND runId = ?").get(contactId, row.id);
+    return { startedAt: row.startedAt, attributed: (sent?.count ?? 0) > 0 };
+  }
   /** Self-chat inbound echoes arrive under fresh IDs; text-less ones carry no
    * disclosure wrap, so send recency is the only signal they are ours. */
   lastButlerSendAt(contactId: string): number | null {

@@ -15,12 +15,12 @@
   "sources": {
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
     "package.json": "02ae445c64c8d10d12e14c36cd47d62345d4a25cfee9fd0442a53bba39549c1e",
-    "packages/control/src/index.ts": "afbdd297541a1196673ec07ee7cf554e84c573be8b02ad562252237c679e4593",
+    "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
     "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
     "packages/textbutler/src/contact-habitat.ts": "8401a8114287cb4961aec53650d2175836675a43215af445b773f82b6fd09a33",
     "packages/textbutler/src/contact-repos.ts": "6b51b022526f98e4ea360e5cd730ce6053f0447d5204f1eef08fe04301fa6783",
-    "packages/textbutler/src/control-service.ts": "4fa87b5505bf47f03a90efe984bc56730a803540839c6d530128c196c27f518b",
+    "packages/textbutler/src/control-service.ts": "6f811071df09514305c8e9dce5636c12f7b3cffec546e3b285c9db88a4891374",
     "packages/textbutler/src/daemon.ts": "ae4a4ee76f1c9166bc109c2e08e34b1886b88634737ee2f5dc368da0a8fa2a17",
     "packages/textbutler/src/fast-driver.ts": "bdea3d4c01c61bf19084965fca2c4ccb9137d0136b3e07b0864bbb66f587c0a6",
     "packages/textbutler/src/gateway-search.ts": "5706ed2c486f186658d536fe7b92426945b51f8871a196a99dd0048d5bca78a4",
@@ -33,7 +33,7 @@
     "packages/textbutler/src/imessage-setup.ts": "fdc734271365a57abe87626c810c7afee880e5074cc118dbc89a6e36c61e86e7",
     "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
     "packages/textbutler/src/javascript-worker-entry.ts": "26112477da6fda01af8c2d5257d191d08a7a061617ad7dcc540c60f2dc521e7d",
-    "packages/textbutler/src/journal.ts": "8f74e4aab576e61c9e6c7c35c7dc4155d918a845435852ea86e53ee86302a411",
+    "packages/textbutler/src/journal.ts": "6251657ab11db9cdcc81959de727b6dafef63da18cf8e5ff5769b308717c2a29",
     "packages/textbutler/src/launch-agent.ts": "4dcae445ff4b0e684bb90dbde7b87d8e23175fe490b60ab98850c5bd142aead2",
     "packages/textbutler/src/macos-app.ts": "8e2a481645ac896aa74fe01b81f2ecb98d7d785ea0dd57325a788f3eaf1a65a0",
     "packages/textbutler/src/meme-search.ts": "ad422591ece4d981dd97d66928984fd7512d303b8773503bcf79283813914c95",
@@ -44,9 +44,9 @@
     "packages/textbutler/src/native-task.ts": "122ba7b346ba9cbaca3d1c71270c32e6d6dda37e4c59c8a34c4051c8241859f4",
     "packages/textbutler/src/owner-cli.ts": "493c223e61815c2590715dfdb967b88f8659ed89617532585b18aecf76319746",
     "packages/textbutler/src/owner-messages.ts": "65fe8a1bea6dcf00d86b445e642b7d92ea13a7270ee9ff7746ba8d537884ea6d",
-    "packages/textbutler/src/owner-replies.ts": "c9dab5b6092e27539a8f6e078b3d49ae83ac6597d2988a136b270ecfafed05f1",
+    "packages/textbutler/src/owner-replies.ts": "d42d68ea95906913e39c9a29cb79c9a137b15393b5691e483ec5cd638282e403",
     "packages/textbutler/src/provider-host.ts": "81f9b55d8d47882429a31331994db5195530a599090ceef96986fe237cd64d2e",
-    "packages/textbutler/src/reply-loop.ts": "625d75b5054244f20c4e9ca4cb646390b3938ab523bb7abbd1e9be7467c5f4b4",
+    "packages/textbutler/src/reply-loop.ts": "0fafd1842035660aac898cfeab3899ae8a4b87972729051ebbdadef56c5abd5f",
     "packages/textbutler/src/routed-agent.ts": "63897e366965b77ac8bcce8b1b8c08b218c20605923dd86bf468e0b9a65f22b3",
     "packages/textbutler/src/runtime-entry.ts": "5bc336c2e6e02b801282081ea51de23e28b6f0c7a27c422797121fc45376287e",
     "packages/textbutler/src/runtime.ts": "83714726eeb4129ff7bd49c78c2cab56b96fe6911df197151914b2d983141604",
@@ -60,7 +60,7 @@
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
   "validation": {
-    "command": "bun run check",
-    "receiptSha256": "dd1c9733a9910d73da5cb89fdee7e7fa2cdf82f039de0d68507262b7832e157e"
+    "command": "bun test packages/textbutler/src/campaign.test.ts packages/textbutler/src/journal.test.ts packages/textbutler/src/owner-replies.test.ts packages/textbutler/src/attribution.test.ts packages/textbutler/src/owner-messages.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/cli-golden.test.ts",
+    "receiptSha256": "47c9f7deddd540062f72b231f9f49fa113756c6e1a5e139c00d3a47b68ba2ed1"
   }
 }

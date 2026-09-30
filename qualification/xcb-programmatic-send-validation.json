@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "scope": "Verify operator and campaign sends go out verbatim without the butler, the owner hold after an operator send, human-typed keyword behaviour, and campaign suppress lists.",
+  "toolchain": "Bun 1.3.14",
+  "command": "bun test packages/textbutler/src/campaign.test.ts packages/textbutler/src/journal.test.ts packages/textbutler/src/owner-replies.test.ts packages/textbutler/src/attribution.test.ts packages/textbutler/src/owner-messages.test.ts packages/textbutler/src/reply-loop.test.ts packages/textbutler/src/cli-golden.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 146,
+    "failed": 0,
+    "files": 7,
+    "assertions": 11726
+  },
+  "typecheck": {
+    "command": "node_modules/.bin/tsc --noEmit -p packages/textbutler/tsconfig.json",
+    "exitCode": 0,
+    "log": "qualification/xcb-programmatic-send-typecheck.log",
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceSha256": {
+    "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
+    "packages/textbutler/src/attribution.ts": "afddd5469055a6906e43448c1ddeaea9ce88bc8686660343e99fb1bfd961e5da",
+    "packages/textbutler/src/campaign.ts": "e2ed7556567d92d3856dc9c2307d5cce15d9d371d1f086e5e4f36e8243be0577",
+    "packages/textbutler/src/campaign.test.ts": "4bbac9e78605c89fcc58ff7bae4b7b4ee07bf67ee679a90952fce02ad1ffc17e",
+    "packages/textbutler/src/control-service.ts": "6f811071df09514305c8e9dce5636c12f7b3cffec546e3b285c9db88a4891374",
+    "packages/textbutler/src/decision.ts": "0483a000331f6c79227ff19f1106cdd4cb69f43579216dad16008eea48b3a9da",
+    "packages/textbutler/src/journal.ts": "6251657ab11db9cdcc81959de727b6dafef63da18cf8e5ff5769b308717c2a29",
+    "packages/textbutler/src/owner-replies.ts": "d42d68ea95906913e39c9a29cb79c9a137b15393b5691e483ec5cd638282e403",
+    "packages/textbutler/src/owner-replies.test.ts": "06369a7e647e70d22f0e6abccc397f24f61950357a2571b0bb1eca63fef44a8e",
+    "packages/textbutler/src/reply-loop.ts": "0fafd1842035660aac898cfeab3899ae8a4b87972729051ebbdadef56c5abd5f",
+    "packages/textbutler/src/reply-loop.test.ts": "6ac6166ccbe148e0bdb6596151468026d75a5103d8f46d1ca974166dbc688fd9"
+  },
+  "review": "qualification/xcb-programmatic-send-review.json",
+  "reviewSha256": "1c7abe320b449efd07e4b977bc9892f148297599bbbe7d8d00dc536ac43893c5",
+  "log": "qualification/xcb-programmatic-send-focused.log",
+  "logSha256": "bc8d50b15fcd7ba67cc86204af18eebe3b8e9cfe08216941fb31c3bf7abc512f"
+}
