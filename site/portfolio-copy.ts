@@ -1,4 +1,4 @@
-import snapshot from "../portfolio-messaging.generated.json";
+import snapshot from "./portfolio-messaging.generated.json";
 import { product as designKitProduct, type PortfolioProductId } from "@hraness/design-kit/portfolio";
 
 // Authored copy lives in hraness/jungle. This checked snapshot keeps builds offline.
