@@ -27,7 +27,7 @@ export function PhoneLab() {
     <div style={{ display: 'grid', gap: 56, padding: '40px 16px', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', maxWidth: 1400, margin: '0 auto' }}>
       <figure style={cell} id="hero-auto">
         <PhoneMockPlayer conversation={conversations.hero} />
-        <figcaption style={caption}>Hero, playback, follows page theme. Example conversation. The people are made up.</figcaption>
+        <figcaption style={caption}>Hero, playback, follows page theme.</figcaption>
       </figure>
       <figure style={cell} id="hero-light">
         <PhoneMock conversation={conversations.hero} theme="light" />

@@ -114,7 +114,7 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
           {film === null ? null : (
             <figure className="tb-film-figure">
               <LaunchVideo sources={film} title="Introducing TextButler" />
-              <figcaption>TextButler in {LAUNCH_FILM_SECONDS} seconds. No sound needed. Every name in the film is made up.</figcaption>
+              <figcaption>TextButler in {LAUNCH_FILM_SECONDS} seconds.</figcaption>
             </figure>
           )}
           {/* The launch post leads with its beats; the reviewed long form follows. */}
