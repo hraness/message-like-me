@@ -1,3 +1,4 @@
+import { marketingHeading } from "../../portfolio-copy";
 // Reader-facing facts for the landing page, llms.txt, and About. Every number
 // here traces to source (config.ts contact defaults, decision.ts, the default
 // reply model); keep latency, test counts, and user counts off these pages.
@@ -53,7 +54,7 @@ export type ReplyWriter = Readonly<{
 export const REPLY_WRITERS: readonly ReplyWriter[] = [
   {
     id: 'local',
-    name: 'A local model on your Mac',
+    name: marketingHeading("home-writer-local"),
     short: 'Ollama',
     chip: 'In testing',
     command: 'ollama pull qwen3:4b-instruct-2507-q4_K_M\ntextbutler providers local',
@@ -62,7 +63,7 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
   },
   {
     id: 'key',
-    name: 'Qwen 3.5 Flash with your own Vercel AI Gateway key',
+    name: marketingHeading("home-writer-key"),
     short: 'Your key',
     chip: 'Works today',
     command: 'pbpaste | textbutler providers gateway-key',
@@ -71,7 +72,7 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
   },
   {
     id: 'subscription',
-    name: 'Your Claude Code, Codex, or Devin subscription',
+    name: marketingHeading("home-writer-subscription"),
     short: 'Through xcb',
     chip: 'Works today',
     command: 'textbutler providers check ACCOUNT',
@@ -81,13 +82,13 @@ export const REPLY_WRITERS: readonly ReplyWriter[] = [
 ];
 
 export const HOW_IT_WORKS_STEPS = [
-  { label: 'Someone texts you.', detail: 'They write in a one-to-one chat you’ve turned on. GhostGet passes the message to TextButler, running in the background on your Mac.' },
-  { label: 'It checks before it speaks.', detail: 'Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Has it been 5 minutes since you last wrote here? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.' },
-  { label: '👀, right away.', detail: 'It sends 🤖{ 👀 } so they know it’s on it.' },
-  { label: 'It reads the room.', detail: 'It reads the notes you keep for this person (how you talk, what matters, what’s off-limits) and the recent conversation. In your own chat it can also search your full history; for other people that’s off unless you turn it on.' },
-  { label: 'Your chosen model writes the reply.', detail: 'That’s a local model, Qwen through your key, or your subscription. It can search the web only when a Gateway key is saved, and it refuses any search that reuses words from your private messages.' },
-  { label: 'Marked, then sent.', detail: 'The reply arrives as 🤖{ … }, so nobody mistakes it for you. If it can’t tell whether a send went through, it doesn’t send it again.' },
-  { label: 'You can step in anytime.', detail: 'Write in the chat yourself and it stays out of it. Pause everything with one command. Or ask for a draft to review before anything is sent. Drafts expire after 15 minutes.' },
+  { label: marketingHeading("home-flow-text"), detail: 'They write in a one-to-one chat you’ve turned on. GhostGet passes the message to TextButler, running in the background on your Mac.' },
+  { label: marketingHeading("home-flow-checks"), detail: 'Is this person turned on? Is it a one-to-one chat? Did they say “butler”? Has it been 5 minutes since you last wrote here? Is it under 12 replies this hour? It also waits 8 seconds, so a burst of texts gets one answer.' },
+  { label: marketingHeading("home-flow-indicator"), detail: 'It sends 🤖{ 👀 } so they know it’s on it.' },
+  { label: marketingHeading("home-flow-context"), detail: 'It reads the notes you keep for this person (how you talk, what matters, what’s off-limits) and the recent conversation. In your own chat it can also search your full history; for other people that’s off unless you turn it on.' },
+  { label: marketingHeading("home-flow-model"), detail: 'That’s a local model, Qwen through your key, or your subscription. It can search the web only when a Gateway key is saved, and it refuses any search that reuses words from your private messages.' },
+  { label: marketingHeading("home-flow-send"), detail: 'The reply arrives as 🤖{ … }, so nobody mistakes it for you. If it can’t tell whether a send went through, it doesn’t send it again.' },
+  { label: marketingHeading("home-flow-step-in"), detail: 'Write in the chat yourself and it stays out of it. Pause everything with one command. Or ask for a draft to review before anything is sent. Drafts expire after 15 minutes.' },
 ] as const;
 
 export const REPLY_MODES = [
@@ -97,7 +98,7 @@ export const REPLY_MODES = [
 ] as const;
 
 export const SETUP_STEPS = [
-  { label: 'Ask your agent.', detail: 'Paste the prompt below into Claude Code, Codex, or Devin. It clones the repo, installs it, connects your messaging apps, and runs textbutler doctor until only your steps are left.' },
-  { label: 'Say yes to your Mac.', detail: 'For iMessage, turn on Full Disk Access for the TextButler helper, then allow the Messages prompt when your agent re-runs setup. For WhatsApp or Beeper, pair once. Then choose what writes replies: pull the local model, paste a Gateway key, or sign in through xcb.' },
-  { label: 'Turn on one person.', detail: 'Everyone starts off, and the butler starts paused. Turn on one chat, then run textbutler resume. When that person says “butler”, your butler answers.' },
+  { label: marketingHeading("home-setup-agent"), detail: 'Paste the prompt below into Claude Code, Codex, or Devin. It clones the repo, installs it, connects your messaging apps, and runs textbutler doctor until only your steps are left.' },
+  { label: marketingHeading("home-setup-mac"), detail: 'For iMessage, turn on Full Disk Access for the TextButler helper, then allow the Messages prompt when your agent re-runs setup. For WhatsApp or Beeper, pair once. Then choose what writes replies: pull the local model, paste a Gateway key, or sign in through xcb.' },
+  { label: marketingHeading("home-setup-person"), detail: 'Everyone starts off, and the butler starts paused. Turn on one chat, then run textbutler resume. When that person says “butler”, your butler answers.' },
 ] as const;

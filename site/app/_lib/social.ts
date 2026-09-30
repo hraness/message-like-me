@@ -1,19 +1,15 @@
-import { product } from '@hraness/design-kit/portfolio';
+import { marketing } from '../../portfolio-copy';
 import { defineSocialImageSite, socialImageAlt, type SocialImagePage } from '@hraness/web-discovery/social-image/card';
 
 import { SOCIAL_ICON_SVG } from './social-icon';
 
-const registry = product('message-like-me');
 
 // The one declaration every TextButler share image renders from. The card
 // itself comes from @hraness/web-discovery; pages pass copy only.
 export const socialSite = defineSocialImageSite({
-  name: 'TextButler',
-  // The registry one-liner ("AI butler for the iMessage, WhatsApp, and Beeper
-  // chats you choose") does not fit the card's two lines and would be cut to
-  // "AI butler for the iMessage", so the card carries the registry tagline,
-  // which is also the home page's headline (SITE_HEADLINE).
-  description: registry.messaging.tagline,
+  name: marketing.names.name,
+  // The canonical tagline fits the shared card without trimming its copy.
+  description: marketing.tagline,
   domain: 'textbutler.app',
   icon: { kind: 'app', src: `data:image/svg+xml,${encodeURIComponent(SOCIAL_ICON_SVG)}` },
   // The site's gruvbox light palette from @hraness/design-kit. The crimson wash keeps the card apart from the other cream and sage
