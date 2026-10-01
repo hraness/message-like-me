@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { automationBindingDigest, automationHash, createGhostgetAutomationClient, type AutomationEvent, type AutomationMessage, type AutomationPlan } from "../../transport/src/automation.ts";
@@ -22,8 +22,9 @@ async function fixture(fast = false, group = false) {
   const habitatListeners = new Set<(contactId: string) => void>();
   const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
   const conversation = { coordinate: { provider: "imessage" as const, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: group ? "group" as const : "single" as const, participants: group ? ["fixture@example.test", "other@example.test"] : ["fixture@example.test"] };
-  const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: true, reason: null });
-  const binding = automationBinding(enrolled()), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
+  let invalidated = false;
+  const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: !invalidated, reason: invalidated ? "ghostget.binding-changed.v1" : null });
+  const binding = automationBinding(enrolled(), group ? new Date(time).toISOString() : undefined), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
   const intentRuns = new Map<string, unknown>();
   let failEvents = 0, eventsCalls = 0, pollSetCalls = 0, statusCalls = 0;
@@ -34,6 +35,7 @@ async function fixture(fast = false, group = false) {
     read: async () => ({ file: "README.md", text: "readme", truncated: false }), search: async () => ({ matches: [], scanned: 0, truncated: false }),
     list: async () => [] as const };
   const client = createGhostgetAutomationClient(async (method, params) => {
+    if (method === "features") return { groupConversations: { version: 1 } };
     if (method === "poll") return enrolled();
     if (method === "pollSet") pollSetCalls++;
     if (method === "status") statusCalls++;
@@ -62,8 +64,9 @@ async function fixture(fast = false, group = false) {
     async qualified() { return true; }, async classify() { classifications++; return { respond: true, confidence: 0.99, reason: "requested" }; },
     async compose(request) { compositions++; return { summary: "Here is help", actions: [{ kind: "text", text: "Hello" }, { kind: "reaction", messageId: request.event.id, emoji: "👍", action: "add" }] }; },
   };
-  const driver = createFastDriver({ kind: "local", baseUrl: "http://127.0.0.1:1234/v1", model: "synthetic" }, { journal, fetch: async () => {
-    compositions++;
+  const prompts: string[] = [];
+  const driver = createFastDriver({ kind: "local", baseUrl: "http://127.0.0.1:1234/v1", model: "synthetic" }, { journal, fetch: async (_url, init) => {
+    prompts.push(String(init?.body)); compositions++;
     return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ value: { respond: true, confidence: 0.99, reason: "requested", summary: "Explain briefly", actions: [{ kind: "text", text: "Synthetic answer" }], tool: null } }) } }] });
   } });
   const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: value => { statuses.push({ state: value.state, detail: value.detail }); }, repos: shelf,
@@ -79,7 +82,7 @@ async function fixture(fast = false, group = false) {
     async notifySelfChat(text: string) { notices.push(text); },
   } });
   cleanup.push(async () => { await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); });
-  return { loop, journal, sent, acks, statuses, coordinate: conversation.coordinate, stats: () => ({ compositions, classifications }), advance(ms: number) { time += ms; }, replaceAgent(next: ButlerAgent) { agent = next; },
+  return { root, prompts, loop, journal, sent, acks, statuses, coordinate: conversation.coordinate, stats: () => ({ compositions, classifications }), advance(ms: number) { time += ms; }, replaceAgent(next: ButlerAgent) { agent = next; },
     intentRuns, now: () => time,
     change(next: Settings) { settings = next; for (const listener of listeners) listener(next); }, settings: () => settings,
     habitatChanged(id: string) { for (const listener of habitatListeners) listener(id); }, habitatListenerCount: () => habitatListeners.size,
@@ -88,6 +91,7 @@ async function fixture(fast = false, group = false) {
     pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
     fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
+    invalidateRoster() { invalidated = true; },
     changeRoster() { conversation.participants.push("new@example.test"); conversation.participants.sort(); },
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
@@ -568,5 +572,27 @@ test("enrolled group replies use group policy and stop when the roster changes",
   expect(observedGroup).toBe(true); expect(f.sent).toHaveLength(1);
   f.add("butler a pending question"); await f.loop.tick(); f.changeRoster(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toHaveLength(1);
+  expect(f.statuses.at(-1)?.detail).toContain("participants changed");
+});
+
+test("group history before enrollment never enters prompts, recent memory, or learning", async () => {
+  const f = await fixture(true, true);
+  f.add("Private message from the previous roster", "incoming", 60_000);
+  await f.loop.tick();
+  f.add("Old delayed secret", "incoming", 30_000); await f.loop.tick();
+  f.add("butler help this new group"); await f.loop.tick(); f.advance(1100); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1); expect(f.prompts.length).toBeGreaterThan(0);
+  for (const prompt of f.prompts) { expect(prompt).not.toContain("Private message"); expect(prompt).not.toContain("Old delayed secret"); }
+  const recent = await readFile(join(f.root, "contacts", "contact-1", "history", "recent.json"), "utf8");
+  expect(recent).toContain("new group"); expect(recent).not.toContain("Private message"); expect(recent).not.toContain("Old delayed secret");
+  const learning = JSON.stringify(new ContactHabitat(f.journal, "contact-1").snapshot());
+  expect(learning).not.toContain("Private message"); expect(learning).not.toContain("Old delayed secret");
+});
+
+test("permanent group invalidation cancels a pending reply even with the original digest", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  f.add("butler pending question"); await f.loop.tick(); f.invalidateRoster(); f.advance(9000);
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toEqual([]); expect(f.stats().compositions).toBe(0);
   expect(f.statuses.at(-1)?.detail).toContain("participants changed");
 });

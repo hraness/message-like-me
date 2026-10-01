@@ -245,7 +245,10 @@ function parseOwnerState(value: unknown): OwnerState {
     bindings[id] = binding;
     if (binding.version === 1 && binding.participants.length !== 1) throw new Error("Group bindings are unsupported");
   }
-  if (new Set(Object.values(bindings).map(ownerBindingDigest)).size !== Object.keys(bindings).length) throw new Error("Repeated owner conversation binding");
+  const scopes = Object.values(bindings);
+  if (new Set(scopes.map(binding => binding.version === 2 && binding.conversation.kind === "group" ? `group:${binding.enrollmentId}` : ownerBindingDigest(binding))).size !== scopes.length) throw new Error("Repeated owner conversation binding");
+  const activeScopes = scopes.filter(binding => binding.version !== 2 || !binding.invalidated);
+  if (new Set(activeScopes.map(ownerBindingDigest)).size !== activeScopes.length) throw new Error("Repeated active owner conversation binding");
   const grants: Record<string, AutomationGrant> = {};
   for (const [id, value] of Object.entries(item.grants === undefined ? {} : record(item.grants))) {
     const binding = bindings[id], grant = parseAutomationGrant(value);
@@ -327,7 +330,10 @@ export class TextbutlerControlService {
       if (this.closed || binding?.version !== 2 || binding.enrollmentId !== expected.enrollmentId || binding.bindingDigest !== expected.bindingDigest) return undefined;
       const contact = current.state.settings.contacts.find(item => item.id === contactId);
       if (!contact) return undefined;
-      if (contact.enabled) await this.publish(current, configureContact(current.state.settings, contactId, { enabled: false }));
+      if (contact.enabled || binding.conversation.kind === "group" && !binding.invalidated) {
+        const bindings = binding.conversation.kind === "group" ? { ...current.state.bindings, [contactId]: { ...binding, invalidated: true as const } } : current.state.bindings;
+        await this.publish(current, configureContact(current.state.settings, contactId, { enabled: false }), bindings);
+      }
       return current.state.grants[contactId];
     });
     if (grant) this.revokeDisabled(contactId, grant);
@@ -585,15 +591,16 @@ export class TextbutlerControlService {
       const binding = parseAutomationBinding(observed.binding);
       if (binding.bindingDigest !== automationBindingDigest(candidate.candidate.identity, candidate.candidate.conversation)) throw new Error("Messaging enrollment changed its target");
       const reauthored = this.reauthor(observed.messages);
-      const messages = request.initializeHistory ? boundedHistory(reauthored) : [];
-      const historyOmittedCount = request.initializeHistory ? observed.messages.length - messages.length : 0;
-      const historyShortenedCount = request.initializeHistory ? messages.filter(message => observed.messages.find(original => original.id === message.id || `sha256:${hash(original.id)}` === message.id)?.text !== message.text).length : 0;
+      const initializeHistory = request.initializeHistory && binding.conversation.kind === "single";
+      const messages = initializeHistory ? boundedHistory(reauthored) : [];
+      const historyOmittedCount = initializeHistory ? observed.messages.length - messages.length : 0;
+      const historyShortenedCount = initializeHistory ? messages.filter(message => observed.messages.find(original => original.id === message.id || `sha256:${hash(original.id)}` === message.id)?.text !== message.text).length : 0;
       return this.serial(async () => {
         signal.throwIfAborted(); const latest = await this.current();
         if (latest.state.revision !== request.expectedRevision) fail("conflict", "Settings changed. Reload before adding a contact.");
-        if (Object.values(latest.state.bindings).some(value => ownerBindingDigest(value) === binding.bindingDigest)) fail("conflict", "This messaging conversation has already been added.");
+        if (Object.values(latest.state.bindings).some(value => binding.conversation.kind === "group" ? value.version === 2 && value.enrollmentId === binding.enrollmentId : ownerBindingDigest(value) === binding.bindingDigest)) fail("conflict", "This messaging conversation has already been added.");
         const id = randomUUID(), workspace = await ContactWorkspace.create(join(this.dataDir, "contacts", id), binding.conversation.kind);
-        if (request.initializeHistory) {
+        if (request.initializeHistory && binding.conversation.kind === "single") {
           const historyFile = await workspace.initializeHistory(messages);
           await workspace.writeVersioned("history/bootstrap-summary.json", JSON.stringify({ schemaVersion: 1, purpose: "context-only-never-trigger", historyFile,
             requestedLimit: 200, receivedMessages: observed.messages.length, retainedMessages: messages.length, omittedMessages: historyOmittedCount,
@@ -604,7 +611,7 @@ export class TextbutlerControlService {
         const settings = parseSettings({ ...latest.state.settings, contacts: [...latest.state.settings.contacts, newContact(id, label.slice(0, 200), binding.enrollmentId)] });
         await this.publish(latest, settings, { ...latest.state.bindings, [id]: binding }); this.automationCandidates.delete(request.candidateId);
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "enrolled", snapshot: await this.snapshot(), contactId: id,
-          historyInitialized: request.initializeHistory, historyCount: messages.length, historyOmittedCount, historyShortenedCount };
+          historyInitialized: initializeHistory, historyCount: messages.length, historyOmittedCount, historyShortenedCount };
       });
     });
   }
@@ -802,7 +809,7 @@ export class TextbutlerControlService {
         if (candidates.length > 200) throw new Error("Too many messaging conversations");
         const current = await this.current(); this.automationCandidates.clear();
         const rows = candidates.map(candidate => {
-          const duplicate = Object.values(current.state.bindings).some(binding => binding.version === 2 && binding.bindingDigest === automationBindingDigest(candidate.identity, candidate.conversation));
+          const duplicate = Object.values(current.state.bindings).some(binding => binding.version === 2 && !binding.invalidated && binding.bindingDigest === automationBindingDigest(candidate.identity, candidate.conversation));
           const id = randomUUID(); this.automationCandidates.set(id, { candidate, expires: Date.now() + 300_000 });
           return { id, name: (candidate.conversation.title ?? candidate.conversation.participants.join(", ")).slice(0, 200),
             subtitle: `${providerName(candidate.identity.provider)} · ${candidate.conversation.kind === "group" ? "Group · " : ""}${candidate.conversation.participants.join(", ")}`.slice(0, 512),

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { automationContextId, automationHash, createGhostgetAutomationTransport, type AutomationEnrollment, type AutomationGrant, type AutomationMessage, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import { parseActionIntent, type ActionIntent } from "../../transport/src/index.ts";
 import { type ContactSettings, type Disclosure } from "./config.ts";
-import { assertAutomationBinding, type AutomationBinding, type OwnerAutomationPort } from "./automation-owner.ts";
+import { assertAutomationBinding, scopedAutomationHistory, type AutomationBinding, type OwnerAutomationPort } from "./automation-owner.ts";
 import { messageAuthor, pendingCluster } from "./attribution.ts";
 import { boundedHistory, type OwnerConversationReadPort } from "./enrollment.ts";
 import { OPERATOR_EVENT_PREFIX, type RunJournal } from "./journal.ts";
@@ -211,6 +211,7 @@ export class OwnerReplies {
         try {
           const page = await client.history(binding.enrollmentId, HISTORY_LIMIT, signal);
           assertAutomationBinding(binding, page.enrollment);
+      page.messages = scopedAutomationHistory(binding, page.messages);
           const cluster = pendingCluster(page.messages, contact, this.ports.journal);
           this.notePending(contact.id, cluster === null ? null : { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: page.enrollment.ready, observedAt: this.ports.now() });
           if (cluster !== null) pending.push(this.item(contact, binding, { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: page.enrollment.ready, observedAt: this.ports.now() }, null));
@@ -255,7 +256,8 @@ export class OwnerReplies {
     const automation = this.ports.automation(), client = this.ports.client(), providers = this.ports.providers();
     if (!automation || !client) fail("unavailable", "Messaging automation is not configured.");
     if (!providers) fail("unavailable", "Select a qualified agent account before requesting suggestions.");
-    const { enrollment, messages } = await client.history(binding.enrollmentId, HISTORY_LIMIT, signal);
+    const { enrollment, messages: allMessages } = await client.history(binding.enrollmentId, HISTORY_LIMIT, signal);
+    const messages = scopedAutomationHistory(binding, allMessages);
     assertAutomationBinding(binding, enrollment);
     const cluster = pendingCluster(messages, contact, this.ports.journal);
     this.notePending(contact.id, cluster === null ? null : { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: enrollment.ready, observedAt: this.ports.now() });
@@ -302,7 +304,8 @@ export class OwnerReplies {
     if (binding?.version !== 2) fail("unavailable", "Only an exact messaging enrollment can compose replies.");
     const client = this.ports.client();
     if (!client || !this.ports.automation()) fail("unavailable", "Messaging automation is not configured.");
-    const { enrollment, messages } = await client.history(binding.enrollmentId, 200, signal); assertAutomationBinding(binding, enrollment);
+    const { enrollment, messages: allMessages } = await client.history(binding.enrollmentId, 200, signal);
+    const messages = scopedAutomationHistory(binding, allMessages); assertAutomationBinding(binding, enrollment);
     return this.storeDraft(contact, binding, enrollment, messages, intents, summary, `owner:compose:${randomUUID()}`, signal);
   }
 
@@ -373,6 +376,7 @@ export class OwnerReplies {
       if (binding?.version !== 2 || !client) return { contactId: contact.id, runId: run.id, resolved: false,
         detail: "Check Messages for this conversation, then reconcile with --sent or --failed." };
       const page = await client.history(binding.enrollmentId, 200, signal); assertAutomationBinding(binding, page.enrollment);
+      page.messages = scopedAutomationHistory(binding, page.messages);
       const candidates = page.messages.filter(message => message.direction === "outgoing" && Date.parse(message.occurredAt) >= run.startedAt - 30_000
         && Date.parse(message.occurredAt) <= run.startedAt + 900_000 && !this.ports.journal.isButlerMessage(contact.id, message.id)
         && messageAuthor(message, contact, this.ports.journal) === "butler");
@@ -471,6 +475,7 @@ export class OwnerReplies {
     const kinds = [...new Set(disclosed.map(action => action.kind))];
     if (disclosed.some(action => (action.kind === "reaction" || action.kind === "sticker") && action.messageId !== null)) {
       const page = await client.history(binding.enrollmentId, 200, signal); assertAutomationBinding(binding, page.enrollment);
+      page.messages = scopedAutomationHistory(binding, page.messages);
       const known = new Set(page.messages.filter(message => message.kind === "message").map(message => message.id));
       for (const action of disclosed) {
         if ((action.kind === "reaction" || action.kind === "sticker") && action.messageId !== null && !known.has(action.messageId)) fail("conflict", "The suggested action targets a message that is no longer in this conversation.");
@@ -502,7 +507,7 @@ export class OwnerReplies {
     const work = (async (): Promise<ReplySendResult> => {
       try {
         if ((await this.ports.hooks.emit("reply.before-send", hook)).veto) return finish("cancelled", "extension-veto");
-        const transport = createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId,
+        const transport = createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, ...(binding.historyStart === undefined ? {} : { historyStart: binding.historyStart }),
           admitAsset: async path => {
             const asset = await (await this.ports.workspace(contact.id)).admitAsset(path);
             const reviewed = draft?.review.assets.find(value => value.path === path);

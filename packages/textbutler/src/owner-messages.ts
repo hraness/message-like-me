@@ -1,6 +1,6 @@
 import type { MessageCapabilitiesResult, MessageHistoryResult, MessageSummaryResult, OwnerMessage } from "../../control/src/index.ts";
 import { AUTOMATION_ACTIONS, automationHash, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
-import { assertAutomationBinding } from "./automation-owner.ts";
+import { assertAutomationBinding, scopedAutomationHistory } from "./automation-owner.ts";
 import { historyAuthor, messageAuthor } from "./attribution.ts";
 import type { ContactSettings } from "./config.ts";
 import { ControlFailure, type OwnerBinding, type OwnerRuntimeState } from "./control-service.ts";
@@ -59,6 +59,7 @@ export class OwnerMessages {
     if (binding.version === 2) {
       const client = this.ports.client(); if (!client) fail("unavailable", "Messaging automation is not configured.");
       const page = await client.history(binding.enrollmentId, limit, signal); assertAutomationBinding(binding, page.enrollment);
+      page.messages = scopedAutomationHistory(binding, page.messages);
       ready = page.enrollment.ready;
       messages = page.messages.map(message => ({ id: message.id, at: Date.parse(message.occurredAt), author: messageAuthor(message, contact, this.ports.journal),
         ...normalizeText(message.text), kind: message.kind, relatedMessageId: message.relatedMessageId, attachments: structuredClone(message.attachments) }));

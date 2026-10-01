@@ -1,3 +1,4 @@
+export const AUTOMATION_BINDING_CHANGED_REASON = "ghostget.binding-changed.v1";
 import { array, canonicalJson, digest, exact, integer, object, string, timestamp } from "./validation";
 import { createHash } from "node:crypto";
 

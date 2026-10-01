@@ -57,7 +57,7 @@ async function setup(options: {
   const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
   const conversation = { coordinate: { provider: "imessage" as const, chatGuid: options.group ? "iMessage;+;synthetic-group" : "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: options.group ? "group" as const : "single" as const, participants: options.group ? ["another@example.test", "fixture@example.test"] : ["fixture@example.test"] };
   const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: options.ready ?? true, reason: null });
-  const binding = automationBinding(enrolled());
+  const binding = automationBinding(enrolled(), options.group ? new Date(NOW - 60_000).toISOString() : undefined);
   const messages: AutomationMessage[] = [
     inbound("inbound-1", "Are you free tomorrow?", NOW - 20_000, conversation.coordinate),
     inbound("inbound-2", "Dinner at 7?", NOW - 10_000, conversation.coordinate),
@@ -70,6 +70,7 @@ async function setup(options: {
     if (method === "poll") return enrolled();
     if (method === "history") return { enrollment: enrolled(), messages: messages.slice(-Number(params.limit)) };
     if (method === "events") return { events: [], nextCursor: "0", caughtUp: true };
+    if (method === "features") return { groupConversations: { version: 1 } };
     if (method === "status") return { identity, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(["text", "attachment", "reaction", "sticker", "link", "poll", "app-clip", "experience"].map(kind => [kind, { available: true, reason: null }])) };
     if (method === "prepare") { const body = { ...params, bindingDigest: binding.bindingDigest, expiresAt: new Date(NOW + 120_000).toISOString() }, digest = automationHash(body), plan = { ...body, digest, id: `plan:${digest}` }; plans.set(plan.id as string, plan as never); return plan; }
     if (method === "submit") { if (options.failSubmit) throw new Error("Synthetic submit failure"); const plan = plans.get(String(params.planId))!, grant = grants.get(String(params.grantId))!;
@@ -661,4 +662,12 @@ test("group support does not expand individual campaign sends", async () => {
   expect(f.sent).toEqual([]); expect(f.grantRequests).toEqual([]);
   expect(await f.replies.send({ contactId: "contact-1", text: "Hello group" }, AbortSignal.timeout(5000))).toMatchObject({ state: "submitted" });
   expect(f.sent).toHaveLength(1);
+});
+
+test("owner-reviewed group suggestions exclude messages before the local enrollment floor", async () => {
+  const f = await setup({ group: true });
+  f.messages.unshift({ ...f.messages[0]!, id: "old-private", text: "Private previous group context", occurredAt: new Date(NOW - 120_000).toISOString() });
+  const result = await f.replies.suggest("contact-1", AbortSignal.timeout(5000));
+  expect(result.draft).not.toBeNull();
+  expect(await f.workspace.read("history/recent.json")).not.toContain("Private previous group context");
 });

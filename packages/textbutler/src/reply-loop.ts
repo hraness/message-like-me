@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { automationContextId, createGhostgetAutomationTransport, type AutomationEnrollment, type AutomationEvent, type AutomationMessage, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
-import { assertAutomationBinding, type AutomationBinding } from "./automation-owner.ts";
+import { assertAutomationBinding, scopedAutomationHistory, type AutomationBinding } from "./automation-owner.ts";
 import { messageAuthor, operatorHold, ownerInvocation, pendingCluster, type MessageAuthor } from "./attribution.ts";
 import type { OwnerRuntimeState, TextbutlerControlService } from "./control-service.ts";
 import { boundedHistory } from "./enrollment.ts";
@@ -139,7 +139,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       const read = async (window: { before: string | null; after: string | null; limit: number }, readSignal: AbortSignal) => {
         const page = await client.historyWindow(binding.enrollmentId, window, readSignal);
         assertAutomationBinding(binding, page.enrollment);
-        return page.messages.flatMap(message => {
+        return scopedAutomationHistory(binding, page.messages).flatMap(message => {
           if (message.kind !== "message" || message.text === null) return [];
           const who = messageAuthor(message, contact, journal);
           return who === "unknown" ? [] : [{ id: message.id, at: Date.parse(message.occurredAt), author: who, text: message.text }];
@@ -150,7 +150,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     active: contact => active(contact.id, contact.revision),
     async capabilities(contact) {
       const binding = owner.bindings[contact.id]; if (binding?.version !== 2) throw Error("Habitat conversation is unavailable");
-      const transport = createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, admitAsset: async path => (await workspace(contact.id)).admitAsset(path), now });
+      const transport = createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, ...(binding.historyStart === undefined ? {} : { historyStart: binding.historyStart }), admitAsset: async path => (await workspace(contact.id)).admitAsset(path), now });
       const result = await transport.capabilities(); if (!result.ok) throw Error("Habitat messaging capabilities are unavailable");
       return result.value.capabilities.filter(value => value.available).map(value => value.capability);
     },
@@ -182,6 +182,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     // second provider session; history still re-reads and re-asserts the live row.
     const enrollment = current ?? state.lastEnrollment ?? await client.poll(state.binding.enrollmentId); assertAutomationBinding(state.binding, enrollment);
     const page = await client.history(state.binding.enrollmentId, 200); assertAutomationBinding(state.binding, page.enrollment);
+    page.messages = scopedAutomationHistory(state.binding, page.messages);
     for (const message of page.messages) if (author(message, contact) === "owner" && !(message.kind === "message" && ownerInvocation(message, contact, journal))) state.lastOwnerAt = Math.max(state.lastOwnerAt ?? 0, Date.parse(message.occurredAt));
     if (state.historyRevision !== page.enrollment.revision) {
       const history = boundedHistory(page.messages.filter(message => message.kind === "message" && message.direction !== "unknown").flatMap(message => {
@@ -233,7 +234,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     previous?.runtime.cancelContact(contact.id);
     const state = { binding, settingsRevision: contact.revision, initialized: false, healthy: false, running: false, runningPinned: false, lastOwnerAt: null, lastEnrollment: null, historyRevision: null, pendingFirstAt: null, syncFailures: 0, runFailures: 0 } as unknown as ContactLoop;
     state.runtime = new ButlerRuntime({ settings: () => settings, refresh: currentContact => snapshot(currentContact, state), agent,
-      transport: createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, admitAsset: async path => (await workspace(contact.id)).admitAsset(path), now }),
+      transport: createGhostgetAutomationTransport({ client, enrollmentId: binding.enrollmentId, ...(binding.historyStart === undefined ? {} : { historyStart: binding.historyStart }), admitAsset: async path => (await workspace(contact.id)).admitAsset(path), now }),
       journal: service.runJournal(), hooks, delegatedGrant: current => service.delegatedGrant(current),
       ...(habitat === undefined ? {} : { onSubmitted: habitat.submitted }),
       validateFile: async (_contact, path) => { await (await workspace(contact.id)).admitAsset(path); }, clock: now });
@@ -248,6 +249,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     const seen = deliveredSeq.get(event.enrollmentId) ?? 0;
     if (event.sequence <= seen) return;
     deliveredSeq.set(event.enrollmentId, event.sequence);
+    if (scopedAutomationHistory(state.binding, [event.message]).length === 0) return;
     const who = author(event.message, contact);
     if (habitat && (who === "owner" || who === "contact") && (event.message.kind === "message" || event.message.kind === "reaction")) {
       try { habitat.observe(contact.id, boundHabitatObservation({ id: event.message.id, at: Date.parse(event.message.occurredAt), author: who, kind: event.message.kind,
@@ -311,8 +313,13 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     // across enrollments and a lane already running reports its current row.
     // A failed call-level poll fails every contact exactly like the per-contact
     // failures it replaces.
+    let groupsAvailable = false;
+    if (actives.some(item => item.binding.conversation.kind === "group")) {
+      try { groupsAvailable = (await client.features()).groupConversations?.version === 1; } catch {}
+    }
+    const admitted = actives.filter(item => item.binding.conversation.kind !== "group" || groupsAvailable);
     let results: Awaited<ReturnType<typeof client.pollSet>> | null = null;
-    try { results = await client.pollSet(actives.map(item => item.binding.enrollmentId)); }
+    try { results = admitted.length ? await client.pollSet(admitted.map(item => item.binding.enrollmentId)) : new Map(); }
     catch { results = null; }
     for (const { contact, binding, state } of actives) {
       const result = results?.get(binding.enrollmentId);

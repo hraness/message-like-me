@@ -28,7 +28,7 @@ incarnation, source generation and participant identity. Phone-number and
 linked-identity JIDs are never equated from similar digits. Group enrollment
 requires the negotiated group-conversation extension and a complete participant
 roster. Each group has separate memory; a changed roster requires a fresh
-enrollment. Broadcasts and newsletters cannot be enrolled.
+enrollment. Self chats, broadcasts and newsletters cannot be enrolled.
 
 The GhostGet provider uses a reviewed private transport patch on
 [wacli](https://github.com/openclaw/wacli) 0.15.0. A single owned synchronization

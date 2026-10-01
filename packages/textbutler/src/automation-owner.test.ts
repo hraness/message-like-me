@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AUTOMATION_ACTIONS, AutomationOperationError, automationRemoteError, automationBindingDigest, createGhostgetAutomationClient, type AutomationGrant, type AutomationGrantRequest,
   type AutomationEnrollment, type AutomationProvider, type AutomationCoordinate } from "../../transport/src/automation.ts";
@@ -18,7 +18,7 @@ function fixture(provider: AutomationProvider = "imessage", group = false) {
   const identity = { provider, authId: "synthetic", accountIdentity: "a".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "b".repeat(64), sourceGeneration: "synthetic-generation" };
   const coordinate: AutomationCoordinate = provider === "imessage" ? { provider, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;synthetic", service: "iMessage" as const, observedChatRowId: 1 } : provider === "beeper" ? { provider, accountId: "synthetic-account-id", conversationId: "synthetic-conversation" } : { provider, conversationJid: "12345@s.whatsapp.net" };
   const conversation = { coordinate, title: "Synthetic person", kind: group ? "group" as const : "single" as const, participants: group ? ["another-person", "synthetic-person"] : ["synthetic-person"] };
-  const enrollment: AutomationEnrollment = { id: `enrollment:${provider}`, identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision: 0, ready: true, reason: null };
+  let enrollment: AutomationEnrollment = { id: `enrollment:${provider}`, identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision: 0, ready: true, reason: null };
   let enrolled = false, drift = false, blockGrant: (() => Promise<void>) | undefined, revokeFails = false, loseGrant = false;
   const intents = new Map<string, AutomationGrant>();
   const status = { identity, connected: true, events: { available: true, reason: null }, actions: Object.fromEntries(AUTOMATION_ACTIONS.map(kind => [kind, { available: ["text", "attachment", "reaction"].includes(kind), reason: ["text", "attachment", "reaction"].includes(kind) ? null : "Unavailable in fixture" }])) };
@@ -44,7 +44,11 @@ function fixture(provider: AutomationProvider = "imessage", group = false) {
     throw new Error(`Unexpected synthetic method ${method}`);
   });
   const port = createAutomationOwnerPort({ client, providers: [provider], now: () => now });
-  return { port, calls, grants, revoked, enrollment, candidate: { identity, conversation }, drift: () => { drift = true; },
+  return { port, calls, grants, revoked, get enrollment() { return enrollment; }, candidate: { identity, conversation }, drift: () => { drift = true; },
+    changeRoster() { conversation.participants.push("new-person"); conversation.participants.sort(); enrolled = false;
+      enrollment = { ...enrollment, id: "enrollment:new-group", conversation, bindingDigest: automationBindingDigest(identity, conversation) }; },
+    restoreRoster() { conversation.participants.splice(0, conversation.participants.length, "another-person", "synthetic-person"); enrolled = false;
+      enrollment = { ...enrollment, id: "enrollment:restored-group", conversation, bindingDigest: automationBindingDigest(identity, conversation) }; },
     loseGrantResponse: () => { loseGrant = true; },
     block: (work: () => Promise<void>) => { blockGrant = work; }, failRevoke: () => { revokeFails = true; }, recoverRevoke: () => { revokeFails = false; } };
 }
@@ -429,4 +433,50 @@ test("group enrollment starts disabled, isolates its workspace and refuses self-
   expect((await service.settings()).contacts[0]!.revision).toBeGreaterThan(before.settings.contacts[0]!.revision);
   await waitForMessagingState(service, contactId, "missing");
   expect(f.revoked).toEqual([f.grants[0]!.id]);
+  expect((await service.runtimeState()).bindings[contactId]).toMatchObject({ invalidated: true });
+});
+
+test("reenrolling a changed group creates a fresh history epoch without importing old private context", async () => {
+  const f = fixture("imessage", true), { service, dataDir, contactId } = await serviceFixture(f);
+  const oldBinding = (await service.runtimeState()).bindings[contactId]!;
+  expect(oldBinding.version).toBe(2);
+  await writeFile(join(dataDir, "contacts", contactId, "MEMORY.md"), "Private old-roster note");
+  await service.invalidateConversation(contactId, parseAutomationBinding(oldBinding));
+  f.changeRoster();
+  const listing = await finish(service, await service.request({ protocol, command: "conversations.list" }));
+  if (!listing.ok || listing.kind !== "conversations") throw Error("Missing group list");
+  const enrolled = await finish(service, await service.request({ protocol, command: "contact.enroll", candidateId: listing.candidates[0]!.id,
+    expectedRevision: (await service.snapshot()).revision, initializeHistory: true }));
+  if (!enrolled.ok || enrolled.kind !== "enrolled") throw Error("Missing new group enrollment");
+  expect(enrolled.contactId).not.toBe(contactId);
+  const binding = parseAutomationBinding((await service.runtimeState()).bindings[enrolled.contactId]);
+  expect(binding.enrollmentId).toBe("enrollment:new-group"); expect(binding.historyStart).toBeDefined();
+  expect((await service.settings()).contacts.find(contact => contact.id === enrolled.contactId)?.enabled).toBe(false);
+  expect(await readFile(join(dataDir, "contacts", enrolled.contactId, "MEMORY.md"), "utf8")).not.toContain("Private old-roster note");
+  expect(await readFile(join(dataDir, "contacts", contactId, "MEMORY.md"), "utf8")).toBe("Private old-roster note");
+  expect(f.calls.filter(method => method === "history")).toEqual([]);
+  const { historyStart: omitted, ...missing } = binding;
+  expect(() => parseAutomationBinding(missing)).toThrow();
+  expect(() => parseAutomationBinding({ ...binding, historyStart: "2026-10-01" })).toThrow();
+  await service.invalidateConversation(enrolled.contactId, binding); f.restoreRoster();
+  const restoredList = await finish(service, await service.request({ protocol, command: "conversations.list" }));
+  if (!restoredList.ok || restoredList.kind !== "conversations") throw Error("Missing restored group list");
+  expect(restoredList.candidates[0]?.eligible).toBe(true);
+  const restored = await finish(service, await service.request({ protocol, command: "contact.enroll", candidateId: restoredList.candidates[0]!.id,
+    expectedRevision: (await service.snapshot()).revision, initializeHistory: true }));
+  if (!restored.ok || restored.kind !== "enrolled") throw Error("Missing restored group enrollment");
+  expect(restored.contactId).not.toBe(contactId); expect(restored.contactId).not.toBe(enrolled.contactId);
+  expect((await service.runtimeState()).bindings[restored.contactId]).toMatchObject({ enrollmentId: "enrollment:restored-group" });
+  expect(await readFile(join(dataDir, "contacts", restored.contactId, "MEMORY.md"), "utf8")).not.toContain("Private old-roster note");
+});
+test("failed group capability checks preserve verified direct discovery without claiming group support", async () => {
+  const f = fixture();
+  const client = createGhostgetAutomationClient(async (method, params) => {
+    if (method === "features") throw automationRemoteError("unavailable");
+    if (method === "conversations") { expect(params.includeGroups).toBeUndefined(); return { identity: f.candidate.identity, conversations: [f.candidate.conversation], complete: true }; }
+    throw Error("Unexpected group request");
+  });
+  const port = createAutomationOwnerPort({ client, providers: ["imessage"] });
+  expect(await port.list(AbortSignal.timeout(1000))).toHaveLength(1);
+  expect(port.discoveryStatus?.().providers[0]).toMatchObject({ state: "truncated", failure: { code: "remote-unavailable" } });
 });

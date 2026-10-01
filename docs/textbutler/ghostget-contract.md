@@ -68,9 +68,15 @@ send automatically.
 
 ## Group-conversation extension
 
-The `ghostget.messaging-automation/1` envelope and existing direct-conversation binding bytes stay unchanged. A read-only `features` request with `{}` returns exactly `{ "groupConversations": { "version": 1 } }` or `{ "groupConversations": null }`. Only the old server’s `invalid-request` rejection of this new method is treated as a direct-only server. Malformed success responses and all other failures remain errors.
+The `ghostget.messaging-automation/1` envelope and existing direct-conversation binding bytes stay unchanged. A read-only `features` request with `{}` returns exactly `{ "groupConversations": { "version": 1 } }` or `{ "groupConversations": null }`. An explicit `invalid-request` rejection of this method means no group extension was negotiated. Malformed responses and other failures remain capability-check errors. The owner discovery panel can still list independently verified direct conversations while reporting that group discovery is unavailable. It does not infer group support from a failed check.
 
 After negotiating version 1, TextButler may pass `includeGroups: true` to `conversations` and `enrollments`. Without that field, both lists retain their direct-only behavior, including when groups have already been enrolled by a newer client. The extension permits `kind: "group"` with one to 500 unique, complete participant identities and canonical WhatsApp group JIDs. A WhatsApp group JID cannot be represented as a direct conversation or vice versa. Discovery is not enrollment or send authority: selection, validation, revision checks, recipient-bound plans and owner grants still apply. Older clients and legacy local binding version 1 remain direct-only.
+
+Group enrollment establishes a silent provider cursor baseline. Historical bodies, historical backfill and edits to pre-enrollment messages never become group context. Group `history` and `history.window` read only messages admitted under that enrollment's post-baseline membership. Direct conversation history is unchanged.
+
+TextButler also stores a trusted local `historyStart` ISO timestamp on each version 2 group binding, set immediately before enrollment. It suppresses group historical bootstrap and excludes earlier messages from prompts, observations, recent history, summaries and read tools. This local clock floor complements the provider cursor and message-ID boundary; it cannot establish membership provenance by itself.
+
+A permanently invalidated enrollment retains its original digest and returns `ready: false` with reason `ghostget.binding-changed.v1`. TextButler cancels pending work, disables and revokes its grant, and persists `invalidated: true` on the group binding. Restoring the old membership never revives that binding. Re-enrollment requires a new upstream ID and a new empty workspace, even if the participant set matches an older invalidated group.
 
 ## Rich actions
 

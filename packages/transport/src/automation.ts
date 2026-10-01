@@ -208,12 +208,18 @@ export const automationContextId = (enrollment: AutomationEnrollment): string =>
 const historyMessage = (message: { id: string; direction: "incoming" | "outgoing" | "unknown"; occurredAt: string; text: string | null }): HistoryMessage => ({ id: message.id, direction: message.direction, time: message.occurredAt, text: message.text, truncated: false, untrusted: true });
 
 /** One immutable Ghostget enrollment per port, never a model-selected recipient. */
-export function createGhostgetAutomationTransport(options: { client: GhostgetAutomationClient; enrollmentId: string; admitAsset(path: string): Promise<Readonly<{ bytes: Uint8Array; sha256: string }>>; now?: () => number }): TextbutlerTransport {
+export function createGhostgetAutomationTransport(options: { client: GhostgetAutomationClient; enrollmentId: string; historyStart?: string; admitAsset(path: string): Promise<Readonly<{ bytes: Uint8Array; sha256: string }>>; now?: () => number }): TextbutlerTransport {
   const client = options.client, enrollmentId = automationId(options.enrollmentId), now = options.now ?? Date.now;
   const plans = new Map<string, { public: ActionPlan; upstream: AutomationPlan; consumed: boolean }>();
   const unavailable = () => failure("unavailable", "Ghostget automation is unavailable or needs owner setup.");
   const scope = (id: string) => { if (id !== enrollmentId) throw new Error("Conversation escaped its contact binding"); };
   const prune = () => { for (const [id, value] of plans) if (Date.parse(value.upstream.expiresAt) <= now()) plans.delete(id); };
+  const scoped = (enrollment: AutomationEnrollment, occurredAt: string): boolean => {
+    if (enrollment.conversation.kind !== "group") return true;
+    const floor = options.historyStart;
+    if (typeof floor !== "string" || !Number.isFinite(Date.parse(floor)) || new Date(floor).toISOString() !== floor) throw new Error("Group history requires its enrollment floor");
+    return Date.parse(occurredAt) >= Date.parse(floor);
+  };
   return {
     async capabilities() {
       try {
@@ -232,12 +238,13 @@ export function createGhostgetAutomationTransport(options: { client: GhostgetAut
       try {
         scope(request.conversationId); if (request.cursor !== undefined) return failure("unsupported", "Automation context uses a bounded current snapshot.", "history");
         await client.poll(enrollmentId); const { enrollment, messages } = await client.history(enrollmentId, request.limit ?? 200);
-        return success({ conversationId: enrollmentId, contextId: enrollment.ready ? automationContextId(enrollment) : null, revision: String(enrollment.revision), expiresAt: new Date(now() + 120000).toISOString(), messages: messages.map(historyMessage), complete: enrollment.ready, nextCursor: null });
+        return success({ conversationId: enrollmentId, contextId: enrollment.ready ? automationContextId(enrollment) : null, revision: String(enrollment.revision), expiresAt: new Date(now() + 120000).toISOString(), messages: messages.filter(message => scoped(enrollment, message.occurredAt)).map(historyMessage), complete: enrollment.ready, nextCursor: null });
       } catch { return unavailable(); }
     },
     async events(request) {
       try { if (request.conversationIds.length !== 1) throw new Error("One contact required"); scope(request.conversationIds[0]!); const page = await client.events({ enrollmentIds: [enrollmentId], cursor: request.cursor, ...(request.limit === undefined ? {} : { limit: request.limit }) });
-        return success({ ...page, events: page.events.map(event => ({ id: `event:${event.sequence}`, conversationId: enrollmentId, kind: event.message.kind === "reaction" ? "reaction.changed" : event.message.kind !== "message" ? "message.changed" : event.message.direction === "outgoing" ? "message.sent" : "message.received", message: historyMessage(event.message), occurredAt: event.message.occurredAt })) });
+        const { enrollment } = await client.history(enrollmentId, 1);
+        return success({ ...page, events: page.events.filter(event => scoped(enrollment, event.message.occurredAt)).map(event => ({ id: `event:${event.sequence}`, conversationId: enrollmentId, kind: event.message.kind === "reaction" ? "reaction.changed" : event.message.kind !== "message" ? "message.changed" : event.message.direction === "outgoing" ? "message.sent" : "message.received", message: historyMessage(event.message), occurredAt: event.message.occurredAt })) });
       } catch { return unavailable(); }
     },
     async prepare(request) {
