@@ -1,11 +1,11 @@
 import { MESSAGES_FDA, recoverySentence } from "./permission-copy.ts";
-import { AUTOMATION_ACTIONS, automationFailure, automationBindingDigest, automationHash, automationId, parseAutomationEnrollment, parseAutomationGrant, type AutomationFailure, type AutomationConversation,
-  type AutomationEnrollment, type AutomationGrant, type AutomationGrantRequest, type AutomationIdentity, type AutomationProvider, type AutomationStatus, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
+import { AUTOMATION_BINDING_CHANGED_REASON, AUTOMATION_ACTIONS, automationFailure, automationBindingDigest, automationHash, automationId, parseAutomationEnrollment, parseAutomationGrant, type AutomationFailure, type AutomationConversation,
+  type AutomationEnrollment, type AutomationMessage, type AutomationGrant, type AutomationGrantRequest, type AutomationIdentity, type AutomationProvider, type AutomationStatus, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
 import type { HistoryMessage } from "./enrollment.ts";
 
 /** Durable recipient identity. Readiness, revision and grants are intentionally separate. */
 export type AutomationBinding = Readonly<{ version: 2; enrollmentId: string; identity: AutomationIdentity;
-  conversation: AutomationConversation; bindingDigest: string }>;
+  conversation: AutomationConversation; bindingDigest: string; historyStart?: string; invalidated?: true }>;
 export type AutomationCandidate = Readonly<{ identity: AutomationIdentity; conversation: AutomationConversation }>;
 export type AutomationDiscoveryStatus = Readonly<{ providers: readonly Readonly<{
   provider: AutomationProvider; state: "complete" | "truncated" | "unavailable"; detail: string; failure?: AutomationFailure;
@@ -32,19 +32,35 @@ export interface OwnerAutomationPort {
 export function parseAutomationBinding(value: unknown): AutomationBinding {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid automation owner binding");
   const row = value as Record<string, unknown>;
-  if (row.version !== 2 || Object.keys(row).sort().join(",") !== "bindingDigest,conversation,enrollmentId,identity,version") throw new Error("Invalid automation owner binding");
-  return automationBinding(parseAutomationEnrollment({ id: row.enrollmentId, identity: row.identity, conversation: row.conversation,
-    bindingDigest: row.bindingDigest, revision: 0, ready: false, reason: null }));
+  const group = (row.conversation as { kind?: unknown } | undefined)?.kind === "group";
+  const keys = group ? ["bindingDigest", "conversation", "enrollmentId", "historyStart", "identity", "version", ...(row.invalidated === true ? ["invalidated"] : [])].sort().join(",") : "bindingDigest,conversation,enrollmentId,identity,version";
+  if (row.version !== 2 || Object.keys(row).sort().join(",") !== keys) throw new Error("Invalid automation owner binding");
+  return Object.freeze({ ...automationBinding(parseAutomationEnrollment({ id: row.enrollmentId, identity: row.identity, conversation: row.conversation,
+    bindingDigest: row.bindingDigest, revision: 0, ready: false, reason: null }), row.historyStart as string | undefined), ...(row.invalidated === true ? { invalidated: true as const } : {}) });
 }
-export function automationBinding(enrollment: AutomationEnrollment): AutomationBinding {
+export function automationBinding(enrollment: AutomationEnrollment, historyStart?: string): AutomationBinding {
   const checked = parseAutomationEnrollment(enrollment);
+  if (checked.conversation.kind === "group") {
+    if (typeof historyStart !== "string" || !Number.isFinite(Date.parse(historyStart)) || new Date(historyStart).toISOString() !== historyStart) throw new Error("A group requires its trusted enrollment history floor");
+  } else if (historyStart !== undefined) throw new Error("Direct conversation history is unchanged");
   return Object.freeze({ version: 2, enrollmentId: checked.id, identity: Object.freeze(checked.identity),
-    conversation: Object.freeze({ ...checked.conversation, coordinate: Object.freeze(checked.conversation.coordinate), participants: Object.freeze([...checked.conversation.participants]) }), bindingDigest: checked.bindingDigest });
+    conversation: Object.freeze({ ...checked.conversation, coordinate: Object.freeze(checked.conversation.coordinate), participants: Object.freeze([...checked.conversation.participants]) }), bindingDigest: checked.bindingDigest, ...(historyStart === undefined ? {} : { historyStart }) });
 }
 export function assertAutomationBinding(expected: AutomationBinding, observed: AutomationEnrollment): void {
-  const current = automationBinding(observed);
+  const current = automationBinding(observed, expected.historyStart);
   parseAutomationBinding(expected);
-  if (current.enrollmentId !== expected.enrollmentId || current.bindingDigest !== expected.bindingDigest) throw new Error("Messaging account or conversation changed. Enroll it again explicitly.");
+  if (expected.invalidated) throw new Error("This group enrollment was invalidated. Select the group again.");
+  if (current.enrollmentId !== expected.enrollmentId || current.bindingDigest !== expected.bindingDigest || !observed.ready && observed.reason === AUTOMATION_BINDING_CHANGED_REASON) throw new Error("Messaging account or conversation changed. Enroll it again explicitly.");
+}
+
+/** A local clock floor complements GhostGet's enrollment cursor/ID boundary.
+ * The upstream boundary is still required: authored timestamps alone cannot
+ * prove the membership under which a message was observed. */
+export function scopedAutomationHistory(binding: AutomationBinding, messages: readonly AutomationMessage[]): AutomationMessage[] {
+  if (binding.conversation.kind !== "group") return [...messages];
+  parseAutomationBinding(binding);
+  if (binding.invalidated) throw new Error("This group enrollment was invalidated");
+  return messages.filter(message => Date.parse(message.occurredAt) >= Date.parse(binding.historyStart!));
 }
 
 /** Owner copy for a provider whose conversations couldn't be listed. An
@@ -64,6 +80,7 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
   if (!providers.length || providers.length > 3 || new Set(providers).size !== providers.length || providers.some(value => value !== "imessage" && value !== "whatsapp" && value !== "beeper")) throw new Error("Invalid owner messaging networks");
   const validate = async (binding: AutomationBinding, signal: AbortSignal) => {
     const expected = parseAutomationBinding(binding); signal.throwIfAborted();
+    if (expected.conversation.kind === "group" && (await client.features(signal)).groupConversations?.version !== 1) throw new Error("Group automation is unavailable");
     if (!providers.includes(expected.identity.provider)) throw new Error("Messaging provider is not configured");
     const observed = await client.poll(expected.enrollmentId, signal); signal.throwIfAborted(); assertAutomationBinding(expected, observed);
     if (!observed.ready) throw new Error("Messaging catchup or provider setup is incomplete");
@@ -87,14 +104,18 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
       const observed: AutomationDiscoveryStatus["providers"][number][] = [];
       const limit = Math.floor(200 / providers.length);
       discovery = { providers: [] };
+      let groups = false, groupFailure: AutomationFailure | undefined;
+      try { groups = (await client.features(signal)).groupConversations?.version === 1; }
+      catch (error) { signal.throwIfAborted(); groupFailure = automationFailure(error); }
       for (const provider of providers) {
         signal.throwIfAborted();
         const name = provider === "imessage" ? "iMessage" : provider === "whatsapp" ? "WhatsApp" : "Beeper";
         try {
-          const page = await client.conversations(provider, limit, signal); signal.throwIfAborted();
+          const page = await client.conversations(provider, limit, signal, groups); signal.throwIfAborted();
           for (const conversation of page.conversations) result.push({ identity: page.identity, conversation });
-          observed.push({ provider, state: page.complete ? "complete" : "truncated",
-            detail: page.complete ? `${name} conversation list is complete.` : `${name} returned a partial list of up to ${limit} recent conversations. Older conversations may be missing.` });
+          observed.push({ provider, state: page.complete && !groupFailure ? "complete" : "truncated",
+            ...(groupFailure ? { failure: groupFailure } : {}),
+            detail: groupFailure ? `${name} direct conversations are listed. Group discovery is unavailable; check or update GhostGet.` : page.complete ? `${name} conversation list is complete.` : `${name} returned a partial list of up to ${limit} recent conversations. Older conversations may be missing.` });
         } catch (error) {
           signal.throwIfAborted();
           const failure = automationFailure(error);
@@ -109,14 +130,15 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
       const expectedDigest = automationBindingDigest(candidate.identity, candidate.conversation);
       // A completed upstream enrollment may survive a cancelled local commit. Reuse only
       // the exact identity/conversation; never manufacture a second enrollment or grant.
-      const existing = (await client.enrollments(signal)).filter(enrollment => enrollment.bindingDigest === expectedDigest);
+      const historyStart = candidate.conversation.kind === "group" ? new Date(now()).toISOString() : undefined;
+      const existing = (await client.enrollments(signal, candidate.conversation.kind === "group")).filter(enrollment => enrollment.bindingDigest === expectedDigest && enrollment.reason !== AUTOMATION_BINDING_CHANGED_REASON);
       if (existing.length > 1) throw new Error("Ambiguous messaging enrollment");
       const enrollment = existing[0] ?? await client.enroll(candidate.identity.provider, candidate.conversation.coordinate, signal);
       if (enrollment.bindingDigest !== expectedDigest) throw new Error("Messaging identity changed during enrollment");
-      const binding = automationBinding(enrollment);
+      const binding = automationBinding(enrollment, historyStart);
       await validate(binding, signal);
       const messages: HistoryMessage[] = [];
-      if (initializeHistory) {
+      if (initializeHistory && binding.conversation.kind === "single") {
         const history = await client.history(binding.enrollmentId, 200, signal); assertAutomationBinding(binding, history.enrollment);
         for (const message of history.messages) {
           if (message.kind !== "message" || message.text === null || message.direction === "unknown") continue;

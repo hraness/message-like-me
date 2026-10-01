@@ -11,13 +11,13 @@ import type { ConversationBinding } from "./enrollment.ts";
 const journals: RunJournal[] = [];
 afterEach(() => { for (const journal of journals.splice(0)) journal.close(); });
 const NOW = Date.parse("2026-09-20T12:00:00Z"), signal = () => AbortSignal.timeout(5000);
-function setup() {
+function setup(group = false) {
   const journal = RunJournal.memory(); journals.push(journal);
   const contact = { ...newContact("synthetic", "Synthetic", "enrollment:synthetic"), enabled: false };
   const identity = { provider: "imessage" as const, authId: "synthetic", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
-  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: "iMessage;-;synthetic@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: "single" as const, participants: ["synthetic@example.test"] };
+  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;synthetic@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: group ? "group" as const : "single" as const, participants: group ? ["another@example.test", "synthetic@example.test"] : ["synthetic@example.test"] };
   const enrollment = { id: "enrollment:synthetic", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision: 1, ready: true, reason: null };
-  let state: OwnerRuntimeState = { revision: 1, settings: { schemaVersion: 1, paused: true, maxActiveContacts: 5, contacts: [contact] }, bindings: { synthetic: automationBinding(enrollment) }, grants: {} };
+  let state: OwnerRuntimeState = { revision: 1, settings: { schemaVersion: 1, paused: true, maxActiveContacts: 5, contacts: [contact] }, bindings: { synthetic: automationBinding(enrollment, group ? new Date(NOW).toISOString() : undefined) }, grants: {} };
   const messages: AutomationMessage[] = [{ id: "message:1", coordinate: conversation.coordinate, direction: "incoming", occurredAt: new Date(NOW).toISOString(), text: "Dinner at 7?", kind: "message", relatedMessageId: null,
     attachments: [{ name: "menu.png", mimeType: "image/png", sizeBytes: 1234 }] }];
   const calls: string[] = [], samples: Parameters<NonNullable<OwnerMessagesPorts["summarize"]>>[0][] = [];
@@ -153,4 +153,14 @@ test("control response parser refuses over-limit or inconsistent body metadata",
   expect(() => parseControlResponse({ protocol: CONTROL_PROTOCOL, ok: true, kind: "message-capabilities", ...capabilities, threadedReplies: { available: true, reason: "pretend" } })).toThrow();
   const summary = { protocol: CONTROL_PROTOCOL, ok: true, kind: "message-summary", contactId: "synthetic", summary: "Dinner", citations: ["message:1"], sampledMessages: 1, omittedMessages: 0, shortenedMessages: 0, limitations: [] };
   for (const changed of [{ sampledMessages: 200, omittedMessages: 1 }, { citations: ["message:1", "message:2"] }, { shortenedMessages: 2 }, { summary: " " }]) expect(() => parseControlResponse({ ...summary, ...changed })).toThrow();
+});
+
+test("group summary context comes from the bound conversation and excludes earlier history", async () => {
+  const f = setup(true), first = f.messages[0]!;
+  f.messages.unshift({ ...first, id: "old-context", occurredAt: new Date(NOW - 1000).toISOString(), text: "Private previous roster context" });
+  await f.owner.summarize("synthetic", 200, signal());
+  expect(f.samples[0]).toMatchObject({ conversationKind: "group", messages: [{ id: "message:1", author: "contact" }] });
+  expect(f.samples[0]!.messages).toHaveLength(1);
+  expect(JSON.stringify(f.samples)).not.toContain("Private previous roster context");
+  expect(f.calls).toEqual(["history"]);
 });

@@ -36,6 +36,7 @@ process.stdin.on("data", (chunk: string) => {
     }
     else if (request.method === "initialize" && mode === "deaf-initialize") { /* A frozen child never answers. */ }
     else if (request.method === "initialize") reply(request, { initialized: true });
+    else if (request.method === "features") reply(request, { groupConversations: null });
     else if (request.method === "conversations" && mode.startsWith("remote-")) {
       process.stdout.write(JSON.stringify({ protocol: AUTOMATION_PROTOCOL, id: request.id, ok: false,
         error: { code: mode.slice("remote-".length), message: "private fixture body, handle and /synthetic/private/path" } }) + "\n");

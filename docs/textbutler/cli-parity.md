@@ -72,7 +72,7 @@ interactive terminal, never with `--json` or `--snapshot`.
 | `replies send` | decide-legacy | Send a reviewed suggestion by digest, or your own text |
 | `replies discard` | operate | Throw a suggestion away |
 | `replies reconcile` | operate | Record whether an uncertain send arrived |
-| `conversations list` | read | List recent one-to-one chats you can add |
+| `conversations list` | read | List recent chats you can add |
 | `contacts list` | read | Show added chats and their settings |
 | `contacts add` | operate | Add a chat with automatic replies off |
 | `contacts enable` | decide-legacy | Turn on automatic replies for a chat |

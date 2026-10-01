@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { automationBindingDigest, automationHash, createGhostgetAutomationClient, type AutomationEvent, type AutomationMessage, type AutomationPlan } from "../../transport/src/automation.ts";
@@ -14,16 +14,18 @@ import { ContactHabitat, boundHabitatObservation } from "./contact-habitat.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
-async function fixture(fast = false) {
+async function fixture(fast = false, group = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "butler-loop-"))), journal = RunJournal.memory();
   let time = Date.parse("2026-09-11T12:00:00.000Z"), revision = 0;
   let settings: Settings = { schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [{ ...newContact("contact-1", "Synthetic", "enrollment:fixture"), enabled: true }] };
   const listeners = new Set<(settings: Settings) => void>();
   const habitatListeners = new Set<(contactId: string) => void>();
   const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
-  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: "single" as const, participants: ["fixture@example.test"] };
-  const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: true, reason: null });
-  const binding = automationBinding(enrolled()), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
+  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: group ? "group" as const : "single" as const, participants: group ? ["fixture@example.test", "other@example.test"] : ["fixture@example.test"] };
+  let invalidated = false, locallyInvalidated = false;
+  let pollError: string | null = null;
+  const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: !invalidated, reason: invalidated ? "ghostget.binding-changed.v1" : null });
+  const binding = automationBinding(enrolled(), group ? new Date(time).toISOString() : undefined), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
   const intentRuns = new Map<string, unknown>();
   let failEvents = 0, eventsCalls = 0, pollSetCalls = 0, statusCalls = 0;
@@ -34,10 +36,11 @@ async function fixture(fast = false) {
     read: async () => ({ file: "README.md", text: "readme", truncated: false }), search: async () => ({ matches: [], scanned: 0, truncated: false }),
     list: async () => [] as const };
   const client = createGhostgetAutomationClient(async (method, params) => {
+    if (method === "features") return { groupConversations: { version: 1 } };
     if (method === "poll") return enrolled();
     if (method === "pollSet") pollSetCalls++;
     if (method === "status") statusCalls++;
-    if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: null })) };
+    if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: pollError })) };
     if (method === "history") return { enrollment: enrolled(), messages: messages.slice(-Number(params.limit)) };
     if (method === "events") { eventsCalls++; if (failEvents > 0) { failEvents--; throw new Error("Synthetic events stream failure"); }
       return { events: events.slice(Number(params.cursor ?? 0)), nextCursor: String(events.length), caughtUp: true }; }
@@ -62,24 +65,30 @@ async function fixture(fast = false) {
     async qualified() { return true; }, async classify() { classifications++; return { respond: true, confidence: 0.99, reason: "requested" }; },
     async compose(request) { compositions++; return { summary: "Here is help", actions: [{ kind: "text", text: "Hello" }, { kind: "reaction", messageId: request.event.id, emoji: "👍", action: "add" }] }; },
   };
-  const driver = createFastDriver({ kind: "local", baseUrl: "http://127.0.0.1:1234/v1", model: "synthetic" }, { journal, fetch: async () => {
-    compositions++;
+  const prompts: string[] = [];
+  const driver = createFastDriver({ kind: "local", baseUrl: "http://127.0.0.1:1234/v1", model: "synthetic" }, { journal, fetch: async (_url, init) => {
+    prompts.push(String(init?.body)); compositions++;
     return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ value: { respond: true, confidence: 0.99, reason: "requested", summary: "Explain briefly", actions: [{ kind: "text", text: "Synthetic answer" }], tool: null } }) } }] });
   } });
   const loop = await createDaemonReplyLoop({ client, automatic: false, now: () => time, hooks: new Hooks(), onStatus: value => { statuses.push({ state: value.state, detail: value.detail }); }, repos: shelf,
     scheduleDispatch: (fire, delayMs) => { const entry = { fire, delayMs, live: true }; armed.push(entry); return () => { entry.live = false; }; },
     ...(fast ? { habitat: { config: { enabled: true, driver: driver.config, evolutionModel: null, debounceMs: 1000 }, driver } }
       : { agent: { qualified: (contact: Parameters<ButlerAgent["qualified"]>[0]) => agent.qualified(contact), classify: (request: Parameters<ButlerAgent["classify"]>[0]) => agent.classify(request), compose: (request: Parameters<ButlerAgent["compose"]>[0]) => agent.compose(request) } }), service: {
-    dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": binding }, grants: {} }), runJournal: () => journal,
+    dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": locallyInvalidated ? { ...binding, invalidated: true as const } : binding }, grants: {} }), runJournal: () => journal,
     delegatedGrant: async contact => !settings.paused && settings.contacts.some(current => current.enabled && current.id === contact.id && current.revision === contact.revision) ? "grant:fixture" : null,
     onSettingsChanged(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     onHabitatChanged(listener) { habitatListeners.add(listener); return () => habitatListeners.delete(listener); },
+    async invalidateConversation(contactId, selectedBinding) {
+      expect(contactId).toBe("contact-1"); expect(selectedBinding).toMatchObject({ version: 2, bindingDigest: binding.bindingDigest });
+      locallyInvalidated = true;
+      settings = { ...settings, contacts: settings.contacts.map(contact => ({ ...contact, enabled: false })) };
+    },
     notePending() {},
     async allowContactRepo(contactId: string, url: string) { allowed.push([contactId, url]); return "added" as const; },
     async notifySelfChat(text: string) { notices.push(text); },
   } });
   cleanup.push(async () => { await loop.close(); journal.close(); await rm(root, { recursive: true, force: true }); });
-  return { loop, journal, sent, acks, statuses, coordinate: conversation.coordinate, stats: () => ({ compositions, classifications }), advance(ms: number) { time += ms; }, replaceAgent(next: ButlerAgent) { agent = next; },
+  return { root, prompts, loop, journal, sent, acks, statuses, coordinate: conversation.coordinate, stats: () => ({ compositions, classifications }), advance(ms: number) { time += ms; }, replaceAgent(next: ButlerAgent) { agent = next; },
     intentRuns, now: () => time,
     change(next: Settings) { settings = next; for (const listener of listeners) listener(next); }, settings: () => settings,
     habitatChanged(id: string) { for (const listener of habitatListeners) listener(id); }, habitatListenerCount: () => habitatListeners.size,
@@ -88,6 +97,9 @@ async function fixture(fast = false) {
     pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
     fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
+    locallyInvalidated: () => locallyInvalidated,
+    invalidateRoster(error: string | null = null) { invalidated = true; pollError = error; },
+    changeRoster() { conversation.participants.push("new@example.test"); conversation.participants.sort(); },
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
   };
@@ -556,4 +568,49 @@ test("a wedged send reconciles from terminal provider evidence without owner rev
   await f.loop.tick(); await f.loop.idle();
   expect(f.journal.hasUncertainSend("contact-1")).toBe(true);
   expect(f.journal.recent("contact-1").find(run => run.id === "run:absent")?.state).toBe("indeterminate");
+});
+
+test("enrolled group replies use group policy and stop when the roster changes", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  let observedGroup = false;
+  f.replaceAgent({ async qualified() { return true; }, async classify() { throw Error("keyword needs no classifier"); },
+    async compose(request) { observedGroup = request.event.group; return { summary: "Help the group", actions: [{ kind: "text", text: "Group answer" }] }; } });
+  f.add("butler help the group"); await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(observedGroup).toBe(true); expect(f.sent).toHaveLength(1);
+  f.add("butler a pending question"); await f.loop.tick(); f.changeRoster(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1);
+  expect(f.statuses.at(-1)?.detail).toContain("participants changed");
+});
+
+test("group history before enrollment never enters prompts, recent memory, or learning", async () => {
+  const f = await fixture(true, true);
+  f.add("Private message from the previous roster", "incoming", 60_000);
+  await f.loop.tick();
+  f.add("Old delayed secret", "incoming", 30_000); await f.loop.tick();
+  f.add("butler help this new group"); await f.loop.tick(); f.advance(1100); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1); expect(f.prompts.length).toBeGreaterThan(0);
+  for (const prompt of f.prompts) { expect(prompt).not.toContain("Private message"); expect(prompt).not.toContain("Old delayed secret"); }
+  const recent = await readFile(join(f.root, "contacts", "contact-1", "history", "recent.json"), "utf8");
+  expect(recent).toContain("new group"); expect(recent).not.toContain("Private message"); expect(recent).not.toContain("Old delayed secret");
+  const learning = JSON.stringify(new ContactHabitat(f.journal, "contact-1").snapshot());
+  expect(learning).not.toContain("Private message"); expect(learning).not.toContain("Old delayed secret");
+});
+
+test("permanent group invalidation cancels a pending reply even with the original digest", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  f.add("butler pending question"); await f.loop.tick(); f.invalidateRoster(); f.advance(9000);
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toEqual([]); expect(f.stats().compositions).toBe(0);
+  expect(f.statuses.at(-1)?.detail).toContain("participants changed");
+});
+
+
+test("a permanent binding proof disables the group even when poll also reports an error", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  f.add("butler pending question"); await f.loop.tick();
+  f.invalidateRoster("Messaging provider identity changed."); f.advance(9000);
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.locallyInvalidated()).toBe(true);
+  expect(f.settings().contacts[0]!.enabled).toBe(false);
+  expect(f.sent).toEqual([]); expect(f.stats().compositions).toBe(0);
 });

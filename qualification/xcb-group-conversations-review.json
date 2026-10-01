@@ -1,0 +1,32 @@
+{
+  "kind": "independent-ai-source-review",
+  "reviewer": "Codex root integrator, independent of the group-conversation implementation worker",
+  "sourceCommit": "76bc231ed428406cc4438df5163b2cae26a55d7f",
+  "reviewedAt": "2026-10-01T04:40:46.995527+00:00",
+  "scope": "Explicitly enrolled group conversations across discovery, enrollment, reply policy, per-enrollment workspaces, retained history, summaries and invalidation.",
+  "result": "Source approved with no unresolved findings; final aggregate and Required CI still required.",
+  "checks": [
+    "Versioned feature negotiation precedes group discovery and polling; omitted flags and direct-chat authority bytes remain unchanged.",
+    "The trusted conversation kind governs group policy; a group cannot obtain self-chat privileges and campaigns remain direct-only.",
+    "Every group enrollment has a new workspace and canonical local history floor; group history bootstrap is disabled. Snapshot, window, summary, learning and reply paths exclude pre-enrollment messages.",
+    "Observed binding change disables the contact, revokes the old grant and marks group bindings invalid permanently. A restored old roster cannot revive its workspace or grant.",
+    "Incoming group messages have anonymous participant attribution; prompts and ephemeral summaries never infer that different incoming messages share one speaker.",
+    "Both a changed binding and the permanent invalidation marker are checked before a separately reported poll error can be handled as transient. Pending composition and send are cancelled.",
+    "Existing capability profiles, native zero-tool XCB execution, explicit account selection, disclosure policy and uncertain-send behavior retain their previous controls."
+  ],
+  "limits": [
+    "This review and synthetic tests establish source behavior, not live provider delivery or OS confinement.",
+    "Group availability remains conditional on the versioned GhostGet host/provider contract."
+  ],
+  "reviewedChangedSources": {
+    "packages/textbutler/src/control-service.ts": "2af17c12f08c429a87b14db13747c824a348f734792b811cb6c1c361b38a3b7b",
+    "packages/textbutler/src/habitat-agent.ts": "33f6a5b77a2d05d55cf2a091a3b62ca73cadda3fd1e115124ad56b44e90f13a8",
+    "packages/textbutler/src/message-summary.ts": "63ab9675afa1ee9ecfcb685bcdf4e47a1b045f066fc9dfb659b297da4cafecae",
+    "packages/textbutler/src/owner-messages.ts": "376de21da66f140b94e3a8769fee9017756402ddf5d8e76d164923b5385ebb5c",
+    "packages/textbutler/src/owner-replies.ts": "bbe40b2c6de31b06a2f9ce1c186a5dfbc87cd437a5b5043b95de4efd8fdf34a1",
+    "packages/textbutler/src/reply-loop.ts": "728a6197ee7cee9719a5d9f652b91a33be18c52d1495faf032250bedcaa36607",
+    "packages/textbutler/src/routed-agent.ts": "e46066b9f1b05152c38196391da4becc795f8641cff108ad04ab523446c7aaa1",
+    "packages/textbutler/src/workspace.ts": "361335780c3807d402ee0547792262002ebdd1d9c00511310c2ef73a1e68a631",
+    "packages/transport/src/automation-contract.ts": "4d715ea1edc48b4373f6c70e687a18e5d78165b13e5697d1c5cf26e29e6c8e8a"
+  }
+}

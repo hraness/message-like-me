@@ -789,7 +789,7 @@ exports[`commands --json every verb has an op class and every decide verb has a 
           "list",
         ],
         "schema": "textbutler.conversations/1",
-        "summary": "List recent one-to-one chats you can add",
+        "summary": "List recent chats you can add",
       },
       {
         "opClass": "read",

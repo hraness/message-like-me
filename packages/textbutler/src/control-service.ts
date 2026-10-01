@@ -241,10 +241,14 @@ function parseOwnerState(value: unknown): OwnerState {
     contactId(id);
     const binding = parseOwnerBinding(value);
     if (!parsed.contacts.some(contact => contact.id === id && contact.routeId === ownerBindingRoute(binding, id))) throw new Error("Conversation binding has no matching contact");
+    if (binding.version === 2 && binding.conversation.kind === "group" && parsed.contacts.find(contact => contact.id === id)?.selfChat) throw new Error("A group cannot be an owner self conversation");
     bindings[id] = binding;
     if (binding.version === 1 && binding.participants.length !== 1) throw new Error("Group bindings are unsupported");
   }
-  if (new Set(Object.values(bindings).map(ownerBindingDigest)).size !== Object.keys(bindings).length) throw new Error("Repeated owner conversation binding");
+  const scopes = Object.values(bindings);
+  if (new Set(scopes.map(binding => binding.version === 2 && binding.conversation.kind === "group" ? `group:${binding.enrollmentId}` : ownerBindingDigest(binding))).size !== scopes.length) throw new Error("Repeated owner conversation binding");
+  const activeScopes = scopes.filter(binding => binding.version !== 2 || !binding.invalidated);
+  if (new Set(activeScopes.map(ownerBindingDigest)).size !== activeScopes.length) throw new Error("Repeated active owner conversation binding");
   const grants: Record<string, AutomationGrant> = {};
   for (const [id, value] of Object.entries(item.grants === undefined ? {} : record(item.grants))) {
     const binding = bindings[id], grant = parseAutomationGrant(value);
@@ -318,6 +322,22 @@ export class TextbutlerControlService {
   }
   async settings(): Promise<Settings> { return (await this.current()).state.settings; }
   async runtimeState(): Promise<OwnerRuntimeState> { const { settings, bindings, grants, revision } = (await this.current()).state; return { settings, bindings, grants, revision }; }
+  /** A proven identity/roster change ends automation for this enrollment.
+   * Never move its memory or grant to a newly discovered conversation. */
+  async invalidateConversation(contactId: string, expected: AutomationBinding): Promise<void> {
+    const grant = await this.serial(async () => {
+      const current = await this.current(), binding = current.state.bindings[contactId];
+      if (this.closed || binding?.version !== 2 || binding.enrollmentId !== expected.enrollmentId || binding.bindingDigest !== expected.bindingDigest) return undefined;
+      const contact = current.state.settings.contacts.find(item => item.id === contactId);
+      if (!contact) return undefined;
+      if (contact.enabled || binding.conversation.kind === "group" && !binding.invalidated) {
+        const bindings = binding.conversation.kind === "group" ? { ...current.state.bindings, [contactId]: { ...binding, invalidated: true as const } } : current.state.bindings;
+        await this.publish(current, configureContact(current.state.settings, contactId, { enabled: false }), bindings);
+      }
+      return current.state.grants[contactId];
+    });
+    if (grant) this.revokeDisabled(contactId, grant);
+  }
   runJournal(): RunJournal { return this.journal; }
   private habitatConfig: HabitatHostConfig | undefined;
   setReplyAgent(agent: ButlerAgent): void { this.replies?.useAgent(agent); }
@@ -535,7 +555,7 @@ export class TextbutlerControlService {
       ...(this.automation ? { messagingProviders: this.automation.providers() } : {}),
       settings: { paused: state.settings.paused, activeContactLimit: state.settings.maxActiveContacts },
       contacts: state.settings.contacts.map(contact => { const binding = state.bindings[contact.id], grant = state.grants[contact.id], recovering = this.grantFailures.has(contact.id) || this.pendingGrant(contact.id); return { id: contact.id, name: contact.label,
-        subtitle: binding?.version === 2 ? `${providerName(binding.identity.provider)} · ${contact.enabled && grant && Date.parse(grant.expiresAt) > Date.now() && !recovering ? "Contact grant active" : "Butler off or grant unavailable"}` : binding ? "Selected Messages conversation · sending unavailable" : "Owner-configured workspace · sending unavailable",
+        subtitle: binding?.version === 2 ? `${providerName(binding.identity.provider)} · ${binding.conversation.kind === "group" ? "Group · " : ""}${contact.enabled && grant && Date.parse(grant.expiresAt) > Date.now() && !recovering ? "Contact grant active" : "Butler off or grant unavailable"}` : binding ? "Selected Messages conversation · sending unavailable" : "Owner-configured workspace · sending unavailable",
         ...(binding && options.includeHandles ? { handles: (binding.version === 2 ? binding.conversation.participants : binding.participants).slice(0, 20).map(handle => handle.slice(0, 320)) } : {}),
         ...(binding?.version !== 2 ? {} : { messaging: { provider: binding.identity.provider,
           state: this.grantWork.has(contact.id) ? "revocation-pending" as const : recovering || !contact.enabled && grant ? "recovery-required" as const : contact.enabled && grant && Date.parse(grant.expiresAt) > Date.now() ? "active" as const : "missing" as const,
@@ -571,15 +591,16 @@ export class TextbutlerControlService {
       const binding = parseAutomationBinding(observed.binding);
       if (binding.bindingDigest !== automationBindingDigest(candidate.candidate.identity, candidate.candidate.conversation)) throw new Error("Messaging enrollment changed its target");
       const reauthored = this.reauthor(observed.messages);
-      const messages = request.initializeHistory ? boundedHistory(reauthored) : [];
-      const historyOmittedCount = request.initializeHistory ? observed.messages.length - messages.length : 0;
-      const historyShortenedCount = request.initializeHistory ? messages.filter(message => observed.messages.find(original => original.id === message.id || `sha256:${hash(original.id)}` === message.id)?.text !== message.text).length : 0;
+      const initializeHistory = request.initializeHistory && binding.conversation.kind === "single";
+      const messages = initializeHistory ? boundedHistory(reauthored) : [];
+      const historyOmittedCount = initializeHistory ? observed.messages.length - messages.length : 0;
+      const historyShortenedCount = initializeHistory ? messages.filter(message => observed.messages.find(original => original.id === message.id || `sha256:${hash(original.id)}` === message.id)?.text !== message.text).length : 0;
       return this.serial(async () => {
         signal.throwIfAborted(); const latest = await this.current();
         if (latest.state.revision !== request.expectedRevision) fail("conflict", "Settings changed. Reload before adding a contact.");
-        if (Object.values(latest.state.bindings).some(value => ownerBindingDigest(value) === binding.bindingDigest)) fail("conflict", "This messaging conversation has already been added.");
-        const id = randomUUID(), workspace = await ContactWorkspace.create(join(this.dataDir, "contacts", id));
-        if (request.initializeHistory) {
+        if (Object.values(latest.state.bindings).some(value => binding.conversation.kind === "group" ? value.version === 2 && value.enrollmentId === binding.enrollmentId : ownerBindingDigest(value) === binding.bindingDigest)) fail("conflict", "This messaging conversation has already been added.");
+        const id = randomUUID(), workspace = await ContactWorkspace.create(join(this.dataDir, "contacts", id), binding.conversation.kind);
+        if (request.initializeHistory && binding.conversation.kind === "single") {
           const historyFile = await workspace.initializeHistory(messages);
           await workspace.writeVersioned("history/bootstrap-summary.json", JSON.stringify({ schemaVersion: 1, purpose: "context-only-never-trigger", historyFile,
             requestedLimit: 200, receivedMessages: observed.messages.length, retainedMessages: messages.length, omittedMessages: historyOmittedCount,
@@ -590,7 +611,7 @@ export class TextbutlerControlService {
         const settings = parseSettings({ ...latest.state.settings, contacts: [...latest.state.settings.contacts, newContact(id, label.slice(0, 200), binding.enrollmentId)] });
         await this.publish(latest, settings, { ...latest.state.bindings, [id]: binding }); this.automationCandidates.delete(request.candidateId);
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "enrolled", snapshot: await this.snapshot(), contactId: id,
-          historyInitialized: request.initializeHistory, historyCount: messages.length, historyOmittedCount, historyShortenedCount };
+          historyInitialized: initializeHistory, historyCount: messages.length, historyOmittedCount, historyShortenedCount };
       });
     });
   }
@@ -788,17 +809,17 @@ export class TextbutlerControlService {
         if (candidates.length > 200) throw new Error("Too many messaging conversations");
         const current = await this.current(); this.automationCandidates.clear();
         const rows = candidates.map(candidate => {
-          const duplicate = Object.values(current.state.bindings).some(binding => binding.version === 2 && binding.bindingDigest === automationBindingDigest(candidate.identity, candidate.conversation));
+          const duplicate = Object.values(current.state.bindings).some(binding => binding.version === 2 && !binding.invalidated && binding.bindingDigest === automationBindingDigest(candidate.identity, candidate.conversation));
           const id = randomUUID(); this.automationCandidates.set(id, { candidate, expires: Date.now() + 300_000 });
-          return { id, name: candidate.conversation.title ?? candidate.conversation.participants.join(", "),
-            subtitle: `${providerName(candidate.identity.provider)} · ${candidate.conversation.participants.join(", ")}`.slice(0, 512),
+          return { id, name: (candidate.conversation.title ?? candidate.conversation.participants.join(", ")).slice(0, 200),
+            subtitle: `${providerName(candidate.identity.provider)} · ${candidate.conversation.kind === "group" ? "Group · " : ""}${candidate.conversation.participants.join(", ")}`.slice(0, 512),
             eligible: !duplicate, reason: duplicate ? "Already added" : "Ready to add" };
         });
         const discovery = this.automation!.discoveryStatus?.().providers ?? [];
         const coverage = discovery.filter(item => item.state !== "complete").map(item => item.detail);
         const diagnostics = discovery.flatMap(item => item.failure === undefined ? [] : [{ provider: item.provider, ...item.failure }]);
         return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "conversations", candidates: rows,
-          detail: ["Choose an exact one-to-one messaging conversation. Adding a contact keeps its butler disabled.", ...coverage].join(" "),
+          detail: ["Choose a messaging conversation. Each direct or group conversation has its own memory and starts disabled.", ...coverage].join(" "),
           ...(diagnostics.length ? { diagnostics } : {}) };
       });
       if (!this.enrollment) fail("unavailable", "Messages selection is not configured. Set up the owner-installed Ghostget CLI in Textbutler's host configuration, then restart the daemon.");
@@ -877,6 +898,8 @@ export class TextbutlerControlService {
       return { protocol: TEXTBUTLER_CONTROL_PROTOCOL, ok: true, kind: "snapshot", snapshot: await this.snapshot() };
     }
     if (request.command === "contact.settings.update") {
+      const binding = current.state.bindings[request.contactId];
+      if (binding?.version === 2 && binding.conversation.kind === "group" && (request.settings.selfChat ?? contact!.selfChat)) fail("invalid-request", "A group cannot be an owner self conversation.");
       if (request.settings.accountId !== undefined && !this.providers && request.settings.accountId !== contact!.accountId) fail("invalid-request", "Provider accounts are not configured.");
       try { this.providers?.validateAccountChange(contact!, request.settings); }
       catch { fail("invalid-request", "Choose a configured account explicitly. Claude API is billed separately from coding-agent subscriptions."); }

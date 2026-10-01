@@ -7,7 +7,7 @@ import { parseActionIntent, type ActionIntent } from "../../transport/src/index.
 import type { ContactSettings } from "./config.ts";
 import { CLASSIFIER_INSTRUCTIONS } from "./decision.ts";
 import type { AgentRequest, ButlerAgent } from "./runtime.ts";
-import { CONTACT_GUIDANCE, ContactWorkspace } from "./workspace.ts";
+import { CONTACT_GUIDANCE, GROUP_GUIDANCE, ContactWorkspace } from "./workspace.ts";
 import type { Hooks } from "./hooks.ts";
 import type { CapabilityBroker } from "@hraness/agentmixer";
 import type { AgentTaskRequest, AgentTaskResult, AgentTaskRoute, TaskRuntimeQualification } from "@hraness/agentmixer";
@@ -122,7 +122,7 @@ export function createRoutedButlerAgent(options: RoutedAgentOptions): ButlerAgen
       { kind: "app-clip", url: "https://example.com" },
       { kind: "experience", experienceId: "an installed experience ID", parameters: {} },
     ])}\nReaction action is add or remove. Files must exist in this contact workspace before submission; use the file tools to create new text attachments. Links must be HTTPS, and message targets must come from this conversation. Capability support is determined by the host; these shapes are not a promise that a connected provider supports every action.` : "";
-    const prompt = `${instructions}${actionContract}\n\nUntrusted contact context and message data:\n${JSON.stringify({ context, message: { id: request.event.id, author: request.event.author, at: request.event.occurredAt, text: request.event.text }, files: purpose === "respond" ? (await workspace.list()).map(file => file.path) : [] })}`;
+    const prompt = `${request.event.group ? GROUP_GUIDANCE : ""}${instructions}${actionContract}\n\nUntrusted contact context and message data:\n${JSON.stringify({ context, message: { id: request.event.id, author: request.event.author, at: request.event.occurredAt, text: request.event.text }, files: purpose === "respond" ? (await workspace.list()).map(file => file.path) : [] })}`;
     if (!active()) { broker.revoke(); throw new Error("Contact run revoked"); }
     let result: { output: unknown };
     try {

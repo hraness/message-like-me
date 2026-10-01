@@ -1,5 +1,8 @@
 # Campaigns: paced texts in your own words
 
+Campaigns send to explicitly selected direct conversations. For a group, use the
+reviewed reply workflow so its entire recipient scope is checked before sending.
+
 `textbutler campaign run` sends texts you wrote to enrolled contacts, one at a
 time, at a slow pace. You are the author, so each text goes out exactly as
 written, with no `🤖{ }` wrap. Everything the butler composes keeps its

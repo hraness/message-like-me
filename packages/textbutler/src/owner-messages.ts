@@ -1,6 +1,6 @@
 import type { MessageCapabilitiesResult, MessageHistoryResult, MessageSummaryResult, OwnerMessage } from "../../control/src/index.ts";
 import { AUTOMATION_ACTIONS, automationHash, type GhostgetAutomationClient } from "../../transport/src/automation.ts";
-import { assertAutomationBinding } from "./automation-owner.ts";
+import { assertAutomationBinding, scopedAutomationHistory } from "./automation-owner.ts";
 import { historyAuthor, messageAuthor } from "./attribution.ts";
 import type { ContactSettings } from "./config.ts";
 import { ControlFailure, type OwnerBinding, type OwnerRuntimeState } from "./control-service.ts";
@@ -59,6 +59,7 @@ export class OwnerMessages {
     if (binding.version === 2) {
       const client = this.ports.client(); if (!client) fail("unavailable", "Messaging automation is not configured.");
       const page = await client.history(binding.enrollmentId, limit, signal); assertAutomationBinding(binding, page.enrollment);
+      page.messages = scopedAutomationHistory(binding, page.messages);
       ready = page.enrollment.ready;
       messages = page.messages.map(message => ({ id: message.id, at: Date.parse(message.occurredAt), author: messageAuthor(message, contact, this.ports.journal),
         ...normalizeText(message.text), kind: message.kind, relatedMessageId: message.relatedMessageId, attachments: structuredClone(message.attachments) }));
@@ -92,7 +93,7 @@ export class OwnerMessages {
       .map(message => ({ id: message.id, at: message.at, author: message.author as SummaryMessage["author"], text: message.text! }));
     const messages = retainNewest(eligible, SUMMARY_BYTES);
     if (!messages.length) fail("unavailable", "This bounded conversation sample contains no text to summarize.");
-    const result = await (this.ports.summarize ?? summarizeMessages)({ contact, messages, providers, signal, now: this.ports.now });
+    const result = await (this.ports.summarize ?? summarizeMessages)({ contact, conversationKind: binding.version === 2 ? binding.conversation.kind : "single", messages, providers, signal, now: this.ports.now });
     await this.unchanged(contact, binding, signal);
     return { contactId, ...result, sampledMessages: messages.length, omittedMessages: history.bounds.received - messages.length,
       shortenedMessages: history.omissions.textShortened, limitations: [...history.limitations, "Only sampled text messages are analyzed; reaction, edit, deletion and attachment contents are excluded."] };
