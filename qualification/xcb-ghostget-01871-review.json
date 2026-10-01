@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "kind": "independent-ai-source-review",
+  "scope": "Exact GhostGet 0.18.71 native iMessage setup adoption bound to the verified immutable upstream group release.",
+  "baseCommit": "7c1f9baa4b2e5d528bc50e71507eb24dfb852243",
+  "recordedAt": "2026-10-01T15:03:18.444989+00:00",
+  "reviewer": "Independent native source reviewer: root integrator",
+  "result": "Independent native source review and focused setup tests passed. Canonical immutable GhostGet 0.18.71 archive and provenance are bound below; final Textbutler integration and Required CI remain mandatory.",
+  "checks": [
+    "The native setup version changes from 0.18.44 to exactly 0.18.71; protocol, authority, permissions, parser closure, cleanup and process custody are unchanged.",
+    "Synthetic package and control snapshot fixtures use exactly 0.18.71. Negative cases preserve all historical rejections, including 0.18.44, 0.18.65 through 0.18.70, and unreviewed future 0.18.72 before grants or connector child launch.",
+    "Existing capability profiles and every other composition source hash are preserved."
+  ],
+  "reviewedChangedSources": {
+    "packages/textbutler/src/imessage-setup.ts": "b7d2c7143488b87e7c56e7eee02cf6536880a1b2bef60e1f23b46ae19ef3c225",
+    "packages/textbutler/src/imessage-setup.test.ts": "02e5670b1d62da5c9bff30eaf99485c49005c662fd90d3ec1204926c4f2e251d"
+  },
+  "focusedValidation": {
+    "status": "passed",
+    "command": "/Users/benguo/.bun/bin/host-run --mode=shared --label=textbutler-ghostget-01871-pin -- /Users/benguo/.bun/bin/bun test packages/textbutler/src/imessage-setup.test.ts",
+    "scope": "Synthetic temporary child-process fixtures; no real accounts, messages, native installation or activation.",
+    "tests": 23,
+    "failures": 0,
+    "assertions": 338,
+    "elapsedSeconds": 8.71,
+    "toolchain": "Bun 1.3.14 (0d9b296a)",
+    "hostSession": 83268,
+    "transcriptChunks": [
+      "7b5dba",
+      "b95eec"
+    ],
+    "rawLog": "Tool transcript only; no separate raw log retained."
+  },
+  "publication": {
+    "status": "verified immutable canonical archive and provenance",
+    "releaseSourceCommit": "db26d87ed29956016aedfd76b932e7c8b7037c3b",
+    "sourceTree": "97dad72e72f95ef4e3b7410fc282b3abd7d76028",
+    "releaseId": 401092655,
+    "releaseUrl": "https://github.com/hraness/ghostget/releases/tag/v0.18.71",
+    "immutable": true,
+    "publishedAt": "2026-10-01T15:15:31Z",
+    "archiveUrl": "https://github.com/hraness/ghostget/releases/download/v0.18.71/hraness-ghostget-0.18.71.tgz",
+    "archiveSha256": "869505039ff55197d8dbab2c49f923e4effaeb71ea124ee2e59852a84127ab4e",
+    "archiveBytes": 12183657,
+    "provenance": {
+      "url": "https://github.com/hraness/ghostget/releases/download/v0.18.71/provenance.jsonl",
+      "sha256": "a8cb735bc631cdf08032392d024572c527e547185812086615e8e4ca8cd126ff",
+      "releaseManifestSha256": "8077d423d0e6919d3bab636c7ac0d261edad5510be4c61b04090f4fb82f283e0",
+      "workflow": ".github/workflows/release.yml",
+      "sourceSha": "db26d87ed29956016aedfd76b932e7c8b7037c3b",
+      "workflowSha": "db26d87ed29956016aedfd76b932e7c8b7037c3b",
+      "runId": 36882101059,
+      "runAttempt": 1
+    },
+    "admissionReference": "Codex/2026-10-01/ghostget-group-canonical-admission.json",
+    "admissionSha256": "8c431b2df7c193b436510b538f448f14984e1d1fb63cb7cab323976bf4a014b5",
+    "canonicalFilesRehashedLocally": true,
+    "deliveryBlockedUntilBound": false,
+    "registryStatus": "not admitted by this source/GitHub artifact adoption; npm availability is separate"
+  },
+  "upstreamContract": {
+    "controlProtocol": "ghostget.control/1",
+    "adapterId": "imessage-direct",
+    "operations": [
+      "messaging.automation.read",
+      "messaging.automation.send.text",
+      "messaging.automation.send.attachment"
+    ],
+    "repository": "https://github.com/hraness/ghostget",
+    "pullRequest": "https://github.com/hraness/ghostget/pull/515",
+    "finalSourceReview": "Root independently approved the frozen 0.18.71 source; merged tree identity and canonical immutable release are bound in upstreamSourceReview and publication."
+  },
+  "limits": [
+    "Synthetic setup fixtures do not establish live messaging, macOS permissions, or provider delivery.",
+    "Current-source aggregate, isolated installation and Required CI remain integration gates.",
+    "Setup guide and agent prompt adoption are owned by the separate editorial integration."
+  ],
+  "previousPreparations": [
+    {
+      "version": "0.18.66",
+      "status": "Superseded before publication; that version is reserved for the analytics-only release and must not be adopted for group support.",
+      "retainedReviewName": "textbutler-ghostget-01866-preparation-review.json",
+      "retainedReviewSha256": "d842b5d2b3805fd6e3916972027bfde610602676bba8b5b50e8f782246fbaac2"
+    },
+    {
+      "version": "0.18.67",
+      "status": "Superseded before publication; the projection-only release owns this version and must not be adopted for group support.",
+      "retainedReviewName": "textbutler-ghostget-01867-preparation/qualification/xcb-ghostget-01867-review.json",
+      "retainedReviewSha256": "5c3ef2a6f9e3c46e727df30562db37b2d4775f781a73a36be6b8843ddf327725",
+      "retainedSourceManifestName": "textbutler-ghostget-01867-preparation/superseded.json",
+      "retainedSourceManifestSha256": "4835a118eb8a6abb8daf9fd12f9063533a493a68cafb4b314930f75c017674dd"
+    },
+    {
+      "targetVersion": "0.18.68",
+      "status": "superseded by confirmed merged 0.18.71 group source",
+      "evidenceReference": "Codex/2026-10-01/marketing-polish-round-two/textbutler-ghostget-01868-preparation/superseded.json",
+      "evidenceSha256": "68a414bb0b1c435946b8742c837e1e7f3c0420326fbc854d1f36087c62474e75"
+    }
+  ],
+  "independentNativeReview": {
+    "status": "SOURCE_APPROVED_TEST_AND_IMMUTABLE_BINDING_PENDING",
+    "reviewer": "root integrator",
+    "reference": "Codex/2026-10-01/marketing-polish-round-two/textbutler-native-071-root-source-review.json",
+    "sha256": "68ade667722dc347ac52c4aa9b7778f36041eafabf2830afc4105e9d103abd9d",
+    "reviewedSourceSha256": {
+      "packages/textbutler/src/imessage-setup.ts": "b7d2c7143488b87e7c56e7eee02cf6536880a1b2bef60e1f23b46ae19ef3c225",
+      "packages/textbutler/src/imessage-setup.test.ts": "02e5670b1d62da5c9bff30eaf99485c49005c662fd90d3ec1204926c4f2e251d"
+    }
+  },
+  "upstreamSourceReview": {
+    "status": "approved merged source candidate; publication independently bound above",
+    "commit": "6046b8b6deb8696a74ace507191b376938d1cfd4",
+    "mergedSourceCommit": "db26d87ed29956016aedfd76b932e7c8b7037c3b",
+    "tree": "97dad72e72f95ef4e3b7410fc282b3abd7d76028",
+    "mergeTreeVerifiedLocally": true,
+    "independentReviewReference": "Codex/2026-10-01/ghostget-group-package/ghostget-071-independent-review.json",
+    "independentReviewSha256": "8058e15e17599f1618da893c5d6011751e621b70710d9b82b683cba3ebfcdc80",
+    "reviewDecision": "SOURCE_AND_LOCAL_PACKAGE_APPROVED_PENDING_CURRENT_HEAD_GATES_AND_IMMUTABLE_RELEASE",
+    "locallyMeasuredArchiveSha256": "869505039ff55197d8dbab2c49f923e4effaeb71ea124ee2e59852a84127ab4e",
+    "localArchiveStatus": "Historical local package measurement; matches the separately downloaded and admitted canonical archive."
+  },
+  "upstream": {
+    "repository": "hraness/ghostget",
+    "version": "0.18.71",
+    "status": "Immutable source/GitHub archive and provenance verified",
+    "requiredBeforeDelivery": [
+      "Run Textbutler final integration, including its isolated bundle installation test.",
+      "Pass Required CI for this native adoption."
+    ]
+  }
+}
