@@ -22,7 +22,8 @@ async function fixture(fast = false, group = false) {
   const habitatListeners = new Set<(contactId: string) => void>();
   const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
   const conversation = { coordinate: { provider: "imessage" as const, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: group ? "group" as const : "single" as const, participants: group ? ["fixture@example.test", "other@example.test"] : ["fixture@example.test"] };
-  let invalidated = false;
+  let invalidated = false, locallyInvalidated = false;
+  let pollError: string | null = null;
   const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: !invalidated, reason: invalidated ? "ghostget.binding-changed.v1" : null });
   const binding = automationBinding(enrolled(), group ? new Date(time).toISOString() : undefined), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
@@ -39,7 +40,7 @@ async function fixture(fast = false, group = false) {
     if (method === "poll") return enrolled();
     if (method === "pollSet") pollSetCalls++;
     if (method === "status") statusCalls++;
-    if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: null })) };
+    if (method === "pollSet") return { results: (params.enrollmentIds as string[]).map(id => ({ enrollmentId: id, enrollment: { ...enrolled(), id }, error: pollError })) };
     if (method === "history") return { enrollment: enrolled(), messages: messages.slice(-Number(params.limit)) };
     if (method === "events") { eventsCalls++; if (failEvents > 0) { failEvents--; throw new Error("Synthetic events stream failure"); }
       return { events: events.slice(Number(params.cursor ?? 0)), nextCursor: String(events.length), caughtUp: true }; }
@@ -73,10 +74,15 @@ async function fixture(fast = false, group = false) {
     scheduleDispatch: (fire, delayMs) => { const entry = { fire, delayMs, live: true }; armed.push(entry); return () => { entry.live = false; }; },
     ...(fast ? { habitat: { config: { enabled: true, driver: driver.config, evolutionModel: null, debounceMs: 1000 }, driver } }
       : { agent: { qualified: (contact: Parameters<ButlerAgent["qualified"]>[0]) => agent.qualified(contact), classify: (request: Parameters<ButlerAgent["classify"]>[0]) => agent.classify(request), compose: (request: Parameters<ButlerAgent["compose"]>[0]) => agent.compose(request) } }), service: {
-    dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": binding }, grants: {} }), runJournal: () => journal,
+    dataDir: root, providers: undefined, runtimeState: async () => ({ settings, bindings: { "contact-1": locallyInvalidated ? { ...binding, invalidated: true as const } : binding }, grants: {} }), runJournal: () => journal,
     delegatedGrant: async contact => !settings.paused && settings.contacts.some(current => current.enabled && current.id === contact.id && current.revision === contact.revision) ? "grant:fixture" : null,
     onSettingsChanged(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     onHabitatChanged(listener) { habitatListeners.add(listener); return () => habitatListeners.delete(listener); },
+    async invalidateConversation(contactId, selectedBinding) {
+      expect(contactId).toBe("contact-1"); expect(selectedBinding).toMatchObject({ version: 2, bindingDigest: binding.bindingDigest });
+      locallyInvalidated = true;
+      settings = { ...settings, contacts: settings.contacts.map(contact => ({ ...contact, enabled: false })) };
+    },
     notePending() {},
     async allowContactRepo(contactId: string, url: string) { allowed.push([contactId, url]); return "added" as const; },
     async notifySelfChat(text: string) { notices.push(text); },
@@ -91,7 +97,8 @@ async function fixture(fast = false, group = false) {
     pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
     fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
-    invalidateRoster() { invalidated = true; },
+    locallyInvalidated: () => locallyInvalidated,
+    invalidateRoster(error: string | null = null) { invalidated = true; pollError = error; },
     changeRoster() { conversation.participants.push("new@example.test"); conversation.participants.sort(); },
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
@@ -595,4 +602,15 @@ test("permanent group invalidation cancels a pending reply even with the origina
   await f.loop.tick(); await f.loop.idle();
   expect(f.sent).toEqual([]); expect(f.stats().compositions).toBe(0);
   expect(f.statuses.at(-1)?.detail).toContain("participants changed");
+});
+
+
+test("a permanent binding proof disables the group even when poll also reports an error", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  f.add("butler pending question"); await f.loop.tick();
+  f.invalidateRoster("Messaging provider identity changed."); f.advance(9000);
+  await f.loop.tick(); await f.loop.idle();
+  expect(f.locallyInvalidated()).toBe(true);
+  expect(f.settings().contacts[0]!.enabled).toBe(false);
+  expect(f.sent).toEqual([]); expect(f.stats().compositions).toBe(0);
 });

@@ -324,7 +324,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     for (const { contact, binding, state } of actives) {
       const result = results?.get(binding.enrollmentId);
       try {
-        if (result === undefined || result.error !== null || result.enrollment === null) throw new Error(result?.error ?? "Poll result missing");
+        if (result === undefined || result.enrollment === null) throw new Error(result?.error ?? "Poll result missing");
         try { assertAutomationBinding(binding, result.enrollment); }
         catch (error) {
           state.runtime.cancelContact(contact.id); delete state.pending; state.pendingFirstAt = null;
@@ -332,6 +332,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
           await service.invalidateConversation?.(contact.id, binding);
           throw error;
         }
+        if (result.error !== null) throw new Error(result.error);
         ready.set(contact.id, result.enrollment.ready); drain.set(binding.enrollmentId, { contact, state }); fresh.set(contact.id, result.enrollment); state.lastEnrollment = result.enrollment;
       } catch { state.runtime.cancelContact(contact.id); state.initialized = false; state.lastEnrollment = null; pollFailed.add(contact.id); }
     }
