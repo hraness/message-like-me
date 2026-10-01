@@ -22,4 +22,8 @@ test("encoded identifiers are removed from public analytics paths and errors", (
   expect(properties.requested_path).toBe("/blog/[email]");
   expect(properties.message).toBe("Bearer%20[credential]");
   expect(JSON.stringify(properties)).not.toContain("canary");
+  for (const email of ["+@a.aa", "%2B%40a.aa", "%252B%2540a.aa"]) {
+    expect(classifyAnalyticsRoute(textbutlerPostHogSite, `https://${textbutlerPostHogSite.canonicalDomain}/blog/${email}`)).toMatchObject({ canonical_path: "/blog/[email]" });
+    expect(sanitizeProviderProperties(textbutlerPostHogSite, { message: email }).message).toBe("[email]");
+  }
 });
