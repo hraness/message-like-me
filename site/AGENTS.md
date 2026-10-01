@@ -38,6 +38,12 @@ below until their reviewed publication-identity migration is complete.
   This site does not author local StyleX recipes; that requires the shared
   compiler's complete application-graph adapter rather than this package-only
   integration.
+- For system-default server-rendered documents, set `data-palette` and the
+  semantic `hraness-palette` class, omit `data-theme` and concrete
+  `getDesignPaletteTheme` classes, and let the shared palette foundation choose
+  light or dark before JavaScript. Use concrete theme classes only with a
+  matching explicit `data-theme`. Keep frame-safe previews readable in both
+  system appearances with scripting disabled.
 - Use the shared split hero and split sections to place product proof beside
   the copy on wide screens and after it on phones. Crop phone mockups through
   the `PhoneMock` component's crop prop, preserving device proportions and

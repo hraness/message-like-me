@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { getDesignPaletteTheme } from '@hraness/design-kit';
 import { Providers } from './providers';
 
 import {
@@ -15,8 +14,6 @@ import {
 } from './_lib/site';
 import '@hraness/design-kit/fonts.css';
 import './globals.css';
-
-const initialPalette = getDesignPaletteTheme('gruvbox', 'light');
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
@@ -150,7 +147,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html className={initialPalette.className} data-hraness-theme="paper" data-hraness-material="lantern" data-hraness-pattern="none" data-palette="gruvbox" lang="en" suppressHydrationWarning>
+    <html className="hraness-palette" data-hraness-theme="paper" data-hraness-material="lantern" data-hraness-pattern="none" data-palette="gruvbox" lang="en" suppressHydrationWarning>
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/theme-bootstrap.js" />
