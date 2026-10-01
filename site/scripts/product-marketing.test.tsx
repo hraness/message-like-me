@@ -163,7 +163,7 @@ test('offers local coding apps for setup on the reader’s Mac', () => {
   expect(html).toContain('aria-label="Copy setup prompt"');
 });
 
-test('binds Design Kit v0.35.0 to the portable Paper palette', async () => {
+test('binds Design Kit v0.36.3 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -175,7 +175,7 @@ test('binds Design Kit v0.35.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.35.0');
+    .toBe('github:hraness/design-kit#v0.36.3');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
