@@ -42,7 +42,7 @@ const PERSONAL_MAKER_CREDIT = [
   'Who made it?',
 ] as const;
 
-test('pins the shared site footer release and imports its stylesheet once', async () => {
+test('pins the shared site footer release and imports its foundation once', async () => {
   const [manifestSource, css] = await Promise.all([
     readFile(resolve(siteRoot, 'package.json'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -52,7 +52,8 @@ test('pins the shared site footer release and imports its stylesheet once', asyn
   };
 
   expect(manifest.dependencies?.['@hraness/site-footer']).toBe(SITE_FOOTER_PIN);
-  expect(css.match(/@import '@hraness\/site-footer\/styles\.css';/gu)).toHaveLength(1);
+  expect(css.match(/@import '@hraness\/site-footer\/compiler-foundation\.css';/gu)).toHaveLength(1);
+  expect(css).not.toMatch(/@hraness\/site-footer\/(?:styles|stylex)\.css/u);
 });
 
 test('binds the canonical Hraness home the shared footer attributes to', () => {

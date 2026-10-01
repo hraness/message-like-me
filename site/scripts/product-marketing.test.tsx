@@ -81,8 +81,8 @@ test('renders TextButler with early model choices and setup', () => {
   expect(html).toContain('Connect your AI subscription');
   expect(html).toContain('A local model writes replies on your Mac too.');
   expect(html).toContain('MIT licensed');
-  expect(html).toContain('The connection uses an unofficial WhatsApp client.');
-  expect(html).toContain('Keep Beeper Desktop open. Replies are text only.');
+  expect(html).toContain('Keep Beeper Desktop open with your messaging accounts connected.');
+  expect(html).toContain('Choose a group, review its members, and turn on replies.');
   expect(html).not.toContain('Built on your Mac');
   expect(html).toContain('After you write in a chat, it pauses for the human cooldown you set (5 minutes by default).');
   expect(html).not.toContain(`TextButler v${SOFTWARE_VERSION}`);
@@ -143,7 +143,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
   expect(html).toContain('the word “butler”');
-  expect(html).toContain('SMS, RCS, and reactions aren’t supported.');
+  expect(html).toContain('Connect them through Beeper Desktop for text replies.');
   expect(html).toContain('under its own data policies');
   // The agent prompt is shown verbatim, copied by a button, never submitted.
   expect(html).toContain('aria-label="Copy setup prompt"');
@@ -210,7 +210,7 @@ test('admits the released finite marketing snapshot and scopes it to the landing
 
 test('keeps machine-readable setup and reply controls consistent with the landing', async () => {
   const discovery = await getDiscoveryText().text();
-  expect(discovery).toContain('New installations start paused and new contacts start disabled.');
+  expect(discovery).toContain('New installations start paused and new conversations start disabled.');
   expect(discovery).toContain('Use the installed TextButler command for automatic replies.');
   expect(discovery).toContain(REPLY_WRITERS_SENTENCE);
   expect(discovery).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');

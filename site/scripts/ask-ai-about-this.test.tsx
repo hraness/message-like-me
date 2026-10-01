@@ -97,15 +97,14 @@ test('keeps the Ask AI block off the not-found page', () => {
   expect(html).not.toContain('>Ask AI about this<');
 });
 
-test('loads only the portable UI tokens and generated component styles', async () => {
+test('loads the portable UI foundation without a second standalone recipe sheet', async () => {
   const css = await readFile(
     resolve(import.meta.dir, '../app/globals.css'),
     'utf8',
   );
 
-  expect(css).toContain("@import '@hraness/ui/tokens.css';");
-  expect(css).toContain("@import '@hraness/ui/stylex.css';");
-  expect(css).not.toMatch(/@hraness\/ui\/(?:components|reset|styles|tailwind)\.css/u);
+  expect(css).toContain("@import '@hraness/ui/compiler-foundation.css';");
+  expect(css).not.toMatch(/@hraness\/ui\/(?:components|reset|styles|stylex|tailwind)\.css/u);
   expect(css).toContain('nav.message-like-me-ask-ai {');
   expect(css).toContain(
     'nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"] {',

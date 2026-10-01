@@ -72,7 +72,7 @@ test('describes the local model route the same way in llms.txt', async () => {
 
 test('describes configurable reply behavior in the home comparison answer', () => {
   const entry = faqEntries(renderToStaticMarkup(<Home />)).find(({ name }) => name.startsWith('How is it different'));
-  expect(entry?.text).toContain('you control the reply mode and marker per person');
+  expect(entry?.text).toContain('you control the reply mode and marker per conversation');
 });
 
 test('publishes a free offer and the hub organization in site JSON-LD', () => {
