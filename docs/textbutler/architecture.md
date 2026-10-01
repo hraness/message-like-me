@@ -259,3 +259,17 @@ GhostGet currently imports published Message Like Me bundle contracts. Keep that
 - [Linq reactions](https://docs.linqapp.com/channel/imessage/api/resources/messages/methods/add_reaction/): emoji and sticker reactions.
 
 Imported shadow tasks must contain no conversation examples. Labeled research artifacts stay private and cannot be installed into a contact habitat until the host can verify every example belongs to that contact. Explicit shadow evaluation enforces the same rule before calling an executor.
+
+
+### Exact reply context
+
+The contact agent can use `context-query` to read original instructions,
+guidance, selected history and memory, and earlier tool results for its current
+reply. Projection keeps the initial prompt small; the original bytes remain
+available through literal search and UTF-8 slices of at most 2,048 bytes.
+The host chooses the entries before handing the model a query interface.
+Queries cannot select another contact, file path, or arbitrary content digest.
+
+These reads share the reply's existing two-tool and three-model-call limit.
+Contact revocation cancels access, and tool evidence records a query digest.
+Reading context proposes no message and changes no contact settings.

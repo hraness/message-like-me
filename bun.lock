@@ -11,7 +11,7 @@
         "@anthropic-ai/claude-agent-sdk": "0.3.268",
         "@anthropic-ai/sdk": "0.125.0",
         "@hraness/agentmixer": "https://github.com/hraness/xcb/releases/download/v0.3.0/hraness-agentmixer-0.3.0.tgz",
-        "@hraness/algal": "github:hraness/algal#0f73388df2093c52291687a9fccb6d170bdf2928",
+        "@hraness/algal": "https://codeload.github.com/hraness/algal/tar.gz/14915465c3d7c5ee2c55e2977e36ee03f6bcbff0",
         "@hraness/desktop-foundation": "https://github.com/hraness/desktop-foundation/releases/download/v0.9.0/hraness-desktop-foundation-0.9.0.tgz",
         "@hraness/local-custody": "github:hraness/local-custody#v0.4.0",
         "@hraness/support-foundation": "github:hraness/support-foundation#8bb514d24b79dc3f305390700ae312cab88e7ad2",
@@ -56,7 +56,7 @@
 
     "@hraness/agentmixer": ["@hraness/agentmixer@https://github.com/hraness/xcb/releases/download/v0.3.0/hraness-agentmixer-0.3.0.tgz", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "0.3.268", "@anthropic-ai/sdk": "0.125.0", "@modelcontextprotocol/sdk": "1.30.0", "zod": "4.6.2" }, "bin": { "agentmixer": "dist/cli.js" } }, "sha512-I/5ozXA+B6G1prtlr98OMkEEZfW++PqYa0XQZ5ph+23Qu3EURJ0Faveg6czBOJPiDuyzPl5FXYNKDsb5CVgKPQ=="],
 
-    "@hraness/algal": ["@hraness/algal@github:hraness/algal#0f73388", { "bin": { "algal": "./cli.ts" } }, "hraness-algal-0f73388", "sha512-HhJ1z2xpbwPhiYUp99zYaHAj1hSb0EGW7Au5b9xFIlcSbEv5sPW1ReMEq4eCSFQaVAl9TzEqs5PSQEypoHakFQ=="],
+    "@hraness/algal": ["@hraness/algal@https://codeload.github.com/hraness/algal/tar.gz/14915465c3d7c5ee2c55e2977e36ee03f6bcbff0", { "bin": { "algal": "./cli.ts" } }, "sha512-u25haUM6nSuicmIRtR7T97agm+UWFmr97d1bd+z3XLXy2VJxB5nfNfwWwQrDsR7biKMVtbCCKT6Ac6xM8mG6Cw=="],
 
     "@hraness/desktop-foundation": ["@hraness/desktop-foundation@https://github.com/hraness/desktop-foundation/releases/download/v0.9.0/hraness-desktop-foundation-0.9.0.tgz", { "bin": { "companion": "./dist/src/cli.js" } }, "sha512-+TlrHoM1wZ2rE4p3u1CIAz1+aGKPZhmiNOKjEKOYPZmTx8BFSyFLPeL06tupfX2WxcRzRZ3QwmOsyjlgSu/p1Q=="],
 

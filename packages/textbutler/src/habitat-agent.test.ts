@@ -892,3 +892,99 @@ test("history-search is offered only when enabled, and pages the conversation th
   await unported.habitat.agent.compose({ ...unported.request, contact: { ...unported.request.contact, selfChat: true } });
   expect(driverEvidence(unportedBodies[0]!).tools).not.toContain("history-search");
 });
+
+
+test("context-query retrieves exact contact history beyond projection within the existing two-tool budget", async () => {
+  const f = await fixture((body: string, call: number) => {
+    const evidence = driverEvidence(body);
+    if (call === 1) {
+      expect(JSON.stringify(evidence.history)).not.toContain("violet picnic");
+      expect(evidence.tools).toContain("context-query");
+      return { ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "search", query: "violet picnic" } } };
+    }
+    if (call === 2) {
+      const match = (evidence.results[0]!.result as { matches: Array<{ index: number; startByte: number; endByte: number }> }).matches[0]!;
+      expect(match.index).toBe(6);
+      return { ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "slice", ...match } } };
+    }
+    expect(evidence.results[1]).toEqual({ tool: "context-query", result: "violet picnic" });
+    expect(evidence.tools).toEqual([]);
+    return replyOutput;
+  });
+  await f.workspace.write("history/recent.json", JSON.stringify({ messages: [{ id: "message", at: f.now - 1000, author: "contact", text: "Background. ".repeat(60) + "violet picnic" }] }));
+  await expect(f.habitat.agent.compose(f.request)).resolves.toMatchObject({ actions: replyOutput.actions });
+  expect(f.calls()).toBe(3);
+  f.habitat.submitted({ ...f.request, actions: [{ kind: "text", text: "A useful answer" }], messageIds: ["synthetic-sent"], at: f.now });
+  const tools = new ContactHabitat(f.journal, f.request.contact.id).snapshot().episodes[0]!.reply.tools!;
+  expect(tools.map(tool => tool.kind)).toEqual(["context-query", "context-query"]);
+  expect(tools.every(tool => /^sha256:[a-f0-9]{64}$/u.test(tool.query))).toBe(true);
+});
+
+test("context-query cannot choose another contact or escape the existing tool budget", async () => {
+  const denied = await fixture({ ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "read", index: 0, contactId: "another-contact" } } });
+  await expect(denied.habitat.agent.compose(denied.request)).rejects.toThrow();
+  expect(denied.calls()).toBe(1);
+  const exhausted = await fixture({ ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "slice", index: 0, startByte: 0, endByte: 20 } } });
+  await expect(exhausted.habitat.agent.compose(exhausted.request)).rejects.toThrow("tool budget");
+  expect(exhausted.calls()).toBe(3);
+});
+
+
+test("exact context beyond guidance projection remains private from public web queries", async () => {
+  let searches = 0;
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "slice", index: 3, startByte: 2200, endByte: 2228 } } };
+    if (call === 2) {
+      expect(driverEvidence(body).results[0]).toMatchObject({ tool: "context-query", result: expect.stringContaining("Ryaan") });
+      return { ...replyOutput, actions: [], tool: { kind: "web-search", query: "Ryaan public weather" } };
+    }
+    expect(driverEvidence(body).results[1]).toMatchObject({ tool: "web-search", result: { error: "query-not-admitted" } });
+    return replyOutput;
+  });
+  await f.workspace.write("ABOUT.md", "x".repeat(2200) + " Ryaan coordinates the picnic");
+  new ContactHabitat(f.journal, f.request.contact.id).configure(0, { ...DEFAULT_HABITAT_PLAN, webSearch: true });
+  f.driver.canSearch = true;
+  f.driver.search = async () => { searches++; return {}; };
+  await f.habitat.agent.compose(f.request);
+  expect(searches).toBe(0); expect(f.calls()).toBe(3);
+});
+
+
+test("trigger context retains only the prior message allowlist, never routing metadata", async () => {
+  const f = await fixture((body: string, call: number) => {
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "context-query", query: { op: "read", index: 1 } } };
+    const event = JSON.parse((driverEvidence(body).results[0]!.result as { text: string }).text);
+    expect(Object.keys(event).sort()).toEqual(["id", "at", "author", "kind", "text", "relatedMessageId", "truncated"].sort());
+    expect(event.text).toBe(f.request.event.text);
+    expect(JSON.stringify(event)).not.toContain("opaque-route");
+    expect(JSON.stringify(event)).not.toContain("opaque-contact");
+    return replyOutput;
+  });
+  await f.habitat.agent.compose({ ...f.request, event: { ...f.request.event, routeId: "opaque-route", contactId: "opaque-contact", revision: "999" } });
+});
+
+for (const operation of ["read", "slice", "search"] as const) test(`context ${operation} preserves memory provenance after prompt eviction`, async () => {
+  let selected!: HabitatMemory, query: unknown;
+  const f = await fixture((body: string, call: number) => {
+    const evidence = driverEvidence(body);
+    expect(evidence.memory.some(entry => entry.id === selected.id)).toBe(false);
+    if (call === 1) return { ...replyOutput, actions: [], tool: { kind: "context-query", query } };
+    expect(evidence.results[0]!.tool).toBe("context-query");
+    if (operation === "read") expect((evidence.results[0]!.result as { text: string }).text).toContain("private provenance marker");
+    else if (operation === "slice") expect(evidence.results[0]!.result).toContain("private provenance marker");
+    else expect((evidence.results[0]!.result as { matches: unknown[] }).matches).toHaveLength(1);
+    return replyOutput;
+  });
+  const state = seedMemory(f, [...Array(7).fill("\u0001".repeat(512)), "private provenance marker " + "z".repeat(450)], true);
+  state.configure(state.snapshot().revision, { ...DEFAULT_HABITAT_PLAN, contextMessages: 32, guidance: "g".repeat(1024) });
+  for (const path of ["ABOUT.md", "MEMORY.md", "STYLE.md"]) await f.workspace.write(path, "g".repeat(2048));
+  await f.workspace.write("history/recent.json", JSON.stringify({ messages: Array.from({ length: 24 }, (_, index) => ({ id: `history-${index}`.padEnd(64, "h"), at: f.now - 30_000 + index * 1000, author: "contact", text: "h".repeat(512) })) }));
+  selected = state.snapshot().memory!.at(-1)!;
+  const index = 6 + 24 + 7, startByte = Buffer.from(JSON.stringify(selected)).indexOf("private provenance marker");
+  query = operation === "read" ? { op: operation, index } : operation === "search" ? { op: operation, query: "private provenance marker" } : { op: operation, index, startByte, endByte: startByte + 25 };
+  await f.habitat.agent.compose(f.request);
+  f.habitat.submitted({ ...f.request, actions: [{ kind: "text", text: "A useful answer" }], messageIds: ["accepted"], at: f.now });
+  const episode = state.snapshot().episodes.at(-1)!;
+  expect(episode.reply.memory?.some(entry => entry.id === selected.id)).toBe(false);
+  expect(episode.reply.priorMemory).toContainEqual({ id: selected.id, sourceDigest: selected.sourceDigest });
+});
