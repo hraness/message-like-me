@@ -125,7 +125,6 @@ export function blogIndexItems(): readonly ArticleIndexItem[] {
     href: blogPostPath(post),
     title: post.title,
     dek: post.dek,
-    eyebrow: post.eyebrow,
     published: post.published,
     ...(post.updated === undefined ? {} : { updated: post.updated }),
   }));

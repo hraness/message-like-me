@@ -1,92 +1,35 @@
-*This post covers the legacy Message Like Me history tools. Today, TextButler reads and sends live messages through GhostGet automation on your Mac, and you bring in a chat's recent history when you add it with `textbutler contacts add CANDIDATE --history`. See [Introducing TextButler](/blog/introducing-textbutler) for how that works.*
+A messaging assistant needs two kinds of judgment. It must understand a conversation well enough to write a useful reply, and it must know which account and conversation that reply belongs to. TextButler separates those jobs: GhostGet connects to messaging apps, while TextButler manages the assistant in each chat.
 
-The legacy history tools can import your Beeper and WhatsApp history without signing in to either service or holding a Beeper or WhatsApp password or session. GhostGet, a separate local tool, exports that history to a private folder in the tools' own format, and the `messagelikeme` command checks the folder and imports it on your Mac. The two programs do not talk to each other during the import; the folder is the whole handoff.
+## Connect the conversation once
 
-## Who this is for
+[GhostGet](https://ghostget.com) provides native iMessage and WhatsApp connections and a connection through Beeper. You set up the messaging account, then choose a direct conversation in TextButler. Selecting it creates a contact with automatic replies off.
 
-You already use Beeper, WhatsApp, or both, and you want the butler to have the history of a conversation with a friend, a sibling, or a group chat. You want that without giving a third app your messaging logins, and without anything leaving your Mac.
+You can import recent messages from that conversation as context. Importing history does not send anything or turn on replies. The history helps the assistant understand what was said before it joined.
 
-The export covers your own history, from accounts you are signed in to, and that includes the other people's messages in each conversation.
+For Beeper, the connection reads conversation history and sends text while Beeper Desktop is open. Support varies by messaging app; the [messaging guide](https://github.com/hraness/textbutler/blob/main/docs/textbutler/messaging-apps.md) describes the available connections and setup requirements.
 
-## What GhostGet does
+## Reading a message is separate from answering it
 
-[GhostGet](https://ghostget.com) is a local command line tool that works with the accounts you are already signed in to on your own computer. For messaging, it can read your Beeper Desktop history and your WhatsApp linked-device history. GhostGet holds the sign-in state and runs the export, and TextButler never sees that state.
+Suppose a friend asks when to meet. GhostGet gives TextButler the message in the selected conversation. TextButler then checks whether that contact is enabled, whether the message fits the response mode, and whether you have recently written in the chat.
 
-For TextButler, GhostGet writes a finished folder of plain text files that describe your accounts, the people in each conversation, the conversations, and their messages, reactions, and deletions.
+In the default keyword mode, the request must include “butler”. Smart mode can recognize a request without that keyword. Both modes use the same contact settings and activity checks.
 
-```sh
-ghostget beeper export-message-like-me --auth <your-beeper-auth> \
-  --output /absolute/private/path/beeper-bundle --json
+If TextButler decides to answer, it combines the conversation with the notes you keep for that contact and asks your chosen model for a reply. GhostGet does not choose the model or write the answer.
 
-ghostget whatsapp export-message-like-me --auth <your-whatsapp-auth> \
-  --output /absolute/private/path/whatsapp-bundle --json
-```
+This separation lets you choose a reply writer without setting up your messaging account again. A local model, a hosted model and a subscription model can use the same connection.
 
-The command names still carry Message Like Me, TextButler's earlier name, because the format was named then and existing tools depend on it.
+## A proposed reply still has to be sent
 
-## How TextButler uses it
+The model returns a proposal. TextButler checks it against the selected conversation and applies the contact’s disclosure settings before asking GhostGet to send it.
 
-TextButler's side is one import command, run with its `messagelikeme` command-line tool, which also keeps the earlier name:
+For a draft you review, TextButler shows the recipient and the complete reply. The send command refers to that reviewed version. For automatic replies, the contact must be enabled and the assistant resumed.
 
-```sh
-messagelikeme ingest bundle --input /absolute/private/path/beeper-bundle --json
-messagelikeme sources list --json
-```
+Keeping these steps separate matters when something fails. A messaging app accepting a request does not mean the other person received it. If TextButler cannot tell whether a message went through, it pauses further automatic activity for that contact rather than sending the same message again.
 
-The import reads only the finished folder. It does not start GhostGet, open Beeper or WhatsApp, use the network, or send anything.
+## Keep account access separate from conversation notes
 
-### TextButler defines the folder format
+Your notes explain the relationship and how the assistant should respond. They do not contain the messaging sign-in or decide which account may send. Account connections and contact controls live outside the files the model can edit.
 
-The folder format is defined in TextButler's repository, as a small module of types and strict checking functions that does no file, network, or messaging work of its own. GhostGet does not keep its own copy of those rules. It depends on TextButler's module, pinned to one fixed commit, and runs every record it writes through TextButler's own checks before the folder is finished.
+That gives each part a clear job. GhostGet connects to the messaging service. Your model writes a proposed response. TextButler checks the conversation and decides whether that response may leave your Mac.
 
-There are two versions:
-
-- **Version 1, for Beeper.** One folder can hold several connected accounts, because Beeper bridges several networks. Each account becomes its own source in TextButler.
-- **Version 2, for WhatsApp.** One folder holds exactly one WhatsApp account, and every address must be a well-formed WhatsApp identifier. Status updates, broadcasts and newsletters are rejected.
-
-Because GhostGet checks its output with TextButler's code at a fixed commit, the rules change in one place, and GhostGet adopts a change only when its pin is updated.
-
-### Each folder lists hashes of its own files
-
-A bundle is seven files: six line-per-record text files and an index file written last. The index lists each file's record count, byte length and SHA-256 hash, plus one hash over the index itself, computed like this:
-
-```text
-bundle hash = SHA-256( canonical JSON of the index, without its integrity section )
-```
-
-"Canonical" means one exact spelling of the JSON, so the same content always produces the same bytes and the same hash. TextButler recomputes all of it before it changes anything in its store. It also refuses a folder that is not private to your user account, contains an extra file, a symbolic link, or a hard link, or changes while it is being read. Checking finishes before the store is touched, and the import itself is one database transaction, so a folder that fails is not partly imported.
-
-### Both repositories test the same sample folder
-
-A small synthetic bundle, with invented accounts such as "Synthetic Primary" and a placeholder phone number, is checked into both repositories as identical files:
-
-- GhostGet's tests run its real exporter over the synthetic source with a fixed clock and require the output to match the checked-in folder byte for byte.
-- TextButler's tests import that same checked-in folder and require the index file's SHA-256 to match the value recorded in the test.
-
-If GhostGet's output changes by one byte, its own test fails. If TextButler's importer stops accepting the checked-in folder, TextButler's test fails. The two copies are kept identical by hand rather than by a shared check, so a deliberate format change means regenerating the folder in GhostGet and copying it into TextButler in step.
-
-### Re-importing does not erase history
-
-Each export is a snapshot of what your Mac could see at that moment, and TextButler treats it that way:
-
-- A later export that leaves out an older message does not delete it from TextButler.
-- An explicit deletion record hides its target, and if the message reappears later it comes back.
-- An older snapshot cannot overwrite newer state.
-
-You can run the export again next month, and a smaller window will not throw away what you imported before.
-
-## What the import gives you
-
-Your Beeper and WhatsApp conversations land in TextButler's private store on your Mac, where its replies can draw on that history, and TextButler never holds a Beeper or WhatsApp login. `sources list` shows what was imported, and `sources show` reports each source's health.
-
-If you use WhatsApp both natively and through Beeper, TextButler stops and asks you to name the overlapping Beeper source with `--overlap-source` before it imports the native export. Both sources stay stored. It counts two messages as one only in one-to-one chats where your own number and the other person's number match exactly, and only after at least one unambiguous shared message agrees on sender, time, direction, text, and kind. Names, partial numbers, approximate times, group chats, and messages without text never count as a match.
-
-## Limits
-
-- **An export holds what your Mac had.** Each export records what the local apps had on your Mac, and says so. The Beeper export marks that it does not claim remote history, and the WhatsApp export marks remote history as incomplete.
-- **No media.** Attachments come across as names and types only. Images, audio and video stay where they are.
-- **WhatsApp reactions are left out.** The WhatsApp tool GhostGet reads cannot tell whether a reaction was later removed, so GhostGet drops reaction rows and adds a warning when it saw any. An empty reactions file in a WhatsApp bundle means reactions could not be observed.
-- **The hashes cover the folder only.** They show the folder was not damaged or edited after GhostGet wrote it, not whether the messaging app's data was right or complete.
-- **Keep the folder private.** It is not anonymized. Names, phone numbers, message text, and who talks to whom are all in it. Do not put it in Git, a shared folder, or a cloud drive.
-
-TextButler status: {{SITE_STATUS_LABEL}}. It runs from source on a Mac and has no downloadable app yet; [Introducing TextButler](/blog/introducing-textbutler) covers what it does today and how to start. GhostGet lists the products that use it on [Built on GhostGet](https://ghostget.com/blog/built-on-ghostget).
+To try the connection, follow the [TextButler setup guide](https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md), select one conversation, and review a draft before enabling automatic replies.

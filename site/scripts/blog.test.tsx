@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -19,7 +20,7 @@ import {
   isIndexablePost,
   provenanceFor,
 } from '../app/_lib/blog.ts';
-import { absoluteUrl, SITE_STATUS, SITE_STATUS_LABEL } from '../app/_lib/site.ts';
+import { absoluteUrl, SITE_STATUS_LABEL } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -48,6 +49,10 @@ const ALLOWED_EXTERNAL_LINKS = new Set([
   'https://xcb.sh/blog/introducing-xcb',
   'https://peopleblade.com',
   'https://textbutler.app',
+  'https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md',
+  'https://github.com/hraness/textbutler/blob/main/docs/textbutler/messaging-apps.md',
+  'https://github.com/hraness/textbutler/blob/main/docs/textbutler/native-subscription.md',
+  'https://github.com/hraness/textbutler/blob/main/docs/textbutler/architecture.md',
 ]);
 
 async function renderPost(slug: string): Promise<string> {
@@ -84,6 +89,23 @@ function visibleText(html: string): string {
 }
 
 describe('blog admission records', () => {
+  test('independent review hashes match the published bodies', async () => {
+    const receipt = JSON.parse(await readFile(resolve(siteRoot, 'editorial-provenance/review-20261001.json'), 'utf8')) as {
+      reviewer: string;
+      reviewerType: string;
+      reviews: Record<string, { sha256: string; verdict: string }>;
+    };
+    expect(receipt.reviewerType).toBe('ai');
+    for (const post of BLOG_POSTS) {
+      const path = `site/content/blog/${post.slug}.md`;
+      const reviewed = receipt.reviews[path];
+      expect(reviewed?.verdict, path).toBe('approve-written-body');
+      const body = await readFile(resolve(siteRoot, '..', path));
+      expect(createHash('sha256').update(body).digest('hex'), path).toBe(reviewed?.sha256);
+      expect(admissionFor(post).review?.reviewer, path).toBe(receipt.reviewer);
+    }
+  });
+
   test('validate with the shared rubric', () => {
     expect(() => assertArticleAdmissions(BLOG_ADMISSIONS)).not.toThrow();
   });
@@ -98,22 +120,22 @@ describe('blog admission records', () => {
 
   test('record the disclosed AI review and no human review', () => {
     for (const admission of BLOG_ADMISSIONS) {
-      expect(admission.review.reviewerType, admission.href).toBe('ai');
+      expect(admission.review?.reviewerType, admission.href).toBe('ai');
       expect(admission.humanReview, admission.href).toBeNull();
       expect(admission.drafting, admission.href).toBe('ai-from-source');
     }
   });
 
-  test('keeps the integration post without a covering relation out of indexes', () => {
+  test('lists reviewed articles with current runtime relations', () => {
     expect(indexableBlogPosts().map(blogPostPath)).toEqual([
       '/blog/introducing-textbutler',
       '/blog/how-textbutler-uses-xcb',
       '/blog/how-textbutler-uses-algal',
+      '/blog/how-textbutler-uses-ghostget',
     ]);
-    for (const slug of ['how-textbutler-uses-ghostget']) {
-      const post = BLOG_POSTS.find((candidate) => candidate.slug === slug);
-      expect(post, slug).toBeDefined();
-      if (post !== undefined) expect(admissionFor(post).lifecycle, slug).toBe('quarantined');
+    for (const post of BLOG_POSTS) {
+      expect(admissionFor(post).review?.reviewerType).toBe('ai');
+      expect(post.relationIds).not.toContain('contract:wrench:message-like-me:exports-private-bundles');
     }
   });
 });
@@ -125,7 +147,7 @@ describe('blog pages', () => {
       expect(html.match(/<h1\b/gu), post.slug).toHaveLength(1);
       expect(html, post.slug).toContain('By <a href="https://hraness.com" rel="author">Hraness</a>');
       const sentence = articleProvenanceSentence(provenanceFor(post));
-      expect(sentence).toMatch(/^Drafted with AI from the source code and reviewed by Claude Opus 5\.5 \(claude-opus-5-5\) [a-z ]*review\.$/u);
+      expect(sentence).toBe(`Drafted with AI from the source code and reviewed by ${admissionFor(post).review?.reviewer}.`);
       expect(html, post.slug).toContain(sentence);
       expect(html, post.slug).not.toMatch(/human/iu);
       expect(html, post.slug).toContain('"@type":"BlogPosting"');
@@ -168,26 +190,30 @@ describe('blog pages', () => {
         expect(copy, `${post.slug}: ${word}`).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
       }
     }
-  }, 20_000); // renders every post, the launch post with its mockups
+  });
 
-  test('render status and versions from release data, never typed in post sources', async () => {
+  test('keep installation details in the current guide and release pins out of evergreen articles', async () => {
     for (const post of BLOG_POSTS) {
       const source = await readFile(resolve(siteRoot, 'content/blog', `${post.slug}.md`), 'utf8');
       expect(source, post.slug).not.toMatch(/\b\d+\.\d+\.\d+\b/u);
       expect(source, post.slug).not.toContain(SITE_STATUS_LABEL);
     }
     const introducing = await renderPost('introducing-textbutler');
-    expect(introducing.split(SITE_STATUS)).toHaveLength(2);
+    expect(introducing).toContain('href="https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md"');
+    expect(introducing).not.toContain('the-longer-version');
+    expect(introducing).not.toContain('<time');
+    const guide = await readFile(resolve(siteRoot, '../docs/textbutler/getting-started.md'), 'utf8');
     const rootPackage = JSON.parse(await readFile(resolve(siteRoot, '../package.json'), 'utf8')) as { packageManager: string };
-    expect(introducing).toContain(`Bun ${rootPackage.packageManager.replace(/^bun@/u, '')}`);
+    expect(guide).toContain(`Bun ${rootPackage.packageManager.replace(/^bun@/u, '')}`);
   });
 
   test('show related products only along registered relations', async () => {
     const ghostget = await renderPost('how-textbutler-uses-ghostget');
     expect(ghostget).toContain('href="https://ghostget.com"');
     expect(ghostget).not.toContain('href="https://peopleblade.com"');
-    for (const slug of ['how-textbutler-uses-xcb', 'how-textbutler-uses-algal']) {
-      expect(await renderPost(slug), slug).not.toContain('plain-publication__related-products');
+    for (const post of BLOG_POSTS.filter((entry) => entry.slug.startsWith('how-'))) {
+      expect(post.relationIds).toHaveLength(1);
+      expect(post.relationIds[0]).toStartWith('runtime:message-like-me:');
     }
   });
 

@@ -1,0 +1,82 @@
+{
+  "reviewer": "Codex GPT-6 independent editorial review",
+  "reviewerType": "ai",
+  "reviewedAt": "2026-10-01T02:00:29.138116+00:00",
+  "reviews": {
+    "site/content/blog/introducing-textbutler.md": {
+      "sha256": "6ae7218d02281fab4c4cef76f808af2f9efeceda917f5d2fa8880883c2e8b603",
+      "verdict": "approve-written-body",
+      "scores": {
+        "readerUtility": 2,
+        "originalEvidence": 1,
+        "factualConfidence": 2,
+        "hostFit": 2,
+        "voiceIntegrity": 2,
+        "maintenanceValue": 2
+      },
+      "followUpReviews": [
+        {
+          "reviewer": "Codex GPT-6 independent editorial review",
+          "reviewerType": "ai",
+          "reviewedAt": "2026-10-01T03:20:29.247730+00:00",
+          "previousSha256": "18295ce56ec2b77c18e190ccadcc19ef0736e8407d0a4594acfb97b17277f565",
+          "sha256": "f078af790b45b196ff43477b32dc4c6d03256488ebb3b20edb7641faf7a00af2",
+          "scope": "Removed the sentence \u201cThis route is in testing.\u201d from the Ollama option; the remainder of the previously reviewed body is unchanged.",
+          "verdict": "approve-written-body",
+          "reason": "Accurately describes the existing Ollama option without claiming measured quality or group support."
+        },
+        {
+          "reviewer": "Codex GPT-6 independent editorial review",
+          "reviewerType": "ai",
+          "reviewedAt": "2026-10-01T15:08:46.697033+00:00",
+          "previousSha256": "f078af790b45b196ff43477b32dc4c6d03256488ebb3b20edb7641faf7a00af2",
+          "sha256": "6ae7218d02281fab4c4cef76f808af2f9efeceda917f5d2fa8880883c2e8b603",
+          "scope": "Direct/group introduction and separate editable group notes with post-enrollment context and explicit member-change re-selection.",
+          "verdict": "approve-written-body",
+          "reason": "Claims match independently reviewed TextButler enrollment/workspace code and GhostGet0.18.71 contract."
+        }
+      ]
+    },
+    "site/content/blog/how-textbutler-uses-ghostget.md": {
+      "sha256": "371a51579dd6e3e44fd81af1c427657ab7429fb88071232bad4582a2edd88876",
+      "verdict": "approve-written-body",
+      "scores": {
+        "readerUtility": 2,
+        "originalEvidence": 1,
+        "factualConfidence": 2,
+        "hostFit": 2,
+        "voiceIntegrity": 2,
+        "maintenanceValue": 2
+      }
+    },
+    "site/content/blog/how-textbutler-uses-xcb.md": {
+      "sha256": "ca2e08dfe72725fe52bd7b8188f660052c3c573bb22f64b993b8d8a9579f9a8a",
+      "verdict": "approve-written-body",
+      "scores": {
+        "readerUtility": 2,
+        "originalEvidence": 1,
+        "factualConfidence": 2,
+        "hostFit": 2,
+        "voiceIntegrity": 2,
+        "maintenanceValue": 2
+      }
+    },
+    "site/content/blog/how-textbutler-uses-algal.md": {
+      "sha256": "4208d3739396f7a6c7d4e5e0159bd6c60d4b8a2581f037df82269fd47d9fec18",
+      "verdict": "approve-written-body",
+      "scores": {
+        "readerUtility": 2,
+        "originalEvidence": 1,
+        "factualConfidence": 2,
+        "hostFit": 2,
+        "voiceIntegrity": 2,
+        "maintenanceValue": 2
+      }
+    }
+  },
+  "notes": [
+    "Full four-body read plus final changes independently reviewed; default-mode claims scoped and unsupported auto-wait removed.",
+    "Actual runtime relation IDs validated by separate shared worker against released immutable portfolio facts.",
+    "Written-body approval does not close retained diagram overlap; visually fix and inspect it before delivery."
+  ]
+}

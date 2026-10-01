@@ -1,7 +1,7 @@
 # TextButler readiness
 
 TextButler currently supports a local, owner-controlled pilot. It is headless:
-its CLI and guided terminal can connect configured messaging accounts, select direct conversations,
+its CLI and guided terminal can connect configured messaging accounts, select direct or group conversations,
 show the reply inbox and manage contacts. An owner can write a reply, review its
 complete disclosed text and explicitly send it. Installation starts no service,
 connects no account and enables no automatic replies.
@@ -16,7 +16,7 @@ remain visible in setup and must be resolved before that claim is made.
 | Agent execution | Verified bundle requires reviewed TextButler composition admission; default Qwen 3.5 Flash writer through the owner's Vercel AI Gateway key, or an [external xcb subscription connection](native-subscription.md), with an explicit executable pin, private state, account and model; no default account or automatic activation | Exact xcb build/provider admission, both classifier and reply checks, and authenticated live inference on the selected account; Claude API still requires separate trusted runtime admission |
 | iMessage | Existing native GhostGet connection | Current account permissions and live transport qualification |
 | WhatsApp | Existing GhostGet linked-device connection and explicit sync | Current linked-device identity, sync and live transport qualification |
-| Beeper | Direct text conversations through GhostGet 0.18.14+; independent connection checks | Current Desktop API/account setup, canonical pending-send reconciliation, and edit/delete observation coverage |
+| Beeper | Direct and group text conversations through GhostGet, using the version required by the [setup guide](getting-started.md); independent connection checks | Current Desktop API/account setup, canonical pending-send reconciliation, and edit/delete observation coverage |
 | Uncertain sends | Journal preserves intent and blocks further sends | Owner reconciliation using durable upstream run/message identity; no blind retry |
 | Distribution | Local integrity-checked bundle and inert installer; `external-xcb` capability keeps provider execution in separately configured xcb | Signed/public release provenance, upgrade qualification and provider-specific admission; artifact hashes do not attest providers |
 

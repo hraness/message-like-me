@@ -8,7 +8,7 @@ export const BLOG_PATH = '/blog' as const;
 export const BLOG_FEED_PATH = '/blog/feed.xml' as const;
 export const BLOG_TITLE = 'TextButler blog';
 export const BLOG_DESCRIPTION =
-  'Posts about TextButler, AI in your messages: how it decides when to answer, what writes its replies, and the tools it runs on.';
+  'Choose who an assistant replies to, how it writes, and which tools it uses.';
 // The blog share card's copy, written to fit the card as drawn (see scripts/social-image.test.ts).
 // The page's own heading is "Blog", which the card shows as its eyebrow, so the
 // card headline names what the posts are about instead of repeating it.
@@ -36,26 +36,27 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   {
     slug: 'introducing-textbutler',
     title: 'Introducing TextButler',
-    dek: 'AI in your messages. When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. Claude Code, Codex, or Devin can set it up for you.',
+    dek: 'Choose which conversations an assistant can answer, how it identifies itself, and where replies are written. Start with one reviewed draft.',
     eyebrow: 'Launch',
     published: '2026-09-24',
-    updated: '2026-09-30',
+    updated: '2026-10-01',
     tags: ['textbutler', 'messaging', 'imessage', 'local-models', 'ollama', 'macos', 'coding-agents', 'xcb'],
     relationIds: [
-      'contract:wrench:message-like-me:exports-private-bundles',
-      'contract:message-like-me:peopleblade:shared-bundle-format',
+      'runtime:message-like-me:wrench:reads-and-sends-messages-through',
+      'runtime:message-like-me:xcb:drafts-replies-through',
+      'runtime:message-like-me:algal:runs-reply-habitats-on',
     ],
-    card: { description: 'AI in your messages. A clearly marked AI assistant answers for you from your Mac.' },
+    card: { description: 'Choose which chats an assistant can answer.' },
   },
   {
     slug: 'how-textbutler-uses-xcb',
     title: 'How TextButler uses xcb to reply on your own subscription',
-    dek: 'One of TextButler’s three reply writers is the Claude Code, Codex, or Devin subscription you already pay for, reached through xcb with no tools of its own.',
+    dek: 'Run replies through a model subscription you already use, while keeping contact permissions and sending in TextButler.',
     eyebrow: 'Integration',
     published: '2026-09-24',
-    updated: '2026-09-28',
+    updated: '2026-10-01',
     tags: ['textbutler', 'xcb', 'subscriptions', 'drafts', 'claude-code', 'codex', 'devin'],
-    relationIds: [],
+    relationIds: ['runtime:message-like-me:xcb:drafts-replies-through'],
     card: {
       headline: 'How TextButler uses xcb',
       description: 'One reply writer is your AI subscription.',
@@ -63,27 +64,27 @@ export const BLOG_POSTS: readonly BlogPost[] = [
   },
   {
     slug: 'how-textbutler-uses-algal',
-    title: 'How TextButler uses ALGAL to improve replies per contact',
-    dek: 'A TextButler habitat replaces a contact\'s reply plan only after a blinded ALGAL replay scores the new plan no lower on any case and higher on average.',
+    title: 'How TextButler uses ALGAL to compare reply plans',
+    dek: 'Compare a proposed reply plan with the current one on past conversations, while keeping contact permissions and account settings under your control.',
     eyebrow: 'Integration',
     published: '2026-09-24',
-    updated: '2026-09-28',
+    updated: '2026-10-01',
     tags: ['textbutler', 'algal', 'habitats', 'drafts', 'messaging', 'local-first'],
-    relationIds: [],
+    relationIds: ['runtime:message-like-me:algal:runs-reply-habitats-on'],
     card: {
       headline: 'How TextButler uses ALGAL',
-      description: 'A new reply plan must win a blinded replay.',
+      description: 'Compare reply guidance on past conversations.',
     },
   },
   {
     slug: 'how-textbutler-uses-ghostget',
-    title: 'How the legacy history tools use GhostGet to import your message history',
-    dek: 'The legacy Message Like Me history tools import Beeper and WhatsApp history from a private folder that GhostGet writes. Live TextButler replies take a different path.',
-    eyebrow: 'Legacy',
+    title: 'How TextButler uses GhostGet to connect your chats',
+    dek: 'GhostGet connects to messaging apps. TextButler uses the conversation to prepare a reply and checks the contact’s settings before sending it.',
+    eyebrow: 'Integration',
     published: '2026-09-24',
-    updated: '2026-09-28',
+    updated: '2026-10-01',
     tags: ['textbutler', 'ghostget', 'beeper', 'whatsapp', 'message-history', 'local-first'],
-    relationIds: ['contract:wrench:message-like-me:exports-private-bundles'],
+    relationIds: ['runtime:message-like-me:wrench:reads-and-sends-messages-through'],
     card: {
       headline: 'How TextButler uses GhostGet',
       description: 'It reads and sends live messages via GhostGet.',

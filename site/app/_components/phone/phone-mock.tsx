@@ -20,6 +20,8 @@ export interface PhoneMockProps {
    * crops the empty top of a short thread so the device hugs the conversation.
    */
   readonly screenHeight?: number;
+  /** Show only the top of the complete device, in device points, with a quiet fade. */
+  readonly crop?: number;
   /** Overrides the generated accessible name (a full reading of the conversation). */
   readonly label?: string;
   readonly className?: string;
@@ -43,6 +45,7 @@ export function PhoneMock({
   theme = 'auto',
   maxWidth,
   screenHeight,
+  crop,
   label,
   className,
   ref,
@@ -54,7 +57,7 @@ export function PhoneMock({
   if (maxWidth) vars['--phone-max-width'] = `${maxWidth}px`;
   if (screenHeight) vars['--phone-h'] = String(screenHeight + 22);
   const style = Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined;
-  return (
+  const phone = (
     <div
       ref={ref}
       className={className ? `${styles.root} ${className}` : styles.root}
@@ -74,4 +77,7 @@ export function PhoneMock({
       </PhoneFrame>
     </div>
   );
+  if (crop === undefined) return phone;
+  if (!Number.isFinite(crop) || crop <= 0) throw new RangeError('Phone crop must be positive.');
+  return <div className={styles.crop} data-phone-crop="" style={{ '--crop-h': String(crop), ...(maxWidth ? { '--crop-max': `${maxWidth}px` } : {}) } as CSSProperties}>{phone}</div>;
 }

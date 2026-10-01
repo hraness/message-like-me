@@ -1,0 +1,115 @@
+{
+  "inspectedOn": "2026-10-01",
+  "tool": "SlopCamera",
+  "version": "3.9.1",
+  "command": "bun run diagrams d1-one-message; bun run diagrams d1-one-message-narrow after label width repair; bun run diagrams d3-who-does-what d4-five-checks; bun run diagrams d3-who-does-what after simpler install label",
+  "exitCode": 0,
+  "browser": {
+    "kind": "Google Chrome for Testing",
+    "playwright": "1.62.0",
+    "revision": "chromium-1234",
+    "version": "151.0.7922.34",
+    "identityAndVersionVerified": true,
+    "singleMergedDisabledFeaturesVerified": true,
+    "muted": true,
+    "ownedBrowserClosed": true
+  },
+  "findings": [
+    "Group membership check replaces the obsolete direct-only label in both diagrams and accessible descriptions.",
+    "Narrow member chip uses available row width, preserves12px font, and fits one line in both themes.",
+    "Inspected rendered narrow/light/dark and wide/dark images; existing ACK/final reply spacing remains clear.",
+    "Static small-target and complexity lint notes remain14perlayout; label-overflow is resolved.",
+    "Remaining launch five-checks diagram now uses Same members?, and both setup diagrams say turn on a chat and install TextButler.",
+    "Inspected d3 wide/light and narrow/dark and d4 light/dark; all changed text fits without shrinking type."
+  ],
+  "lint": {
+    "strictNarrowExitCode": 2,
+    "notesPerLayout": 14,
+    "categories": [
+      "short-arrow",
+      "small-target",
+      "too-many-elements"
+    ],
+    "interpretation": "Static chip/icon/bubble size and diagram-complexity notes remain; no claim of strict success.",
+    "additionalLayouts": {
+      "d3-who-does-what-narrow": 19,
+      "d3-who-does-what-wide": 9,
+      "d4-five-checks": 23
+    }
+  },
+  "sha256": {
+    "site/design/diagrams/d1-one-message-narrow.diagram.json": "0859013896593e7515a592ed3840e4951ee06c537984e0a372199c832e77fbce",
+    "site/public/diagrams/d1-one-message-narrow.light.svg": "a51d24d722cceedb7f8cd55d1b49a4d269e3305149a27fcf41e108da7e772edf",
+    "site/public/diagrams/d1-one-message-narrow.dark.svg": "989e77a0f4d1f4f637b42d9ff00654d2e69a373088aded2ca02fd2cec99c2fea",
+    "site/public/diagrams/d1-one-message-narrow.light@2x.png": "2d94d195893e8920030a45b0471de6b8332d385b84c72f9e7112b7460036efdf",
+    "site/public/diagrams/d1-one-message-narrow.dark@2x.png": "7ccaadb6ccd31a05eb1eea613d4c95b04627afa8443ee0cf57834a605551357e",
+    "site/design/diagrams/d1-one-message-wide.diagram.json": "f56f680e711f834d7aa1665d10d3d8aaf9249ecab03745ee5aeda2b40463b7ad",
+    "site/public/diagrams/d1-one-message-wide.light.svg": "1c6448452b064478bae6c5fa84dbf08bd8b60d3dbb8d2de8d152e3a36c62b7cc",
+    "site/public/diagrams/d1-one-message-wide.dark.svg": "4b7a018d2c999ffd77cd32291afd23589aa0111b9c02dd8cd77e7661f301ab2f",
+    "site/public/diagrams/d1-one-message-wide.light@2x.png": "e128d2a68ea9b885cdd1b9dc1d5d55a512bdd4c6fb46a623a19ded28abe26279",
+    "site/public/diagrams/d1-one-message-wide.dark@2x.png": "1ac9270c4af50d0a0d328ebaa6b0c76de705e68223946158c4eca4098567361b",
+    "site/design/diagrams/diagrams.meta.json": "c8d5be5b5998f6f3ee340b11e7243b5ca02cf335a8b368f6df6c1a86bb50a5af",
+    "site/design/diagrams/d3-who-does-what-narrow.diagram.json": "6406e25c4a803447faf63073484862af06f13d8288d45574450ba175bd3e9a3b",
+    "site/public/diagrams/d3-who-does-what-narrow.light.svg": "f2e23e7dda431fcee5778f10f08d2b15a241cc71a4b625e195eab3dc29d16a10",
+    "site/public/diagrams/d3-who-does-what-narrow.dark.svg": "bf2cb337caa4feb2d3c42c5b4fe57ddea6cbf0c0bf06186e0a390e10237ed073",
+    "site/public/diagrams/d3-who-does-what-narrow.light@2x.png": "9188d6d5b1b53887f4e29d880c8156724e01ca534846fe7d0201c4d47e3133d6",
+    "site/public/diagrams/d3-who-does-what-narrow.dark@2x.png": "1752ef0ae7efb26e00a1f8b022b2371c4135ba9932fab8fa9cf2f47401e3f603",
+    "site/design/diagrams/d3-who-does-what-wide.diagram.json": "d4b6815777c11682cd054ec13797407b7ddd7b2c45646ab75dfa5629b852a710",
+    "site/public/diagrams/d3-who-does-what-wide.light.svg": "5a2ca0d92ac7b4880bc094abd17c7585ee93499167975f062d62120915597825",
+    "site/public/diagrams/d3-who-does-what-wide.dark.svg": "ac84d56ac296abcd8e41e7aa9ee2aca58ac9b617b6d78dccd76d00f840e61a57",
+    "site/public/diagrams/d3-who-does-what-wide.light@2x.png": "1878444f9d03657fbb8af880e14ff5b3f18ed12cb995191e500d272fed9091f8",
+    "site/public/diagrams/d3-who-does-what-wide.dark@2x.png": "c8c598b725626fd92fbcdeb4f535705a2fe41703a805041d5755eea46ee3084d",
+    "site/design/diagrams/d4-five-checks.diagram.json": "43244ed05be2b1b97f374732aac3cacb8768ffd24f9cc97a5e57293807a61795",
+    "site/public/diagrams/d4-five-checks.light.svg": "3f004d28ae6079817ac51bffbe2abaec1c078771d172b2d27d06b303cd41af00",
+    "site/public/diagrams/d4-five-checks.dark.svg": "012e14764e63f868118ffd373bba20d89387a0bbb002c3f40ae153fc0fc07806",
+    "site/public/diagrams/d4-five-checks.light@2x.png": "795ed8f00eb4886b2a06826d444cdb7603dd2fda6566b6720e0e844a21495c55",
+    "site/public/diagrams/d4-five-checks.dark@2x.png": "4b2e8e21fc9c4cd62e58a9ea4697721786900cec22215fbc57ad1c479ecfd37c"
+  },
+  "previousReviews": [
+    {
+      "inspectedOn": "2026-10-01",
+      "tool": "SlopCamera",
+      "version": "3.9.1",
+      "command": "bun run diagrams d1-one-message",
+      "exitCode": 0,
+      "browser": {
+        "kind": "Google Chrome for Testing",
+        "playwright": "1.62.0",
+        "revision": "chromium-1234",
+        "version": "151.0.7922.34",
+        "identityAndVersionVerified": true,
+        "singleMergedDisabledFeaturesVerified": true,
+        "muted": true,
+        "ownedBrowserClosed": true
+      },
+      "findings": [
+        "Inspected narrow and wide PNGs in both light and dark themes.",
+        "Narrow ACK and final-reply subtitles read \u201cvia GhostGet\u201d and no longer overlap the bubbles.",
+        "Wide source geometry is unchanged; both layouts were rendered with the same verified toolchain."
+      ],
+      "lint": {
+        "strictNarrowExitCode": 2,
+        "notesPerLayout": 14,
+        "categories": [
+          "small-target",
+          "too-many-elements"
+        ],
+        "interpretation": "Static chip/icon/bubble size and diagram-complexity notes remain; no claim of strict success."
+      },
+      "sha256": {
+        "site/design/diagrams/d1-one-message-narrow.diagram.json": "a3d802c77a12480a531f05853a98b60c4fe8f82284d8f610680bebd5c782fc39",
+        "site/public/diagrams/d1-one-message-narrow.light.svg": "290c9de419073e134b11eaa447bf533fcee68bb655cde58f85efc86d3abe308b",
+        "site/public/diagrams/d1-one-message-narrow.dark.svg": "818697c7d2693a663e19085d412747b1aaa5a213e64f1461f1116d99ecae5b88",
+        "site/public/diagrams/d1-one-message-narrow.light@2x.png": "31f6ccbfb9b9ca587457cb7ac6d6f8e63ff20f685ed31e2eac65b8f07ac515eb",
+        "site/public/diagrams/d1-one-message-narrow.dark@2x.png": "82e5babcb13f8bee1bbf640d6f98698e3589254d3a675b4486a3ec1731929d76",
+        "site/design/diagrams/d1-one-message-wide.diagram.json": "cad25e406e5ab3f6300b660b6549b4c78eb4070df0e46148dd7bc49c9687f446",
+        "site/public/diagrams/d1-one-message-wide.light.svg": "6359636c23beff9a2c19e749fe38d87e34b75d2e745a82faf1e2195390350d6a",
+        "site/public/diagrams/d1-one-message-wide.dark.svg": "e26bc8b3560a23aca8778b23b969cce3716bb410c1a5dc75954c56d7a0ebd6f7",
+        "site/public/diagrams/d1-one-message-wide.light@2x.png": "a293e49f225fe628a35301e151db758f50a7c09cb463ec18bff2429078d91f1e",
+        "site/public/diagrams/d1-one-message-wide.dark@2x.png": "6b39e5962e59d9d2029b836604abc2278fad5b0c3a271f809f79a541852b78a2"
+      }
+    }
+  ],
+  "updatedAt": "2026-10-01T15:35:13.505485+00:00",
+  "reviewer": "Root visual integration review; group-copy semantics independently reviewed by lifecharts_layout"
+}

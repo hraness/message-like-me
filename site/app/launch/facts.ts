@@ -13,7 +13,7 @@ export const LAUNCH_STATUS = SITE_STATUS_LABEL satisfies LaunchStatus;
 export const launchFacts = {
   status: {
     value: LAUNCH_STATUS,
-    source: 'site/app/_lib/site.ts SITE_STATUS_LABEL, the one development-status label README.md repeats',
+    source: 'site/app/_lib/site.ts SITE_STATUS_LABEL, the machine-readable development stage',
   },
   cooldown: {
     value: '5 minutes',
@@ -27,10 +27,6 @@ export const launchFacts = {
     value: '12',
     source: 'packages/textbutler/src/config.ts default contact maxRepliesPerHour: 12',
   },
-  smartConfidence: {
-    value: '85%',
-    source: 'packages/textbutler/src/decision.ts smart mode replies only at confidence >= 0.85',
-  },
   draftExpiry: {
     value: '15 minutes',
     source: 'packages/textbutler/src/owner-replies.ts DRAFT_TTL_MS = 15 * 60_000',
@@ -41,7 +37,7 @@ export const launchFacts = {
   },
   localModelSize: {
     value: '2.5 GB',
-    source: 'README.md reply-writer table and docs/textbutler/getting-started.md: the pinned qwen3:4b-instruct-2507-q4_K_M model is about 2.5 GB',
+    source: 'docs/textbutler/getting-started.md: the pinned qwen3:4b-instruct-2507-q4_K_M model is about 2.5 GB',
   },
   memoryEntries: {
     value: '64',

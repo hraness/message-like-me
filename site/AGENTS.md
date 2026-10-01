@@ -5,11 +5,13 @@ Textbutler at `textbutler.app`. The current rebrand overrides historical product
 name, description, and drafts-only marketing instructions below. Describe the
 headless daemon and its CLI and guided terminal, contact-scoped memory,
 selected coding agent, and disclosed responses. Textbutler has no menu bar
-companion or desktop window. State the development status once, near the top, by rendering
-`SITE_STATUS` from `app/_lib/site.ts`; put each other limit beside the feature it
-limits, in the reader's terms, and keep qualification, admission, composition and
-custody vocabulary off the pages. Do not advertise live
-autoresponses, rich transport support, or a signed download before verified.
+companion or desktop window. Write the homepage and launch post around the
+supported product and its benefits. Use `SITE_STATUS` from `app/_lib/site.ts`
+for the one concise macOS/setup note; do not add development badges, live-test
+caveats, or generic illustration captions. Keep necessary feature and setup
+conditions in concise supporting copy beside the claim, and keep qualification,
+admission, composition and custody vocabulary off the pages. Verify capabilities
+and the supported installation path before making public claims.
 Retained Message Like Me source documentation describes the legacy history
 reader. Preserve immutable artifact versions and the production delivery gates
 below until their reviewed publication-identity migration is complete.
@@ -27,6 +29,24 @@ below until their reviewed publication-identity migration is complete.
 
 # Guidelines
 
+- Combine precompiled UI, Design Kit and footer recipes through the shared
+  compiler's manifest-checked rule union in `stylex.config.mjs` and PostCSS.
+  Import each package's `compiler-foundation.css`; never concatenate its
+  standalone `styles.css`, `stylex.css`, or an entry such as `palettes.css`
+  that imports those recipes. Keep one union after all foundations. Product
+  CSS must not repair shared atomic-class collisions with local breakpoints.
+  This site does not author local StyleX recipes; that requires the shared
+  compiler's complete application-graph adapter rather than this package-only
+  integration.
+- Use the shared split hero and split sections to place product proof beside
+  the copy on wide screens and after it on phones. Crop phone mockups through
+  the `PhoneMock` component's crop prop, preserving device proportions and
+  keeping complete example replies above the fade. Keep playback controls
+  outside the cropped viewport; export stills and films retain complete devices.
+- Provider cards must reflow from icon beside copy to icon above copy when the
+  available reading width is tight, including enlarged text. Base wrapping on
+  the card’s available width; keep full-size marks and complete copy without
+  ellipsis, clipping, or smaller text to force a fit.
 - Keep the page informational. It must never accept, upload, transmit, or
   request message history, contact data, study packets, profiles, or drafts.
 - Where the site describes the legacy Message Like Me package, keep its

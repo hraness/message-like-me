@@ -11,13 +11,15 @@ doctor` after each step and do what it says, stop and hand over whenever macOS
 asks for a permission, a pairing, or a key, leave every contact turned off, and
 don't send any messages.
 
-You need a Mac, Bun 1.3.14, and GhostGet, a separate Mac tool that handles
-messaging sign-in and permissions. If GhostGet isn't installed, follow its
-[getting started tutorial](https://ghostget.com/docs/tutorials/getting-started)
-first.
+You need a Mac, Bun 1.3.14, and exactly GhostGet 0.18.71, the tool that handles
+messaging sign-in and permissions. Install it or update an existing installation
+using the [GhostGet setup guide](https://ghostget.com/docs/tutorials/getting-started).
+Run `ghostget --version` and confirm it reports `0.18.71` before connecting.
+After an update, restart or reconnect TextButler's GhostGet host so it checks the
+new capabilities, then run `textbutler doctor`.
 
 AI replies need a local build of TextButler and something to write them.
-Replies can be written by a local model through Ollama (in testing), by Qwen 3.5
+Replies can be written by a local model through Ollama, by Qwen 3.5
 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or
 Devin subscription through xcb. If you choose one with a command, that choice
 wins. Otherwise a saved Gateway key wins over a local model. When a Gateway key
@@ -73,11 +75,12 @@ setup steps and whether reply generation is actually available.
 
 ## Connect your messaging apps
 
-TextButler uses an existing GhostGet installation for account sign-in, permissions
-and messaging access. [Install GhostGet](https://ghostget.com/docs/tutorials/getting-started)
-first if you haven't. You need its physical executable path and the exact account
-ID; TextButler does not guess an identity. Native iMessage can use the app setup
-flow below. Set up other messaging accounts in GhostGet first.
+TextButler uses GhostGet for account sign-in, permissions and messaging access.
+[Install or update GhostGet](https://ghostget.com/docs/tutorials/getting-started)
+to exactly `0.18.71`, then check the version of the executable you will configure
+below. You need its physical executable path and the exact account ID; TextButler
+does not guess an identity. Native iMessage can use the app setup flow below.
+Set up other messaging accounts in GhostGet first.
 
 Choose **Connect messaging apps** in the terminal:
 
@@ -85,11 +88,13 @@ Choose **Connect messaging apps** in the terminal:
 - **WhatsApp:** a native linked device; connecting explicitly starts sync.
 - **Beeper:** linked apps such as Signal, Telegram, Instagram, WhatsApp and
   iMessage. Keep Beeper Desktop open with its local API enabled. The current
-  GhostGet automation adapter supports direct conversations and text replies.
+  GhostGet automation adapter supports direct and group conversations with text replies.
 
-Beeper automation requires GhostGet 0.18.14 or later with the
-`ghostget.messaging-automation/1` protocol. A connection being configured does
-not prove that it is connected. Check it before selecting conversations.
+TextButler uses GhostGet's `ghostget.messaging-automation/1` protocol and checks
+the account's capabilities when its host connects. Updating GhostGet does not
+refresh an already running host: restart TextButler's background service or
+reconnect its GhostGet host, then run `textbutler doctor` before selecting
+conversations.
 
 Initial setup can also be scripted. Replace the paths and IDs with your own:
 
@@ -174,8 +179,8 @@ with a notice; at a terminal, press Enter to open the Full Disk Access pane. In
 Enable its switch. macOS may require your password in its own dialog.
 
 Configure the exact GhostGet `src/cli.ts`, Bun runtime, private state directory
-and `imessage:ACCOUNT` binding using `setup` above. This development version pins
-GhostGet 0.18.44 and its reviewed `imsg` helper artifact. Native setup provisions
+and `imessage:ACCOUNT` binding using `setup` above. Native setup requires exactly
+GhostGet 0.18.71 and its reviewed `imsg` helper artifact. Native setup provisions
 that pinned helper into the connector state directory (`imessage transport install`)
 before linking; a missing or mismatched artifact stops setup instead of reaching
 messaging. Setup links only
@@ -246,7 +251,7 @@ To send your own words to several people at a slow, safe pace, see
 
 Choose one of the three options below. You can switch later.
 
-### A local model on your Mac (in testing)
+### A local model on your Mac
 
 With a local model, the reply is written on your Mac. Install
 [Ollama](https://ollama.com), then pull the model TextButler looks for (about
@@ -326,9 +331,13 @@ contract. Source and bundle integrity checks alone do not qualify an AI provider
 
 ## Add one conversation and try the inbox
 
-Choose **Add a conversation**, select the exact person and app, and choose
-whether to import recent text history. Importing history never sends anything.
-The new contact has automatic replies off.
+Choose **Add a conversation**, select the exact direct or group chat and app,
+and review its members. For a direct chat, you can also import recent text
+history. Group context starts with new messages after enrollment; older group
+history is not imported. Each group has separate editable notes. If the
+account or membership changes, enroll that group again before replies resume.
+Selecting a conversation or importing history never sends anything. The new
+conversation has automatic replies off.
 
 Choose **Inbox & replies**. TextButler lists unanswered incoming messages in your
 selected conversations. Choose **Type a reply**, review the recipient and the

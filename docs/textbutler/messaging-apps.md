@@ -6,6 +6,13 @@ iMessage, WhatsApp, Signal, Telegram and Instagram, Beeper is the simplest
 shared connection. Each conversation still needs its own enrollment and reply
 settings. An available connection does not by itself enable automatic replies.
 
+## Direct and group conversations
+
+Select a direct chat or group in iMessage, WhatsApp, or Beeper. Group setup
+requires a complete member list and keeps notes separate from direct chats.
+Context begins with new messages after enrollment. A change to the account or
+group membership stops replies until you select the group again.
+
 ## Choose a connection
 
 | App | Current route | Other options |

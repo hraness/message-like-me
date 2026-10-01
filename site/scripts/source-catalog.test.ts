@@ -33,13 +33,13 @@ describe('supported source presentation', () => {
     });
 
     expect(routeDates).toEqual([
-      ['/', '2026-09-28T00:00:00.000Z'],
+      ['/', '2026-10-01T00:00:00.000Z'],
       ['/sources', '2026-09-11T00:00:00.000Z'],
-      ['/docs', '2026-09-28T00:00:00.000Z'],
+      ['/docs', '2026-10-01T00:00:00.000Z'],
       ['/methodology', '2026-09-11T00:00:00.000Z'],
       ['/research', '2026-09-11T00:00:00.000Z'],
-      ['/about', '2026-09-28T00:00:00.000Z'],
-      ['/compare/ghostreply', '2026-09-28T00:00:00.000Z'],
+      ['/about', '2026-10-01T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-10-01T00:00:00.000Z'],
     ]);
   });
 
@@ -213,7 +213,7 @@ describe('supported source presentation', () => {
     expect(renderedHomePage).not.toContain('messagelikeme ingest');
     expect(renderedSourcesPage).toContain('Legacy history sources');
     expect(renderedSourcesPage).toContain('They only import old messages and are separate from TextButler’s live iMessage, WhatsApp, and Beeper connections');
-    expect(modelText).toContain('## Current TextButler development status');
+    expect(modelText).toContain('## Start with a conversation');
     expect(modelText).toContain('## Legacy Message Like Me history tools');
     expect(sourcesPage).toContain('Beeper via GhostGet');
     expect(sourcesPage).toContain('It owns zero of GhostGet’s');

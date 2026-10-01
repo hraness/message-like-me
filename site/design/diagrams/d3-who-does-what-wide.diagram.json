@@ -81,7 +81,7 @@
       "type": "text",
       "x": 860,
       "y": 32,
-      "text": "3  Turn on one person",
+      "text": "3  Turn on a chat",
       "fontSize": 15,
       "weight": 700,
       "tone": "neutral",
@@ -120,7 +120,7 @@
       "radius": 12,
       "tone": "neutral",
       "strokeWidth": 1.25,
-      "label": "clone + install",
+      "label": "install TextButler",
       "labelFontSize": 13,
       "labelWeight": 500
     },
@@ -321,7 +321,7 @@
       "radius": 12,
       "tone": "neutral",
       "strokeWidth": 1.25,
-      "label": "turn on one person",
+      "label": "turn on a chat",
       "labelFontSize": 13,
       "labelWeight": 500
     }

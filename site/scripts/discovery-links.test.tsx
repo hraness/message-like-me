@@ -46,32 +46,33 @@ test('keeps the home comparison answer identical in the visible FAQ and its JSON
   expect(entry).toBeDefined();
   expect(home).toContain(`<p>${entry?.text ?? ''}</p>`);
   expect(entry?.text).not.toContain('compare/ghostreply');
-  expect(entry?.text).toContain('If you only want suggestions, the built-in features are simpler.');
+  expect(entry?.text).toContain('It marks replies as AI by default');
 });
 
 test('explains why replies are marked on the about page', () => {
   const about = renderToStaticMarkup(<About />);
   expect(about).toContain('>Why replies are marked</h2>');
-  expect(about).toContain('so the model can’t leave it out');
+  expect(about).toContain('With the default settings');
 });
 
 test('describes the default AI route on the comparison page', () => {
   const compare = renderToStaticMarkup(<CompareGhostReplyPage />);
-  expect(compare).toContain('Qwen 3.5 Flash through your own Vercel AI Gateway');
+  expect(compare).toContain('Qwen through your own Vercel AI Gateway');
   expect(compare).not.toContain('fast-reply mode');
   expect(compare).toContain('Choose GhostReply for a ready-to-install app with hosted AI included.');
-  expect(compare).toContain('comfortable building it from source');
+  expect(compare).toContain('Coding agent or setup guide');
+  expect(compare).toContain('Optional web search sends queries through a saved Gateway key');
 });
 
 test('describes the local model route the same way in llms.txt', async () => {
   const llms = await getLlmsText().text();
-  expect(llms).toContain('is detected automatically');
+  expect(llms).toContain('an Ollama server already serving the pinned model is picked up');
   expect(llms).not.toContain('A habitat block in the host.json settings file');
 });
 
-test('scopes the no-commands claim to the Mac in the home comparison answer', () => {
+test('describes configurable reply behavior in the home comparison answer', () => {
   const entry = faqEntries(renderToStaticMarkup(<Home />)).find(({ name }) => name.startsWith('How is it different'));
-  expect(entry?.text).toContain('its model can’t run commands on your Mac.');
+  expect(entry?.text).toContain('you control the reply mode and marker per person');
 });
 
 test('publishes a free offer and the hub organization in site JSON-LD', () => {

@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core';
 import { browserLaunchArgs, deadline, ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, verifyOwnedChromium } from './browser-contract.mjs';
 import { settleProductionImages } from './production-image-settlement.mjs';
 import { verifyProductionBrowserLaunch } from './production-browser-launch.mjs';
+import { inspectHomeLayout } from './check-home-layout.mjs';
 
 // Only public read-only production pages: no application commands, credentials,
 // personal data, form submission, or deployment operations are used here.
@@ -103,6 +104,7 @@ try {
           assert.equal(await page.evaluate(() => Object.hasOwn(window, '__next_f')), false, 'Preview runtime stays inert');
         }
         await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+        const homeLayout = path === '/' ? await inspectHomeLayout(page) : undefined;
         const measure = () => page.evaluate(() => {
           const rect = element => element && { x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y,
             width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
@@ -143,7 +145,7 @@ try {
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const afterCapture = await measure();
-        report.records.push({ path, width, theme, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        report.records.push({ path, width, theme, homeLayout, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
         assert.deepEqual(afterCapture, metrics, `${label}: layout and pointer media preserved through captures`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);

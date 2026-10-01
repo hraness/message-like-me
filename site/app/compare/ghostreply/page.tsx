@@ -8,7 +8,6 @@ import {
   pageMetadata,
   REPLY_WRITERS_SENTENCE,
   serializeJsonLd,
-  SITE_STATUS_LABEL,
   SUBSCRIPTION_GUIDE_URL,
 } from '../../_lib/site';
 
@@ -17,7 +16,7 @@ const GHOSTREPLY_PRIVACY_URL = 'https://ghostreply.lol/privacy.html';
 const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-safe.html';
 
 const description =
-  'GhostReply answers iMessages in your texting style on a $4.99 license. TextButler answers as a marked assistant when someone says “butler”, with a local model, your own key, or your subscription.';
+  'Compare GhostReply and TextButler by reply controls, conversation memory, AI model choices, and where message context goes.';
 
 export const metadata = pageMetadata({
   title: 'GhostReply alternative: TextButler compared',
@@ -44,7 +43,7 @@ const questions = [
   {
     question: 'Where does my message history go?',
     answer:
-      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. TextButler keeps a folder of notes per person locally. With a local model through Ollama (in testing), the reply is written on your Mac too; with your Gateway key or your subscription, the conversation context goes to that service.',
+      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. TextButler keeps a folder of notes per person locally. Ollama writes replies on your Mac; hosted models receive the conversation context. Optional web search sends queries through a saved Gateway key even when the reply model is local.',
   },
 ] as const;
 
@@ -71,14 +70,12 @@ export default function CompareGhostReplyPage() {
           <p className="eyebrow">Compare</p>
           <h1>TextButler compared with GhostReply</h1>
           <p>
-            GhostReply writes iMessage replies in your style. TextButler replies as a marked
-            assistant, with your choice of AI and editable notes for each person.
+            GhostReply writes iMessage replies in your style. TextButler gives you a choice
+            of AI, editable notes for each person, and configurable reply controls.
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
         <article className="readme-prose document-prose">
-          <p>TextButler status: {SITE_STATUS_LABEL}. <Link href="/#status">See where it stands</Link>.</p>
-
           <h2>How they compare</h2>
           <MarketingComparison
             caption="TextButler and GhostReply at a glance"
@@ -88,19 +85,18 @@ export default function CompareGhostReplyPage() {
               { label: 'Software', values: ['Free · MIT', '$4.99 once · one Mac'] },
               { label: 'AI cost', values: ['Your model, key or subscription', 'Hosted AI included'] },
               { label: 'iMessage', values: [true, true] },
-              { label: 'WhatsApp and Beeper', values: [{ status: 'partial', label: 'In testing' }, false] },
+              { label: 'WhatsApp and Beeper', values: ['Through GhostGet', false] },
               { label: 'Reply style', values: ['Marked assistant by default', 'Matches your texting style'] },
-              { label: 'Local AI', values: [{ status: 'partial', label: 'In testing' }, false] },
-              { label: 'Install', values: ['Build from source', 'One command'] },
+              { label: 'Local AI', values: ['Ollama', false] },
+              { label: 'Setup', values: ['Coding agent or setup guide', 'One command'] },
             ]}
-            note={<>Checked September 26, 2026. TextButler has no signed download; iMessage replies have worked in our testing. Gateway usage stops at $1 a day. GhostReply includes 10 free replies before purchase. <a href="#comparison-sources">Sources</a>.</>}
+            note={<>TextButler Gateway usage stops at $1 a day. GhostReply includes 10 free replies before purchase. <a href="#comparison-sources">Sources</a>.</>}
           />
 
           <h2>Which one fits</h2>
           <p>
             Choose GhostReply for a ready-to-install app with hosted AI included. Choose TextButler
-            for assistant-marked replies, editable memory, and your own AI—if you are comfortable
-            building it from source.
+            for editable memory, configurable reply controls, and your own model or AI subscription.
           </p>
           <p>
             GhostReply recommends telling contacts when AI assistance matters and keeping
@@ -157,7 +153,7 @@ export default function CompareGhostReplyPage() {
           <h2 id="comparison-sources">Sources</h2>
           <ul>
             <li><a href={GHOSTREPLY_URL}>GhostReply product page</a></li>
-            <li><a href={GHOSTREPLY_PRIVACY_URL}>GhostReply privacy details</a> (updated August 22, 2026)</li>
+            <li><a href={GHOSTREPLY_PRIVACY_URL}>GhostReply privacy details</a></li>
             <li><a href={GHOSTREPLY_SAFETY_URL}>GhostReply’s own safety guide</a></li>
             <li><a href={GETTING_STARTED_URL}>TextButler setup guide</a></li>
             <li><a href={SUBSCRIPTION_GUIDE_URL}>How TextButler connects a subscription through xcb</a></li>

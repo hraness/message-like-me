@@ -22,13 +22,11 @@ test('launch facts match the product source', async () => {
   expect(config).toContain('debounceMs: 8_000');
   expect(launchFacts.debounce.value).toBe('8 seconds');
   expect(config).toContain(`maxRepliesPerHour: ${launchFacts.hourlyCap.value}`);
-  expect(await source('packages/textbutler/src/decision.ts')).toContain('result.confidence >= 0.85');
-  expect(launchFacts.smartConfidence.value).toBe('85%');
   expect(await source('packages/textbutler/src/owner-replies.ts')).toContain('DRAFT_TTL_MS = 15 * 60_000');
   expect(launchFacts.draftExpiry.value).toBe('15 minutes');
   expect(await source('packages/textbutler/src/default-reply-model.ts')).toContain('dailyBudgetUsd: 1 ');
   expect(launchFacts.gatewayBudget.value).toBe('$1');
-  expect(await source('README.md')).toContain(`About ${launchFacts.localModelSize.value}`);
+  expect(await source('docs/textbutler/getting-started.md')).toContain(launchFacts.localModelSize.value);
   expect(await source('packages/textbutler/src/contact-habitat.ts')).toContain(`memoryEntries: ${launchFacts.memoryEntries.value},`);
   expect(WRITERS).toHaveLength(3);
   expect(launchFacts.replyWriters.value).toBe('three');
@@ -58,7 +56,7 @@ test('mockup commands are ones the product documents', async () => {
   expect(AGENT_SETUP_PROMPT).toContain('textbutler doctor');
 });
 
-test('the launch post renders every beat and the social kit links back to it', () => {
+test('the retained launch kit renders every beat and links to its introduction', () => {
   const html = renderToStaticMarkup(<LaunchPostBeats />);
   for (const beat of launchBeats) expect(html).toContain(beat.id);
   expect(JSON.stringify(socialKit)).toContain(LAUNCH_POST_PATH);
@@ -72,14 +70,13 @@ test('the film length is the launch fact, in whole seconds of the real mp4', asy
   expect(statSync(resolve(import.meta.dir, '../public/launch/textbutler-launch.mp4')).size).toBeGreaterThan(0);
 });
 
-// The article body takes its numbers from the facts too, so a config change
-// cannot leave the longer version stale while the beats move on.
+// Any numeric facts used by the evergreen article resolve from the same source.
+// The article need not repeat every configuration limit.
 test('the launch post body uses fact tokens, not typed numbers', async () => {
   const body = await source('site/content/blog/introducing-textbutler.md');
   const tokens = launchFactTokens();
-  for (const token of ['COOLDOWN', 'HOURLY_CAP', 'DEBOUNCE', 'SMART_CONFIDENCE', 'DRAFT_EXPIRY', 'GATEWAY_BUDGET', 'LOCAL_MODEL_SIZE', 'MEMORY_ENTRIES']) {
-    expect(tokens[token]).toBeDefined();
-    expect(body).toContain(`{{${token}}}`);
+  for (const [, token] of body.matchAll(/\{\{([A-Z_]+)\}\}/gu)) {
+    expect(tokens[token!]).toBeDefined();
   }
   for (const typed of ['5 minutes', '8 seconds', '85%', '15 minutes', '$1 a day', '2.5 GB', '64 notes', 'under 12']) expect(body).not.toContain(typed);
 });

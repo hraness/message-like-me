@@ -107,7 +107,7 @@
       "radius": 24,
       "tone": "neutral",
       "strokeWidth": 1.25,
-      "label": "One-to-one?",
+      "label": "Same members?",
       "labelFontSize": 14,
       "labelWeight": 600
     },

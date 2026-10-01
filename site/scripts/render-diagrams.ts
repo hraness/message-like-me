@@ -14,14 +14,16 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
+import { browserLaunchArgs, ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, verifyOwnedChromium } from './browser-contract.mjs';
 
 const siteRoot = resolve(import.meta.dir, '..');
 const sourceDir = join(siteRoot, 'design', 'diagrams');
 const outDir = join(siteRoot, 'public', 'diagrams');
 const slopcamera = process.env.SLOPCAMERA_BIN ?? 'slopcamera';
-const expectedVersion = /^3\.3\./;
-const browserExecutable =
-  process.env.TEXTBUTLER_BROWSER_EXECUTABLE ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const expectedVersion = '3.9.1';
+const browserExecutable = await pinnedBrowserExecutable(chromium.executablePath(), process.env.TEXTBUTLER_BROWSER_EXECUTABLE);
+const { defaultArgs, expectedVersion: expectedBrowserVersion } = pinnedChromiumDefinition();
+const launchOptions = ownedChromiumLaunchOptions(browserExecutable, defaultArgs, browserLaunchArgs);
 const filters = process.argv.slice(2);
 
 type Meta = { readonly title: string; readonly desc: string };
@@ -67,8 +69,8 @@ function finish(svg: string, name: string): string {
 }
 
 const version = run(['--version']).trim();
-if (!expectedVersion.test(version) && process.env.SLOPCAMERA_ANY_VERSION !== '1') {
-  throw new Error(`Expected Slopcamera 3.3.x, found ${version}. Set SLOPCAMERA_ANY_VERSION=1 to override.`);
+if (version !== expectedVersion) {
+  throw new Error(`Expected SlopCamera ${expectedVersion}, found ${version}. Review a renderer upgrade before changing the pin.`);
 }
 
 const sources = (await readdir(sourceDir))
@@ -79,8 +81,10 @@ if (sources.length === 0) throw new Error('No matching .diagram.json sources.');
 
 await mkdir(outDir, { recursive: true });
 const work = await mkdtemp(join(tmpdir(), 'textbutler-diagrams-'));
-const browser = await chromium.launch({ executablePath: browserExecutable, headless: true });
+const browser = await chromium.launch(launchOptions);
 try {
+  const proof = await verifyOwnedChromium(browser, browserExecutable, expectedBrowserVersion);
+  console.log(`SlopCamera ${version}; ${proof.executable}; Chromium ${proof.browserVersion}`);
   for (const file of sources) {
     const source = join(sourceDir, file);
     const spec = JSON.parse(await readFile(source, 'utf8')) as { name: string; canvas: { width: number; height: number } };

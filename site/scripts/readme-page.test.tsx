@@ -20,7 +20,7 @@ test('renders the complete README with one source-owned heading and working anch
   expect(html).toContain('href="https://github.com/hraness/textbutler/blob/main/docs/message-like-me.md"');
   for (const fragment of html.matchAll(/href="#([^"]+)"/gu)) expect(html).toContain(`id="${fragment[1]}"`);
   expect(html).toContain('"headline":"TextButler"');
-  expect(html).toContain('"dateModified":"2026-09-28"');
+  expect(html).toContain('"dateModified":"2026-10-01"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 
@@ -30,7 +30,7 @@ test('leads with the agent setup prompt, then the guided terminal and complete d
   expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('bun run textbutler tui');
   expect(html).toContain('docs/textbutler/getting-started.md');
   // README.md repeats SITE_STATUS word for word, so the site and the README
-  // state one development status.
+  // state the same setup defaults.
   expect(text(html)).toContain(SITE_STATUS.replace(/\s+/gu, ' '));
   expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('bun run textbutler:install');
   expect(html).toContain('href="https://github.com/hraness/xcb"');
