@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
-import { settleProductionImages } from './production-image-settlement.mjs';
+import { settleProductionConsent, settleProductionImages } from './production-image-settlement.mjs';
 import { productionBrowserLaunchOptions, verifyProductionBrowserLaunch } from './production-browser-launch.mjs';
 
 assert.ok(process.env.PRODUCTION_BROWSER_EXECUTABLE, 'Use the pinned temporary-profile Chromium fixture.');
@@ -53,6 +53,28 @@ try {
     await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><div style="height:50000px">bounded fixture</div>');
     await assert.rejects(settleProductionImages(page, 'oversize'), /bounded image-settlement count/u,
       'The existing finite capture bound also applies before the geometry baseline.');
-    console.log('production image settlement: preserved default launch arguments, lazy-ratio/capture preservation, broken-image denial, and tile-bound denial passed');
+    for (const state of ['required', 'clear', 'declined']) {
+      await page.setContent('<style>[hidden]{display:none}footer{height:40px}footer:has([data-consent-state="required"]){height:90px}</style><footer><div data-slot="hraness-cookie-consent" hidden>notice</div></footer>');
+      const beforeConsent = await page.locator('footer').evaluate(element => element.getBoundingClientRect().height);
+      // Schedule hydration and its region result independently of the waiter.
+      await page.evaluate(terminal => {
+        const notice = document.querySelector('[data-slot="hraness-cookie-consent"]');
+        setTimeout(() => notice.setAttribute('data-consent-state', 'checking'), 75);
+        setTimeout(() => { notice.setAttribute('data-consent-state', terminal); notice.hidden = false; }, 200);
+      }, state);
+      const [settled] = await settleProductionConsent(page);
+      assert.equal(settled.state, state);
+      assert.equal(settled.hidden, false);
+      const afterConsent = await page.locator('footer').evaluate(element => element.getBoundingClientRect().height);
+      assert.equal(afterConsent - beforeConsent, state === 'required' ? 50 : 0);
+      await page.screenshot({ animations: 'disabled' });
+      assert.equal(await page.locator('footer').evaluate(element => element.getBoundingClientRect().height), afterConsent);
+    }
+    for (const markup of ['', '<div data-slot="hraness-cookie-consent" data-consent-state="checking"></div>', '<div data-slot="hraness-cookie-consent" data-consent-state="unknown"></div>']) {
+      await page.setContent(markup);
+      await assert.rejects(settleProductionConsent(page, { timeout: 150 }), /Timeout/u,
+        'Missing, checking, or unrecognized consent cannot become a geometry baseline.');
+    }
+    console.log('production settlement: image and consent readiness, capture preservation, missing/broken/unknown state denial, and finite bounds passed');
   } finally { await context.close(); }
 } finally { await browser.close(); }

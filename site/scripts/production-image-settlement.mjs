@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 const maximumTiles = 100;
 const imageDeadline = 10_000;
 
+// The regional notice changes the footer footprint after hydration. Observe its
+// real terminal state before taking a baseline; never accept a checking notice.
+export async function settleProductionConsent(page, { timeout = 10_000 } = {}) {
+  await page.waitForFunction(() => {
+    const notices = [...document.querySelectorAll('[data-slot="hraness-cookie-consent"]')];
+    return notices.length > 0 && notices.every(notice =>
+      ['required', 'clear', 'declined'].includes(notice.getAttribute('data-consent-state')));
+  }, undefined, { timeout });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  return page.locator('[data-slot="hraness-cookie-consent"]').evaluateAll(notices =>
+    notices.map(notice => ({ state: notice.getAttribute('data-consent-state'),
+      hidden: notice.hidden, height: notice.getBoundingClientRect().height })));
+}
+
 // A natural viewport pass loads only pictures that the later capture pass sees.
 // Settle those assets before recording the geometry that captures must preserve.
 export async function settleProductionImages(page, label) {
