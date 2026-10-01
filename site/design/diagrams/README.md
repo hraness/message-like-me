@@ -9,8 +9,9 @@ bun run diagrams             # render every source
 bun run diagrams d2-words    # render only the sources whose name starts with d2-words
 ```
 
-You need SlopCamera 3.3.x on `PATH` (or set `SLOPCAMERA_BIN`) and Google Chrome.
-To use a different Chromium build, set `TEXTBUTLER_BROWSER_EXECUTABLE`. Each
+You need SlopCamera 3.9.1 on `PATH` (or set `SLOPCAMERA_BIN`) and the Chromium
+installed for the site’s pinned Playwright version. The renderer verifies its
+executable, version and launch flags; it never launches system Chrome. Each
 source renders four files: `<name>.light.svg`, `<name>.dark.svg`,
 `<name>.light@2x.png`, and `<name>.dark@2x.png`.
 

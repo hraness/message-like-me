@@ -23,43 +23,7 @@
   gap: 1rem;
   margin: 0;
 }
-.tb-hero-stage::before {
-  /* A soft pool of light behind the phone, from the page's own accent. */
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: -6% -18% 18%;
-  background: radial-gradient(closest-side, color-mix(in oklch, var(--primary) 16%, transparent), transparent 72%);
-  pointer-events: none;
-}
-.tb-hero-stage > * { position: relative; z-index: 1; }
-.tb-hero-stage__device { display: grid; gap: 0.75rem; inline-size: min(100%, 24rem); }
-.tb-callouts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem 1.25rem;
-  inline-size: min(100%, 26rem);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--muted);
-  font-size: 0.8125rem;
-  line-height: 1.4;
-}
-.tb-callouts li { display: flex; align-items: baseline; gap: 0.5rem; }
-.tb-callouts li > span {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
-  border: 1px solid color-mix(in oklch, var(--primary) 55%, transparent);
-  border-radius: 999px;
-  color: var(--primary);
-  font: 600 0.6875rem/1 var(--font-text);
-}
-.tb-caption { margin: 0; color: var(--muted); font-size: 0.8125rem; line-height: 1.5; text-align: center; }
-
+.tb-hero-stage__device { display: grid; gap: 0.75rem; inline-size: min(100%, 25rem); min-inline-size: 0; }
 /* Status: one quiet band under the hero. */
 .textbutler-marketing .tb-status-band {
   display: grid;
@@ -102,13 +66,13 @@
 .tb-chip[data-tone="off"]::before { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
 
 .tb-fine { max-inline-size: 70ch; margin: 1.25rem 0 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
-.tb-fine a, .tb-support a, .tb-tile a, .tb-pillars a, .tb-example a, .textbutler-marketing .legacy-note a {
+.tb-fine a, .tb-support a, .tb-tile a, .tb-feature a, .tb-example a, .textbutler-marketing .legacy-note a {
   color: var(--primary);
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
 }
-.tb-fine code, .tb-pillars code, .tb-setup-extra code { font-family: var(--font-mono); font-size: 0.9em; }
+.tb-fine code, .tb-feature code, .tb-setup-extra code { font-family: var(--font-mono); font-size: 0.9em; }
 
 /* Diagram rules live in diagram-figure.css. */
 .tb-switch { display: grid; gap: 1rem; margin-block-start: 1rem; }
@@ -168,7 +132,7 @@
   background: var(--surface);
 }
 .tb-writer[data-writer="local"] { border-color: color-mix(in oklch, var(--primary) 45%, var(--line)); }
-.tb-writer__head { display: grid; gap: 0.5rem; justify-items: start; }
+.tb-writer__head { display: grid; gap: 0.85rem; justify-items: start; }
 .tb-writer h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.3; }
 .tb-writer .provider-marks { margin: 0; }
 .tb-writer pre, .tb-tile pre {
@@ -196,39 +160,25 @@
 .tb-setup-extra { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); margin-block-start: 2.5rem; }
 .tb-setup-extra h3 { margin: 0 0 0.4rem; font-size: 1.0625rem; font-weight: 600; }
 .tb-setup-extra > div > p { margin: 0 0 1rem; color: var(--muted); }
-.tb-install { display: grid; gap: 0.75rem; margin-block-start: 2.5rem; min-inline-size: 0; }
-.tb-install h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
-.tb-install > p { margin: 0; color: var(--muted); }
 .tb-tile { align-self: start; display: grid; align-content: start; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--hraness-marketing-radius, 0.625rem); background: var(--surface); }
 .tb-tile p { margin: 0 !important; }
 
 /* Control. */
-.tb-pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.25rem, 3vw, 2.5rem); }
-.tb-pillars article { display: grid; align-content: start; gap: 0.5rem; }
-.tb-pillars h3 { margin: 0; font-size: 1.125rem; font-weight: 600; }
-.tb-pillars p { margin: 0; line-height: 1.55; }
 .tb-proof { padding-inline-start: 0.85rem; border-inline-start: 2px solid var(--line); color: var(--muted); font-size: 0.875rem; }
-.tb-examples { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 1.5rem; margin-block-start: 3rem; align-items: start; }
 .tb-example { display: grid; gap: 0.85rem; margin: 0; min-inline-size: 0; }
 .tb-example figcaption { display: grid; justify-items: start; gap: 0.5rem; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
 .tb-example figcaption strong { color: var(--foreground); }
-.tb-example--folder .workspace-example { margin: 0; }
-.tb-example--folder .workspace-example pre { padding: 0.9rem 0.75rem; font-size: 0.75rem; line-height: 1.7; white-space: pre-wrap; }
 /* Supporting phones keep a real iPhone's proportions and crop the empty bottom of the screen. */
-.tb-phone-crop { inline-size: min(100%, var(--crop-max, 22rem)); margin-inline: auto; aspect-ratio: 412 / var(--crop-h); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
+
 .tb-example--solo { justify-items: center; }
 .tb-example--solo > :first-child { inline-size: min(100%, 22rem); }
 
 .textbutler-marketing .legacy-note { max-inline-size: var(--hraness-marketing-measure, 70rem); margin: 0 auto; padding: 0 var(--hraness-marketing-gutter) 2rem; color: var(--muted); font-size: 0.875rem; }
 
 @media (max-width: 64rem) {
-  .tb-writers, .tb-pillars, .tb-examples, .tb-setup-steps { grid-template-columns: minmax(0, 1fr); }
+  .tb-writers, .tb-setup-steps { grid-template-columns: minmax(0, 1fr); }
   .tb-support, .tb-setup-extra { grid-template-columns: minmax(0, 1fr); }
   .tb-modes { grid-template-columns: minmax(0, 1fr); }
-  .tb-examples > .tb-example:not(.tb-example--folder) > :first-child { inline-size: min(100%, 22rem); justify-self: center; }
-}
-@media (max-width: 30rem) {
-  .tb-callouts { grid-template-columns: minmax(0, 1fr); }
 }
 @media (forced-colors: active) {
   .tb-chip, .tb-writer, .tb-tile, .tb-modes { border: 1px solid CanvasText; }
@@ -237,3 +187,11 @@
 /* Planned reply option: labeled as coming, set apart from the options you can pick today. */
 .tb-writer-coming { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.75rem; max-inline-size: 70ch; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.6; }
 .tb-agent-demo { display: grid; gap: 0.75rem; margin: 1.5rem 0 0; }
+
+.tb-support__copy { display: grid; gap: 0.4rem; min-inline-size: 0; }
+
+/* Product benefits use the same split-section foundation as the hero proof. */
+.textbutler-marketing .tb-feature { padding-inline: 0; align-items: center; }
+.tb-feature-sections { display: grid; gap: 2rem; }
+.tb-feature .workspace-example { margin: 0; }
+.tb-feature .workspace-example pre { white-space: pre-wrap; overflow-wrap: anywhere; }

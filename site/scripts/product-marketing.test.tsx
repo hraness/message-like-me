@@ -9,7 +9,7 @@ import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
 import { checkMarketingSnapshot } from '../styles/vendor/hraness-marketing/check.mjs';
-import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS, SITE_STATUS_LABEL, SOFTWARE_VERSION } from '../app/_lib/site.ts';
+import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS, SOFTWARE_VERSION } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -46,7 +46,7 @@ function textBeforeRelated(html: string): string {
   return (related === -1 ? html : html.slice(0, related)).replace(/<[^>]+>/gu, ' ').toLowerCase();
 }
 
-test('renders TextButler with the shared grammar and one development status', () => {
+test('renders TextButler with early model choices and setup', () => {
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('An AI butler in your messaging apps.');
@@ -66,24 +66,25 @@ test('renders TextButler with the shared grammar and one development status', ()
   expect(html).toContain('id="setup"');
   expect(html).toContain('id="models"');
   expect(html).toContain('id="supports"');
-  // SITE_STATUS renders once, directly under the hero.
+  // One Mac/setup note, followed by model choices and setup before detail.
   expect(html.split(SITE_STATUS)).toHaveLength(2);
   expect(html.indexOf(SITE_STATUS)).toBeLessThan(html.indexOf('id="how-it-works"'));
-  expect(html).toContain('new installs start paused');
-  expect(html).toContain('iMessage, WhatsApp, and Beeper');
+  expect(html.toLowerCase()).toContain('new installs start paused');
+  expect(html.indexOf('id="models"')).toBeLessThan(html.indexOf('id="setup"'));
+  expect(html.indexOf('id="setup"')).toBeLessThan(html.indexOf('id="how-it-works"'));
+  expect(html.indexOf('id="setup"')).toBeLessThan(html.indexOf('id="supports"'));
+  for (const channel of ['iMessage', 'WhatsApp', 'Beeper']) expect(html).toContain(channel);
   expect(html).toContain(REPLY_WRITERS_SENTENCE);
-  expect(html).toContain('In testing');
-  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
-  expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('pbpaste | textbutler providers gateway-key');
+  expect(html).not.toMatch(/Works today|In testing|not yet tested live/iu);
   expect(html).toContain('Spending stops at $1 a day.');
   expect(html).toContain('If you choose one with a command, that choice wins.');
   expect(html).toContain('Connect your AI subscription');
-  expect(html).toContain('a local model keeps reply writing on your Mac');
+  expect(html).toContain('A local model writes replies on your Mac too.');
   expect(html).toContain('MIT licensed');
-  expect(html).toContain('Telegram’s terms limit AI use of message content, so ask the person first.');
-  expect(html).toContain('Built on your Mac');
-  expect(html).toContain('Setup builds a small helper app on your Mac so macOS can grant iMessage access.');
-  expect(html).toContain('It waits 5 minutes after you last wrote, and skips requests in that window rather than saving them.');
+  expect(html).toContain('Keep Beeper Desktop open with your messaging accounts connected.');
+  expect(html).toContain('Choose a group, review its members, and turn on replies.');
+  expect(html).not.toContain('Built on your Mac');
+  expect(html).toContain('After you write in a chat, it pauses for the human cooldown you set (5 minutes by default).');
   expect(html).not.toContain(`TextButler v${SOFTWARE_VERSION}`);
   expect(html).toContain('Installing them doesn’t install TextButler or turn on automatic replies.');
   expect(html).toContain('Only anonymous visit counts. textbutler.app counts page views');
@@ -103,9 +104,8 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(10);
   expect(heroCopy).toContain('your');
   expect(hero?.[0]).not.toContain('hraness-marketing-hero__boundary');
-  expect(hero?.[0]).toContain('hraness-marketing-hero__install');
-  expect(hero?.[0].replace(/<\/?span\b[^>]*>/gu, '')).toContain('git clone');
-  expect(html).toContain(SITE_STATUS_LABEL);
+  expect(hero?.[0]).not.toContain('hraness-marketing-hero__install');
+  expect(hero?.[0]).not.toContain('git clone');
   for (const word of HERO_VOCABULARY_TO_AVOID) expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
 });
 
@@ -143,8 +143,7 @@ test('shows the real first terminal screen, synthetic conversations, and disclos
   expect(html).toContain('MEMORY.md');
   expect(html).toContain('AGENTS.md');
   expect(html).toContain('the word “butler”');
-  expect(html).toContain('No tapbacks or other reactions on a normal Mac.');
-  expect(html).toContain('SMS and RCS aren’t supported.');
+  expect(html).toContain('Connect them through Beeper Desktop for text replies.');
   expect(html).toContain('under its own data policies');
   // The agent prompt is shown verbatim, copied by a button, never submitted.
   expect(html).toContain('aria-label="Copy setup prompt"');
@@ -163,7 +162,7 @@ test('offers local coding apps for setup on the reader’s Mac', () => {
   expect(html).toContain('aria-label="Copy setup prompt"');
 });
 
-test('binds Design Kit v0.36.3 to the portable Paper palette', async () => {
+test('binds the released Design Kit to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -178,7 +177,7 @@ test('binds Design Kit v0.36.3 to the portable Paper palette', async () => {
     .toBe('github:hraness/design-kit#v0.36.3');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
-  expect(css).toContain("@import '@hraness/design-kit/styles.css';");
+  expect(css).toContain("@import '@hraness/design-kit/compiler-foundation.css';");
   expect(layout).toContain("colorScheme: 'light dark'");
   expect(layout).toContain('data-hraness-theme="paper"');
   expect(css).toContain("@import '../styles/vendor/hraness-paper/paper-theme.css';");
@@ -209,40 +208,26 @@ test('admits the released finite marketing snapshot and scopes it to the landing
   }
 });
 
-test('keeps machine-readable setup and conditional subscription admission consistent with the landing', async () => {
+test('keeps machine-readable setup and reply controls consistent with the landing', async () => {
   const discovery = await getDiscoveryText().text();
-  expect(discovery).toContain('New installations start paused and new contacts start disabled.');
-  expect(discovery).toContain('only from the local install that bun run textbutler:install builds');
-  expect(discovery).toContain('it checks its own source against the last reviewed version first');
-  expect(discovery).toContain('Running from source never writes AI replies.');
-  expect(discovery).toContain('A subscription account must also pass providers check');
+  expect(discovery).toContain('New installations start paused and new conversations start disabled.');
+  expect(discovery).toContain('Use the installed TextButler command for automatic replies.');
   expect(discovery).toContain(REPLY_WRITERS_SENTENCE);
   expect(discovery).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
-  expect(discovery).not.toContain('still needs an xcb account');
-  expect(discovery.slice(0, discovery.indexOf('## Legacy Message Like Me history tools'))).not.toContain('habitat');
-  expect(discovery).toContain('no app to download and no published TextButler package');
   expect(discovery).toContain(AGENT_SETUP_PROMPT);
-  expect(discovery).toContain('Test inference and delivery on your own account');
+  expect(discovery).toContain('Smart mode can recognize a request for help without the keyword');
+  expect(discovery).toContain('carry an AI marker by default');
+  expect(discovery).toContain('web search sends queries through a saved Gateway key even when a local model writes the reply');
+  expect(discovery).not.toMatch(/85% sure|Works today|In testing|Coming soon/iu);
 });
 
-test('offers guided source setup without implying a released AI engine or a menu bar app', async () => {
+test('offers guided setup and draft review without implying a menu bar app', async () => {
   const home = renderToStaticMarkup(<Home />).replace(/<\/?span\b[^>]*>/gu, '');
-  const about = renderToStaticMarkup(<About />);
   const discovery = await getDiscoveryText().text();
-  // The full status renders on the home page and in llms.txt; About links to it.
-  for (const content of [home, discovery]) expect(content).toContain(SITE_STATUS);
-  expect(about).not.toContain(SITE_STATUS);
-  expect(about).toContain('href="/#status"');
-  for (const content of [home, about, discovery]) {
+  for (const content of [home, discovery]) {
+    expect(content).toContain(SITE_STATUS);
     expect(content).toContain(GETTING_STARTED_URL);
-    expect(content).toContain('bun run textbutler:install');
-    expect(content).toMatch(/last reviewed version/u);
-    expect(content).toMatch(/That copy writes the AI replies|AI replies come only from the local install/u);
-    if (content !== home) expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
-    expect(content).toContain(content === home ? 'https://xcb.sh' : 'https://github.com/hraness/xcb');
-    expect(content).toContain('no window');
     expect(content).not.toMatch(/menu bar companion|menubar|prebuilt runner/iu);
-    expect(content).not.toContain('Claude API is available after setup');
     expect(content).not.toContain(`${GITHUB_URL}/tree/main/apps/macos`);
   }
   expect(home).toContain('Have your agent set it up');
@@ -252,13 +237,13 @@ test('offers guided source setup without implying a released AI engine or a menu
   expect(discovery).toContain('replies send DRAFT DIGEST');
 });
 
-test('offers the source install on macOS only, with Linux and Windows unavailable', () => {
+test('keeps manual installation in its setup guide after the agent prompt', () => {
   const html = renderToStaticMarkup(<Home />);
-  const install = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<\/header>/u.exec(html)?.[0].replace(/<\/?span\b[^>]*>/gu, '') ?? '';
-  expect(install).not.toBe('');
-  const tabs = [...install.matchAll(/<button\b[^>]*data-platform="([a-z]+)"[^>]*role="tab"/gu)].map((match) => match[1]);
-  expect(tabs).toEqual(['macos', 'linux', 'windows']);
-  expect(install).toContain('git clone https://github.com/hraness/textbutler.git &amp;&amp; cd textbutler &amp;&amp; bun install --frozen-lockfile --ignore-scripts &amp;&amp; bun run textbutler:install');
-  expect(install.split('Uses Messages.app, so it runs on macOS only.').length - 1).toBe(2);
-  expect(html).toContain('Runs on');
+  const guides: string[] = [];
+  new HTMLRewriter().on('#install a', {
+    element(element) { guides.push(element.getAttribute('href') ?? ''); },
+  }).transform(html);
+  expect(guides).toContain(GETTING_STARTED_URL);
+  expect(html).not.toContain('git clone');
+  expect(html.indexOf('Copy setup prompt')).toBeLessThan(html.indexOf('id="install"'));
 });

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { inspectHomeLayout } from './check-home-layout.mjs';
 import { assertBuildJoin, assertPresentation, assertServerExit, browserCases, browserEnvironment, browserMediaFeatures, browserOwner,
   browserLaunchArgs, deadline, finishBrowserCase, isPreviewPolicyBlock, isSyntheticBadge, isSyntheticConsentRegion,
   ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, routeTasks, verifyOwnedChromium } from './browser-contract.mjs';
@@ -302,6 +303,7 @@ try {
       assert.equal(metrics.reducedTransparency, false);
       assertPresentation(metrics, sample);
       if (sample.path === '/') {
+        item.homeLayout = await inspectHomeLayout(page);
         await applyMedia('reduce');
         await page.waitForFunction(() => matchMedia('(prefers-reduced-transparency: reduce)').matches);
         item.reducedTransparency = await deadline(page.evaluate(() => ({

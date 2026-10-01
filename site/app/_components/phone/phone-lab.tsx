@@ -47,7 +47,7 @@ export function PhoneLab() {
       </figure>
       <figure style={cell} id="stays-out">
         <PhoneMock conversation={conversations.staysOut} />
-        <figcaption style={caption}>It stays out of it · WhatsApp · not yet tested live</figcaption>
+        <figcaption style={caption}>It stays out of it · WhatsApp</figcaption>
       </figure>
       <figure style={cell} id="boundaries">
         <PhoneMock conversation={conversations.boundaries} />

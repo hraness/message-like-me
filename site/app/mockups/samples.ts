@@ -16,13 +16,13 @@ import { launchFacts } from '../launch/facts';
 export const beeperConversation: Conversation = {
   ...boundariesConversation,
   id: 'beeper-boundaries',
-  via: 'via Beeper · not yet tested live',
+  via: 'via Beeper',
 };
 
-/** The WhatsApp reply from the phone kit, labelled as not yet tested live. */
+/** The synthetic WhatsApp reply from the phone kit. */
 export const whatsappConversation: Conversation = {
   ...whatsappReplyConversation,
-  via: 'not yet tested live',
+  via: 'WhatsApp',
 };
 
 /** The two marked messages the marker close-up shows, straight from the hero. */
@@ -46,9 +46,9 @@ export const WRITERS: readonly Writer[] = [
   {
     id: 'local',
     label: 'On your Mac',
-    hint: 'A local model through Ollama. In testing.',
+    hint: 'A local model through Ollama.',
     commands: ['ollama pull qwen3:4b-instruct-2507-q4_K_M', 'textbutler providers local'],
-    where: `Written on this Mac. Nothing leaves it to write the reply. The model is about ${launchFacts.localModelSize.value}.`,
+    where: `Replies are written on this Mac. Optional web search sends queries through a saved Gateway key.`,
   },
   {
     id: 'subscription',

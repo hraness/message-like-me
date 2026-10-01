@@ -17,18 +17,17 @@ export type ThreadApp = 'messages' | 'whatsapp' | 'beeper' | 'others';
 const OTHER_APPS = {
   whatsapp: {
     conversation: whatsappConversation,
-    label: 'Illustration: a WhatsApp-style chat, not yet tested live. Jordan asks the butler about Thursday, and marked replies answer. Names are made up.',
+    label: 'Illustration: a WhatsApp-style chat. Jordan asks the butler about Thursday, and marked replies answer. Names are made up.',
   },
   beeper: {
     conversation: beeperConversation,
-    label: 'Illustration: a Beeper-style chat, not yet tested live. Marcus asks the butler for Sam’s work address, and a marked reply declines. Names are made up.',
+    label: 'Illustration: a Beeper-style chat. Marcus asks the butler for Sam’s work address, and a marked reply declines. Names are made up.',
   },
 } as const;
 
 /**
  * The phone chat. `messages` plays the hero exchange; `whatsapp` and `beeper`
- * are drawn without the apps' names or marks and say they are not yet tested
- * live; `others` shows those two side by side.
+ * use synthetic conversations; `others` shows those two side by side.
  */
 export function ThreadMockup({ app = 'messages', play = false }: Readonly<{ app?: ThreadApp; play?: boolean }>) {
   if (app === 'others') {

@@ -11,10 +11,11 @@ test('server-renders a script-independent preview with the site status and no na
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
   expect(html).toContain('An AI butler in your messaging apps.');
   expect(html).toContain(SITE_STATUS);
-  expect(html).toContain('local model through Ollama (in testing)');
+  expect(html).toContain('local model through Ollama');
+  expect(html).not.toContain('(in testing)');
   expect(html).toContain('runs in the background with no window or menu bar icon');
   expect(html).toContain('🤖{ 👀 }');
-  expect(html).toContain('no app to download');
+  expect(html).toContain('an AI marker by default');
   expect(html).toContain('Synthetic example · no message sent');
   expect(html).not.toContain('Happy to help');
   expect(html).not.toMatch(/<(?:a|button|form|script)\b/u);

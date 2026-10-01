@@ -1,11 +1,11 @@
 {
   "d1-one-message-wide": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. TextButler sends 🤖{ 👀 } back through GhostGet right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through GhostGet to the phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, same members, said “butler”, you’re quiet, under 12 an hour. TextButler sends 🤖{ 👀 } back through GhostGet right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through GhostGet to the phone."
   },
   "d1-one-message-narrow": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, one-to-one, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through GhostGet, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through GhostGet to their phone."
+    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, same members, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through GhostGet, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through GhostGet to their phone."
   },
   "d2-words-local-wide": {
     "title": "Where your words go: a local model",
@@ -33,14 +33,14 @@
   },
   "d3-who-does-what-wide": {
     "title": "Who does what",
-    "desc": "Two lanes across three setup steps. Your agent: clone + install, connect apps, textbutler doctor ✓, textbutler doctor ✓. You: after the first doctor run, Full Disk Access switch, Allow Messages, pair WhatsApp or Beeper (optional), pick what writes replies; after the second, turn on one person."
+    "desc": "Two lanes across three setup steps. Your agent: install TextButler, connect apps, textbutler doctor ✓, textbutler doctor ✓. You: after the first doctor run, Full Disk Access switch, Allow Messages, pair WhatsApp or Beeper (optional), pick what writes replies; after the second, turn on a chat."
   },
   "d3-who-does-what-narrow": {
     "title": "Who does what",
-    "desc": "Step 1, Ask your agent: your agent does clone + install and connect apps. Step 2, Say yes to your Mac: your agent runs textbutler doctor ✓, then you do the Full Disk Access switch, Allow Messages, pair WhatsApp or Beeper (optional), and pick what writes replies. Step 3, Turn on one person: your agent runs textbutler doctor ✓, then you turn on one person."
+    "desc": "Step 1, Ask your agent: your agent does install TextButler and connect apps. Step 2, Say yes to your Mac: your agent runs textbutler doctor ✓, then you do the Full Disk Access switch, Allow Messages, pair WhatsApp or Beeper (optional), and pick what writes replies. Step 3, Turn on a chat: your agent runs textbutler doctor ✓, then you turn on a chat."
   },
   "d4-five-checks": {
     "title": "Five checks before it speaks",
-    "desc": "Messages pass five gates: Turned on? One-to-one? Said “butler”? You’ve been quiet 5 minutes? Under 12 this hour? Most fall away at a gate. One passes and becomes 🤖{ 👀 }, then 🤖{ … }. Most of the time, it does nothing."
+    "desc": "Messages pass five gates: Turned on? Same members? Said “butler”? You’ve been quiet 5 minutes? Under 12 this hour? Most fall away at a gate. One passes and becomes 🤖{ 👀 }, then 🤖{ … }. Most of the time, it does nothing."
   }
 }

@@ -6,7 +6,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { ctaTarget } from '../app/_components/analytics';
 import { TEXTBUTLER_CTA_EVENT, TEXTBUTLER_INSTALL_COPY_EVENT, textbutlerPostHogSite } from '../app/_lib/analytics';
-import { REPLY_CREDITS_NOTE } from '../app/_lib/site';
 import { REPLY_WRITERS } from '../app/_lib/landing';
 import Home from '../app/page';
 
@@ -39,14 +38,10 @@ test('CTA targets never carry a path or query from another site', () => {
   expect(ctaTarget('https://github.com/hraness/textbutler?tab=readme', origin)).toBe('github.com');
 });
 
-test('credits stay labeled as coming soon and are not offered as a reply writer', () => {
+test('only available reply writer routes are offered', () => {
   expect(REPLY_WRITERS.map((writer) => writer.id)).toEqual(['local', 'key', 'subscription']);
-  expect(REPLY_CREDITS_NOTE).toStartWith('Coming soon:');
-  expect(REPLY_CREDITS_NOTE).toContain('aren’t available yet');
   const html = renderToStaticMarkup(<Home />);
-  expect(html).toContain('>Coming</span>');
-  expect(html).toContain('Coming soon: TextButler AI credits');
-  expect(html).toContain('coming soon and can’t be bought yet');
+  expect(html).not.toContain('TextButler AI credits');
 });
 
 test('every event textbutler.app sends is registered in the repo cost registry', () => {

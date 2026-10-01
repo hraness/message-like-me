@@ -12,10 +12,6 @@ import {
   serializeJsonLd,
 } from '@hraness/web-discovery';
 
-import { LaunchVideo } from '../../_components/landing/launch-video';
-import { LaunchPostBeats, LaunchSocialKit } from '../../launch/launch-post';
-import { LAUNCH_POST_PATH } from '../../launch/beats';
-import { LAUNCH_FILM_SECONDS, launchFilmSources } from '../../_components/landing/public-assets';
 import { SiteFooter, SiteHeader } from '../../_components/site-chrome';
 import {
   admissionFor,
@@ -61,9 +57,6 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
   const post = blogPostBySlug((await params).slug);
   if (post === undefined) notFound();
   const body = bodyFor(post);
-  // The launch post opens with the launch film once it exists.
-  const isLaunch = blogPostPath(post) === LAUNCH_POST_PATH;
-  const film = isLaunch ? launchFilmSources() : null;
   const admission = admissionFor(post);
   const related = relatedProductsFor(post);
   const toc = body.headings.length >= 4
@@ -81,15 +74,16 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
         <MarketingArticle
           author={BLOG_AUTHOR}
           dek={post.dek}
-          eyebrow={post.eyebrow}
           heading={post.title}
           provenance={provenanceFor(post)}
           published={post.published}
+          showDates={false}
           {...(post.updated === undefined ? {} : { updated: post.updated })}
           {...(toc === undefined ? {} : { toc })}
           after={(
             <>
               <ArticleSources
+                showDates={false}
                 sources={admission.sources.map((source) => ({
                   title: source.title,
                   href: source.url,
@@ -111,18 +105,7 @@ export default async function BlogPostPage({ params }: Readonly<{ params: Promis
             </>
           )}
         >
-          {film === null ? null : (
-            <figure className="tb-film-figure">
-              <LaunchVideo sources={film} title="Introducing TextButler" />
-              <figcaption>TextButler in {LAUNCH_FILM_SECONDS} seconds.</figcaption>
-            </figure>
-          )}
-          {/* The launch post leads with its beats; the reviewed long form follows. */}
-          {isLaunch ? <LaunchPostBeats /> : null}
-          {isLaunch ? <h2 id="the-longer-version">The longer version</h2> : null}
           <div dangerouslySetInnerHTML={{ __html: body.html }} />
-          {/* A quarantined launch post has no social kit. */}
-          {isLaunch && isIndexablePost(post) ? <LaunchSocialKit /> : null}
         </MarketingArticle>
       </main>
       <SiteFooter path={blogPostPath(post)} />

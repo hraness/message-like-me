@@ -1,15 +1,12 @@
-@import '@hraness/ui/tokens.css';
-@import '@hraness/ui/stylex.css';
-/* The complete Design Kit export includes compiled React slot recipes and
- * the marketing foundation. The raw HTML grammar alone omits those atoms. */
-@import '@hraness/design-kit/styles.css';
-@import '@hraness/design-kit/syntax-highlighting.css';
-@import '@hraness/site-footer/styles.css';
+/* Recipe-free foundations precede the one package union added by PostCSS.
+ * Never concatenate standalone atomic sheets: shared atoms would cross layers. */
+@import '@hraness/ui/compiler-foundation.css';
+@import '@hraness/design-kit/compiler-foundation.css';
+@import '@hraness/site-footer/compiler-foundation.css';
 @import '../styles/vendor/hraness-paper/paper-theme.css';
 @import '../styles/vendor/hraness-marketing/product-marketing-preset.css';
 @import '../styles/vendor/hraness-forced-colors/marketing-forced-colors.css';
 @import '../styles/vendor/hraness-lantern/lantern-material.css';
-@import "@hraness/design-kit/palettes.css";
 
 /* Product roles alias the shared palette. Message examples retain their
  * incoming/outgoing distinction without a separate site color system. */

@@ -593,3 +593,15 @@
   .bubble, .typing, .tapback { border: 1px solid CanvasText; }
   .tail, .waTail { fill: Canvas; }
 }
+
+/* Crop the complete device, preserving its proportions and accessible transcript.
+ * Player controls remain outside this viewport. */
+.crop {
+  inline-size: min(100%, var(--crop-max, 22rem));
+  min-inline-size: 0;
+  margin-inline: auto;
+  aspect-ratio: 412 / var(--crop-h);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent);
+  mask-image: linear-gradient(to bottom, #000 88%, transparent);
+}

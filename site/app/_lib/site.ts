@@ -12,28 +12,24 @@ export const SITE_DESCRIPTION =
 // The one-sentence "what it is": README line 5, the launch post, and the CLI
 // description use the same words.
 export const SITE_WHAT_IT_IS =
-  'TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”.';
-// The one development-status statement. Pages render it where they state the
-// status; README.md repeats it word for word and a site test keeps them equal.
+  'TextButler adds an assistant to the iMessage, WhatsApp, and Beeper chats you choose on your Mac. By default, it answers “butler” requests and marks its replies as AI.';
+// The machine-readable development stage is distinct from the brief setup
+// fact shared by the homepage, README, and discovery text.
 export const SITE_STATUS_LABEL = 'In development';
 export const SITE_STATUS =
-  `${SITE_STATUS_LABEL}. TextButler runs on a Mac, built from its source code: there’s no app to download yet, and new installs start paused. Automatic replies have worked end to end over iMessage in our testing. Try them on your own account, especially over WhatsApp or Beeper, before you rely on them.`;
+  'TextButler runs on your Mac. New installs start paused until you choose which chats it can answer.';
 // The canonical reply-writer sentence, reused verbatim wherever the options are named.
 export const REPLY_WRITERS_SENTENCE =
-  'Replies can be written by a local model through Ollama (in testing), by Qwen 3.5 Flash through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
+  'Replies can be written by a local model through Ollama, by Qwen through your own Vercel AI Gateway key, or by your Claude Code, Codex, or Devin subscription through xcb.';
 export const REPLY_WRITERS_PRECEDENCE =
-  'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins, and with no key saved, an Ollama server already serving the pinned model is picked up when the background service starts. When a Gateway key is saved, the butler can also search the web for the people you turn on (in your own chat, only when you ask), using your key even when a local model writes the replies. It refuses any search that reuses words from your private messages, and you can turn search off for one person from the command line.';
-// TextButler AI credits are planned, not built. Keep them labeled as coming
-// soon everywhere until credits can actually be bought and used.
-export const REPLY_CREDITS_NOTE =
-  'Coming soon: TextButler AI credits, so the butler can write replies through Vercel AI Gateway without a key of your own. Credits aren’t available yet. Today you pick a local model, your own subscription, or your own Gateway key.';
+  'If you choose one with a command, that choice wins. Otherwise a saved Gateway key wins, and with no key saved, an Ollama server already serving the pinned model is picked up when the background service starts. When a Gateway key is saved, the butler can also search the web for the conversations you turn on (in your own chat, only when you ask), using your key even when a local model writes the replies. It refuses any search that reuses words from your private messages, and you can turn search off for one conversation from the command line.';
 export { SOCIAL_IMAGE_ALT };
-// The prompt a reader pastes into Claude Code, Codex, or Devin. It follows the
-// written guide; there is no TextButler setup skill or one-line installer yet.
+// The prompt a reader pastes into a coding agent follows the setup guide.
 export const AGENT_SETUP_PROMPT = [
   'Set up TextButler on this Mac: https://github.com/hraness/textbutler',
   'Follow docs/textbutler/getting-started.md step by step.',
-  'If GhostGet isn\'t installed, set it up first: https://ghostget.com/docs/tutorials/getting-started',
+  'Install or update GhostGet to exactly 0.18.71: https://ghostget.com/docs/tutorials/getting-started',
+  'Check `ghostget --version`, then restart or reconnect TextButler\'s GhostGet host so it checks the new capabilities.',
   'Connect my iMessage, and WhatsApp or Beeper if I use them.',
   'For replies, if Ollama is running with qwen3:4b-instruct-2507-q4_K_M, choose it with `textbutler providers local`; otherwise ask me which option I want.',
   'Run `textbutler doctor` after each step and do what it says.',
@@ -120,20 +116,11 @@ export function pageMetadata({
 // hand: Vercel builds from shallow clones, so Git history is not available.
 // The docs page publishes its dateModified from this table too.
 export const PAGE_LAST_MODIFIED = {
-  '/': '2026-09-28',
+  '/': '2026-10-01',
   '/sources': '2026-09-11',
-  '/docs': '2026-09-28',
+  '/docs': '2026-10-01',
   '/methodology': '2026-09-11',
   '/research': '2026-09-11',
-  '/about': '2026-09-28',
-  '/compare/ghostreply': '2026-09-28',
+  '/about': '2026-10-01',
+  '/compare/ghostreply': '2026-10-01',
 } as const;
-
-/** Builds a local copy from source; the same steps the getting-started guide lists. */
-export const INSTALL_COMMAND = 'git clone https://github.com/hraness/textbutler.git && cd textbutler && bun install --frozen-lockfile --ignore-scripts && bun run textbutler:install';
-/** TextButler automates Messages.app, so only the macOS tab has a command. */
-export const INSTALL_PLATFORMS = [
-  { id: 'macos', command: INSTALL_COMMAND, shell: 'Terminal', note: 'Requires Bun 1.3.14 and GhostGet' },
-  { id: 'linux', unavailable: true, unavailableNote: 'Uses Messages.app, so it runs on macOS only.' },
-  { id: 'windows', unavailable: true, unavailableNote: 'Uses Messages.app, so it runs on macOS only.' },
-] as const;

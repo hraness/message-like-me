@@ -257,15 +257,20 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
   const sample = { width: 1440, theme: 'light', path: '/' };
   const valid = { paper: 'paper', background: 'rgb(251, 241, 199)', bodyFont: '"Nebula Sans", sans-serif', coarse: false, overflow: 0,
     forms: 8, appearanceControls: [...['catppuccin','gruvbox','rose-pine','tokyo-night','paper'].map(value => ({name:'fixture-palette',value,legend:'Theme'})), ...['light','dark','system'].map(value => ({name:'fixture-mode',value,legend:'Appearance'}))], headers: 1, footers: 1, askAi: 1, preset: 'editorial', material: 'lantern', headerBackdrop: 'none',
-    layers: ['components.hraness-ui.priority1', 'components.hraness-design-kit.priority1'],
+    layers: ['components.hraness-stylex.priority1'],
     fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],
     headingFont: '"Nebula Sans", sans-serif', headingSize: 64, headingLeading: 67.84, headingTracking: -1.92, headingWeight: '550', headerMinHeight: '52px',
     headerWidth: 1216, gutter: '32px',
-    sections: Array.from({ length: 9 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
+    sections: Array.from({ length: 12 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
     workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', terminalBackground: 'rgb(255, 253, 249)',
     actionHeights: [42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
+  for (const family of ['ui', 'design-kit', 'site-footer']) {
+    const standalone = `components.hraness-${family}.priority1`;
+    expect(() => assertPresentation({ ...valid, layers: [standalone] }, sample)).toThrow('Shared compiled recipe union missing');
+    expect(() => assertPresentation({ ...valid, layers: [...valid.layers, standalone] }, sample)).toThrow('Standalone package recipes');
+  }
   for (const path of ['/docs', '/sources', '/preview', '/blog', '/blog/introducing-textbutler']) {
     const preview = path === '/preview';
     const document = { ...valid, preset: null, renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],

@@ -258,9 +258,8 @@ export function assertPresentation(value, sample) {
   assert.equal(value.footers, sample.path === '/preview' ? 0 : 1);
   assert.equal(value.headers, sample.path === '/preview' ? 0 : 1);
   assert.equal(value.askAi, sample.path === '/preview' ? 0 : 1);
-  for (const family of ['hraness-ui', 'hraness-design-kit']) {
-    assert.ok(value.layers.some((name) => name.startsWith(`components.${family}.priority`)), `${family} compiled layers missing.`);
-  }
+  assert.ok(value.layers.some((name) => name.startsWith('components.hraness-stylex.priority')), 'Shared compiled recipe union missing.');
+  assert.ok(!value.layers.some((name) => /^components\.hraness-(?:ui|design-kit|site-footer)\.priority/u.test(name)), 'Standalone package recipes must not compete with the shared union.');
   for (const weight of ['400', '500', '600', '700']) assert.ok(value.fontWeights.includes(weight), `Nebula Sans ${weight} missing.`);
   assert.equal(value.preset, sample.path === '/' ? 'editorial' : null);
   assert.equal(value.material, 'lantern');
@@ -278,7 +277,7 @@ export function assertPresentation(value, sample) {
     assert.equal(value.headerWidth, Math.min(1216, sample.width));
     assert.equal(value.gutter, sample.width < 761 ? '20px' : '32px');
     const h2Size = Math.min(40, Math.max(28, 21.6 + sample.width * 0.016));
-    assert.equal(value.sections.length, 9);
+    assert.equal(value.sections.length, 12, 'All landing section headings, including the three split benefits, must be inspected.');
     for (const section of value.sections) {
       assert.match(section.font, /Nebula Sans/u);
       assert.equal(section.weight, '550');

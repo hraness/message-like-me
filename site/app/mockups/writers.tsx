@@ -9,6 +9,7 @@ import { WRITERS, type WriterId } from './samples';
 export function WritersShowcase({ initial = 'local' }: Readonly<{ initial?: WriterId }>) {
   return (
     <StepThrough
+      fit="fill"
       initial={initial}
       label="Reply writers"
       steps={WRITERS.map((writer) => ({
@@ -17,6 +18,7 @@ export function WritersShowcase({ initial = 'local' }: Readonly<{ initial?: Writ
         hint: writer.hint,
         render: () => (
           <TerminalFrame
+            density="presentation"
             describe={`Illustration: setting up ${writer.label.toLowerCase()} as the reply writer. ${writer.where}`}
             lines={[
               ...writer.commands.map((text) => ({ kind: 'input' as const, text })),

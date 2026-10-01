@@ -8,8 +8,11 @@ GhostGet process's private helper or open provider databases.
 
 The automation contract was first admitted with
 [GhostGet 0.18.2](https://github.com/hraness/ghostget/releases/tag/v0.18.2).
-This development version of the native `TextButler.app` iMessage setup pins GhostGet
-0.18.44. Its matching artifact and live conversation checks remain pending.
+Native `TextButler.app` iMessage setup requires exactly GhostGet 0.18.71.
+Earlier GhostGet releases do not provide the reviewed group-conversation contract.
+Install or update GhostGet, check the configured executable with `--version`,
+and restart or reconnect TextButler's GhostGet host to negotiate its capabilities
+again. Matching artifact admission and live conversation checks remain pending.
 The required contract preserves the native helper's resource bundle, avoids
 opening unrelated protected folders during state validation, and exposes bounded
 discovery diagnostics without message bodies. Valid native chat rows without

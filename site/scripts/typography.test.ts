@@ -20,11 +20,12 @@ describe("site typography", () => {
     expect(layout).toContain("import '@hraness/design-kit/fonts.css';");
     expect(layout.indexOf("@hraness/design-kit/fonts.css"))
       .toBeLessThan(layout.indexOf("./globals.css"));
-    expect(css).toContain("@import '@hraness/design-kit/styles.css';");
+    expect(css).toContain("@import '@hraness/design-kit/compiler-foundation.css';");
+    expect(css).not.toMatch(/@hraness\/design-kit\/(?:styles|stylex)\.css/u);
     expect(css).not.toContain("@import '@hraness/design-kit/product-marketing.css';");
     expect(css).not.toContain("@import 'tail" + "windcss';");
-    expect(css.indexOf("@import '@hraness/ui/stylex.css';"))
-      .toBeLessThan(css.indexOf("@import '@hraness/design-kit/styles.css';"));
+    expect(css.indexOf("@import '@hraness/ui/compiler-foundation.css';"))
+      .toBeLessThan(css.indexOf("@import '@hraness/design-kit/compiler-foundation.css';"));
     expect(css).toContain('font-family: var(--font-text);');
     expect(css).not.toContain("font-family: Inter");
   });

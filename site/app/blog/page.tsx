@@ -64,6 +64,7 @@ export default function BlogIndexPage() {
           headingLevel={1}
           items={blogIndexItems()}
           summary={BLOG_DESCRIPTION}
+          showDates={false}
         />
         <p className="blog-feed-link"><a href={BLOG_FEED_PATH}>Subscribe with the Atom feed</a></p>
       </main>

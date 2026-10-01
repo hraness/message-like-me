@@ -166,13 +166,12 @@ console.log(JSON.stringify({id:state.mode==="wrong-id"?"wrong-id":frame.id,proto
   await writeFile(join(dataDir, "state", "host.json"), JSON.stringify({ schemaVersion: 1, ghostget: { executable, runtimeExecutable, authId: ID, stateHome, automationAccounts: [{ provider: "imessage", authId: ID }] } }), { mode: 0o600 });
   return { root, packageRoot, home, dataDir, stateHome, executable, options: { home, platform: "darwin", automationPermission: "allowed", launchGeneration: "12345678-1234-1234-1234-123456789abc", processLimits: { commandMs: 2000, cleanupMs: 100 } }, async calls() { try { return (await readFile(join(stateHome, "calls.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line)); } catch { return []; } } };
 }
-test("connector releases outside the pinned native group contract are refused before launch", async () => {
-  for (const version of ["0.18.16", "0.18.17", "0.18.18", "0.18.19", "0.18.20", "0.18.21", "0.18.38", "0.18.43", "0.18.42", "0.18.44", "0.18.65", "0.18.66", "0.18.67", "0.18.68", "0.18.69", "0.18.70", "0.18.72"]) {
-    const f = await processFixture();
-    await writeFile(join(f.packageRoot, "package.json"), JSON.stringify({ name: "@hraness/ghostget", version, type: "module" }), { mode: 0o600 });
-    expect(await runIMessageSetup(f.dataDir, f.options)).toMatchObject({ ok: false, status: "blocked", custody: "not-acquired", code: "unsupported-connector-version" });
-    expect(await f.calls()).toHaveLength(0);
-  }
+// Each independent fixture retains the default timeout and completes its own cleanup.
+test.each(["0.18.16", "0.18.17", "0.18.18", "0.18.19", "0.18.20", "0.18.21", "0.18.38", "0.18.43", "0.18.42", "0.18.44", "0.18.65", "0.18.66", "0.18.67", "0.18.68", "0.18.69", "0.18.70", "0.18.72"])("connector release %s outside the pinned native group contract is refused before launch", async (version) => {
+  const f = await processFixture();
+  await writeFile(join(f.packageRoot, "package.json"), JSON.stringify({ name: "@hraness/ghostget", version, type: "module" }), { mode: 0o600 });
+  expect(await runIMessageSetup(f.dataDir, f.options)).toMatchObject({ ok: false, status: "blocked", custody: "not-acquired", code: "unsupported-connector-version" });
+  expect(await f.calls()).toHaveLength(0);
 });
 test("real child setup has closed argv/environment, durable results, and repeatable completed state", async () => {
   const f = await processFixture();
