@@ -1,18 +1,19 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Reply-local scoped context queries with unchanged contact capability profiles and existing effect budgets.",
+  "recordedAt": "2026-10-01T18:55:39.460688+00:00",
+  "toolchain": "Bun 1.3.14",
+  "command": "/Users/benguo/.bun/bin/host-run --mode=shared --lane=compute --label=textbutler-context-admission-focused -- /Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/history-search.test.ts",
+  "result": {
+    "exitCode": 0,
+    "passed": 118,
+    "failed": 0,
+    "files": 5,
+    "assertions": 1060
   },
-  "sources": {
+  "sourceInventoryCount": 46,
+  "sourceDigest": "82cf3fea2c93ec127180b06d22e6f608d2d1fe668774f9579fa7ff564e948020",
+  "sourceSha256": {
     "bun.lock": "3a5fd59cdfdd77bf92d7fec308e2c6145ebda477f6a291a110fc15a2bcbd0679",
     "package.json": "ea3f88bcc79893c2cae022153f4157208d9a69702b660823c36d1c8dccb92b0a",
     "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
@@ -60,8 +61,19 @@
     "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
     "scripts/xcb-integration-admission.ts": "81428dd407f793fd38b4b7116ffb0f0d53e1f7276b6ecd2773298d2b37e16d11"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/host-run --mode=shared --lane=compute --label=textbutler-context-admission-focused -- /Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/history-search.test.ts",
-    "receiptSha256": "dfac1a59cfb064072726bb7e0cae0ebdc5ccf445f5fa479517be46263a932dfe"
-  }
+  "review": "qualification/xcb-scoped-context-review.json",
+  "reviewSha256": "2747a1501abe17e3f8c5281a4d7a7ada1d4ed1a36133a915536cd97c672fbd16",
+  "previousAdmission": {
+    "baseCommit": "f1f308443acc9237ee25063ce83043ea7239ff7b",
+    "path": "qualification/xcb-textbutler-v1.json",
+    "sha256": "d0deb74e5acd6012158f09e7b66f41e1a319a1e4a8fd3ea7a47b5540af65057c",
+    "validation": {
+      "command": "Previous group qualification plus current native iMessage setup 0.18.71 tests; independent source reviews, immutable artifact binding and remaining final gates are recorded in qualification/xcb-group-conversations-validation.json",
+      "receiptSha256": "d7f6f930fd9636a695bb1027b2e41fa5c4697babd2acf8b5a040234754ce9293"
+    }
+  },
+  "limits": [
+    "Synthetic fixtures only; no live inference, message sending, installed daemon activation or provider qualification.",
+    "Repository aggregate and delivery gates remain separately required."
+  ]
 }

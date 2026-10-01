@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "scope": "Scoped exact context reads for one TextButler contact reply, privacy filtering and memory exposure provenance; source composition only.",
+  "reviewer": "Independent AI subagent /root/context_foundation",
+  "reviewedAt": "2026-10-01T18:48:11.235843+00:00",
+  "baseCommit": "f1f308443acc9237ee25063ce83043ea7239ff7b",
+  "method": "Read-only independent review of the changed source, query helper, immutable dependency pin, regression tests and admission inventory. The reviewer owns only this review record. Tests and supported composition receipt refresh are owned by /root/consumer_rollout_plan.",
+  "result": "No blocking findings in the reviewed source. Rebinding the composition receipt to these exact bytes is supported after the validation owner supplies passing evidence; this review does not itself establish validation or authorize installed runtime activation.",
+  "reviewedSha256": {
+    "bun.lock": "3a5fd59cdfdd77bf92d7fec308e2c6145ebda477f6a291a110fc15a2bcbd0679",
+    "package.json": "ea3f88bcc79893c2cae022153f4157208d9a69702b660823c36d1c8dccb92b0a",
+    "packages/textbutler/src/contact-habitat.ts": "6b772cb9f04c6a82ced7fd1826d01a823255e925d4da05ab8b0e12065e98ff47",
+    "packages/textbutler/src/habitat-agent.ts": "6a7398f084c90bd44caeaefc628349b9a050245300b49c5a299b82b37281ae16",
+    "packages/textbutler/src/context-access.ts": "6e903fcb4e96a087d5702f34c78423d04be4c739eb7cfb60abbb44d3ba346367",
+    "packages/textbutler/src/habitat-agent.test.ts": "0d2e12c3b6128e9fae61f3b44a733ee8ebe8bedbcf2f6a71c4a295e347d45be7",
+    "scripts/xcb-integration-admission.ts": "81428dd407f793fd38b4b7116ffb0f0d53e1f7276b6ecd2773298d2b37e16d11",
+    "docs/textbutler/architecture.md": "ea8b7c6f50124d9a4868a144d2c0cda59a1fa6761db69eb0be9e50a3fb8930aa"
+  },
+  "findings": [
+    {
+      "area": "Contact scope",
+      "result": "The host creates a fresh MemoryStore and bound reader from the current reply instructions, allowlisted trigger message, current contact guidance, selected contact history and memory, and prior reply-local tool results. The strict shared query parser does not permit contact, path or snapshot selection."
+    },
+    {
+      "area": "Trigger metadata",
+      "result": "The retained trigger uses eventObservation plus original text, preserving the previous message-field allowlist. Route IDs, contact IDs and event revision/control metadata are not copied into the retained trigger. The new regression checks the complete allowed field set."
+    },
+    {
+      "area": "Budget and effects",
+      "result": "Context queries use the existing two-tool/three-model-call loop, 2048-byte read/slice ceiling, eight search matches and 4096-byte serialized result ceiling. Queries are pure in-memory reads and cannot directly send messages, modify settings, select providers or broaden filesystem authority. Revocation assertions bracket the asynchronous access and result publication."
+    },
+    {
+      "area": "Public-query privacy",
+      "result": "The existing public web query filter now receives original retained history and full scoped guidance, so text retrieved beyond the ordinary prompt projection remains part of its private corpus. A regression attempts to search a private identifier read from guidance and verifies no public search executes. This preserves the existing heuristic privacy mechanism; it is not a general proof against semantic disclosure."
+    },
+    {
+      "area": "Memory provenance",
+      "result": "Read, slice and search report source entry indices. Queried memory entries are mapped through the fixed memory offset to their original sourceDigest and enter exposedMemory even when ordinary prompt fitting evicted them. Submitted reply records keep these references in priorMemory; three regressions cover read, slice and search."
+    },
+    {
+      "area": "Admission inventory",
+      "result": "The inventory adds only packages/textbutler/src/context-access.ts. Exact source equality, physical-path reads, frozen profile identities and the required validation digest are preserved. The stale composition receipt must continue failing until the validation owner performs its supported refresh."
+    },
+    {
+      "area": "Dependency provenance",
+      "result": "package.json and bun.lock pin the same immutable ALGAL commit 14915465c3d7c5ee2c55e2977e36ee03f6bcbff0 through a public codeload URL and lock checksum. This review adds no sibling-path dependency."
+    }
+  ],
+  "validationOwnership": {
+    "owner": "/root/consumer_rollout_plan",
+    "status": "Focused and aggregate validation are separate evidence; no new reviewer-owned test execution claimed."
+  },
+  "remainingLimits": [
+    "No live provider qualification, installed daemon activation, or external message was exercised by this review.",
+    "The context store is reply-local; this change does not claim a durable cross-restart archive.",
+    "Any subsequent change to a reviewed file requires review of that delta and a refreshed hash."
+  ]
+}

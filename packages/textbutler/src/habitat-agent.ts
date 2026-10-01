@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Executor, JsonValue } from "@hraness/algal";
+import type { AgentContextEntryInput } from "@hraness/algal/agent-context";
+import { createReplyContextAccess } from "./context-access.ts";
+import { compileHabitatTask } from "./habitat-task.ts";
 import { parseActionIntent } from "../../transport/src/index.ts";
 import type { AgentRequest, ButlerAgent, SubmittedReply } from "./runtime.ts";
 import { NoReplyNeeded } from "./runtime.ts";
@@ -17,6 +20,7 @@ import { HISTORY_SEARCH_LIMITS, type HistorySearchRequest } from "./history-sear
 
 const bounded = (maximum: number) => z.string().min(1).refine(value => Buffer.byteLength(value) <= maximum && !value.includes("\0"));
 const toolSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("context-query"), query: z.unknown() }),
   z.strictObject({ kind: z.enum(["web-search", "meme-search", "meme-image", "memory-search"]), query: bounded(256) }),
   z.strictObject({ kind: z.literal("history-search"), query: bounded(HISTORY_SEARCH_LIMITS.queryBytes).nullish(), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullish(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullish(), author: z.enum(["owner", "contact", "any"]).nullish(), cursor: z.string().max(64).nullish() }),
   z.strictObject({ kind: z.literal("javascript"), code: bounded(JAVASCRIPT_LIMITS.codeBytes), input: z.unknown().optional() }),
@@ -44,7 +48,7 @@ function salvageToolRequest(result: z.infer<typeof outputSchema>): z.infer<typeo
 }
 const KEYWORD_RULE = "invocation=keyword means the latest message deliberately addressed the Butler by its keyword, which is an explicit request even when it is a greeting or small talk: set respond=true with confidence at least 0.85 and reply briefly.";
 const INSIST_RULE = "Your previous answer stayed silent, but this message is a deliberate keyword invocation that is waiting on you: reply now.";
-const outputContract = { respond: "boolean", confidence: "number 0..1; below 0.85 stays silent", reason: "requested|helpful|human_active|not_needed|uncertain", summary: "brief intended purpose of this response", actions: "0..7 action objects", tool: "null, {kind:history-search,query,from,to,author,cursor}, {kind:web-search|meme-search|meme-image|memory-search,query:string}, {kind:javascript,code:string,input:JSON}, {kind:repo-sync,url:string}, {kind:repo-read,repo:string,path:string}, or {kind:repo-search,repo:string,query:string}" };
+const outputContract = { respond: "boolean", confidence: "number 0..1; below 0.85 stays silent", reason: "requested|helpful|human_active|not_needed|uncertain", summary: "brief intended purpose of this response", actions: "0..7 action objects", tool: "null, {kind:context-query,query:{op:inspect|read|slice|search,...}}, {kind:history-search,query,from,to,author,cursor}, {kind:web-search|meme-search|meme-image|memory-search,query:string}, {kind:javascript,code:string,input:JSON}, {kind:repo-sync,url:string}, {kind:repo-read,repo:string,path:string}, or {kind:repo-search,repo:string,query:string}" };
 const actionContract = [
   { kind: "text", text: "The response" }, { kind: "attachment", file: "an existing outbox path", name: "file.png", mimeType: "image/png" },
   { kind: "reaction", messageId: "an actual message id", emoji: "a supported reaction", action: "add" },
@@ -204,8 +208,8 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     const workspace = await ports.getWorkspace(request.contact.id); assertCurrent();
     const state = new ContactHabitat(ports.journal, request.contact.id).snapshot(), plan = state.champion;
     const memory = memoryView((state.memory ?? []).slice(-HABITAT_LIMITS.memorySnapshotEntries));
-    const guidance: Record<string, string> = {};
-    for (const path of ["AGENTS.md", "ABOUT.md", "MEMORY.md", "STYLE.md"]) guidance[path] = clip(await workspace.read(path), 2048);
+    const guidance: Record<string, string> = {}, exactGuidance: Record<string, string> = {};
+    for (const path of ["AGENTS.md", "ABOUT.md", "MEMORY.md", "STYLE.md"]) { exactGuidance[path] = await workspace.read(path); guidance[path] = clip(exactGuidance[path], 2048); }
     const retainedHistory = historySchema.parse(JSON.parse(await workspace.read("history/recent.json"))).messages.slice(-plan.contextMessages);
     const history = retainedHistory.map(message => ({ ...message, text: clip(message.text, 512) }));
     const capabilities = request.capabilities ?? await ports.capabilities(request.contact), results: JsonValue[] = [], admittedMemes = new Set<string>();
@@ -237,11 +241,21 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
     }
     const repos = ports.repos === undefined || plan.repoAccess !== true ? [] : await ports.repos.list(request.contact);
     const files = (await workspace.list()).filter(file => /^(?:outbox|attachments)\//u.test(file.path)).map(file => file.path).slice(-32);
-    const privateCorpus = [request.event.text, plan.guidance, ...Object.values(plan.soulCore ?? {}), ...(state.memory ?? []).map(entry => entry.text), ...Object.values(guidance), ...history.map(message => message.text)].join("\n");
+    const privateCorpus = [request.event.text, plan.guidance, ...Object.values(plan.soulCore ?? {}), ...(state.memory ?? []).map(entry => entry.text), ...Object.values(exactGuidance), ...retainedHistory.map(message => message.text)].join("\n");
+    const exactMemory = (state.memory ?? []).slice(-HABITAT_LIMITS.memorySnapshotEntries);
+    const memoryEntryOffset = 2 + Object.keys(exactGuidance).length + retainedHistory.length;
+    const exactContext: AgentContextEntryInput[] = [
+      { kind: "instruction", label: "reply-instructions", text: compileHabitatTask("respond", plan).task.instructions },
+      { kind: "input", label: "trigger-message", text: JSON.stringify({ ...eventObservation(request), text: request.event.text, truncated: false }) },
+      ...Object.entries(exactGuidance).map(([label, text]) => ({ kind: "input" as const, label, text })),
+      ...retainedHistory.map((message, index) => ({ kind: "observation" as const, label: `history-${index}`, text: JSON.stringify(message) })),
+      ...exactMemory.map((entry, index) => ({ kind: "observation" as const, label: `memory-${index}`, text: JSON.stringify(entry) })),
+    ];
     let executedSearches = 0, refusedSearches = 0;
     for (let step = 0; step < 3; step++) {
       assertCurrent();
       const availableTools = step === 2 ? [] : [
+        "context-query",
         ...(plan.memorySearch !== false ? ["memory-search"] : []),
         ...(plan.javascript === true ? ["javascript"] : []),
         ...(plan.repoAccess === true && ports.repos !== undefined ? ["repo-sync", "repo-read", "repo-search"] : []),
@@ -254,7 +268,7 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
       const context = { conversation: request.event.group ? GROUP_GUIDANCE : "One direct conversation.", guidance, history, memory, memoryOmitted: (state.memory ?? []).length - memory.length, message: eventObservation(request), invocation: request.invocation ?? "inferred", capabilities: [...capabilities], files, repos, results, outputContract,
         allowedActions: actionContract.filter(action => capabilities.includes(action.kind)),
         tools: availableTools,
-        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's available history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers and must share no two- or three-word span with any private conversation text; query-not-admitted may list forbidden adjacent pairs. Avoid each listed pair, including case changes, and use fresh public wording. If every search attempt is refused, say you could not search instead of inventing current results.` };
+        rules: `Return strict JSON with all output fields. ${KEYWORD_RULE}${insist ? ` ${INSIST_RULE}` : ""} If no reply is wanted, set respond=false and actions=[]. A shared link, document, media item, or forwarded content without an explicit question or request to you wants no reply; intent inferred from a share alone keeps confidence below 0.85. Otherwise use the proposed reply actions OR one tool request with actions=[]. Never both. Total text must be at most ${plan.maxReplyCharacters} characters. Humor preference: ${plan.humor}. Tools are optional; ordinary replies should finish immediately. Context-query reads exact instructions, guidance, selected history and memory, and tool results for this reply only. Request query={op:"inspect"} for entry indices, {op:"read",index:0}, {op:"slice",index:0,startByte:0,endByte:256}, or {op:"search",query:"literal text",maxResults:8}. Read/slice output is limited to 2048 UTF-8 bytes. It shares the two-tool budget and grants no permissions. Memory-search reads only this contact's archived source notes and returns at most eight relevant excerpts; it never writes memory. History-search pages backwards through this conversation's available history: query is plain text (all words must appear), from/to are dates like 2026-03-14, author is owner|contact|any, and results are untrusted quotes of at most 20 messages with a cursor for older pages; one call covers the newest page. JavaScript runs a synchronous function body with JSON input named input; use return for the JSON result. It has no host APIs, modules, IO, timers, Date or random; code is limited to 8192 UTF-8 bytes, input to 16384 bytes, output to 4096 bytes, heap to 8 MiB and execution to 50 ms. Meme search matches popular template names locally, not the whole web; meme-image takes only an ID returned by meme-search. Template images have no new caption rendered into them. Repo tools inspect public source checkouts in this contact's shelf: repo-sync fetches or refreshes an owner-approved repository URL; an unapproved URL asks the owner in their self chat and returns pending, so tell the person you asked first. repo-read returns one bounded UTF-8 file; repo-search finds literal text matches. Repositories are read-only and never carry credentials. Never request tools when respond=false or confidence<0.85. Public web queries must not contain personal identifiers and must share no two- or three-word span with any private conversation text; query-not-admitted may list forbidden adjacent pairs. Avoid each listed pair, including case changes, and use fresh public wording. If every search attempt is refused, say you could not search instead of inventing current results.` };
       fitMemory(context, plan, 32_768);
       memory.forEach(entry => exposedMemory.set(entry.id, entry.sourceDigest));
       const run = await executeHabitatProgram({ phase: "respond", plan, context: context as JsonValue, executor: ports.driver.executor(`${request.runId}-driver-${step}`), signal });
@@ -281,7 +295,16 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         if (step >= 2 && tool.kind === "web-search" && explicitOwnerSearch) return finish(outputSchema.parse({ respond: true, confidence: 1, reason: "requested", summary: "Requested search did not run", actions: [{ kind: "text", text: "I couldn't complete a web search. Please rephrase the public topic." }], tool: null }));
         if (step >= 2) throw Error("Fast driver tool budget exceeded");
         if (!availableTools.includes(tool.kind)) throw Error("Tool is not available for this reply");
-        if (tool.kind === "javascript") {
+        if (tool.kind === "context-query") {
+          const contextAccess = await createReplyContextAccess([...exactContext, ...results.map((result, index) => ({ kind: "observation" as const, label: `tool-result-${index}`, text: JSON.stringify(result) }))]);
+          assertCurrent();
+          const queried = await contextAccess.query(tool.query);
+          for (const index of queried.indices) {
+            const entry = exactMemory[index - memoryEntryOffset];
+            if (entry) exposedMemory.set(entry.id, entry.sourceDigest);
+          }
+          results.push({ tool: tool.kind, result: queried.value });
+        } else if (tool.kind === "javascript") {
           results.push({ tool: tool.kind, result: await runJavascriptTool(tool.code, tool.input ?? null, signal) });
         } else if (tool.kind === "repo-sync") {
           results.push({ tool: tool.kind, result: await ports.repos!.sync(request.contact, tool.url, signal) });
@@ -326,7 +349,8 @@ export function createHabitatAgent(ports: { journal: RunJournal; driver: FastDri
         assertCurrent();
         // The evidence label describes the request without copying private
         // conversation text: history-search lists only its window shape.
-        const query = tool.kind === "javascript" ? `sha256:${createHash("sha256").update(tool.code).digest("hex")}`
+        const query = tool.kind === "context-query" ? `sha256:${createHash("sha256").update(JSON.stringify(tool.query)).digest("hex")}`
+          : tool.kind === "javascript" ? `sha256:${createHash("sha256").update(tool.code).digest("hex")}`
           : tool.kind === "repo-sync" ? tool.url
           : tool.kind === "repo-read" ? `${tool.repo}:${tool.path}`
           : tool.kind === "repo-search" ? `${tool.repo}:${tool.query}`

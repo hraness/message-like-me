@@ -1,18 +1,15 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
+  "scope": "Complete source/package validation after scoped context composition refresh.",
+  "recordedAt": "2026-10-01T19:42:46.001641+00:00",
+  "command": "/Users/benguo/.bun/bin/host-run --mode=heavy --lane=compute --label=textbutler-context-rebound-final -- /Users/benguo/.nvm/versions/node/v24.18.1/bin/system-one-skills check --timeout-ms 900000 -- /Users/benguo/.bun/bin/bun run check",
+  "result": {
+    "exitCode": 0,
+    "rootTests": 498,
+    "packageTests": 894,
+    "failed": 0
   },
-  "sources": {
+  "sourceSha256": {
     "bun.lock": "3a5fd59cdfdd77bf92d7fec308e2c6145ebda477f6a291a110fc15a2bcbd0679",
     "package.json": "ea3f88bcc79893c2cae022153f4157208d9a69702b660823c36d1c8dccb92b0a",
     "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
@@ -60,8 +57,10 @@
     "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
     "scripts/xcb-integration-admission.ts": "81428dd407f793fd38b4b7116ffb0f0d53e1f7276b6ecd2773298d2b37e16d11"
   },
-  "validation": {
-    "command": "/Users/benguo/.bun/bin/host-run --mode=shared --lane=compute --label=textbutler-context-admission-focused -- /Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/history-search.test.ts",
-    "receiptSha256": "dfac1a59cfb064072726bb7e0cae0ebdc5ccf445f5fa479517be46263a932dfe"
-  }
+  "admissionSha256": "70cae5d53dce8720b10ccbc848fb0ede918d09b05d8c72d116fcdaffa1649d5c",
+  "reviewSha256": "2747a1501abe17e3f8c5281a4d7a7ada1d4ed1a36133a915536cd97c672fbd16",
+  "focusedValidationSha256": "dfac1a59cfb064072726bb7e0cae0ebdc5ccf445f5fa479517be46263a932dfe",
+  "localLog": "/var/folders/vh/qdfcqc514qj47bbvzslcwjsc0000gn/T/system-one-MHChH6/check.log",
+  "localLogSha256": "5e963684f7a45c6a5a72c35c084cf8cee586706c515ef4f4841d78ea74005a35",
+  "limitations": "Synthetic source, packaging and replay validation only; no live provider, messaging or installed daemon activation."
 }
