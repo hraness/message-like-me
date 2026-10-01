@@ -173,7 +173,7 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   box-shadow: none;
   color: var(--primary);
   padding-inline: 0.5rem;
-  text-decoration: underline;
+  text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
 }
