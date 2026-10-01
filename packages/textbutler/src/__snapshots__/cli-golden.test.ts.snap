@@ -38,7 +38,7 @@ Everyday
   replies <command>          Suggest, review and send replies
 
 Chats and contacts
-  conversations list         List recent one-to-one chats you can add
+  conversations list         List recent chats you can add
   contacts <command>         Add chats and choose how TextButler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
@@ -185,7 +185,7 @@ Example
   "conversations": 
 "Usage: textbutler conversations list
 
-List recent one-to-one chats from your connected apps. Add one with
+List recent chats from your connected apps. Add one with
 textbutler contacts add <candidate>. The list expires after five minutes."
 ,
   "daemon": 

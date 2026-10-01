@@ -7,7 +7,7 @@ export const AUTOMATION_ACTIONS = ["text", "attachment", "reaction", "sticker", 
 export type AutomationProvider = "imessage" | "whatsapp" | "beeper";
 export type AutomationCoordinate = { provider: "imessage"; chatGuid: string; service: "iMessage"; observedChatRowId: number } | { provider: "whatsapp"; conversationJid: string } | { provider: "beeper"; accountId: string; conversationId: string };
 export interface AutomationIdentity { provider: AutomationProvider; authId: string; accountIdentity: string; accountSubject: string; implementationIdentity: string; sourceGeneration: string }
-export interface AutomationConversation { coordinate: AutomationCoordinate; title: string | null; kind: "single"; participants: readonly string[] }
+export interface AutomationConversation { coordinate: AutomationCoordinate; title: string | null; kind: "single" | "group"; participants: readonly string[] }
 export interface AutomationEnrollment { id: string; identity: AutomationIdentity; conversation: AutomationConversation; bindingDigest: string; revision: number; ready: boolean; reason: string | null }
 export interface AutomationMessage { id: string; coordinate: AutomationCoordinate; direction: "incoming" | "outgoing" | "unknown"; occurredAt: string; text: string | null; kind: "message" | "reaction" | "edit" | "delete"; relatedMessageId: string | null; attachments: readonly { name: string | null; mimeType: string | null; sizeBytes: number | null }[] }
 export interface AutomationGrantRequest { enrollmentId: string; expectedBindingDigest: string; actions: readonly typeof AUTOMATION_ACTIONS[number][]; expiresAt: string; maximumActions: number; minimumIntervalMs: number }
@@ -23,6 +23,7 @@ export type AutomationAction =
 export interface AutomationPlan { id: string; digest: string; enrollmentId: string; expectedRevision: number; intentId: string; actions: readonly AutomationAction[]; bindingDigest: string; expiresAt: string }
 export interface AutomationRun { id: string; planId: string; intentId: string; enrollmentId: string; state: "started" | "accepted" | "failed" | "partial" | "indeterminate"; accepted: readonly { messageId: string | null; providerReceiptId: string | null }[]; totalActions: number; reason: string | null; retryable: false }
 export interface AutomationEvent { sequence: number; enrollmentId: string; revision: number; message: AutomationMessage }
+export interface AutomationFeatures { groupConversations: { version: 1 } | null }
 export interface AutomationStatus { identity: AutomationIdentity; connected: boolean; events: { available: boolean; reason: string | null }; actions: Record<typeof AUTOMATION_ACTIONS[number], { available: boolean; reason: string | null }> }
 export const automationHash = (value: unknown): string => createHash("sha256").update(canonicalJson(value)).digest("hex");
 /** Display titles can change without changing the account or recipient. */
@@ -46,7 +47,7 @@ export function parseAutomationCoordinate(value: unknown): AutomationCoordinate 
   }
   exact(r, ["provider", "conversationJid"]);
   const conversationJid = string(r.conversationJid, 256);
-  if (!/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid)$/u.test(conversationJid)) throw new Error("Invalid individual WhatsApp coordinate");
+  if (!/^(?:[1-9][0-9]{4,14}@s\.whatsapp\.net|[1-9][0-9]{4,19}@lid|[1-9][0-9]{4,19}(?:-[1-9][0-9]{0,19})?@g\.us)$/u.test(conversationJid)) throw new Error("Invalid WhatsApp coordinate");
   return { provider, conversationJid };
 }
 export function parseAutomationIdentity(value: unknown): AutomationIdentity {
@@ -54,9 +55,13 @@ export function parseAutomationIdentity(value: unknown): AutomationIdentity {
   return { provider: automationProvider(r.provider), authId: automationId(r.authId), accountIdentity: digest(r.accountIdentity), accountSubject: string(r.accountSubject, 512), implementationIdentity: digest(r.implementationIdentity), sourceGeneration: string(r.sourceGeneration, 256) };
 }
 export function parseAutomationConversation(value: unknown): AutomationConversation {
-  const r = automationRecord(value, ["coordinate", "title", "kind", "participants"]), participants = array(r.participants, 2).map(value => string(value, 512));
-  if (r.kind !== "single" || participants.length < 1 || new Set(participants).size !== participants.length) throw new Error("Exact individual conversation required");
-  return { coordinate: parseAutomationCoordinate(r.coordinate), title: nullable(r.title, 512), kind: "single", participants: participants.sort() };
+  const r = automationRecord(value, ["coordinate", "title", "kind", "participants"]);
+  if (r.kind !== "single" && r.kind !== "group") throw new Error("Exact conversation kind required");
+  const participants = array(r.participants, r.kind === "single" ? 2 : 500).map(value => string(value, 512));
+  if (participants.length < 1 || new Set(participants).size !== participants.length) throw new Error("Exact conversation participants required");
+  const coordinate = parseAutomationCoordinate(r.coordinate);
+  if (coordinate.provider === "whatsapp" && coordinate.conversationJid.endsWith("@g.us") !== (r.kind === "group")) throw new Error("WhatsApp conversation kind mismatch");
+  return { coordinate, title: nullable(r.title, 512), kind: r.kind, participants: participants.sort() };
 }
 export function parseAutomationEnrollment(value: unknown): AutomationEnrollment {
   const r = automationRecord(value, ["id", "identity", "conversation", "bindingDigest", "revision", "ready", "reason"]);

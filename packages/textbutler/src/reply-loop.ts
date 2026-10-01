@@ -22,7 +22,7 @@ import { parseRepoUrl } from "./config.ts";
 import type { JsonValue } from "@hraness/algal";
 import type { MessagesActivity } from "./messages-activity.ts";
 
-type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { setReplyAgent?: (agent: ButlerAgent) => void; observeHabitatOperations?: TextbutlerControlService["observeHabitatOperations"] };
+type LoopService = Pick<TextbutlerControlService, "dataDir" | "providers" | "runtimeState" | "runJournal" | "delegatedGrant" | "onSettingsChanged" | "onHabitatChanged" | "notePending" | "allowContactRepo" | "notifySelfChat"> & { invalidateConversation?: TextbutlerControlService["invalidateConversation"]; setReplyAgent?: (agent: ButlerAgent) => void; observeHabitatOperations?: TextbutlerControlService["observeHabitatOperations"] };
 type ContactLoop = { binding: AutomationBinding; settingsRevision: number; initialized: boolean; healthy: boolean; runtime: ButlerRuntime; pending?: MessageEvent; pendingFirstAt: number | null; blocked?: string; running: boolean; runningPinned: boolean; lastOwnerAt: number | null; lastEnrollment: AutomationEnrollment | null; historyRevision: number | null; syncFailures: number; runFailures: number };
 const RECONCILE_DETAIL = "A previous send needs reconciliation. Check Messages, then run `textbutler replies reconcile`.";
 const SYNC_FAILURE_THRESHOLD = 3;
@@ -91,7 +91,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
   const workspaces = new Map<string, Promise<ContactWorkspace>>();
   const workspace = (id: string) => {
     let cached = workspaces.get(id);
-    if (!cached) { cached = ContactWorkspace.create(join(service.dataDir, "contacts", id)); cached.catch(() => workspaces.delete(id)); workspaces.set(id, cached); }
+    if (!cached) { const binding = owner.bindings[id]; cached = ContactWorkspace.create(join(service.dataDir, "contacts", id), binding?.version === 2 ? binding.conversation.kind : "single"); cached.catch(() => workspaces.delete(id)); workspaces.set(id, cached); }
     return cached;
   };
   let setCursor: string | null = null, lastSetKey = "", yieldingSince: number | null = null;
@@ -193,7 +193,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     }
     const cluster = pendingCluster(page.messages, contact, journal);
     service.notePending(contact.id, cluster === null ? null : { count: cluster.count, lastAt: cluster.latestAt, preview: cluster.preview, ready: page.enrollment.ready, observedAt: now() });
-    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), relatedMessageIds: new Map(page.messages.filter(message => message.kind === "message" && message.relatedMessageId !== null).map(message => [message.id, message.relatedMessageId!])), state: { latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000), operatorThread: operatorHold(page.messages, contact, journal) } };
+    return { contextId: automationContextId(page.enrollment), messageIds: page.messages.filter(message => message.kind === "message").map(message => message.id), relatedMessageIds: new Map(page.messages.filter(message => message.kind === "message" && message.relatedMessageId !== null).map(message => [message.id, message.relatedMessageId!])), state: { conversationKind: state.binding.conversation.kind, latestRevision: String(page.enrollment.revision), lastOwnerAt: state.lastOwnerAt, ownerTyping: "unknown", synchronizedAt: page.enrollment.ready ? now() : 0, repliesInLastHour: service.runJournal().repliesSince(contact.id, now() - 3600000), operatorThread: operatorHold(page.messages, contact, journal) } };
   }
   /** Settles a wedged send only from positive provider evidence. A terminal
    * upstream row is a receipt; no reply row beside a settled ack row proves
@@ -281,7 +281,7 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
     const firstAt = who === "contact" && state.pending?.author === "contact" && state.pendingFirstAt !== null ? state.pendingFirstAt : now();
     const capBound = firstAt + Math.max(contact.debounceMs * 2, 30_000) - contact.debounceMs;
     const observedAt = Math.min(now(), capBound), pinned = now() > capBound;
-    state.pending = { id: event.message.id, contactId: contact.id, routeId: bindingRoute(state), revision: String(event.revision), occurredAt: Date.parse(event.message.occurredAt), observedAt, pinned, author: invoked ? "owner" : "contact", kind: "message", text: event.message.text ?? "", historical: false, group: false };
+    state.pending = { id: event.message.id, contactId: contact.id, routeId: bindingRoute(state), revision: String(event.revision), occurredAt: Date.parse(event.message.occurredAt), observedAt, pinned, author: invoked ? "owner" : "contact", kind: "message", text: event.message.text ?? "", historical: false, group: state.binding.conversation.kind === "group" };
     state.pendingFirstAt = firstAt;
   }
   const bindingRoute = (state: ContactLoop) => state.binding.enrollmentId;
@@ -318,7 +318,13 @@ export async function createDaemonReplyLoop(options: ReplyLoopOptions) {
       const result = results?.get(binding.enrollmentId);
       try {
         if (result === undefined || result.error !== null || result.enrollment === null) throw new Error(result?.error ?? "Poll result missing");
-        assertAutomationBinding(binding, result.enrollment);
+        try { assertAutomationBinding(binding, result.enrollment); }
+        catch (error) {
+          state.runtime.cancelContact(contact.id); delete state.pending; state.pendingFirstAt = null;
+          state.blocked = "This conversation's account or participants changed. Select it again to start with a separate workspace.";
+          await service.invalidateConversation?.(contact.id, binding);
+          throw error;
+        }
         ready.set(contact.id, result.enrollment.ready); drain.set(binding.enrollmentId, { contact, state }); fresh.set(contact.id, result.enrollment); state.lastEnrollment = result.enrollment;
       } catch { state.runtime.cancelContact(contact.id); state.initialized = false; state.lastEnrollment = null; pollFailed.add(contact.id); }
     }

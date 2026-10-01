@@ -53,6 +53,18 @@ describe("reply admission", () => {
   test("ignores replay, outgoing, groups and nonmessage events", () => {
     for (const patch of [{ historical: true }, { author: "owner" as const, text: "I am answering this" }, { author: "butler" as const }, { group: true }, { kind: "reaction" as const }, { revision: "old" }, { routeId: "elsewhere" }]) expect(decideReply(settings, contact, { ...event, ...patch }, state, now).outcome).toBe("ignore");
   });
+  test("only an enrolled group can admit group events, retaining pause and owner precedence", () => {
+    const grouped = { ...event, group: true }, groupState = { ...state, conversationKind: "group" as const };
+    expect(decideReply(settings, contact, grouped, groupState, now).outcome).toBe("reply");
+    expect(decideReply(settings, contact, grouped, state, now).reason).toBe("conversation-kind-mismatch");
+    expect(decideReply(settings, contact, event, groupState, now).reason).toBe("conversation-kind-mismatch");
+    expect(decideReply(settings, { ...contact, selfChat: true }, grouped, groupState, now).outcome).toBe("ignore");
+    expect(decideReply({ ...settings, paused: true }, contact, grouped, groupState, now).reason).toBe("paused");
+    expect(decideReply(settings, { ...contact, enabled: false }, grouped, groupState, now).reason).toBe("paused");
+    expect(decideReply(settings, contact, grouped, { ...groupState, lastOwnerAt: now - 1000 }, now).reason).toBe("owner-active");
+    expect(decideReply(settings, contact, { ...grouped, author: "unknown" }, groupState, now).outcome).toBe("ignore");
+    expect(decideReply(settings, contact, { ...grouped, historical: true }, groupState, now).outcome).toBe("ignore");
+  });
   test("owner keyword invocation replies unless the owner takes over after it", () => {
     const invoke = { ...event, author: "owner" as const };
     expect(decideReply(settings, contact, invoke, state, now)).toMatchObject({ outcome: "reply", reason: "owner-keyword" });

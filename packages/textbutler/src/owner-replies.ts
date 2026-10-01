@@ -273,7 +273,7 @@ export class OwnerReplies {
     if (!await agent.qualified(contact)) fail("unavailable", "The selected agent account is not qualified. Check it under providers.");
     const latest = messages.find(message => message.id === cluster.latestId)!;
     const event: MessageEvent = { id: latest.id, contactId: contact.id, routeId: binding.enrollmentId, revision: String(enrollment.revision),
-      occurredAt: Date.parse(latest.occurredAt), observedAt: this.ports.now(), author: "contact", kind: "message", text: latest.text ?? "", historical: false, group: false };
+      occurredAt: Date.parse(latest.occurredAt), observedAt: this.ports.now(), author: "contact", kind: "message", text: latest.text ?? "", historical: false, group: binding.conversation.kind === "group" };
     const request: AgentRequest = { runId: `suggest:${randomUUID()}`, contact, event, signal };
     let value: unknown;
     try { value = await agent.compose(request); } catch (error) { if (error instanceof NoReplyNeeded) return { draft: null, pending: item }; throw error; }
@@ -452,6 +452,7 @@ export class OwnerReplies {
     }
     const binding = state.bindings[contact.id];
     if (binding?.version !== 2) fail("unavailable", "This contact has no messaging enrollment that can send. Re-enroll it through messaging.");
+    if (operator && binding.conversation.kind === "group") fail("invalid-request", "Campaigns require a direct conversation; use a reviewed reply for a group.");
     if (draft && (draft.bindingDigest !== binding.bindingDigest || draft.review.conversationId !== binding.enrollmentId))
       fail("conflict", "The messaging recipient changed since this suggestion. Request a fresh one.");
     const automation = this.ports.automation(), client = this.ports.client();

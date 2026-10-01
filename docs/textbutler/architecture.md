@@ -62,7 +62,11 @@ Textbutler/
 
 Directory names use opaque identifiers, not contact names or phone numbers. Files are private to the Mac user. Models cannot traverse parent paths, links, other contact folders, or host configuration. The file broker supports reads, conditional writes, and exact edits. It exposes no symlink, directory, delete-tree, shell, or executable permission operations. Atomic replacement preserves the preceding file if a write fails. A stale memory revision produces a conflict instead of overwriting an owner's correction.
 
-The owner chooses one verified direct conversation from a bounded GhostGet list. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
+The owner chooses one verified direct or group conversation from a bounded GhostGet list. Groups require GhostGet’s negotiated group-conversation extension and a complete participant roster. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. History import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
+
+Each group has its own workspace and learning state, separate from every direct chat with its members. The current automation message contract identifies incoming versus outgoing messages but does not identify individual incoming speakers. Group guidance therefore treats each incoming message as an unidentified participant’s statement, cites its message ID, and never merges participants’ preferences or grants them owner authority. Groups cannot be configured as the owner’s self chat.
+
+A changed account, conversation kind, or participant roster invalidates the old binding, pauses that enrollment and revokes its standing grant. Pending drafts remain bound to the old settings and digest and cannot be sent. The owner selects the changed group again to create a fresh disabled enrollment and empty workspace; old memory remains preserved in its original workspace.
 
 The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated.
 
@@ -70,7 +74,7 @@ The original Message Like Me corpus and profile tools remain an optional bounded
 
 Default contact mode is keyword, but a new contact starts disabled. Activating more than the configured limit fails atomically; no existing contact is displaced. The initial limit is five, with owner settings from one to fifty.
 
-An inbound event must identify one activated direct conversation. Historical, outgoing, butler-authored, unknown-author, group, reaction-only, and delivery events do not start reply runs. Persisted event identity prevents a duplicate send. One run may own a contact at a time.
+An inbound event must identify one activated conversation and match its enrolled direct or group kind. Historical, butler-authored, unknown-author, reaction-only, and delivery events do not start reply runs. Owner-authored messages start a run only with an explicit keyword invocation. Persisted event identity prevents a duplicate send. One run may own a contact at a time.
 
 The daemon waits eight seconds after an incoming message to collect a burst. Newer messages supersede older candidates. Owner typing suppresses a reply when that signal exists. Any recent owner message causes a five-minute cooldown. The runtime checks current messages and settings again after composition. Disabling a contact or pressing global pause cancels pending runs and invalidates their grants.
 
@@ -222,6 +226,8 @@ account controls are never model tools.
 WhatsApp follows the same GhostGet ownership boundary. Its private wacli-backed transport provides durable observations and recipient-bound actions; pairing, session state and synchronization stay in GhostGet. The [WhatsApp guide](whatsapp.md) describes setup and action support. TextButler does not embed WPPConnect or invoke wacli directly.
 
 GhostGet owns its provider process and private control socket; TextButler consumes only GhostGet's documented CLI and automation contracts.
+
+Group discovery uses the [versioned group-conversation extension](ghostget-contract.md#group-conversation-extension). Existing direct-conversation bindings and older direct-only clients retain their contract.
 
 The older generic messaging APIs retain expiring route references and owner-confirmed previews. Automation uses a separate explicit owner protocol with durable enrollment, revocable grants and event observations. The iMessage provider negotiates attachments, reactions, stickers, rich links and polls separately; unsupported App Clips and arbitrary experiences remain unavailable. Native Contacts directory discovery is not implemented in this protocol.
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationCoordinate, parseAutomationEnrollment, STATUS_REUSE_MS, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
+import { automationContextId, automationBindingDigest, automationHash, automationFailure, automationRemoteError, AutomationOperationError, createGhostgetAutomationClient, createGhostgetAutomationTransport, parseAutomationConversation, parseAutomationCoordinate, parseAutomationEnrollment, STATUS_REUSE_MS, type AutomationEnrollment, type AutomationPlan, type GhostgetAutomationInvoker } from "./automation";
 import { parseActionIntent } from "./validation";
 
 const now = Date.parse("2026-09-11T00:00:00.000Z");
@@ -290,4 +290,62 @@ test("only complete allowlisted native markers survive remote unavailable classi
     expect(automationFailure(automationRemoteError(code, "ghostget.discovery.v1:native-chats:failed"))).toEqual({ stage: "provider", code: `remote-${code}` });
   }
   expect(() => automationRemoteError("private-code")).toThrow("contract changed");
+});
+
+test("group rosters are exact and bounded while direct binding bytes remain stable", async () => {
+  const f = automationFixture(), original = f.enrollment;
+  expect(parseAutomationEnrollment(original)).toEqual(original);
+  expect(automationBindingDigest(original.identity, original.conversation)).toBe(original.bindingDigest);
+  const conversation = { ...original.conversation, kind: "group" as const,
+    coordinate: { provider: "whatsapp" as const, conversationJid: "120363123456789012@g.us" },
+    participants: ["15550000002@s.whatsapp.net", "15550000001@s.whatsapp.net", "15550000003@s.whatsapp.net"] };
+  const group = parseAutomationConversation(conversation);
+  const enrollment = { ...original, conversation: group, bindingDigest: automationBindingDigest(original.identity, group) };
+  expect(parseAutomationEnrollment(enrollment).conversation.kind).toBe("group");
+  const client = createGhostgetAutomationClient(async () => ({ enrollment, messages: [] }));
+  const transport = createGhostgetAutomationTransport({ client, enrollmentId: enrollment.id, admitAsset: async () => { throw Error("unused"); } });
+  const listed = await transport.conversations();
+  expect(listed.ok && listed.value[0]).toMatchObject({ kind: "group", participantCount: 3 });
+  for (const invalid of [{ ...group, kind: "single" }, { ...group, participants: [] }, { ...group, participants: ["same", "same"] },
+    { ...group, participants: Array.from({ length: 501 }, (_, i) => `participant:${i}`) },
+    { ...group, coordinate: original.conversation.coordinate }]) expect(() => parseAutomationConversation(invalid)).toThrow();
+  expect(() => parseAutomationEnrollment({ ...enrollment, conversation: { ...group, participants: [...group.participants, "new-member"] } })).toThrow("binding");
+});
+
+test("group discovery requires the negotiated extension and leaves legacy list bytes unchanged", async () => {
+  const f = automationFixture(), groupConversation = { ...f.enrollment.conversation, kind: "group" as const,
+    coordinate: { provider: "whatsapp" as const, conversationJid: "120363123456789012@g.us" }, participants: ["person-a", "person-b"] };
+  const groupEnrollment = { ...f.enrollment, id: "enrollment:group", conversation: groupConversation,
+    bindingDigest: automationBindingDigest(f.enrollment.identity, groupConversation) };
+  for (const support of ["legacy", "none", "group"] as const) {
+    const calls: { method: string; params: Readonly<Record<string, unknown>> }[] = [];
+    const client = createGhostgetAutomationClient(async (method, params) => {
+      calls.push({ method, params });
+      if (method === "features") {
+        if (support === "legacy") throw automationRemoteError("invalid-request");
+        return { groupConversations: support === "group" ? { version: 1 } : null };
+      }
+      if (method === "conversations") return { identity: f.enrollment.identity,
+        conversations: params.includeGroups ? [f.enrollment.conversation, groupConversation] : [f.enrollment.conversation], complete: true };
+      if (method === "enrollments") return params.includeGroups ? [f.enrollment, groupEnrollment] : [f.enrollment];
+      throw Error("Unexpected test method");
+    });
+    expect((await client.conversations("whatsapp")).conversations).toHaveLength(1);
+    expect(await client.enrollments()).toHaveLength(1);
+    expect(calls).toEqual([{ method: "conversations", params: { provider: "whatsapp", limit: 200 } }, { method: "enrollments", params: {} }]);
+    const expectedCount = support === "group" ? 2 : 1;
+    expect((await client.conversations("whatsapp", 200, undefined, true)).conversations).toHaveLength(expectedCount);
+    expect(await client.enrollments(undefined, true)).toHaveLength(expectedCount);
+    expect(calls.filter(call => call.method === "features")).toHaveLength(1);
+    expect(calls.at(-1)?.params).toEqual(support === "group" ? { includeGroups: true } : {});
+  }
+});
+test("failed or malformed feature negotiation never falls back or opts into groups", async () => {
+  for (const response of [{}, { groupConversations: true }, { groupConversations: { version: 2 } }, { groupConversations: { version: 1, extra: true } },
+    automationRemoteError("unavailable"), automationRemoteError("not-ready"), new Error("transport failed")]) {
+    const methods: string[] = [];
+    const client = createGhostgetAutomationClient(async method => { methods.push(method); if (response instanceof Error) throw response; return response; });
+    await expect(client.conversations("whatsapp", 200, undefined, true)).rejects.toThrow();
+    expect(methods).toEqual(["features"]);
+  }
 });

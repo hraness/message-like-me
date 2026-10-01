@@ -14,14 +14,14 @@ import { ContactHabitat, boundHabitatObservation } from "./contact-habitat.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
-async function fixture(fast = false) {
+async function fixture(fast = false, group = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "butler-loop-"))), journal = RunJournal.memory();
   let time = Date.parse("2026-09-11T12:00:00.000Z"), revision = 0;
   let settings: Settings = { schemaVersion: 1, paused: false, maxActiveContacts: 5, contacts: [{ ...newContact("contact-1", "Synthetic", "enrollment:fixture"), enabled: true }] };
   const listeners = new Set<(settings: Settings) => void>();
   const habitatListeners = new Set<(contactId: string) => void>();
   const identity = { provider: "imessage" as const, authId: "fixture", accountIdentity: "1".repeat(64), accountSubject: "synthetic-account", implementationIdentity: "2".repeat(64), sourceGeneration: "synthetic-db" };
-  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: "single" as const, participants: ["fixture@example.test"] };
+  const conversation = { coordinate: { provider: "imessage" as const, chatGuid: group ? "iMessage;+;synthetic-group" : "iMessage;-;fixture@example.test", service: "iMessage" as const, observedChatRowId: 1 }, title: "Synthetic", kind: group ? "group" as const : "single" as const, participants: group ? ["fixture@example.test", "other@example.test"] : ["fixture@example.test"] };
   const enrolled = () => ({ id: "enrollment:fixture", identity, conversation, bindingDigest: automationBindingDigest(identity, conversation), revision, ready: true, reason: null });
   const binding = automationBinding(enrolled()), events: AutomationEvent[] = [], messages: AutomationMessage[] = [], sent: readonly unknown[][] = [], acks: readonly unknown[][] = [];
   const mutableSent = sent as unknown[][], mutableAcks = acks as unknown[][], plans = new Map<string, AutomationPlan>(), statuses: { state: string; detail: string }[] = [];
@@ -88,6 +88,7 @@ async function fixture(fast = false) {
     pollSetCalls: () => pollSetCalls, statusCalls: () => statusCalls, armed: () => armed.filter(entry => entry.live),
     fireArmed() { const live = armed.filter(entry => entry.live); for (const entry of live) { entry.live = false; entry.fire(); } return live.length; },
     allowed, notices, synced,
+    changeRoster() { conversation.participants.push("new@example.test"); conversation.participants.sort(); },
     push(message: AutomationMessage) { revision++; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
     add(text: string, direction: AutomationMessage["direction"] = "incoming", ageMs = 0) { revision++; const message: AutomationMessage = { id: `message:${revision}`, coordinate: conversation.coordinate, direction, occurredAt: new Date(time - ageMs).toISOString(), text, kind: "message", relatedMessageId: null, attachments: [] }; messages.push(message); events.push({ sequence: revision, enrollmentId: binding.enrollmentId, revision, message }); },
   };
@@ -556,4 +557,16 @@ test("a wedged send reconciles from terminal provider evidence without owner rev
   await f.loop.tick(); await f.loop.idle();
   expect(f.journal.hasUncertainSend("contact-1")).toBe(true);
   expect(f.journal.recent("contact-1").find(run => run.id === "run:absent")?.state).toBe("indeterminate");
+});
+
+test("enrolled group replies use group policy and stop when the roster changes", async () => {
+  const f = await fixture(false, true); await f.loop.tick();
+  let observedGroup = false;
+  f.replaceAgent({ async qualified() { return true; }, async classify() { throw Error("keyword needs no classifier"); },
+    async compose(request) { observedGroup = request.event.group; return { summary: "Help the group", actions: [{ kind: "text", text: "Group answer" }] }; } });
+  f.add("butler help the group"); await f.loop.tick(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(observedGroup).toBe(true); expect(f.sent).toHaveLength(1);
+  f.add("butler a pending question"); await f.loop.tick(); f.changeRoster(); f.advance(9000); await f.loop.tick(); await f.loop.idle();
+  expect(f.sent).toHaveLength(1);
+  expect(f.statuses.at(-1)?.detail).toContain("participants changed");
 });

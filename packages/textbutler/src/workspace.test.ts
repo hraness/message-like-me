@@ -131,3 +131,16 @@ test("owner media import rejects excessive bytes, unsafe names and linked outbox
   await symlink(root, join(workspace.root, "outbox"));
   await expect(workspace.importAsset(Buffer.from("x"))).rejects.toThrow();
 });
+
+test("group memory has anonymous participant guidance and cannot read a direct-chat workspace", async () => {
+  const { root, workspace: direct } = await setup();
+  await direct.write("MEMORY.md", "Private direct-chat preference");
+  const group = await ContactWorkspace.create(join(root, "group"), "group");
+  expect(await group.read("AGENTS.md")).toContain("unidentified group participant");
+  expect(await group.read("MEMORY.md")).not.toContain("Private direct-chat preference");
+  await expect(group.read("../contact/MEMORY.md")).rejects.toThrow();
+  await group.write("MEMORY.md", "Group context from message:1");
+  const reenrolled = await ContactWorkspace.create(join(root, "group-new-roster"), "group");
+  expect(await reenrolled.read("MEMORY.md")).not.toContain("Group context");
+  expect(await direct.read("MEMORY.md")).toBe("Private direct-chat preference");
+});

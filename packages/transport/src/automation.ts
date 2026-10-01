@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { AUTOMATION_ACTIONS, automationBoolean, automationHash, automationId, automationProvider, automationRecord, parseAutomationConversation, parseAutomationCoordinate, parseAutomationEnrollment, parseAutomationGrant, parseAutomationIdentity, parseAutomationMessage, parseAutomationRun, parseAutomationStatus, type AutomationAction, type AutomationCoordinate, type AutomationEnrollment, type AutomationEvent, type AutomationGrantRequest, type AutomationPlan, type AutomationProvider, type AutomationRun } from "./automation-contract";
+import { AUTOMATION_ACTIONS, automationBoolean, automationHash, automationId, automationProvider, automationRecord, parseAutomationConversation, parseAutomationCoordinate, parseAutomationEnrollment, parseAutomationGrant, parseAutomationIdentity, parseAutomationMessage, parseAutomationRun, parseAutomationStatus, type AutomationFeatures, type AutomationAction, type AutomationCoordinate, type AutomationEnrollment, type AutomationEvent, type AutomationGrantRequest, type AutomationPlan, type AutomationProvider, type AutomationRun } from "./automation-contract";
 import { array, canonicalJson, digest, failure, integer, parseActionIntent, string, success, timestamp } from "./validation";
 import { TRANSPORT_PROTOCOL, type ActionPlan, type HistoryMessage, type SendReceipt, type TextbutlerTransport, type TransportResult } from "./types";
 import { AutomationOperationError, automationFailure } from "./automation-diagnostics.ts";
@@ -25,11 +25,38 @@ export function createGhostgetAutomationClient(invoke: GhostgetAutomationInvoker
   const known = new Map<string, AutomationEnrollment>();
   const statuses = new Map<AutomationProvider, { at: number; value: Promise<ReturnType<typeof parseAutomationStatus>> }>();
   const remember = (value: unknown): AutomationEnrollment => { const result = parseAutomationEnrollment(value); known.set(result.id, result); return result; };
+  let features: Promise<AutomationFeatures> | undefined;
+  const readFeatures = async (signal?: AbortSignal): Promise<AutomationFeatures> => {
+    signal?.throwIfAborted();
+    if (!features) {
+      const pending = (async (): Promise<AutomationFeatures> => {
+        let value: unknown;
+        try { value = await invoke("features", {}); }
+        catch (error) {
+          // This precise old-server rejection is the sole legacy fallback.
+          // A transport fault or malformed success never manufactures support.
+          if (automationFailure(error).code === "remote-invalid-request") return { groupConversations: null };
+          throw error;
+        }
+        try {
+          const r = automationRecord(value, ["groupConversations"]);
+          if (r.groupConversations === null) return { groupConversations: null };
+          const group = automationRecord(r.groupConversations, ["version"]);
+          if (group.version !== 1) throw new Error("Unsupported group contract");
+          return { groupConversations: { version: 1 } };
+        } catch { throw new AutomationOperationError("response-schema"); }
+      })();
+      features = pending;
+      void pending.catch(() => { if (features === pending) features = undefined; });
+    }
+    return structuredClone(await unlessAborted(features, signal));
+  };
   const readStatus = async (provider: AutomationProvider, signal?: AbortSignal) => {
     const result = parseAutomationStatus(await invoke("status", { provider: automationProvider(provider) }, signal));
     if (result.identity.provider !== provider) throw new Error("Provider status changed network"); return result;
   };
   return {
+    features: readFeatures,
     async start(provider: AutomationProvider, signal?: AbortSignal) { statuses.delete(provider); return parseAutomationStatus(await invoke("start", { provider: automationProvider(provider) }, signal)); },
     /** `maxAgeMs` opts into sharing an in-flight read or reusing a success at
      * most that old (capped at STATUS_REUSE_MS); zero always reads fresh. */
@@ -48,12 +75,13 @@ export function createGhostgetAutomationClient(invoke: GhostgetAutomationInvoker
       value.then(() => { entry.at = now(); }, () => { if (statuses.get(provider) === entry) statuses.delete(provider); });
       return await unlessAborted(value, signal);
     },
-    async conversations(provider: AutomationProvider, limit = 200, signal?: AbortSignal) {
-      const value = await invoke("conversations", { provider: automationProvider(provider), limit: integer(limit, 1, 200) }, signal);
+    async conversations(provider: AutomationProvider, limit = 200, signal?: AbortSignal, includeGroups = false) {
+      const groups = includeGroups && (await readFeatures(signal)).groupConversations?.version === 1;
+      const value = await invoke("conversations", { provider: automationProvider(provider), limit: integer(limit, 1, 200), ...(groups ? { includeGroups: true } : {}) }, signal);
       try {
         const r = automationRecord(value, ["identity", "conversations", "complete"]);
         const identity = parseAutomationIdentity(r.identity), conversations = array(r.conversations, limit).map(parseAutomationConversation);
-        if (identity.provider !== provider || conversations.some(item => item.coordinate.provider !== provider)) throw new Error("Discovery changed network");
+        if (identity.provider !== provider || conversations.some(item => item.coordinate.provider !== provider || !groups && item.kind === "group")) throw new Error("Discovery changed network");
         return { identity, conversations, complete: automationBoolean(r.complete) };
       } catch { throw new AutomationOperationError("response-schema"); }
     },
@@ -63,7 +91,12 @@ export function createGhostgetAutomationClient(invoke: GhostgetAutomationInvoker
       const result = remember(await invoke("enroll", { provider, coordinate: selected }, signal));
       if (automationHash(result.conversation.coordinate) !== automationHash(selected)) throw new Error("Enrollment target changed"); return result;
     },
-    async enrollments(signal?: AbortSignal) { return array(await invoke("enrollments", {}, signal), 1000).map(remember); },
+    async enrollments(signal?: AbortSignal, includeGroups = false) {
+      const groups = includeGroups && (await readFeatures(signal)).groupConversations?.version === 1;
+      const result = array(await invoke("enrollments", groups ? { includeGroups: true } : {}, signal), 1000).map(remember);
+      if (!groups && result.some(item => item.conversation.kind === "group")) throw new AutomationOperationError("response-schema");
+      return result;
+    },
     async grant(request: AutomationGrantRequest, intentId: string, signal?: AbortSignal) {
       const result = parseAutomationGrant(await invoke("grant", { ...request, intentId: automationId(intentId) }, signal));
       const { id: _id, revoked, consumedActions, ...bound } = result;
@@ -193,7 +226,7 @@ export function createGhostgetAutomationTransport(options: { client: GhostgetAut
         ] });
       } catch { return unavailable(); }
     },
-    async conversations() { try { const { enrollment } = await client.history(enrollmentId, 1); return success([{ id: enrollmentId, title: enrollment.conversation.title, kind: "single", participantCount: enrollment.conversation.participants.length, expiresAt: new Date(now() + 120000).toISOString() }]); } catch { return unavailable(); } },
+    async conversations() { try { const { enrollment } = await client.history(enrollmentId, 1); return success([{ id: enrollmentId, title: enrollment.conversation.title, kind: enrollment.conversation.kind, participantCount: enrollment.conversation.participants.length, expiresAt: new Date(now() + 120000).toISOString() }]); } catch { return unavailable(); } },
     async contacts() { return failure("unsupported", "Contacts are selected through the owner enrollment panel.", "contacts"); },
     async history(request) {
       try {

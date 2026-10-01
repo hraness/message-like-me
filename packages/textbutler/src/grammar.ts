@@ -165,7 +165,7 @@ export const PRODUCT_VERBS: readonly Verb<null, unknown>[] = [
   productVerb("replies send", "decide-legacy", "Send a reviewed suggestion by digest, or your own text"),
   productVerb("replies discard", "operate", "Throw a suggestion away"),
   productVerb("replies reconcile", "operate", "Record whether an uncertain send arrived"),
-  productVerb("conversations list", "read", "List recent one-to-one chats you can add"),
+  productVerb("conversations list", "read", "List recent chats you can add"),
   productVerb("contacts list", "read", "Show added chats and their settings"),
   productVerb("contacts add", "operate", "Add a chat with automatic replies off"),
   productVerb("contacts enable", "decide-legacy", "Turn on automatic replies for a chat"),

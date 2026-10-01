@@ -38,7 +38,7 @@ Restarting TextButler does not silently clear it.
 | Surface | Implemented contract |
 | --- | --- |
 | `status`, `start` | Observe capabilities; explicitly start supported synchronization. |
-| `conversations`, `enroll`, `enrollments` | Exact account generation and direct participant-bound conversation enrollment. |
+| `conversations`, `enroll`, `enrollments` | Exact account generation and participant-bound direct or group enrollment. |
 | `poll`, `pollSet`, `history`, `events` | Bounded history, durable observation cursors, revisions, catch-up and gap detection; `pollSet` shares one provider session across a contact set and reports each enrollment separately. An enrollment busy with another operation reports its current stored row — not necessarily synced this tick. |
 | `grant`, `grant.get`, `grant.by-intent`, `revoke` | Recipient, action, expiry and quota limits; idempotent issuance lookup and immediate revocation. |
 | `asset`, `prepare` | Admit exact attachment bytes and bind the ordered action list to a context revision and expiry. |
@@ -65,6 +65,12 @@ debounce, owner cooldown, classification and rate limits. GhostGet rechecks
 identity, permission, context and grant before dispatch, and observes intervening
 conversation changes between actions. Neither component retries an uncertain
 send automatically.
+
+## Group-conversation extension
+
+The `ghostget.messaging-automation/1` envelope and existing direct-conversation binding bytes stay unchanged. A read-only `features` request with `{}` returns exactly `{ "groupConversations": { "version": 1 } }` or `{ "groupConversations": null }`. Only the old server’s `invalid-request` rejection of this new method is treated as a direct-only server. Malformed success responses and all other failures remain errors.
+
+After negotiating version 1, TextButler may pass `includeGroups: true` to `conversations` and `enrollments`. Without that field, both lists retain their direct-only behavior, including when groups have already been enrolled by a newer client. The extension permits `kind: "group"` with one to 500 unique, complete participant identities and canonical WhatsApp group JIDs. A WhatsApp group JID cannot be represented as a direct conversation or vice versa. Discovery is not enrollment or send authority: selection, validation, revision checks, recipient-bound plans and owner grants still apply. Older clients and legacy local binding version 1 remain direct-only.
 
 ## Rich actions
 

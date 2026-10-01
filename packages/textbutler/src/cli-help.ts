@@ -42,7 +42,7 @@ Everyday
   replies <command>          Suggest, review and send replies
 
 Chats and contacts
-  conversations list         List recent one-to-one chats you can add
+  conversations list         List recent chats you can add
   contacts <command>         Add chats and choose how TextButler answers
   messaging list | start     Show or connect iMessage, WhatsApp or Beeper
 
@@ -130,7 +130,7 @@ A contact is an exact ID or a unique name from textbutler contacts list.`,
 
 Choosing an account never turns a chat on, and resume never does either.`,
     example: "textbutler contacts mode Alex keyword --keyword butler" },
-  conversations: { usage: "textbutler conversations list", summary: "List recent one-to-one chats from your connected apps. Add one with\ntextbutler contacts add <candidate>. The list expires after five minutes." },
+  conversations: { usage: "textbutler conversations list", summary: "List recent chats from your connected apps. Add one with\ntextbutler contacts add <candidate>. The list expires after five minutes." },
   messaging: { usage: "textbutler messaging list | start <app>", summary: "Show configured messaging apps, or connect one: imessage, whatsapp\nor beeper. Sign in to each app with GhostGet first. iMessage also\nneeds macOS access for TextButler: see textbutler help permissions.",
     example: "textbutler messaging start imessage" },
   providers: { usage: "textbutler providers gateway-key | local | list | check <account>", summary: "Set up AI replies, show your AI accounts, or check that one is ready.",

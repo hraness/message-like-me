@@ -91,7 +91,7 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
         signal.throwIfAborted();
         const name = provider === "imessage" ? "iMessage" : provider === "whatsapp" ? "WhatsApp" : "Beeper";
         try {
-          const page = await client.conversations(provider, limit, signal); signal.throwIfAborted();
+          const page = await client.conversations(provider, limit, signal, true); signal.throwIfAborted();
           for (const conversation of page.conversations) result.push({ identity: page.identity, conversation });
           observed.push({ provider, state: page.complete ? "complete" : "truncated",
             detail: page.complete ? `${name} conversation list is complete.` : `${name} returned a partial list of up to ${limit} recent conversations. Older conversations may be missing.` });
@@ -109,7 +109,7 @@ export function createAutomationOwnerPort(options: { client: GhostgetAutomationC
       const expectedDigest = automationBindingDigest(candidate.identity, candidate.conversation);
       // A completed upstream enrollment may survive a cancelled local commit. Reuse only
       // the exact identity/conversation; never manufacture a second enrollment or grant.
-      const existing = (await client.enrollments(signal)).filter(enrollment => enrollment.bindingDigest === expectedDigest);
+      const existing = (await client.enrollments(signal, true)).filter(enrollment => enrollment.bindingDigest === expectedDigest);
       if (existing.length > 1) throw new Error("Ambiguous messaging enrollment");
       const enrollment = existing[0] ?? await client.enroll(candidate.identity.provider, candidate.conversation.coordinate, signal);
       if (enrollment.bindingDigest !== expectedDigest) throw new Error("Messaging identity changed during enrollment");

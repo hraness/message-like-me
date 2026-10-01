@@ -18,7 +18,7 @@ Mac owners who want a clearly identified personal assistant to help selected peo
 
 ## Product Purpose
 
-Choose a few contacts, give each relationship a folder of context, and let a butler help when it is useful. The owner can pause the whole butler or disable an individual contact. The assistant learns from bounded conversation history and maintains readable, editable memory.
+Choose a few direct or group conversations, give each conversation a folder of context, and let a butler help when it is useful. The owner can pause the whole butler or disable an individual contact. The assistant learns from bounded conversation history and maintains readable, editable memory.
 
 ## Positioning
 
@@ -32,7 +32,7 @@ developers building on xcb's native application API.
 
 ## Operating Context
 
-The Mac must be awake and signed in for local messaging. The installed user agent runs in the background; closing the terminal doesn't stop it. A global pause is always available. Contacts are selected explicitly; keyword response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`. Each field may be cleared individually or together; cleared fields remove the visible wrap while the daemon still attributes butler output through its send journal.
+The Mac must be awake and signed in for local messaging. The installed user agent runs in the background; closing the terminal doesn't stop it. A global pause is always available. Direct and group conversations are selected explicitly and start disabled; keyword response is the default mode after activation. The keyword defaults to `butler`. The three disclosure fields default to `🤖`, `{`, and `}` and produce `🤖{ hello this is my response }`. Each field may be cleared individually or together; cleared fields remove the visible wrap while the daemon still attributes butler output through its send journal.
 
 ## Capabilities and Constraints
 
@@ -54,7 +54,7 @@ provider seam; Textbutler's supported surface is the CLI and status item.
 ## Product Principles
 
 1. Make it obvious when the butler speaks. Text the owner wrote goes out as the owner's.
-2. Keep each relationship's memory inspectable and isolated.
+2. Keep each conversation’s memory inspectable and isolated, including groups and direct chats with the same people.
 3. Yield to the owner before composing and immediately before dispatch.
 4. Expose only proven transport capabilities, and state each limit beside the capability it limits.
 5. Keep reusable agent execution separate from messaging policy.
