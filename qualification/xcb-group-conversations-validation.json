@@ -1,18 +1,10 @@
 {
   "version": 1,
-  "profiles": {
-    "classify": {
-      "id": "textbutler.classify",
-      "version": 1,
-      "digest": "72e5bfdffb7feed1b5c75ef202bc7e2cc007ff27a976dbeab870b94f5b801933"
-    },
-    "respond": {
-      "id": "textbutler.respond",
-      "version": 1,
-      "digest": "6a5110b4f5e3e433802586294e5a95667fdfea67569c92cbdd65759c29b8e98e"
-    }
-  },
-  "sources": {
+  "scope": "Group-conversation composition admission after independent source review and relevant focused validation.",
+  "toolchain": "Bun 1.3.14",
+  "review": "qualification/xcb-group-conversations-review.json",
+  "reviewSha256": "ee07fa992ae362e4dc516a67604db932642f88cf9d246e42c365f0d1aa1fd8c5",
+  "sourceSha256": {
     "bun.lock": "79abc7b80ada25d910ed82160a4ab89c94c6c1056c3d0877d1753bc9d197da60",
     "package.json": "02ae445c64c8d10d12e14c36cd47d62345d4a25cfee9fd0442a53bba39549c1e",
     "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
@@ -59,8 +51,41 @@
     "scripts/build-textbutler.ts": "d0ef9decba9a57fcedd2926a94783502c35d649be940656fcafdb8a033f8fee9",
     "scripts/xcb-integration-admission.ts": "186108cf1140931720649e9755561c116ae842da1e41282d25b7623f2ee0d80d"
   },
-  "validation": {
-    "command": "bun run check:textbutler and focused message-summary, owner-messages, workspace and reply-loop regressions; see qualification/xcb-group-conversations-validation.json",
-    "receiptSha256": "b00ed29caa3d437cb67a0708910efacd90ba776ba49825d54a9d3dd147aa7b28"
-  }
+  "evidence": [
+    {
+      "command": "bun run check:textbutler",
+      "sourceCommit": "3cc35fa",
+      "exitCode": 0,
+      "testsPassed": 884,
+      "snapshots": 40,
+      "assertions": 18519,
+      "typechecks": "transport and textbutler passed"
+    },
+    {
+      "command": "bun test packages/textbutler/src/message-summary.test.ts packages/textbutler/src/owner-messages.test.ts packages/textbutler/src/workspace.test.ts",
+      "sourceCommit": "c6f7d9c",
+      "exitCode": 0,
+      "testsPassed": 30,
+      "assertions": 179,
+      "provenance": "Retained execution transcript chunk 623cb4; no raw file log retained."
+    },
+    {
+      "command": "bun test packages/textbutler/src/reply-loop.test.ts",
+      "sourceCommit": "76bc231",
+      "exitCode": 0,
+      "testsPassed": 28,
+      "assertions": 135
+    }
+  ],
+  "retainedLocalLogDigests": [
+    {
+      "kind": "full-package-check-before-scoped-summary-followup",
+      "sha256": "a0583f3198baea7a634de2d66d8b0ca86d6f1ca72d26ed4aa61ed114497c4d54"
+    },
+    {
+      "kind": "permanent-binding-marker-with-poll-error",
+      "sha256": "22ca76d4c3f1d4ebeb43949f854f35cb9e90046e03f7ca89f00efe35fd6ef4e3"
+    }
+  ],
+  "finalGates": "The reviewed composition may be bundled; current-source aggregate, isolated installation, and Required CI remain mandatory."
 }
