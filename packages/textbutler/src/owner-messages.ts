@@ -93,7 +93,7 @@ export class OwnerMessages {
       .map(message => ({ id: message.id, at: message.at, author: message.author as SummaryMessage["author"], text: message.text! }));
     const messages = retainNewest(eligible, SUMMARY_BYTES);
     if (!messages.length) fail("unavailable", "This bounded conversation sample contains no text to summarize.");
-    const result = await (this.ports.summarize ?? summarizeMessages)({ contact, messages, providers, signal, now: this.ports.now });
+    const result = await (this.ports.summarize ?? summarizeMessages)({ contact, conversationKind: binding.version === 2 ? binding.conversation.kind : "single", messages, providers, signal, now: this.ports.now });
     await this.unchanged(contact, binding, signal);
     return { contactId, ...result, sampledMessages: messages.length, omittedMessages: history.bounds.received - messages.length,
       shortenedMessages: history.omissions.textShortened, limitations: [...history.limitations, "Only sampled text messages are analyzed; reaction, edit, deletion and attachment contents are excluded."] };
