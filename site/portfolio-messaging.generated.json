@@ -5,7 +5,7 @@
   "portfolio": {
     "contract": "hraness.portfolio-public/v1",
     "url": "https://hraness.com/portfolio.json",
-    "digest": "sha256:3e82dac495694ca14dbdea88c58d6781f23725a4005231eb0b5eb4e68d4e4907"
+    "digest": "sha256:ba365e481a8b15c4a19503b1628e1b7ae9399e47055dde02bae124183a3e1447"
   },
   "messaging": {
     "formatVersion": 1,
@@ -25,7 +25,7 @@
     "long": "TextButler is an AI butler for your messages, running on your Mac. Turn it on for the chats you choose in iMessage, WhatsApp, or Beeper, and it replies as a clearly marked assistant that keeps notes on each person in files you can edit. New installs start paused and every contact starts off. Choose a local model, your Gateway key, or a connected subscription; local-model replies are in testing. Hosted AI providers receive the context needed to write a reply. TextButler is free and MIT licensed.",
     "hero": {
       "heading": "An AI butler in your messaging apps.",
-      "summary": "When someone you’ve turned on texts “butler”, a clearly marked AI assistant answers for you from your Mac. It writes with a local model or the AI subscription you already pay for. Claude Code, Codex, or Devin can set it up for you.",
+      "summary": "A clearly marked AI assistant answers the people you choose, from your Mac.",
       "primaryAction": "Have your agent set it up",
       "secondaryAction": "See how it works"
     },
@@ -37,7 +37,7 @@
       "control-title": "You stay in charge",
       "self-title": "Ask it yourself",
       "questions-title": "Questions",
-      "related-title": "From the same workshop",
+      "related-title": "Other tools from our studio",
       "closing-title": "Start with one person",
       "where-it-stands": "Where it stands",
       "messaging-apps": "Messaging apps",

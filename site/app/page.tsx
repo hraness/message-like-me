@@ -1,4 +1,4 @@
-import { marketing, marketingHeading, product } from "../portfolio-copy";
+import { marketing, marketingHeading } from "../portfolio-copy";
 import {
   MarketingCallToAction,
   MarketingFlow,
@@ -13,17 +13,15 @@ import {
   SyntaxCode,
 } from '@hraness/design-kit/react/server';
 import { PlatformInstall } from '@hraness/design-kit/react/platform-install';
-import type { PortfolioProductId } from '@hraness/design-kit/portfolio';
+import { portfolioRelatedGroups } from '@hraness/design-kit/portfolio';
 import { agentSetupTargets } from '@hraness/design-kit';
 import Link from 'next/link';
 
 import { CodeBlock } from './_components/code-block';
 import { AgentSetup } from './_components/landing/agent-setup';
-import { DiagramFigure } from './_components/landing/diagram-figure';
-import { DiagramSwitch } from './_components/landing/diagram-switch';
 import { LaunchVideo } from './_components/landing/launch-video';
 import { PhoneSlot } from './_components/landing/phone-slot';
-import { DIAGRAMS, LAUNCH_ASSETS, LAUNCH_FILM_SECONDS, launchFilmSources, publicAssetExists } from './_components/landing/public-assets';
+import { LAUNCH_ASSETS, LAUNCH_FILM_SECONDS, launchFilmSources, publicAssetExists } from './_components/landing/public-assets';
 import './_components/landing/landing.css';
 import {
   askYourselfConversation,
@@ -59,7 +57,6 @@ import {
   SITE_STATUS_LABEL,
   SITE_TITLE,
   SUBSCRIPTION_GUIDE_URL,
-  XCB_URL,
 } from './_lib/site';
 import { TERMINAL_FIRST_RUN } from './_lib/terminal';
 import { AgentMockup } from './mockups';
@@ -82,12 +79,6 @@ export const metadata = publicAssetExists(LAUNCH_ASSETS.film)
       },
     }
   : baseMetadata;
-
-// Related cards take each product's link, mark, and one-liner from the portfolio facts.
-const related = (id: PortfolioProductId) => {
-  const { canonicalUrl, mark, name, oneLiner } = product(id);
-  return { href: canonicalUrl, mark, name, role: oneLiner };
-};
 
 const HERO_BOUNDARY = `${SITE_STATUS_LABEL} · macOS · iMessage, WhatsApp, and Beeper · runs from source · new installs start paused`;
 
@@ -201,14 +192,13 @@ export default function Home() {
           <ProductHero
             backdrop={false}
             align="start"
-            actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: '#how-it-works', label: marketing.hero.secondaryAction, emphasis: 'secondary' }]}
-            boundary={HERO_BOUNDARY}
+            actions={[{ href: '#setup', label: marketing.hero.primaryAction, emphasis: 'secondary' }]}
             className="mlm-marketing-hero tb-hero"
-            eyebrow="iMessage and WhatsApp today, more apps through Beeper, on Mac"
             frame={<HeroStage />}
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
-            name={marketing.names.name}
+            install={<PlatformInstall platforms={INSTALL_PLATFORMS} />}
+            name=""
             summary={marketing.hero.summary}
           />
 
@@ -218,7 +208,6 @@ export default function Home() {
           </section>
 
           <MarketingSection heading={marketingHeading("how-title")} headingId="how-title" id="how-it-works" label="How it works" summary="Most of the time, it does nothing. When someone you’ve turned on asks for it, it says so right away, reads your notes and your chat, and answers in a bubble nobody could mistake for you.">
-            <DiagramFigure alt="One message, start to finish: a friend’s message reaches GhostGet on your Mac, passes five checks, gets a 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back." className="tb-diagram--wide-only" name={DIAGRAMS.oneMessage} />
             <MarketingFlow ariaLabel="What happens to one message" steps={HOW_IT_WORKS_STEPS} />
             <dl className="tb-modes" aria-label="When it answers">
               {REPLY_MODES.map((mode) => (
@@ -279,12 +268,7 @@ export default function Home() {
               ))}
             </ol>
             <p className="tb-writer-coming"><Chip>{CREDITS_CHIP}</Chip> <span>{REPLY_CREDITS_NOTE}</span></p>
-            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} Setup installs a local copy of TextButler on your Mac (<code>bun run textbutler:install</code>). That copy writes the AI replies, and it refuses to build if its code doesn’t match the last reviewed version. <a href={SUBSCRIPTION_GUIDE_URL}>Connect a subscription through xcb</a></p>
-            <DiagramSwitch label="Show where your words go with" options={[
-              { label: 'Local', caption: 'Local model: the reply is written on your Mac. In testing.', panel: <DiagramFigure alt="Where your words go with a local model: GhostGet, TextButler, and Ollama all sit inside your Mac, and nothing crosses its edge to write the reply. Vercel AI Gateway is used only with your key, xcb only with your subscription, and web search only with your key." name={DIAGRAMS.whereWordsGo} /> },
-              { label: 'Your key', caption: 'Your Gateway key: the conversation context goes to Vercel AI Gateway, and spending stops at $1 a day.', panel: <DiagramFigure alt="Where your words go with your Vercel AI Gateway key: Qwen 3.5 Flash writes the reply, and one arrow leaves your Mac for Vercel AI Gateway." name={DIAGRAMS.whereWordsGoKey} /> },
-              { label: 'Your subscription', caption: 'Your subscription: the conversation context goes through xcb to your Claude Code, Codex, or Devin account.', panel: <DiagramFigure alt="Where your words go with your subscription: your Claude Code, Codex, or Devin account writes the reply, and one arrow leaves your Mac through xcb." name={DIAGRAMS.whereWordsGoSubscription} /> },
-            ]} />
+            <p className="tb-fine">{REPLY_WRITERS_PRECEDENCE} <a href={SUBSCRIPTION_GUIDE_URL}>Connect your AI subscription</a>.</p>
           </MarketingSection>
 
           <MarketingSection heading={marketingHeading("setup-title")} headingId="setup-title" id="setup" label="Setup" summary="Paste this prompt into your coding agent. It follows the setup guide and stops when you need to grant access, sign in, or choose a contact.">
@@ -297,14 +281,12 @@ export default function Home() {
             <figure className="tb-agent-demo">
               <AgentMockup />
             </figure>
-            <p className="tb-fine">You’ll need a Mac, Bun 1.3.14, and GhostGet. Use a coding agent on that Mac to follow the <a href={GETTING_STARTED_URL}>setup guide</a>.</p>
+            <p className="tb-fine">You’ll need a Mac and a coding agent to follow the <a href={GETTING_STARTED_URL}>setup guide</a>.</p>
             <div className="tb-install" id="install">
               <h3>{marketingHeading("install-it-yourself")}</h3>
               <PlatformBadges platforms={['macos']} />
-              <PlatformInstall platforms={INSTALL_PLATFORMS} />
-              <p className="tb-fine">This builds a local copy from source and checks it against the reviewed record. It starts no services and connects no accounts.</p>
+              <p className="tb-fine">The installer checks its source against the last reviewed version. AI replies come only from the local install. Follow the setup guide to connect your chats and choose who it may answer.</p>
             </div>
-            <DiagramFigure alt="Who does what. Your agent clones and installs TextButler, connects your apps, and runs textbutler doctor. You turn on the Full Disk Access switch, allow Messages, pair WhatsApp or Beeper if you use them, pick what writes replies, and turn on one person." name={DIAGRAMS.whoDoesWhat} />
             <div className="tb-setup-extra">
               <div>
                 <h3>{marketingHeading("prefer-to-do-it-yourself")}</h3>
@@ -313,9 +295,8 @@ export default function Home() {
               </div>
               <div className="tb-tile">
                 <h3>{marketingHeading("your-agent-speaks-its-language")}</h3>
-                <p>The JSON command line lets your agent list conversations, summarize a thread, draft a reply, and send it only with the review code that draft shows.</p>
-                <CodeBlock code={'textbutler conversations list\ntextbutler replies suggest CONTACT\ntextbutler replies show DRAFT\ntextbutler replies send DRAFT DIGEST'} />
-                <a href={AGENT_CLI_URL}>Read the agent CLI guide</a>
+                <p>Ask your agent to find a conversation, summarize it, or prepare a reply for your review.</p>
+                <a href={AGENT_CLI_URL}>Read the agent guide</a>
               </div>
             </div>
           </MarketingSection>
@@ -330,12 +311,12 @@ export default function Home() {
               <article>
                 <h3>{marketingHeading("it-never-pretends-to-be-you")}</h3>
                 <p>Everything it sends is wrapped in <code>{'🤖{ }'}</code>, including the 👀.</p>
-                <p className="tb-proof">The marker is on by default. You can remove it only per person, and never in your own chat. New installs start paused, every person starts off, and setup never sends a message. <code>textbutler pause</code> stops everything, and <code>textbutler contacts disable</code> turns one person off.</p>
+                <p className="tb-proof">The marker is on by default. You can remove it only per person, and never in your own chat. New installs start paused and every person starts off. You can pause all replies or turn off one person at any time.</p>
               </article>
               <article>
                 <h3>{marketingHeading("it-runs-on-your-mac")}</h3>
                 <p>No server of ours sits in the middle. Your notes about each person are plain files you can read and edit. With a local model, the reply is written on your Mac too (in testing).</p>
-                <p className="tb-proof">Gateway spending stops at $1 a day. Web search needs a saved Gateway key, and it refuses any search that reuses words from your private messages. Through <a href={XCB_URL}>xcb</a>, the model can’t run commands on your Mac.</p>
+                <p className="tb-proof">Gateway spending stops at $1 a day. Hosted AI receives the conversation context it needs; a local model keeps reply writing on your Mac.</p>
               </article>
             </div>
             <div className="tb-examples">
@@ -370,19 +351,11 @@ export default function Home() {
           </MarketingSection>
 
           <MarketingQuestionList className="mlm-marketing-questions" heading={marketingHeading("questions-title")} headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, link, question }) => ({ answer: link ? <><p>{answer}</p><p><Link href={link.href}>{link.label}</Link></p></> : <p>{answer}</p>, question }))} />
-          <MarketingRelated heading={marketingHeading("related-title")} headingId="related-title" label="Related" summary="More Hraness tools that work on your Mac and keep the agent’s access limited." groups={[
-            {
-              heading: marketingHeading("home-related-apps"),
-              headingId: 'related-apps',
-              items: [related('peopleblade'), related('soulscrape'), related('kb')],
-            },
-            {
-              heading: marketingHeading("home-related-tools"),
-              headingId: 'related-tools',
-              summary: 'The connections, subscription, and model comparisons around the butler.',
-              items: [related('wrench'), related('xcb'), related('aicharts')],
-            },
-          ]} />
+          <MarketingRelated
+            groups={portfolioRelatedGroups(["peopleblade", "soulscrape", "kb", "wrench", "xcb", "aicharts"])}
+            heading="Other tools from our studio"
+            headingId="related-title"
+          />
           <MarketingCallToAction actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading={marketingHeading("closing-title")} headingId="closing-title" id="closing" summary="Paste the prompt, approve what your Mac asks for, and turn on someone who knows you’re trying it. Everyone else stays off." />
           <p className="legacy-note">Looking for the Message Like Me history tools? <Link href="/sources">View legacy history sources.</Link></p>
         </MarketingPage>

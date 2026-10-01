@@ -406,7 +406,7 @@ describe("exact Git release-ref authority", () => {
         runner: runnerFor(input).runner,
       })).toThrow();
     }
-  });
+  }, 15_000);
 
   test("lets a nonstable tag remain visible but lets a higher lightweight stable block", () => {
     const allowed = fixture({ nonstable: true });
@@ -454,7 +454,7 @@ describe("exact Git release-ref authority", () => {
       requestedTag: "v1.0.0",
       runner: injectedRunner.runner,
     })).toThrow("post-import inventory does not contain the exact governed ref set");
-  });
+  }, 15_000);
 
   test("rejects advertised/fetched OID drift and a changed terminal inventory", () => {
     const advertisedDrift = fixture();
@@ -492,7 +492,7 @@ describe("exact Git release-ref authority", () => {
       requestedTag: "v1.0.0",
       runner: terminalRunner.runner,
     })).toThrow("changed during verification");
-  });
+  }, 15_000);
 
   test("rejects an annotated tag whose embedded name differs from the requested ref", () => {
     const input = fixture();

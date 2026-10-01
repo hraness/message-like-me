@@ -264,7 +264,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     sections: Array.from({ length: 9 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
     workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', terminalBackground: 'rgb(255, 253, 249)',
-    actionHeights: [42, 42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
+    actionHeights: [42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
   expect(() => assertPresentation(valid, sample)).not.toThrow();
   for (const path of ['/docs', '/sources', '/preview', '/blog', '/blog/introducing-textbutler']) {
     const preview = path === '/preview';
@@ -279,7 +279,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     { material: null }, { headerBackdrop: 'blur(20px) saturate(1.1)' }, { wall: true }, { bodyBackgroundImage: 'url("/grain.svg")' },
     { renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'InstrumentSerif-Regular' }] },
     { headingWeight: '400' }, { headingFont: '"Instrument Serif", serif' }, { terminalBackground: 'rgba(0, 0, 0, 0)' },
-    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionHeights: [32, 42, 42, 42, 42] },
+    { preset: null }, { headingSize: 68 }, { headerMinHeight: '56px' }, { actionHeights: [32, 42, 42, 42] }, { actionHeights: [42, 42, 42] },
     { sections: [] }, { workspaceInk: 'rgb(248, 247, 244)' }, { gutter: '20px' }, { headerWidth: 1120 }]) {
     expect(() => assertPresentation({ ...valid, ...change }, sample)).toThrow();
   }

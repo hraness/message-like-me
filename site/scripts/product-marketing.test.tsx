@@ -61,7 +61,7 @@ test('renders TextButler with the shared grammar and one development status', ()
   expect(header).not.toContain('src="/icon.png"');
   expect(html).toContain('data-foil=""');
   expect(html).toContain('TextButler');
-  expect(html).toContain('See how it works');
+  expect(html).toContain('Have your agent set it up');
   expect(html).toContain('id="how-it-works"');
   expect(html).toContain('id="setup"');
   expect(html).toContain('id="models"');
@@ -77,8 +77,8 @@ test('renders TextButler with the shared grammar and one development status', ()
   expect(html.replace(/<\/?span\b[^>]*>/gu, '')).toContain('pbpaste | textbutler providers gateway-key');
   expect(html).toContain('Spending stops at $1 a day.');
   expect(html).toContain('If you choose one with a command, that choice wins.');
-  expect(html).toContain('That copy writes the AI replies');
-  expect(html).toContain('can’t run commands on your Mac');
+  expect(html).toContain('Connect your AI subscription');
+  expect(html).toContain('a local model keeps reply writing on your Mac');
   expect(html).toContain('MIT licensed');
   expect(html).toContain('Telegram’s terms limit AI use of message content, so ask the person first.');
   expect(html).toContain('Built on your Mac');
@@ -102,10 +102,10 @@ test('keeps the hero outcome-led and free of contract vocabulary', () => {
   const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';
   expect(heading.split(/\s+/u).length).toBeLessThanOrEqual(10);
   expect(heroCopy).toContain('your');
-  const boundary = /<p\b[^>]*class="[^"]*\bhraness-marketing-hero__boundary\b[^"]*"[^>]*>([^<]+)<\/p>/u.exec(hero?.[0] ?? '')?.[1] ?? '';
-  expect(boundary).toStartWith(`${SITE_STATUS_LABEL} · macOS`);
-  for (const app of ['iMessage', 'WhatsApp', 'Beeper']) expect(boundary).toContain(app);
-  expect(boundary).not.toContain(SOFTWARE_VERSION);
+  expect(hero?.[0]).not.toContain('hraness-marketing-hero__boundary');
+  expect(hero?.[0]).toContain('hraness-marketing-hero__install');
+  expect(hero?.[0].replace(/<\/?span\b[^>]*>/gu, '')).toContain('git clone');
+  expect(html).toContain(SITE_STATUS_LABEL);
   for (const word of HERO_VOCABULARY_TO_AVOID) expect(heroCopy).not.toMatch(new RegExp(`\\b${word}\\b`, 'u'));
 });
 
@@ -159,11 +159,11 @@ test('offers local coding apps for setup on the reader’s Mac', () => {
     element(element) { targets.push(element.getAttribute('data-agent-target') ?? ''); },
   }).transform(html);
   expect(targets).toEqual(['cursor', 'codex-app']);
-  expect(html).toContain('Use a coding agent on that Mac');
+  expect(html).toContain('Paste this prompt into your coding agent.');
   expect(html).toContain('aria-label="Copy setup prompt"');
 });
 
-test('binds Design Kit v0.32.0 to the portable Paper palette', async () => {
+test('binds Design Kit v0.35.0 to the portable Paper palette', async () => {
   const [layout, css, manifestSource, paper] = await Promise.all([
     readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8'),
     readFile(resolve(siteRoot, 'app/globals.css'), 'utf8'),
@@ -175,7 +175,7 @@ test('binds Design Kit v0.32.0 to the portable Paper palette', async () => {
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.32.0');
+    .toBe('github:hraness/design-kit#v0.35.0');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/styles.css';");
@@ -239,7 +239,7 @@ test('offers guided source setup without implying a released AI engine or a menu
     expect(content).toMatch(/last reviewed version/u);
     expect(content).toMatch(/That copy writes the AI replies|AI replies come only from the local install/u);
     if (content !== home) expect(content).toMatch(/Claude API route (?:isn’t|is not) available in any build of this repository/u);
-    expect(content).toContain('https://github.com/hraness/xcb');
+    expect(content).toContain(content === home ? 'https://xcb.sh' : 'https://github.com/hraness/xcb');
     expect(content).toContain('no window');
     expect(content).not.toMatch(/menu bar companion|menubar|prebuilt runner/iu);
     expect(content).not.toContain('Claude API is available after setup');
@@ -254,10 +254,11 @@ test('offers guided source setup without implying a released AI engine or a menu
 
 test('offers the source install on macOS only, with Linux and Windows unavailable', () => {
   const html = renderToStaticMarkup(<Home />);
-  const install = html.slice(html.indexOf('id="install"'));
+  const install = /<header[^>]*data-hraness-marketing="hero"[\s\S]*?<\/header>/u.exec(html)?.[0].replace(/<\/?span\b[^>]*>/gu, '') ?? '';
+  expect(install).not.toBe('');
   const tabs = [...install.matchAll(/<button\b[^>]*data-platform="([a-z]+)"[^>]*role="tab"/gu)].map((match) => match[1]);
   expect(tabs).toEqual(['macos', 'linux', 'windows']);
   expect(install).toContain('git clone https://github.com/hraness/textbutler.git &amp;&amp; cd textbutler &amp;&amp; bun install --frozen-lockfile --ignore-scripts &amp;&amp; bun run textbutler:install');
   expect(install.split('Uses Messages.app, so it runs on macOS only.').length - 1).toBe(2);
-  expect(install).toContain('Runs on');
+  expect(html).toContain('Runs on');
 });

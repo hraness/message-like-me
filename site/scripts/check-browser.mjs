@@ -317,14 +317,14 @@ try {
         await page.locator('details[open]').first().waitFor({ state: 'visible' });
         await summary.press('Enter');
         assert.equal(await page.locator('details[open]').count(), 0);
-        const howAction = page.locator('.tb-hero a[href="#how-it-works"]');
-        assert.ok((await howAction.innerText()).trim(), 'The hero action must have a visible label.');
-        await howAction.click();
-        await page.waitForURL((url) => url.hash === '#how-it-works');
-        const howHeading = page.locator('#how-it-works').getByRole('heading', { level: 2 });
-        await howHeading.waitFor({ state: 'visible' });
-        assert.ok((await howHeading.innerText()).trim(), 'The action destination must have a visible heading.');
-        item.interaction = 'Keyboard FAQ opened and closed; how-it-works action reached its real section.';
+        const installAction = page.locator('.tb-hero a[href="#setup"]');
+        assert.ok((await installAction.innerText()).trim(), 'The hero action must have a visible label.');
+        await installAction.click();
+        await page.waitForURL((url) => url.hash === '#setup');
+        const setupHeading = page.locator('#setup').getByRole('heading', { level: 2 });
+        await setupHeading.waitFor({ state: 'visible' });
+        assert.ok((await setupHeading.innerText()).trim(), 'The action destination must have a visible heading.');
+        item.interaction = 'Keyboard FAQ opened and closed; install action reached its setup section.';
       } else if (sample.path === '/docs') {
         const heading = page.locator('.document-prose h2[id]').first();
         const target = await heading.getAttribute('id');

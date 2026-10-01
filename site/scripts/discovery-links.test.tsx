@@ -59,7 +59,7 @@ test('describes the default AI route on the comparison page', () => {
   const compare = renderToStaticMarkup(<CompareGhostReplyPage />);
   expect(compare).toContain('Qwen 3.5 Flash through your own Vercel AI Gateway');
   expect(compare).not.toContain('fast-reply mode');
-  expect(compare).toContain('Pick GhostReply for a finished $4.99 app whose replies read as yours.');
+  expect(compare).toContain('Choose GhostReply for a ready-to-install app with hosted AI included.');
   expect(compare).toContain('comfortable building it from source');
 });
 
