@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import { browserLaunchArgs, deadline, ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, verifyOwnedChromium } from './browser-contract.mjs';
-import { settleProductionImages } from './production-image-settlement.mjs';
+import { settleProductionConsent, settleProductionImages } from './production-image-settlement.mjs';
 import { verifyProductionBrowserLaunch } from './production-browser-launch.mjs';
 import { inspectHomeLayout } from './check-home-layout.mjs';
 
@@ -123,6 +123,7 @@ try {
         const label = `${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-').replace(/-$/u, '')}-${width}-${theme}`;
         // Chromium's captureBeyondViewport can reset touch emulation. Capture
         // overlapping viewport tiles instead, checking real phone media at each tile.
+        const consentSettlement = preview ? null : await settleProductionConsent(page);
         const imageSettlement = await settleProductionImages(page, label);
         const metrics = await measure();
         const captures = [];
@@ -145,7 +146,7 @@ try {
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const afterCapture = await measure();
-        report.records.push({ path, width, theme, homeLayout, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        report.records.push({ path, width, theme, homeLayout, consentSettlement, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
         assert.deepEqual(afterCapture, metrics, `${label}: layout and pointer media preserved through captures`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);
