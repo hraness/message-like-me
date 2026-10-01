@@ -27,7 +27,11 @@ export async function verifySettledConsentFlow(page, { allowHidden = false, scre
   }
   async function measure(state) {
     for (const scale of [1, 2]) {
-      await page.evaluate(({ base, scale }) => { document.documentElement.style.fontSize = `${base * scale}px`; }, { base: prior.base, scale });
+      const scaledSize = await page.evaluate(({ base, scale }) => {
+        document.documentElement.style.fontSize = `${base * scale}px`;
+        return parseFloat(getComputedStyle(document.documentElement).fontSize);
+      }, { base: prior.base, scale });
+      assert.equal(scaledSize, prior.base * scale, `Consent check must apply ${scale * 100}% text size`);
       await page.evaluate(() => document.fonts.ready);
       for (const position of ["near", "end"]) {
         await page.evaluate(position => {
@@ -80,6 +84,16 @@ export async function verifySettledConsentFlow(page, { allowHidden = false, scre
     return { initialState, placement: "flow", samples, panelAccess: true };
   } finally {
     try { await closePanel(); }
-    finally { await page.evaluate(prior => { document.documentElement.style.fontSize = prior.font; scrollTo(prior.x, prior.y); document.documentElement.style.scrollBehavior = prior.behavior; }, prior); }
+    finally {
+      const restoredSize = await page.evaluate(async prior => {
+        document.documentElement.style.fontSize = prior.font;
+        await document.fonts.ready;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        scrollTo(prior.x, prior.y);
+        document.documentElement.style.scrollBehavior = prior.behavior;
+        return parseFloat(getComputedStyle(document.documentElement).fontSize);
+      }, prior);
+      assert.equal(restoredSize, prior.base, "Consent check must restore the original text size");
+    }
   }
 }
