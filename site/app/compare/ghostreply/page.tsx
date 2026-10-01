@@ -38,12 +38,12 @@ const questions = [
   {
     question: 'Can either app send without me watching?',
     answer:
-      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New TextButler contacts start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler waits 5 minutes after you last wrote.',
+      'Both can send automatically once you turn a contact on. GhostReply auto-sends while the Mac is awake and the app is running, and your own reply takes over or pauses that contact. New TextButler conversations start disabled; once on, they answer by default only messages that contain a keyword you choose, and the butler waits 5 minutes after you last wrote.',
   },
   {
     question: 'Where does my message history go?',
     answer:
-      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. TextButler keeps a folder of notes per person locally. Ollama writes replies on your Mac; hosted models receive the conversation context. Optional web search sends queries through a saved Gateway key even when the reply model is local.',
+      'Both read iMessage history on your Mac. GhostReply keeps its reply profile locally under ~/.ghostreply and sends the context needed for a reply through its Cloudflare backend to Cloudflare Workers AI. TextButler keeps editable notes for each direct or group conversation locally. Ollama writes replies on your Mac; hosted models receive the conversation context. Optional web search sends queries through a saved Gateway key even when the reply model is local.',
   },
 ] as const;
 
@@ -71,7 +71,7 @@ export default function CompareGhostReplyPage() {
           <h1>TextButler compared with GhostReply</h1>
           <p>
             GhostReply writes iMessage replies in your style. TextButler gives you a choice
-            of AI, editable notes for each person, and configurable reply controls.
+            of AI, editable notes for each conversation, and configurable reply controls.
           </p>
           <a href={GITHUB_URL}>View the open-source project</a>
         </header>
@@ -129,13 +129,13 @@ export default function CompareGhostReplyPage() {
             <p>
               TextButler is a headless macOS butler: a CLI, a guided terminal, and a background daemon,
               with no window or menu bar icon. You turn it on per conversation across iMessage, WhatsApp,
-              and Beeper, and it keeps each contact’s context in a folder of ordinary files you can
-              open and edit. New installations start paused, and new contacts start disabled.
+              and Beeper, and it keeps each conversation’s context in a folder of ordinary files you can
+              open and edit. New installations start paused, and new conversations start disabled.
             </p>
             <p>
               By default its replies carry a disclosure marker:{' '}
               <code>{'🤖{ … }'}</code>, and it sends <code>{'🤖{ 👀 }'}</code> first so the other person
-              knows it’s on it. You can remove the marker per person, never in your own chat. By
+              knows it’s on it. You can remove the marker per conversation, never in your own chat. By
               default the butler answers only messages that contain the word “butler”; smart mode
               lets it decide when a reply is clearly wanted. A draft you review sends only in the
               version you approved. {REPLY_WRITERS_SENTENCE} The reply model can’t run commands on your Mac.

@@ -69,7 +69,7 @@ type HomeQuestion = Readonly<{ question: string; answer: string; link?: Readonly
 const HOME_QUESTIONS: readonly HomeQuestion[] = [
   {
     question: 'Does it read all my messages?',
-    answer: 'It answers only in conversations you turn on. Keyword mode waits for “butler”; Smart mode can recognize a request for help without it. Contact notes stay on your Mac. A local model writes replies there too; optional web search sends queries through your saved Gateway key.',
+    answer: 'It answers only in conversations you turn on. Keyword mode waits for “butler”; Smart mode can recognize a request for help without it. Conversation notes stay on your Mac. A local model writes replies there too; optional web search sends queries through your saved Gateway key.',
   },
   {
     question: 'Will people know it’s not me?',
@@ -101,7 +101,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
-    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. TextButler can answer in the conversations you enable, using a model you choose and notes you can edit. It marks replies as AI by default, and you control the reply mode and marker per person.',
+    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. TextButler can answer in the conversations you enable, using a model you choose and notes you can edit. It marks replies as AI by default, and you control the reply mode and marker per conversation.',
     link: { href: '/compare/ghostreply', label: 'TextButler compared with GhostReply' },
   },
   {
@@ -110,7 +110,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Is textbutler.app collecting anything?',
-    answer: 'Only anonymous visit counts. textbutler.app counts page views, page load speed, and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each person’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
+    answer: 'Only anonymous visit counts. textbutler.app counts page views, page load speed, and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each conversation’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
   },
   {
     question: 'What happened to Message Like Me?',
@@ -236,7 +236,7 @@ export default function Home() {
             </div>
           </MarketingSection>
 
-          <MarketingSection heading={marketingHeading("how-title")} headingId="how-title" id="how-it-works" label="How it works" summary="In an enabled conversation, TextButler checks whether to answer, reads the contact’s notes and recent messages, and asks your chosen model to write a reply.">
+          <MarketingSection heading={marketingHeading("how-title")} headingId="how-title" id="how-it-works" label="How it works" summary="In an enabled conversation, TextButler checks whether to answer, reads the conversation’s notes and recent messages, and asks your chosen model to write a reply.">
             <MarketingFlow ariaLabel="What happens to one message" steps={HOW_IT_WORKS_STEPS} />
             <dl className="tb-modes" aria-label="When it answers">
               {REPLY_MODES.map((mode) => (
@@ -268,7 +268,7 @@ export default function Home() {
                 headingLevel={3}
                 layout="split-reverse"
                 summary="You choose how it speaks and what’s off-limits for each conversation."
-                headingContent={<><p>The default marker wraps replies and acknowledgments in <code>{'🤖{ }'}</code>.</p><p className="tb-proof">You can change or remove it per person, but your own chat always keeps a visible marker. New installs start paused and every person starts off. You can pause all replies or turn off one person at any time.</p></>}
+                headingContent={<><p>The default marker wraps replies and acknowledgments in <code>{'🤖{ }'}</code>.</p><p className="tb-proof">You can change or remove it per conversation, but your own chat always keeps a visible marker. New installs start paused and every conversation starts off. You can pause all replies or turn off one conversation at any time.</p></>}
               >
                 <PhoneSlot conversation={boundariesConversation} crop={560} />
               </MarketingSection>
@@ -278,7 +278,7 @@ export default function Home() {
                 headingId="control-memory-title"
                 headingLevel={3}
                 layout="split"
-                summary="Your notes about each person are plain files you can read and edit. A local model writes replies on your Mac too."
+                summary="Your notes for each conversation are plain files you can read and edit. A local model writes replies on your Mac too."
                 headingContent={<><p className="tb-proof">Settings and sign-ins live separately. Optional learning starts off; you can review or clear what it remembers. <a href={`${ARCHITECTURE_URL}#contact-data`}>How contact folders work</a></p><p className="tb-fine">Gateway spending stops at $1 a day. Hosted AI receives the conversation context it needs. Optional web search sends queries through your saved Gateway key.</p></>}
               >
                 <div className="workspace-example"><pre aria-label="Example contact folder" tabIndex={0}><code>{`contact/\n├── AGENTS.md   standing instructions\n├── ABOUT.md    what matters here\n├── MEMORY.md   dated, sourced notes\n├── STYLE.md    how it talks here\n├── history/\n├── notes/\n├── attachments/\n└── outbox/`}</code></pre></div>

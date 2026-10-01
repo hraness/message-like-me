@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function inspectHomeLayout(page) {
+export async function inspectHomeLayout(page, { enforceDesktopColumns = true } = {}) {
   const pause = page.locator('.tb-hero .tb-pause');
   if (await pause.getAttribute('aria-pressed') !== 'true') await pause.click();
   await page.locator('.tb-hero [data-phase="final"]').waitFor();
@@ -42,13 +42,14 @@ export async function inspectHomeLayout(page) {
   assert.ok(hero.crop && hero.phone && hero.crop.height < hero.phone.height - 1, 'Hero: crop the device, retaining the complete phone proportions');
   assert.ok(hero.pauseOutside && hero.pause.y >= hero.crop.bottom - 1, 'Hero: animation control stays outside the faded viewport');
   assert.ok(state.crops.every(crop => crop.replies.every(reply => reply.bottom <= crop.frame.y + crop.frame.height * 0.88 + 1)), 'Phones: the butler’s complete replies remain above the bottom fade');
-  if (state.width >= 1440) {
+  if (state.width >= 1440 && enforceDesktopColumns) {
     assert.ok(hero.frame.x >= hero.copy.right - 1, 'Hero: phone sits beside the copy');
     assert.ok(hero.frame.y < hero.copy.bottom && hero.copy.y < hero.frame.bottom, 'Hero: phone and copy share the same row');
     assert.ok(state.features.every(feature => feature.copy.right <= feature.media.x + 1 || feature.media.right <= feature.copy.x + 1), 'Benefits: copy and proof occupy separate columns');
   } else if (state.width <= 390) {
     assert.ok(hero.frame.y >= hero.copy.bottom - 1, 'Hero: phone follows the copy on mobile');
   }
+  assert.ok(state.features.every(feature => feature.copy.right <= feature.media.x + 1 || feature.media.right <= feature.copy.x + 1 || feature.copy.bottom <= feature.media.y + 1 || feature.media.bottom <= feature.copy.y + 1), 'Benefits: copy and proof never overlap, including when enlarged text reflows');
   assert.equal(state.providers.length, 3, 'Messaging apps: three integrations');
   assert.ok(state.providers.every(provider => provider.icon && provider.copy && provider.glyph && provider.fits && provider.icon.width >= 55 && (provider.icon.right <= provider.copy.x + 1 || provider.icon.bottom <= provider.copy.y + 1)), 'Messaging apps: large real marks beside or above complete text');
   return state;

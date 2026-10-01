@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import stylex from '../stylex.config.mjs';
 import { loadPackageUnion } from './stylex-package-union.mjs';
+import { inspectHomeLayout } from './check-home-layout.mjs';
 import { browserLaunchArgs, ownedChromiumLaunchOptions, pinnedBrowserExecutable, pinnedChromiumDefinition, verifyOwnedChromium } from './browser-contract.mjs';
 
 const [origin, output] = process.argv.slice(2);
@@ -92,7 +93,8 @@ try {
           if (state.wide) assert.equal(sideBySide, true, 'The shared breakpoint places the phone beside the copy.');
           else assert.ok(state.frame.y >= state.copy.bottom - 1, 'The phone follows the copy below the shared breakpoint.');
           assert.ok(state.copy.x >= -1 && state.copy.right <= sample.width + 1 && state.frame.x >= -1 && state.frame.right <= sample.width + 1, 'Hero tracks stay within the viewport.');
-          report.cases.push({ ...sample, ...state });
+          const homeLayout = await inspectHomeLayout(page, { enforceDesktopColumns: sample.textSize === 100 });
+          report.cases.push({ ...sample, ...state, homeLayout });
         }
         if ([390, 1440].includes(sample.width)) {
           await page.screenshot({ path: join(output, `${variant}-${sample.width}-${sample.textSize}-${sample.theme}.png`), fullPage: false });

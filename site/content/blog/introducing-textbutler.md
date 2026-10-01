@@ -47,6 +47,6 @@ An explicit provider choice takes precedence. Otherwise, a saved Gateway key tak
 
 Each direct or group conversation has a folder of plain files on your Mac. You can read and edit the notes. Your account settings and sign-ins live separately from those files.
 
-Optional learning can revise reply guidance for one contact after comparing it with past examples. It starts off. [How TextButler uses ALGAL](/blog/how-textbutler-uses-algal) explains the comparison and its limits.
+Optional learning can revise reply guidance for one conversation after comparing it with past examples. It starts off. [How TextButler uses ALGAL](/blog/how-textbutler-uses-algal) explains the comparison and its limits.
 
-Start by reviewing a draft for one person who knows you are trying the assistant. That makes the words, the recipient and the disclosure easy to check before you enable automatic replies. Follow the [setup guide](https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md) yourself or ask your coding agent to work through it with you.
+Connect your messaging apps, choose what writes replies, and turn on the direct or group conversations where you want an assistant. Follow the [setup guide](https://github.com/hraness/textbutler/blob/main/docs/textbutler/getting-started.md) or give the setup prompt to your coding agent.

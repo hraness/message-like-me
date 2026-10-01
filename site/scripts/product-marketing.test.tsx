@@ -174,7 +174,7 @@ test('binds the released Design Kit to the portable Paper palette', async () => 
   };
 
   expect(manifest.dependencies?.['@hraness/design-kit'])
-    .toBe('github:hraness/design-kit#v0.36.1');
+    .toBe('github:hraness/design-kit#v0.36.2');
   expect(manifest.dependencies?.['@hraness/ui'])
     .toBe('github:hraness/ui#v0.5.19');
   expect(css).toContain("@import '@hraness/design-kit/compiler-foundation.css';");

@@ -48,7 +48,7 @@ export default function NotFound() {
           next={[
             { href: '/', label: 'What TextButler does', description: 'Runs on your Mac and replies in the chats you choose as a marked assistant.' },
             { href: '/docs', label: 'Documentation', description: 'Set up on your Mac and connect iMessage, WhatsApp, or Beeper.' },
-            { href: '/about', label: 'About', description: 'Why each contact gets its own context and control stays on your Mac.' },
+            { href: '/about', label: 'About', description: 'Why each conversation gets its own context and control stays on your Mac.' },
           ]}
           primaryAction={{ href: GETTING_STARTED_URL, label: 'Set up on your Mac' }}
           routes={knownPages}

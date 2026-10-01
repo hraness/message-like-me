@@ -70,16 +70,28 @@ access.
 
 ## Informational-site browser check
 
-Check the site with `bun run --cwd site check`. Set
-`TEXTBUTLER_BROWSER_EXECUTABLE` to an installed Chromium executable and
-`TEXTBUTLER_NODE_EXECUTABLE` to an installed Node 24 executable, using absolute
-paths, then run `bun run --cwd site check:browser` on the committed candidate.
-Use the exclusive browser lane when a host or repository scheduler is present.
-The verifier makes its own sterile production build in that same invocation and
-joins the clean Git source and lockfile before and after compilation and teardown.
+Check the site with `bun run --cwd site check`. The required **Site** CI job
+installs the Chromium revision pinned by this site's Playwright dependency and
+runs `bun run --cwd site check:browser` on the committed candidate. The verifier
+makes its own sterile production build in that same invocation and joins the
+clean Git source, manifest, and lockfile before and after compilation and
+teardown. Review the exact candidate's `informational-site-browser` artifact for
+its screenshots and receipt; a failed browser check fails the Site job and the
+Required check for site changes.
 
-The 16 cases cover the editorial landing, documentation, legacy source catalog,
-and frame-safe preview in both system appearances at desktop and touch widths.
+On a dedicated runner without a host scheduler, set
+`TEXTBUTLER_BROWSER_EXECUTABLE` to that pinned Chromium executable and
+`TEXTBUTLER_NODE_EXECUTABLE` to an installed Node 24 executable, using absolute
+paths, before running the verifier. On a managed Mac, use the required CI job
+for this combined build, server, and browser gate. For supplemental local visual
+checks, run the build in the compute lane, own a loopback server outside the
+browser lanes, and admit only the headless browser check to the browser lane.
+Do not wrap the combined verifier in a browser lane. Supplemental checks do not
+replace the committed candidate's complete CI gate.
+
+The 24 cases cover the editorial landing, documentation, legacy source catalog,
+frame-safe preview, blog index, and launch article in both system appearances at
+desktop and touch widths.
 They check actual rendered fonts, compiled stylesheet layers, Paper and preset
 roles, responsive geometry, keyboard disclosures, document links, and collection
 boundaries. Screenshots, the exact Git/build/browser receipt, and an isolated

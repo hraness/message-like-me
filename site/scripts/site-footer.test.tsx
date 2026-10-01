@@ -18,7 +18,7 @@ import { CANONICAL_PAGE_PATHS } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
-const SITE_FOOTER_PIN = 'https://github.com/hraness/site-footer/releases/download/v0.20.5/hraness-site-footer-0.20.5.tgz';
+const SITE_FOOTER_PIN = 'https://github.com/hraness/site-footer/releases/download/v0.20.6/hraness-site-footer-0.20.6.tgz';
 
 const publicPages: readonly Readonly<{
   name: string;

@@ -108,7 +108,7 @@ test with someone you trust on the account you’ll use.
    Gateway key is saved, and it refuses any search that reuses words from your
    private messages.
 6. **Reply in the same chat.** The default marker wraps the reply as `🤖{ … }`.
-   You can configure the marker per person. If it can’t tell whether a send
+   You can configure the marker per conversation. If it can’t tell whether a send
    went through, it doesn’t send it again.
 7. **You can step in anytime.** Write in the chat yourself and it stays out of
    it. Pause everything with one command, or ask for a draft to review first.
@@ -140,10 +140,10 @@ Devin subscription through xcb.
 If you choose one with a command, that choice wins. Otherwise a saved Gateway
 key wins, and with no key saved, an Ollama server already serving the pinned
 model is picked up when the background service starts. When a Gateway key is
-saved, the butler can also search the web for the people you turn on (in your
+saved, the butler can also search the web for the conversations you turn on (in your
 own chat, only when you ask), using your key even when a local model writes the
 replies. It refuses any search that reuses words from your private messages,
-and you can turn search off for one person with `textbutler habitats configure`.
+and you can turn search off for one conversation with `textbutler habitats configure`.
 Stop the background service before `providers local`, and restart it after
 changing the reply writer. The [subscription guide](docs/textbutler/native-subscription.md) covers xcb setup.
 
@@ -163,9 +163,9 @@ bun run textbutler contacts disable CONTACT
 
 `daemon install` starts the service now and at every sign-in (a per-user
 LaunchAgent on macOS). `status` shows whether it’s running, whether replies are
-paused, and each person’s state. `pause` stops everything at once, and
-`contacts disable` turns one person off. Uninstalling with `daemon uninstall`
-keeps your settings and contact notes.
+paused, and each conversation’s state. `pause` stops everything at once, and
+`contacts disable` turns one conversation off. Uninstalling with `daemon uninstall`
+keeps your settings and conversation notes.
 
 Every command also takes `--json`. `textbutler tui --snapshot` prints the
 guided terminal's views as plain text, and `textbutler commands --json` lists
@@ -202,10 +202,10 @@ recipient received or read it. A pending operation prints a job ID: inspect it
 with `bun run textbutler jobs show JOB_ID`. Do not repeat a send with an unknown
 outcome. Uncertain sends stay blocked until they’re sorted out.
 
-By default, replies and acknowledgments carry the `🤖{ … }` marker. You can change or clear the marker for one person,
+By default, replies and acknowledgments carry the `🤖{ … }` marker. You can change or clear the marker for one conversation,
 never in your own chat. The review shows the actual outgoing text.
 
-Each person you turn on gets a folder of plain files on your Mac (`AGENTS.md`,
+Each conversation you turn on gets a folder of plain files on your Mac (`AGENTS.md`,
 `ABOUT.md`, `MEMORY.md`, `STYLE.md`) holding your notes on how you talk, what
 matters, and what’s off-limits. Your settings and sign-ins live elsewhere, where
 the butler can’t change them. Optional learning (off by default; it needs a
@@ -226,8 +226,8 @@ Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that
 you send yourself. [GhostReply](https://ghostreply.lol) is a $4.99 Mac app that
 answers iMessages in your texting style. [OpenClaw](https://openclaw.ai) is an
 open-source assistant you message, and it can run commands on your computer.
-TextButler answers only the people you turn on, when they ask, marks its
-replies by default, keeps notes on each person in files you can edit, and its
+TextButler answers only in the conversations you turn on, when they ask, marks its
+replies by default, keeps notes for each conversation in files you can edit, and its
 model can’t run commands on your Mac. See
 [TextButler compared with GhostReply](https://textbutler.app/compare/ghostreply).
 
@@ -243,8 +243,8 @@ model can’t run commands on your Mac. See
   parts fit together.
 - [Provider setup](packages/textbutler/PROVIDERS.md), for developers.
 
-TextButler keeps each person’s context in files you can read and edit, marks
-its own replies by default, and answers only after you turn a person on and
+TextButler keeps each conversation’s context in files you can read and edit, marks
+its own replies by default, and answers only after you turn a conversation on and
 resume the butler: the design every Hraness project shares. [The thread through
 hraness](https://hraness.com/writing/the-thread-through-hraness) follows that
 design across the projects, and the [ALGAL

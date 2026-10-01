@@ -4,7 +4,7 @@
   "reviewedAt": "2026-10-01T02:00:29.138116+00:00",
   "reviews": {
     "site/content/blog/introducing-textbutler.md": {
-      "sha256": "6ae7218d02281fab4c4cef76f808af2f9efeceda917f5d2fa8880883c2e8b603",
+      "sha256": "ebf24134b08c405cdd631bc119323382bf2c5abdcc40e8522ca6fc4dc29996e4",
       "verdict": "approve-written-body",
       "scores": {
         "readerUtility": 2,
@@ -34,6 +34,17 @@
           "scope": "Direct/group introduction and separate editable group notes with post-enrollment context and explicit member-change re-selection.",
           "verdict": "approve-written-body",
           "reason": "Claims match independently reviewed TextButler enrollment/workspace code and GhostGet0.18.71 contract."
+        },
+        {
+          "reviewer": "Codex GPT-6 independent editorial review",
+          "reviewerType": "ai",
+          "reviewedAt": "2026-10-01T15:55:23.937295+00:00",
+          "previousSha256": "6ae7218d02281fab4c4cef76f808af2f9efeceda917f5d2fa8880883c2e8b603",
+          "sha256": "ebf24134b08c405cdd631bc119323382bf2c5abdcc40e8522ca6fc4dc29996e4",
+          "scope": "Conversation-scoped learning wording and a direct setup CTA covering selected direct/group conversations.",
+          "verdict": "approve-written-body",
+          "reason": "Matches the reviewed group implementation and preserves separate enrollment context; no provider capability or command changes.",
+          "independentEvidenceSha256": "c04fdfa0ee1a06d6f9062978cdb61e576a24b8b8206712cf2a7df5934b6a8b85"
         }
       ]
     },
@@ -77,6 +88,7 @@
   "notes": [
     "Full four-body read plus final changes independently reviewed; default-mode claims scoped and unsupported auto-wait removed.",
     "Actual runtime relation IDs validated by separate shared worker against released immutable portfolio facts.",
-    "Written-body approval does not close retained diagram overlap; visually fix and inspect it before delivery."
+    "Written-body approval does not close retained diagram overlap; visually fix and inspect it before delivery.",
+    "Final group/setup diagrams rendered and visually reviewed; source/archive/runtime adoption verified in the integration."
   ]
 }
