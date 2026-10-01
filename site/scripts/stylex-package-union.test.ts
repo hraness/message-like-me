@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { serializeStylexRuleUnionV1 } from '@hraness/ui/stylex-build';
+import { serializeStylexRuleUnionV1, type StylexRuleV1 } from '@hraness/ui/stylex-build';
 import stylex from '../stylex.config.mjs';
 import { auditPackageStyles, loadPackageUnion } from './stylex-package-union.mjs';
 import packageUnion from './postcss-package-union.cjs';
@@ -20,8 +20,8 @@ test('the real UI, Design Kit and footer share one order-independent recipe unio
   const reversed = [...union.manifests].reverse();
   expect(serializeStylexRuleUnionV1(reversed.flatMap(item => [...item.rules]), reversed.map(item => item.standaloneSerializer)))
     .toBe(union.css);
-  const shared = union.manifests[1]!.rules.find(rule => rule[1].ltr.includes('grid-template-columns:minmax(0,1fr)'))!;
-  expect(union.manifests[2]!.rules.some(rule => rule[0] === shared[0])).toBeTrue();
+  const shared = union.manifests[1]!.rules.find((rule: StylexRuleV1) => rule[1].ltr.includes('grid-template-columns:minmax(0,1fr)'))!;
+  expect(union.manifests[2]!.rules.some((rule: StylexRuleV1) => rule[0] === shared[0])).toBeTrue();
   expect(union.css.split(`.${shared[0]} {`)).toHaveLength(2);
   expect(union.css).toContain('components.hraness-stylex.priority');
   expect(union.css).not.toMatch(/components\.hraness-(?:ui|design-kit|site-footer)\.priority/u);
