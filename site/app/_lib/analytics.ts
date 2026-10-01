@@ -14,6 +14,7 @@ export const textbutlerPostHogSite = {
   canonicalDomain: 'textbutler.app',
   allowedHosts: ['textbutler.app', 'www.textbutler.app'],
   schemaVersion: POSTHOG_SCHEMA_VERSION,
+  attributionMode: "referrer_only",
   excludedPaths: ['/api', '/auth', '/account', '/dashboard', '/login', '/sign-in', '/oauth', '/callback', '/checkout', '/billing', '/invite']
     .map(path => ({ match: 'prefix' as const, path })),
   routes: [

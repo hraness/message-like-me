@@ -12,6 +12,7 @@ import Home from '../app/page';
 
 test('analytics uses the shared small-sites convention for textbutler.app only', () => {
   expect(textbutlerPostHogSite.id).toBe('textbutler');
+  expect(textbutlerPostHogSite.attributionMode).toBe('referrer_only');
   expect(textbutlerPostHogSite.canonicalDomain).toBe('textbutler.app');
   expect(classifyAnalyticsRoute(textbutlerPostHogSite, 'https://textbutler-git-main.vercel.app/')).toBeNull();
   expect(classifyAnalyticsRoute(textbutlerPostHogSite, 'http://localhost:3000/')).toBeNull();
