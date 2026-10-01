@@ -322,7 +322,7 @@ try {
         await installAction.click();
         await page.waitForURL((url) => url.hash === '#setup');
         const setupHeading = page.locator('#setup').getByRole('heading', { level: 2 });
-        await howHeading.waitFor({ state: 'visible' });
+        await setupHeading.waitFor({ state: 'visible' });
         assert.ok((await setupHeading.innerText()).trim(), 'The action destination must have a visible heading.');
         item.interaction = 'Keyboard FAQ opened and closed; install action reached its setup section.';
       } else if (sample.path === '/docs') {
