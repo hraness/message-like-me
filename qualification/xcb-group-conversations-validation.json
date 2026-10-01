@@ -22,7 +22,7 @@
     "packages/textbutler/src/habitat-task-shadow.ts": "b8201e4adad2261e547c2dc993c8076fada83cb6b557f45b57927b1cbf6dd48a",
     "packages/textbutler/src/habitat-task.ts": "ea6da92ba494683383c3b5ca590eca1259bf639daaab551e978af7243a68893e",
     "packages/textbutler/src/host-config.ts": "c0a59527d9427aaa3ca26ca469ce73e7edb1153607d1ac5d9c50e84dd825ccd0",
-    "packages/textbutler/src/imessage-setup.ts": "fdc734271365a57abe87626c810c7afee880e5074cc118dbc89a6e36c61e86e7",
+    "packages/textbutler/src/imessage-setup.ts": "b7d2c7143488b87e7c56e7eee02cf6536880a1b2bef60e1f23b46ae19ef3c225",
     "packages/textbutler/src/javascript-tool.ts": "6ae01458d0eb16c44c5a5c06e7d4790245ed592cb0885d81c4f6a8d082a66ad7",
     "packages/textbutler/src/javascript-worker-entry.ts": "26112477da6fda01af8c2d5257d191d08a7a061617ad7dcc540c60f2dc521e7d",
     "packages/textbutler/src/journal.ts": "6251657ab11db9cdcc81959de727b6dafef63da18cf8e5ff5769b308717c2a29",
@@ -75,6 +75,30 @@
       "exitCode": 0,
       "testsPassed": 28,
       "assertions": 135
+    },
+    {
+      "command": "bun test packages/textbutler/src/imessage-setup.test.ts",
+      "baseCommit": "7c1f9baa4b2e5d528bc50e71507eb24dfb852243",
+      "sourceSha256": {
+        "packages/textbutler/src/imessage-setup.ts": "dd92d96043dfe81b7c1f2138e21b90e160afe8163c5ea19254787ff8c73e868e",
+        "packages/textbutler/src/imessage-setup.test.ts": "f62ae0552abd1fc3bb9e75ae87c9ff463b549aef7a717e1b418e9f103efcfd16"
+      },
+      "exitCode": 0,
+      "testsPassed": 23,
+      "assertions": 326,
+      "provenance": "Observed tool transcript chunks 1d54b2 and 291e3d, host-run session 83857. No separate raw log file retained."
+    },
+    {
+      "command": "bun test packages/textbutler/src/imessage-setup.test.ts",
+      "baseCommit": "7c1f9baa4b2e5d528bc50e71507eb24dfb852243",
+      "sourceSha256": {
+        "packages/textbutler/src/imessage-setup.ts": "b7d2c7143488b87e7c56e7eee02cf6536880a1b2bef60e1f23b46ae19ef3c225",
+        "packages/textbutler/src/imessage-setup.test.ts": "02e5670b1d62da5c9bff30eaf99485c49005c662fd90d3ec1204926c4f2e251d"
+      },
+      "exitCode": 0,
+      "testsPassed": 23,
+      "assertions": 338,
+      "provenance": "Observed tool transcript chunks 7b5dba and b95eec, host-run session 83268. No separate raw log retained. Exact .71 source bytes unchanged since this run."
     }
   ],
   "retainedLocalLogDigests": [
@@ -87,5 +111,12 @@
       "sha256": "22ca76d4c3f1d4ebeb43949f854f35cb9e90046e03f7ca89f00efe35fd6ef4e3"
     }
   ],
-  "finalGates": "The reviewed composition may be bundled; current-source aggregate, isolated installation, and Required CI remain mandatory."
+  "finalGates": "Current-source aggregate, isolated installation and Required CI remain mandatory. Exact GhostGet 0.18.71 source review, focused native setup validation, and immutable upstream source/archive/provenance admission are recorded in the follow-up review.",
+  "followupReviews": [
+    {
+      "review": "qualification/xcb-ghostget-01871-review.json",
+      "reviewSha256": "bf2436cb9deb206044471d2201a6ff337945b0f25b8354ce5bea4825a39f0558",
+      "scope": "Exact GhostGet 0.18.71 native setup pin; independent source review, focused validation and canonical immutable artifact binding complete. Final integration and Required CI remain mandatory."
+    }
+  ]
 }
