@@ -261,7 +261,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     fontWeights: ['400', '500', '600', '700'], renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],
     headingFont: '"Nebula Sans", sans-serif', headingSize: 64, headingLeading: 67.84, headingTracking: -1.92, headingWeight: '550', headerMinHeight: '52px',
     headerWidth: 1216, gutter: '32px',
-    sections: Array.from({ length: 9 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
+    sections: Array.from({ length: 12 }, () => ({ font: '"Nebula Sans", sans-serif', weight: '550', size: 40, leading: 44.8, tracking: -0.8 })),
     workspaceInk: 'rgb(28, 25, 23)', bodyInk: 'rgb(28, 25, 23)',
     workspaceBackground: 'rgb(255, 253, 249)', terminalBackground: 'rgb(255, 253, 249)',
     actionHeights: [42, 42, 42, 42], wall: false, bodyBackgroundImage: 'none' };
