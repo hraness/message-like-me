@@ -3,7 +3,9 @@
 // typechecks) as balanced parallel lanes. The package tests are wall-clock
 // bound (real child processes, grace periods, watchdogs), so one serial
 // `bun test` leaves most runner cores idle. Every discovered package test file
-// runs in exactly one lane; `--tests-only` skips the platform-independent
+// runs in exactly one lane. The QuickJS resource-boundary tests run after
+// those lanes finish so gate contention cannot consume their fixed guest budget.
+// `--tests-only` skips the platform-independent
 // typechecks (used by the macOS fixture job, whose Linux sibling runs them).
 import { Glob } from "bun";
 
@@ -12,15 +14,16 @@ const HEAVY_LANES: readonly (readonly string[])[] = [
   ["packages/textbutler/src/imessage-setup.test.ts"],
   [
     "packages/textbutler/src/ghostget-automation-process.test.ts",
-    "packages/textbutler/src/javascript-tool.test.ts",
     "packages/textbutler/src/control-service.test.ts",
   ],
 ];
+const EXCLUSIVE_TESTS = ["packages/textbutler/src/javascript-tool.test.ts"] as const;
 const TYPECHECK_PROJECTS = ["packages/transport/tsconfig.json", "packages/textbutler/tsconfig.json"] as const;
 // Matches Bun's default test-file discovery for `bun test packages`.
 const TEST_FILES = new Glob("packages/**/*{.test,_test,.spec,_spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}");
 
-type Lane = Readonly<{ label: string; commands: readonly (readonly string[])[] }>;
+type Lane = Readonly<{ label: string; commands: readonly (readonly string[])[]; exclusive?: boolean }>;
+type LaneResult = { label: string; ok: boolean; seconds: number };
 
 export function packageTestFiles(root = process.cwd()): string[] {
   const files: string[] = [];
@@ -42,6 +45,10 @@ export function planLanes(files: readonly string[], testsOnly: boolean): Lane[] 
     }
     lanes.push({ label: `tests-${String(index + 1)}`, commands: [[process.execPath, "test", ...lane.map(file => `./${file}`)]] });
   });
+  for (const file of EXCLUSIVE_TESTS) {
+    if (!available.has(file)) throw new Error(`check:textbutler exclusive file ${file} no longer exists; update scripts/check-textbutler.ts`);
+    assigned.add(file);
+  }
   const rest = files.filter(file => !assigned.has(file));
   if (rest.length > 0) {
     lanes.push({ label: `tests-${String(lanes.length + 1)}`, commands: [[process.execPath, "test", ...rest.map(file => `./${file}`)]] });
@@ -49,6 +56,7 @@ export function planLanes(files: readonly string[], testsOnly: boolean): Lane[] 
   if (!testsOnly) {
     lanes.push({ label: "types", commands: TYPECHECK_PROJECTS.map(project => ["tsc", "--noEmit", "-p", project]) });
   }
+  lanes.push({ label: "tests-resource-boundaries", exclusive: true, commands: [[process.execPath, "test", ...EXCLUSIVE_TESTS.map(file => `./${file}`)]] });
   return lanes;
 }
 
@@ -65,7 +73,7 @@ async function pipeWithPrefix(stream: ReadableStream<Uint8Array>, prefix: string
   if (pending.length > 0) sink.write(`${prefix}${pending}\n`);
 }
 
-async function runLane(lane: Lane): Promise<{ label: string; ok: boolean; seconds: number }> {
+async function runLane(lane: Lane): Promise<LaneResult> {
   const started = performance.now();
   const prefix = `[${lane.label}] `;
   for (const command of lane.commands) {
@@ -81,6 +89,13 @@ async function runLane(lane: Lane): Promise<{ label: string; ok: boolean; second
   return { label: lane.label, ok: true, seconds: (performance.now() - started) / 1000 };
 }
 
+/** Exclusive lanes start only after every parallel child and its output are joined. */
+export async function runLanes(lanes: readonly Lane[], execute: (lane: Lane) => Promise<LaneResult> = runLane): Promise<LaneResult[]> {
+  const results = await Promise.all(lanes.filter(lane => !lane.exclusive).map(execute));
+  for (const lane of lanes.filter(lane => lane.exclusive)) results.push(await execute(lane));
+  return results;
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const unknown = args.filter(arg => arg !== "--tests-only");
@@ -91,7 +106,7 @@ if (import.meta.main) {
   const files = packageTestFiles();
   if (files.length === 0) throw new Error("check:textbutler found no package test files");
   const lanes = planLanes(files, args.includes("--tests-only"));
-  const results = await Promise.all(lanes.map(runLane));
+  const results = await runLanes(lanes);
   for (const result of results) {
     process.stdout.write(`check:textbutler ${result.label}: ${result.ok ? "pass" : "FAIL"} in ${result.seconds.toFixed(1)}s\n`);
   }
