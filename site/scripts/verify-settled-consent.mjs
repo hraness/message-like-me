@@ -27,8 +27,10 @@ export async function verifySettledConsentFlow(page, { allowHidden = false, scre
   }
   async function measure(state) {
     for (const scale of [1, 2]) {
-      const scaledSize = await page.evaluate(({ base, scale }) => {
+      const scaledSize = await page.evaluate(async ({ base, scale }) => {
         document.documentElement.style.fontSize = `${base * scale}px`;
+        await document.fonts.ready;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         return parseFloat(getComputedStyle(document.documentElement).fontSize);
       }, { base: prior.base, scale });
       assert.equal(scaledSize, prior.base * scale, `Consent check must apply ${scale * 100}% text size`);
