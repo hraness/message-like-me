@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { publicationLinkGroups, verifyPublicationLinks } from './verify-publication-links.mjs';
+import { verifySettledConsentFlow } from './verify-settled-consent.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
@@ -104,6 +106,12 @@ try {
           assert.equal(await page.evaluate(() => Object.hasOwn(window, '__next_f')), false, 'Preview runtime stays inert');
         }
         await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+        const publicationLinks = path === '/blog/introducing-textbutler'
+          ? await verifyPublicationLinks(page, [
+              ...publicationLinkGroups.map(group => ({ ...group, required: group.name !== 'footer' })),
+              { name: 'byline', selector: '.plain-publication__byline a[href]', required: true },
+            ])
+          : undefined;
         const homeLayout = path === '/' ? await inspectHomeLayout(page) : undefined;
         const measure = () => page.evaluate(() => {
           const rect = element => element && { x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y,
@@ -124,6 +132,7 @@ try {
         // Chromium's captureBeyondViewport can reset touch emulation. Capture
         // overlapping viewport tiles instead, checking real phone media at each tile.
         const consentSettlement = preview ? null : await settleProductionConsent(page);
+        const settledConsent = path === '/' ? await verifySettledConsentFlow(page) : undefined;
         const imageSettlement = await settleProductionImages(page, label);
         const metrics = await measure();
         const captures = [];
@@ -146,7 +155,7 @@ try {
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const afterCapture = await measure();
-        report.records.push({ path, width, theme, homeLayout, consentSettlement, imageSettlement, metrics, afterCapture, captures, previewCsp, previewErrors: preview ? [...previewErrors] : undefined });
+        report.records.push({ path, width, theme, homeLayout, consentSettlement, settledConsent, imageSettlement, metrics, afterCapture, captures, previewCsp, publicationLinks, previewErrors: preview ? [...previewErrors] : undefined });
         assert.deepEqual(afterCapture, metrics, `${label}: layout and pointer media preserved through captures`);
         assert.ok(metrics.rootOverflow <= 1 && metrics.bodyOverflow <= 1 && metrics.bodyWidth <= width + 1, `${label}: page overflow`);
         assert.equal(metrics.coarse, mobile, `${label}: real phone pointer media`);

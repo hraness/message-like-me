@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { publicationLinkGroups, verifyPublicationLinks } from './verify-publication-links.mjs';
+import { verifySettledConsentFlow } from './verify-settled-consent.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -234,6 +236,13 @@ try {
         await document.fonts.ready;
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       }), 'Font settlement', 15_000);
+      if (sample.path === '/') item.settledConsent = await verifySettledConsentFlow(page);
+      if (sample.path === '/blog/introducing-textbutler') {
+        item.publicationLinks = await verifyPublicationLinks(page, [
+          ...publicationLinkGroups.map(group => ({ ...group, required: group.name !== 'footer' })),
+          { name: 'byline', selector: '.plain-publication__byline a[href]', required: true },
+        ]);
+      }
       const metrics = await deadline(page.evaluate(() => {
         const heading = document.querySelector('h1');
         const style = getComputedStyle(heading);
