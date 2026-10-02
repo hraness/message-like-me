@@ -1,11 +1,9 @@
-import type { CSSProperties, Ref } from 'react';
 
 import type { Conversation, Perspective } from './conversations';
-import { describeConversation, MessagesScreen, type PlaybackPhase } from './messages-thread';
-import { PhoneFrame } from './phone-frame';
-import styles from './phone.module.css';
+import { conversationScene, describeConversation, type SceneTheme } from './scene';
+import { PhoneView, type PhoneTheme, type SceneVariant } from './phone-view';
 
-export type PhoneTheme = 'auto' | 'light' | 'dark';
+export type { PhoneTheme, PlaybackPhase } from './phone-view';
 
 export interface PhoneMockProps {
   readonly conversation: Conversation;
@@ -16,8 +14,8 @@ export interface PhoneMockProps {
   /** Maximum rendered width in CSS pixels. The phone scales down to its container. */
   readonly maxWidth?: number;
   /**
-   * Screen height in iOS points (default 844, a full iPhone). A shorter screen
-   * crops the empty top of a short thread so the device hugs the conversation.
+   * Device height in points (default 852, a full iPhone). A shorter device
+   * crops the empty top of a short thread so the phone hugs the conversation.
    */
   readonly screenHeight?: number;
   /** Show only the top of the complete device, in device points, with a quiet fade. */
@@ -25,59 +23,30 @@ export interface PhoneMockProps {
   /** Overrides the generated accessible name (a full reading of the conversation). */
   readonly label?: string;
   readonly className?: string;
-  /** Ref to the root element (the player observes it for scroll-into-view). */
-  readonly ref?: Ref<HTMLDivElement>;
-  /** Internal: playback state from `PhoneMockPlayer`. */
-  readonly visibleCount?: number;
-  readonly typingId?: string;
-  readonly phase?: PlaybackPhase;
 }
 
 /**
- * A code-rendered iPhone showing a synthetic Messages conversation.
+ * A code-rendered iPhone showing a synthetic conversation, drawn by
+ * @hraness/textmockups (the renderer behind textmock.com).
  * Static and server-safe (no scripts): use it in pages that must render without
  * JavaScript, blog image capture and video scenes. `PhoneMockPlayer` adds
  * scripted playback on top of the same markup.
  */
-export function PhoneMock({
-  conversation,
-  perspective = 'owner',
-  theme = 'auto',
-  maxWidth,
-  screenHeight,
-  crop,
-  label,
-  className,
-  ref,
-  visibleCount,
-  typingId,
-  phase,
-}: PhoneMockProps) {
-  const vars: Record<string, string> = {};
-  if (maxWidth) vars['--phone-max-width'] = `${maxWidth}px`;
-  if (screenHeight) vars['--phone-h'] = String(screenHeight + 22);
-  const style = Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined;
-  const phone = (
-    <div
-      ref={ref}
-      className={className ? `${styles.root} ${className}` : styles.root}
-      data-phone-theme={theme === 'auto' ? undefined : theme}
-      role="img"
-      aria-label={label ?? describeConversation(conversation, perspective)}
-      style={style}
-    >
-      <PhoneFrame screen={conversation.app === 'whatsapp' ? 'wallpaper' : 'plain'}>
-        <MessagesScreen
-          conversation={conversation}
-          perspective={perspective}
-          visibleCount={visibleCount}
-          typingId={typingId}
-          phase={phase}
-        />
-      </PhoneFrame>
-    </div>
+export function PhoneMock({ conversation, perspective = 'owner', theme = 'auto', screenHeight, label, ...rest }: PhoneMockProps) {
+  return (
+    <PhoneView
+      {...rest}
+      app={conversation.app}
+      label={label ?? describeConversation(conversation, perspective)}
+      scenes={sceneVariants(conversation, perspective, theme, screenHeight)}
+      theme={theme}
+    />
   );
-  if (crop === undefined) return phone;
-  if (!Number.isFinite(crop) || crop <= 0) throw new RangeError('Phone crop must be positive.');
-  return <div className={styles.crop} data-phone-crop="" style={{ '--crop-h': String(crop), ...(maxWidth ? { '--crop-max': `${maxWidth}px` } : {}) } as CSSProperties}>{phone}</div>;
 }
+
+/** The validated scene for each appearance the phone draws: both for `auto`, one otherwise. */
+export function sceneVariants(conversation: Conversation, perspective: Perspective, theme: PhoneTheme, screenHeight?: number): SceneVariant[] {
+  const themes: readonly SceneTheme[] = theme === 'auto' ? ['light', 'dark'] : [theme];
+  return themes.map((sceneTheme) => ({ theme: sceneTheme, scene: conversationScene(conversation, { perspective, theme: sceneTheme, screenHeight }) }));
+}
+

@@ -1,0 +1,12 @@
+/* TextButler's adjustments to the Textmock renderer (global: they target its .tm-* classes). */
+
+/* A generic app (Beeper) is drawn in Messages layout with neutral slate bubbles. */
+[data-tb-phone][data-app="neutral"] .tm-phone { --tm-out: #3d4656; --tm-tint: #3d4656; }
+[data-tb-phone][data-app="neutral"] .tm-phone[data-theme="dark"] { --tm-out: #4a5466; --tm-tint: #8a95a8; }
+
+/* The loop crossfades the thread out and back in. */
+[data-tb-phone][data-phase="fading"] .tm-thread { animation: tb-phone-fade-out 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes tb-phone-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-tb-phone] .tm-thread { animation: none !important; }
+}
