@@ -1,8 +1,8 @@
 # TextButler architecture
 
-TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”. An owner activates a bounded set of contacts. Each contact gets a private workspace that a model can read and evolve through TextButler's broker. A separate daemon decides when to invoke that agent and controls every outward action.
+TextButler puts a clearly marked AI assistant in the iMessage, WhatsApp, and Beeper chats you choose on your Mac, and it answers when someone says “butler”. You turn it on for a limited number of contacts. Each contact gets a private workspace that a model can read and update through TextButler's broker. A separate daemon decides when to call that agent and controls every message that leaves the Mac.
 
-The source includes the owner daemon, contact reply loop, versioned GhostGet automation protocol and owner CLI with its guided terminal. TextButler is headless: it has no desktop window or menu bar companion. Synthetic tests establish their control and recovery behavior. Live provider delivery has separate acceptance requirements below.
+This page explains how the pieces fit together, for developers. The source includes the owner daemon, the contact reply loop, the versioned GhostGet automation protocol, and the owner CLI with its guided terminal. TextButler is headless: it has no desktop window or menu bar companion. Tests with simulated accounts cover control and recovery. Live delivery still needs the checks listed under [Still to verify before live use](#still-to-verify-before-live-use).
 
 ## Ownership
 
@@ -11,7 +11,7 @@ flowchart LR
   Cli[Owner CLI and guided terminal] --> Control[Owner-only control socket]
   Control --> Butler[TextButler daemon]
   Butler --> Xcb[xcb zero-tool generate]
-  Xcb --> Provider[Admitted subscription provider]
+  Xcb --> Provider[Checked subscription provider]
   Provider --> Proposal[Structured result or proposal]
   Proposal --> Butler
   Butler --> Tools[Contact-bound tool broker]
@@ -24,15 +24,17 @@ flowchart LR
   GhostGet --> Messages[iMessage and WhatsApp]
 ```
 
-GhostGet owns native permissions, message and contact acquisition, provider actions, and receipts. TextButler does not open chat.db or automate Messages directly. xcb owns subscription credentials, provider admission, model catalogs, confinement, cancellation and account custody. TextButler invokes its native zero-tool generation API and interprets returned operation proposals through its own contact broker. TextButler owns conversation policy and the durable send transaction. The owner CLI changes settings through a small local protocol; it never gives a model arbitrary local commands.
+GhostGet handles native permissions, reading messages and contacts, provider actions, and the record of what each send did. TextButler does not open chat.db or automate Messages directly. xcb holds subscription credentials, decides which providers may run, keeps model catalogs, confines and cancels provider processes, and locks each account while a provider uses it. TextButler calls xcb's native zero-tool generation API and handles the operations a model proposes through its own contact broker. TextButler decides conversation policy and keeps the durable send journal. The owner CLI changes settings through a small local protocol; it never gives a model arbitrary local commands.
 
-The background lifecycle uses a user LaunchAgent: native messaging belongs to the signed-in Mac user, and login persistence needs no interactive app. Installation records the exact runtime, entrypoint, data directory and generation; removal verifies its private receipt and loaded service identity. Uninstall preserves contact data. New settings start paused. A private SQLite custody lock prevents duplicate daemon ownership and permits recovery only for a dead recorded process and its exact unserved socket. A minimal native TextButler.app can supervise the verified daemon so Full Disk Access belongs to the app. Its private installation receipt pins the runtime, payload, native executable and signature resources; a changed identity blocks startup. The app accepts fixed daemon and iMessage setup roles, with no arbitrary command passthrough; opening the app itself starts nothing. Local builds default to an ad-hoc signature, so a rebuilt app may require a fresh macOS permission grant; building with a persistent signing identity keeps grants bound to that certificate across rebuilds.
+The background service runs as a user LaunchAgent, because native messaging belongs to the signed-in Mac user and starting at login needs no interactive app. Installation records the runtime, entry point, data directory, and generation; removal checks that private record and the loaded service's identity first. Uninstalling keeps contact data. New settings start paused. A lock in a private SQLite file stops a second daemon from starting, and allows recovery only when the recorded process is dead and its socket is no longer served.
 
-The daemon serves owner controls, enrollment jobs and a reply loop through its own supervised GhostGet process. Startup, enablement and recovery establish a silent event boundary, refresh bounded history and admit only subsequent eligible inbound messages. A failed catch-up pauses the affected conversation. No provider work starts without explicit owner account configuration.
+A minimal native app, `TextButler.app`, can supervise the verified daemon so that Full Disk Access belongs to the app. Its private install record pins the runtime, payload, native executable, and signature resources; if any of them changes, the app refuses to start. The app accepts only two fixed roles, the daemon and iMessage setup, and passes through no other command. Opening the app itself starts nothing. Local builds use an ad hoc signature by default, so a rebuilt app may need a fresh macOS permission grant. Building with a persistent signing identity keeps grants tied to that certificate across rebuilds.
+
+The daemon serves owner controls, enrollment jobs, and a reply loop through its own supervised GhostGet process. On startup, when a conversation is turned on, and after recovery, it sets a starting point without replying to earlier messages, refreshes a limited window of history, and considers only eligible incoming messages that arrive afterward. If catching up fails, that conversation pauses. No provider work starts until the owner configures an account.
 
 ## Contact data
 
-The intended application-support tree is:
+The application support folder is laid out like this:
 
 ```text
 Textbutler/
@@ -41,214 +43,167 @@ Textbutler/
     settings.json              owner configuration and contact bindings
     host.json                  private GhostGet and xcb executable/account bindings
     runs.sqlite                private run and send journal
-    daemon-custody.sqlite      exclusive process/socket ownership
-    launch-agent-custody.sqlite lifecycle serialization
-    launch-agent.json          exact LaunchAgent installation receipt
-    ghostget-automation-custody.json exact supervised messaging process claim
+    daemon-custody.sqlite      lock that allows one daemon process and socket
+    launch-agent-custody.sqlite serializes LaunchAgent install and removal
+    launch-agent.json          LaunchAgent installation record
+    ghostget-automation-custody.json record of the supervised GhostGet process
   plugins/
-    extensions.json            explicit owner-installed hook manifest
+    extensions.json            owner-installed hook list
     quiet-hours.ts             example trusted executable extension
   contacts/
-    <opaque-contact-id>/       the only model-visible workspace for one run
+    <opaque-contact-id>/       the only workspace a model sees during a run
       AGENTS.md                fixed role guidance; read-only to agents
       ABOUT.md                 relationship context and owner instructions
-      MEMORY.md                concise, dated, source-attributed working notes
-      STYLE.md                 owner-style evidence and response preferences
-      history/                 bounded, attributed conversation excerpts
-      notes/                   task-specific notes and outstanding questions
-      attachments/             broker-admitted incoming files
+      MEMORY.md                short, dated working notes with sources
+      STYLE.md                 examples of the owner's style and response preferences
+      history/                 limited, attributed conversation excerpts
+      notes/                   task notes and open questions
+      attachments/             incoming files accepted by the broker
       outbox/                  files proposed for this conversation
 ```
 
-Directory names use opaque identifiers, not contact names or phone numbers. Files are private to the Mac user. Models cannot traverse parent paths, links, other contact folders, or host configuration. The file broker supports reads, conditional writes, and exact edits. It exposes no symlink, directory, delete-tree, shell, or executable permission operations. Atomic replacement preserves the preceding file if a write fails. A stale memory revision produces a conflict instead of overwriting an owner's correction.
+Folder names use opaque identifiers, never contact names or phone numbers. Files are private to the Mac user. Models cannot reach parent paths, links, other contacts' folders, or host configuration. The file broker supports reads, conditional writes, and exact edits. It offers no symlink, directory, recursive delete, shell, or executable-permission operations. Writes replace files atomically, so a failed write leaves the previous file in place. A write based on an outdated memory revision fails with a conflict instead of overwriting an owner's correction.
 
-The owner chooses one verified direct or group conversation from a bounded GhostGet list. Groups require GhostGet’s negotiated group-conversation extension and a complete participant roster. Enrollment rechecks the account incarnation and participant identity and creates a disabled contact. Direct-conversation history import is a separate opt-in, limited to 200 recent, explicitly scoped messages, with message ID, time, and author preserved. The import records shortening and omissions; it does not fetch media. These records are context only, and historical automation may be unobservable. A later qualified initialization run may summarize preferences, conversational style, open tasks, and useful context into memory. It must distinguish evidence from inference and retain uncertainty. Later runs correct outdated notes and record sources. Proven butler output never becomes owner-style training evidence. No global person model or cross-contact retrieval is supplied by default.
+The owner picks one verified direct or group conversation from a list GhostGet returns. Groups require GhostGet's negotiated group-conversation extension and a complete participant list. Enrollment rechecks the account incarnation and participant identity, then creates the contact turned off. Importing direct-conversation history is a separate opt-in, limited to 200 recent messages the owner scoped, and keeps each message's ID, time, and author. The import records what it shortened or left out, and it does not fetch media. These records are context only, and past automated messages may not be identifiable. A later initialization run on a ready provider may summarize preferences, conversational style, open tasks, and useful context into memory. It must separate what the messages show from what it infers, and keep uncertainty visible. Later runs correct outdated notes and record their sources. Messages known to come from the butler never count as examples of the owner's style. By default there is no global model of a person and no retrieval across contacts.
 
-Groups start with a fresh history epoch and do not import historical messages. Each group has its own workspace and learning state, separate from every direct chat with its members. The current automation message contract identifies incoming versus outgoing messages but does not identify individual incoming speakers. Group guidance therefore treats each incoming message as an unidentified participant’s statement, cites its message ID, and never merges participants’ preferences or grants them owner authority. Groups cannot be configured as the owner’s self chat.
+Groups start a fresh history and do not import earlier messages. Each group has its own workspace and learning state, separate from every direct chat with its members. The current automation message format marks messages as incoming or outgoing but does not identify which member sent an incoming message. Group guidance therefore treats each incoming message as a statement from an unidentified participant, cites its message ID, never merges participants' preferences, and never gives a participant owner authority. A group cannot be configured as the owner's self chat.
 
-A changed account, conversation kind, or participant roster invalidates the old binding, pauses that enrollment and revokes its standing grant. Pending drafts remain bound to the old settings and digest and cannot be sent. The owner selects the changed group again to create a fresh disabled enrollment and empty workspace; old memory remains preserved in its original workspace.
+If the account, conversation kind, or participant list changes, the old binding stops working: that enrollment pauses and its standing grant is revoked. Pending drafts stay tied to the old settings and digest and cannot be sent. The owner selects the changed group again to create a new enrollment, turned off, with an empty workspace. The old memory stays in its original workspace.
 
-The original Message Like Me corpus and profile tools remain an optional bounded bootstrap source. They do not become the live message transport. Old databases are not reset or silently migrated.
+The history-reader tools published from this repository's root package can still supply optional starting context, within their own limits. They never carry live messages, and their databases are not reset or migrated.
 
-## Reply admission
+## When the butler replies
 
-Default contact mode is keyword, but a new contact starts disabled. Activating more than the configured limit fails atomically; no existing contact is displaced. The initial limit is five, with owner settings from one to fifty.
+A new contact starts turned off, in keyword mode. Turning on more contacts than the limit fails as a whole, and no contact that is already on gets turned off. The limit is five by default; the owner can set it between 1 and 50.
 
-An inbound event must identify one activated conversation and match its enrolled direct or group kind. Historical, butler-authored, unknown-author, reaction-only, and delivery events do not start reply runs. Owner-authored messages start a run only with an explicit keyword invocation. Persisted event identity prevents a duplicate send. One run may own a contact at a time.
+An incoming event starts a reply run only when it belongs to one turned-on conversation and matches that enrollment's direct or group kind. Historical, butler-authored, unknown-author, reaction-only, and delivery events never start a run. The owner's own messages start a run only when they include the keyword. A stored event identity prevents duplicate sends. Only one run can act for a contact at a time.
 
-The daemon waits eight seconds after an incoming message to collect a burst. Newer messages supersede older candidates. Owner typing suppresses a reply when that signal exists. Any recent owner message causes a five-minute cooldown. The runtime checks current messages and settings again after composition. Disabling a contact or pressing global pause cancels pending runs and invalidates their grants.
+The daemon waits eight seconds after an incoming message to collect a burst, and newer messages replace older candidates. When an adapter reports that the owner is typing, the butler stays silent. Any recent owner message starts a five-minute cooldown. After composing, the daemon checks current messages and settings again. Turning a contact off or pausing everything cancels pending runs and invalidates their grants.
 
-A whole-word, case-insensitive `butler` invocation permits a response after those deterministic gates. In keyword mode, other messages stay silent. In smart mode, a tool-free cheap model returns a strict structured classification. It should answer useful assistance requests, and stay silent during ordinary conversation, acknowledgments, emotional exchanges, or uncertain intent. Confidence below 0.85 stays silent. Malformed results, exhausted accounts, stale model catalogs, or timeouts never escalate to a more expensive agent automatically.
+A whole-word, case-insensitive `butler` in the message lets the butler respond once those fixed checks pass. In keyword mode, every other message gets no reply. In smart mode, a cheap model with no tools returns a strict structured classification. It should answer useful requests for help and stay silent during ordinary conversation, acknowledgments, emotional exchanges, or unclear intent. Confidence below 0.85 means silence. A malformed result, exhausted account, stale model catalog, or timeout never falls through to a more expensive agent.
 
-The xcb subscription route uses the owner-selected full model key for classification and replies; a subscription model is not assigned invented API prices. The separately billed API route selects its classifier from fresh availability and explicit cost metadata. Classifier and responder share the chosen provider/account policy, and classification receives no operation authority.
+On the xcb subscription route, the owner-selected full model key handles both classification and replies, and no invented API prices are assigned to a subscription model. The separately billed API route picks its classifier from current availability and its listed costs. Classifier and responder use the same provider and account, and the classifier cannot perform any operation.
 
-No typing signal can prove the owner is absent. The current adapters expose no typing signal; the daemon retains its message-based cooldown and final revision checks. The selected provider/account must independently qualify before smart mode can invoke a model.
+No typing signal can prove the owner is away, and the current adapters expose none. The daemon relies on its message-based cooldown and a final revision check instead. Smart mode calls a model only after the selected provider and account pass their own checks.
 
 ## Send transaction and disclosure
 
-The model proposes actions. It does not dispatch them. Owner-installed hooks may shape the work or veto a reply, but all action validation, contact binding, limits, and disclosure run afterwards.
+The model proposes actions; it never sends them. Owner-installed hooks may shape the work or veto a reply, but action validation, contact binding, limits, and disclosure all run after the hooks.
 
-Every text action is wrapped by trusted code with the contact's three symbols. Each field is either cleared (empty) or exactly one visible grapheme; invisible or multi-grapheme fields are rejected. Default rendering is `🤖{ hello this is my response }`. Clearing all three fields removes the visible wrap entirely and sends plain text.
+Trusted code wraps every text action in the contact's three disclosure symbols. Each symbol is either empty or exactly one visible grapheme; invisible or multi-grapheme symbols are rejected. By default a reply reads `🤖{ hello this is my response }`. Clearing all three symbols removes the visible wrap and sends plain text.
 
-Clearing disclosure never makes butler output indistinguishable internally. The transport reports the provider-accepted message IDs for every submitted action, and the daemon records them in a private `sent_messages` journal table. Each row carries a provenance, `butler` or `operator`. History and attribution classify an outgoing message through that journal first: `butler` rows are butler output and `operator` rows are the owner's own words, even when they quote the wrap. Only unjournaled text in the configured visible wrap, from sends that predate the journal, falls back to butler. The history readers themselves mark every outgoing message owner-authored and leave classification to the journal. A cleared wrap simply has no visible form; provenance stays exact.
+Clearing disclosure never hides butler output from TextButler itself. The transport reports the message IDs the provider accepted for every submitted action, and the daemon records them in a private `sent_messages` journal table. Each row is marked `butler` or `operator`. History and attribution check that journal first: `butler` rows are butler output and `operator` rows are the owner's own words, even when they quote the wrap. Only text that predates the journal and sits inside the configured visible wrap falls back to being treated as butler output. The history readers mark every outgoing message as owner-authored and leave classification to the journal. With the wrap cleared, the journal still records exactly who wrote each message.
 
-Reactions, stickers, link previews, and app cards cannot literally carry that text prefix. When visible markers remain configured, a disclosed text companion is therefore the first action in a nontext response, and counts toward the eight-action maximum. With disclosure fully cleared the companion would be unexplained extra text and is not added. The provider must execute in order and stop if that companion fails. App-specific cards may additionally identify TextButler in their content, but never remove the companion requirement.
+Reactions, stickers, link previews, and app cards cannot carry a text prefix. While visible markers are configured, a disclosed text companion therefore goes first in any response that is not plain text, and it counts toward the eight-action maximum. With disclosure fully cleared, the companion would be unexplained extra text, so it is not added. The provider must run actions in order and stop if the companion fails. App cards may also name TextButler in their content, but that never replaces the companion.
 
-Before send, the runtime rechecks owner activity, conversation revision, current settings, capability availability, cancellation, attachment ownership, target message membership, and the contact grant. It asks the transport to prepare an exact plan with an expiry and digest. Immediately before submission, it journals the dispatch intent. The transport must atomically validate the grant, contact route, context revision, and plan digest at its own effect boundary.
+Before sending, the daemon rechecks owner activity, the conversation revision, current settings, capability availability, cancellation, attachment ownership, that the target message is in the conversation, and the contact's grant. It asks the transport to prepare an exact plan with an expiry and digest, and records the send intent in the journal immediately before submitting. The transport must check the grant, contact route, context revision, and plan digest together at the moment it sends.
 
-`submitted` is not `delivered`. Partial and indeterminate outcomes pause further automated activity for that contact until explicit reconciliation. A crash while dispatching becomes indeterminate on recovery; it never causes a blind retry. A crash before dispatch abandons the run without sending. Provider failover cannot replay a possibly submitted action.
+`submitted` is not `delivered`. A partial or indeterminate result pauses further automated activity for that contact until the outcome is reconciled. A crash during sending becomes indeterminate on recovery and never causes a blind retry. A crash before sending abandons the run without sending. Switching providers cannot resend an action that may already have gone out.
 
 ## Owner reply triage
 
-The same machinery serves an explicit owner workflow that is distinct from automatic replies. `textbutler inbox` (or **Inbox & replies** in the guided terminal) runs a bounded read-only pass over every enrolled conversation and reports each trailing run of unanswered inbound messages: the contact, a bounded sanitized preview, the pending count, whether a send is currently possible, and why not when it is not. The automatic loop's live observations feed the same view, so the inbox reflects what the daemon already saw between scans.
+The same machinery serves a manual owner workflow, separate from automatic replies. `textbutler inbox` (or **Inbox & replies** in the guided terminal) runs a read-only pass over every enrolled conversation and lists each run of unanswered incoming messages: the contact, a short sanitized preview, the pending count, whether a send is possible now, and why not when it isn't. The automatic loop's live observations feed the same view, so the inbox shows what the daemon already saw between scans.
 
-`textbutler replies suggest CONTACT` asks the contact's configured agent to draft a reply for that pending run. A suggestion is a bounded draft with a fifteen-minute expiry: summary, exact proposed actions, and the disclosed preview the send would carry. It never dispatches. Drafts bind the conversation revision and disclosure settings they were created against; a stale context, changed disclosure, or expired draft is rejected rather than silently sent.
+`textbutler replies suggest CONTACT` asks the contact's configured agent to draft a reply to that pending run. A suggestion is a draft that expires after 15 minutes. It holds a summary, the exact proposed actions, and the disclosed preview the send would carry, and it never sends anything. A draft is tied to the conversation revision and disclosure settings it was created with; a changed context, changed disclosure, or expired draft is rejected instead of being sent.
 
-`textbutler replies show DRAFT` exposes every ordered disclosed action, exact recipient, attachment hash and review digest. `textbutler replies send DRAFT DIGEST` sends only that exact reviewed draft, and `textbutler replies send CONTACT TEXT...` sends literal owner text through the identical grant, plan, journal, disclosure and reconciliation discipline as an automatic reply. `textbutler replies discard DRAFT` drops a suggestion. Complete review and digest-bound sending happen in the terminal or CLI.
+`textbutler replies show DRAFT` shows every disclosed action in order, the exact recipient, attachment hashes, and the review digest. `textbutler replies send DRAFT DIGEST` sends only that reviewed draft. `textbutler replies send CONTACT TEXT...` sends literal owner text through the same grant, plan, journal, disclosure, and reconciliation steps as an automatic reply. `textbutler replies discard DRAFT` drops a suggestion. Full review and digest-checked sending happen in the terminal or CLI.
 
-An owner send reuses the contact's live standing grant when it covers the needed action kinds with remaining quota. Otherwise the daemon issues a tightly scoped grant: only the specific action kinds, ten-minute expiry, quota equal to the action count. The scoped grant is journaled with intent and pending state, published to the conversation, and revoked after the send when the contact is disabled. One serialized work registration covers grant issuance and dispatch together so delegated renewal and disable-revocation cannot race an in-flight send. The agent never sees this surface; it has no send authority in either direction.
+An owner send reuses the contact's live standing grant when it covers the needed action kinds and has quota left. Otherwise the daemon issues a narrow grant: only the needed action kinds, a ten-minute expiry, and a quota equal to the number of actions. The daemon journals that grant's intent and pending state, publishes it to the conversation, and revokes it after the send if the contact is turned off. Grant issue and sending are registered as one serialized unit of work, so grant renewal and revocation on disable cannot interfere with a send in progress. The agent never sees this path and has no authority to send.
 
-An operator send is the owner's own text, sent verbatim through the same grant, plan, journal and reconciliation path with no disclosure wrap. It is only reachable through an explicit `operator` field on `replies.send`, which `textbutler campaign run` uses; the butler, the agent and the default `replies send` path cannot set it. It needs an idempotency key: the run is claimed under `operator:KEY`, so a repeated key reports the first outcome and never dispatches again, and a `replayOnly` request reads that outcome without sending. A run abandoned before dispatch may be retried under the same key. The requested `minimumIntervalMs` is passed through the scoped grant so the transport enforces pacing at its own boundary. Accepted message IDs are journaled with provenance `operator`, not `butler`: they count as owner-authored for history, style evidence and loop detection, end a pending run like any owner reply, and are not counted against `maxRepliesPerHour`. Because an operator send has no visible marker, history cannot prove one landed; an uncertain operator send is resolved only by the owner's `--sent` or `--failed` attestation. Operator runs are kept for 400 days rather than 90 so their keys stay exactly-once. The `origin` column is added in place; a journal opened by this build should not be reopened by an older build, whose four-value insert would fail after a successful send.
+An operator send is the owner's own text, sent word for word through the same grant, plan, journal, and reconciliation path with no disclosure wrap. Only an explicit `operator` field on `replies.send` reaches it, and `textbutler campaign run` sets that field; the butler, the agent, and the default `replies send` path cannot. Each operator send needs an idempotency key. The run is claimed under `operator:KEY`, so a repeated key reports the first outcome and never sends again, and a `replayOnly` request reads that outcome without sending. A run abandoned before sending may be retried under the same key. The requested `minimumIntervalMs` travels in the narrow grant, so the transport enforces the pacing itself. Accepted message IDs are journaled as `operator`, not `butler`. They count as owner-authored for history, style examples, and loop detection, they end a pending run like any owner reply, and they don't count toward `maxRepliesPerHour`. Because an operator send has no visible marker, history cannot prove one arrived; an uncertain operator send is resolved only when the owner records `--sent` or `--failed`. Operator runs are kept for 400 days instead of 90 so each key sends at most once. The `origin` column is added to the existing journal; don't reopen a journal this build has opened with an older build, whose four-value insert would fail after a successful send.
 
-`replies.send` returns `submitted`, `failed`, `partial`, `cancelled`, or `indeterminate`. An indeterminate owner send blocks the next reply for that contact, automatic or owner-initiated, until the journaled intent is reconciled, exactly like an automatic send.
+`replies.send` returns `submitted`, `failed`, `partial`, `cancelled`, or `indeterminate`. An indeterminate owner send blocks the next reply for that contact, automatic or manual, until its journaled intent is reconciled, the same as an automatic send.
 
 ## Contact habitats
 
-When the owner enables `habitat` in `host.json`, each enrolled conversation gets an isolated habitat: a bounded, durable learning state stored in the private run journal, plus a fast reply driver and a slower background evolver. Habitat state is never shared between conversations; two threads with the same person keep separate habitats.
+When the owner enables `habitat` in `host.json`, each enrolled conversation gets its own habitat: a size-limited, durable learning state stored in the private run journal, plus a fast reply driver and a slower background evolver. Habitats are never shared between conversations, so two threads with the same person keep separate habitats.
 
-The fast driver answers ordinary replies with one bounded model call instead of the multi-turn subscription loop. The default route is Qwen 3.5 Flash through the owner's Vercel AI Gateway key with reasoning disabled, capped at $1 a day. `providers gateway-key` stores that key owner-only as `state/provider-credentials/vercel-ai-gateway`; with no `habitat` block in `state/host.json`, an admitted build then runs this writer by default, and a contact can be turned on without a subscription account. An explicit `habitat` block takes precedence, including `"enabled": false`, and a local OpenAI-compatible endpoint is the alternative route. Prompt, context, output and wall-clock budgets are fixed in code. A classified response and its composition share the same inference, and follow-up learning starts only after the transport accepts a submitted reply, never on a draft.
+The fast driver answers ordinary replies with one model call instead of the multi-turn subscription loop. By default it uses Qwen 3.5 Flash through the owner's Vercel AI Gateway key with reasoning turned off, capped at $1 a day. `providers gateway-key` saves that key, readable only by the owner, as `state/provider-credentials/vercel-ai-gateway`. With no `habitat` block in `state/host.json`, a verified local build then uses this writer by default, and a contact can be turned on without a subscription account. An explicit `habitat` block takes precedence, including `"enabled": false`, and a local OpenAI-compatible endpoint is the other route. Prompt, context, output, and wall-clock limits are fixed in code. Classification and composition share one model call, and follow-up learning starts only after the transport accepts a submitted reply, never on a draft.
 
-Each contact's plan defines its guidance, humor, context size and reply length. An optional `soulCore` holds owner-authored voice, relationship context, shared context and boundaries; it is an anchor, not a model-editable personality. The learned personality only changes tone (`neutral`, `warm`, `playful` or `direct`) and formality (`casual`, `balanced` or `formal`). This follows SOUL.md's useful separation between voice and operating authority: learned text never grants tools, changes disclosure or invents a relationship. The owner can set a starting plan with `textbutler habitats configure CONTACT REVISION JSON` while automation is paused. `habitats show CONTACT` returns the current revision and plan. Configuration records the preceding plan and starts a new rollback history, so rollback cannot restore tools the owner has disabled.
+Each contact's plan sets its guidance, humor, context size, and reply length. An optional `soulCore` holds owner-written voice, relationship context, shared context, and boundaries. It is a fixed anchor that the model cannot edit. The learned personality changes only tone (`neutral`, `warm`, `playful`, or `direct`) and formality (`casual`, `balanced`, or `formal`). This follows SOUL.md's useful separation between voice and permission to act: learned text never grants tools, changes disclosure, or invents a relationship. While automation is paused, the owner can set a starting plan with `textbutler habitats configure CONTACT REVISION JSON`. `habitats show CONTACT` returns the current revision and plan. Configuring records the previous plan and starts a new rollback history, so rollback cannot restore tools the owner has turned off.
 
-The same reflection can select useful source message IDs for durable contact memory. Trusted code resolves them to observed owner or contact messages and retains up to 64 attributed excerpts of 1 KiB each under a 96 KiB encoded-byte cap, with digests of bounded canonical observations and explicit truncation. Optional categories distinguish preferences, shared references, open loops and context; they label evidence but do not establish relationship claims. Reflection applies bounded additions, reclassifications and forgets instead of replacing the ledger. It rejects invented or ambiguous sources and evicts the oldest entries deterministically at capacity. A local lexical `memory-search` retrieves up to eight relevant notes from only that contact; the full archive is never copied into every prompt. Each submitted episode snapshots at most eight 512-byte notes and records source digests for up to 24 additional notes exposed during tool steps. These remain untrusted statements, separate from `soulCore` and existing `MEMORY.md`. The owner can inspect it with `habitats show` or clear it with `habitats memory-clear CONTACT REVISION` while paused. Clearing advances an observation cutoff and cancels pending learning, so old observations cannot immediately restore the cleared excerpts. Historical records and `MEMORY.md` remain retained; personality rollback does not rewind memory.
+The same reflection step can pick source message IDs worth keeping in the contact's memory. Trusted code matches them to observed owner or contact messages and keeps up to 64 attributed excerpts of 1 KiB each, within a 96 KiB encoded total, with digests of the observations they came from and a flag on anything truncated. Optional categories (preferences, shared references, open loops, and context) label excerpts but don't establish facts about the relationship. Reflection adds, recategorizes, or forgets individual entries instead of replacing the whole list. It rejects invented or ambiguous sources, and at capacity it removes the oldest entries first. A local word-matching `memory-search` returns up to eight relevant notes from that contact only; the full archive never goes into every prompt. Each submitted reply records at most eight 512-byte notes it was shown, plus source digests for up to 24 more notes that tool steps exposed. These notes remain untrusted statements, separate from `soulCore` and the existing `MEMORY.md`. While paused, the owner can inspect memory with `habitats show` or clear it with `habitats memory-clear CONTACT REVISION`. Clearing moves an observation cutoff forward and cancels pending learning, so older observations cannot immediately restore the cleared excerpts. Historical records and `MEMORY.md` are kept, and personality rollback does not rewind memory.
 
-Evolution runs in the background when the contact is idle. It reviews the reply's purpose, tool results and later messages or reactions, then proposes a candidate personality and response strategy. It compares the current and candidate plans on two retained cases with blinded ordering and asks a separate judge for scores. A candidate needs cited follow-up evidence, acceptable behavior on every case, no lower score on either case, and an average improvement of at least 0.1. Silence alone cannot improve its score. The comparison generates text only; recorded tool results describe the submitted reply, and no tools run during replay. It does not measure whether a candidate would choose better tools. Recent ALGAL execution records remain in the private journal for replay, with the oldest removed after 32 records per contact.
+Evolution runs in the background while the contact is idle. It reviews the reply's purpose, tool results, and later messages or reactions, then proposes a candidate personality and response strategy. It compares the current and candidate plans on two saved cases in blinded order and asks a separate judge to score them. A candidate is adopted only with cited follow-up evidence, acceptable behavior on every case, no lower score on either case, and an average improvement of at least 0.1. Silence alone cannot raise a score. The comparison only generates text: recorded tool results describe the submitted reply, and no tools run during replay, so it cannot tell whether a candidate would choose better tools. The private journal keeps recent ALGAL execution records for replay and drops the oldest beyond 32 per contact.
 
-The reply, reflection and judge programs use ALGAL's task authoring API and compile to ordinary replayable organisms. Their prompts, input and output checks, provider deadlines and one-call limits remain host-controlled. Cancellation waits for provider cleanup; an uncertain attempt is never repeated automatically.
+The reply, reflection, and judge programs are written with ALGAL's task authoring API and compile to ordinary replayable programs. The host keeps control of their prompts, input and output checks, provider deadlines, and one-call limits. Cancellation waits for the provider to clean up, and an attempt with an uncertain result is never repeated automatically.
 
-An owner may stage a portable `algal.evaluated-task.v1` response task for explicit
-shadow evaluation with `textbutler habitats task-stage CONTACT REVISION FILE`
-while automatic replies are paused. The private JSON file contains `artifact`
-and its complete `archive`. Admission replays that archive without a provider,
-binds its selected task and dataset, and requires the current host task's exact
-base identity, inputs, output contract, routes and budgets. Evaluation references
-alone are insufficient. The contact retains at most two 64 KiB artifacts under
-its existing state limit; staging fails rather than evicting reply episodes.
-Archives must fit the 768 KiB admission limit and remain in the owner's private
-study directory for later audit.
+### Shadow tasks
 
-`habitats show` reports the artifact and archive digests, readiness and the
-explicit `activeForReplies: false` status. The ordinary reply driver continues
-using its current host task. The separate `executeHabitatShadow` host entrypoint
-returns output and a receipt without a messaging operation. It is never invoked
-automatically by staging. Owner plan changes make a staged artifact stale;
-conditional `habitats task-rollback CONTACT REVISION` restores its predecessor
-and records a bounded rollback tombstone. None of these commands changes a
-contact's permissions, provider, disclosure, memory or live champion. Receipt
-replay establishes recorded execution, not annotation truth or improved quality.
+While automatic replies are paused, an owner may stage a portable `algal.evaluated-task.v1` response task for explicit shadow evaluation with `textbutler habitats task-stage CONTACT REVISION FILE`. The private JSON file contains `artifact` and its complete `archive`. Staging replays that archive without a provider, ties it to its selected task and dataset, and requires the current host task's base identity, inputs, output format, routes, and limits to match exactly. Evaluation references alone are not enough. A contact keeps at most two 64 KiB artifacts within its existing state limit; staging fails instead of evicting reply episodes. Archives must fit the 768 KiB staging limit and stay in the owner's private study folder for later audit.
 
-`habitats show` also carries a `status` record in the shared
-`algal.host-lifecycle.v1` vocabulary: a paused lane reads `suspended`, an
-unresolved send reads `uncertain` with its journaled intent retained, and a
-staged artifact a newer owner plan superseded is marked `stale` beside the
-record. The record is read-only evidence. It never sends, retries or changes
-anything; `uncertain` asks the owner to reconcile, never to retry.
+Imported shadow tasks must contain no conversation examples. Labeled research artifacts stay private and cannot be installed into a contact habitat until the host can verify that every example belongs to that contact. Shadow evaluation enforces the same rule before calling an executor.
 
-The explicit source command `bun scripts/export-textbutler-study.ts --journal
-ABSOLUTE_PRIVATE_JOURNAL --out NEW_PRIVATE_FILE` captures up to 128 retained
-response inferences for the ALGAL Lab importer. It opens the existing journal
-read-only, includes source digests and complete replay evidence, omits records
-without a current habitat base, and reports omissions. It does not read provider
-credentials or infer labels from recorded model decisions. Independent annotation
-and conversation-group freezing are required before any effectiveness comparison.
+`habitats show` reports the artifact and archive digests, readiness, and `activeForReplies: false`. The ordinary reply driver keeps using its current host task. The separate `executeHabitatShadow` host entry point returns output and an execution record without sending any message, and staging never calls it automatically. Owner plan changes make a staged artifact stale. `habitats task-rollback CONTACT REVISION` restores the previous artifact if the revision matches and records a small rollback marker. None of these commands changes a contact's permissions, provider, disclosure, memory, or live plan. Replaying an execution record shows what ran; it doesn't show that annotations are correct or that quality improved.
 
-`textbutler habitats show CONTACT` includes an `operations` list. It shows eligible or waiting checkpoints, live evaluations, retained or promoted outcomes, reasons and available receipt IDs. A claimed checkpoint without a live evaluator is marked `uncertain`; that does not establish whether its provider call completed. Cancellation is shown as `requested` only while the current evaluator reports an aborted signal. It is `unknown` in other cases, including after the live observation is gone. This view reads existing state and does not authorize retries. The response reports omitted entries if its size limit requires trimming.
+`habitats show` also includes a `status` record in the shared `algal.host-lifecycle.v1` vocabulary. A paused contact reads `suspended`. An unresolved send reads `uncertain` and keeps its journaled intent. A staged artifact replaced by a newer owner plan is marked `stale`. The record is read-only. It never sends, retries, or changes anything, and `uncertain` asks the owner to reconcile, not to retry.
 
-Learning can change personality, guidance, context size, reply length and humor. The owner controls the plan's `webSearch`, `memeSearch`, `historySearch` and `javascript` flags; evolution cannot change them. JavaScript is disabled by default. When enabled, each call uses a fresh QuickJS WebAssembly runtime, receives copied JSON only, and has no host functions, module loader, filesystem, network, timers or contact objects. Code, input, output, heap, stack and CPU are bounded; tool evidence retains only a SHA-256 code digest and a bounded JSON result. Its purpose is pure data transformation, not messaging or memory mutation. `memorySearch` is a local read-only tool scoped to this contact. Owner edits and rollback invalidate pending replies and learning for that contact. Already-started sends finish through the normal send journal. `habitats rollback CONTACT REVISION` restores a learned ancestor from the current owner configuration while automation is paused.
+The source command `bun scripts/export-textbutler-study.ts --journal ABSOLUTE_PRIVATE_JOURNAL --out NEW_PRIVATE_FILE` exports up to 128 saved response inferences for the ALGAL Lab importer. It opens the journal read-only, includes source digests and complete replay data, leaves out records without a current habitat base, and reports what it left out. It does not read provider credentials or infer labels from recorded model decisions. Independent annotation and fixed conversation groups are required before comparing effectiveness.
 
-The host runs each permitted tool. Web search uses the gateway's server-side Exa tool. Queries are checked against the private corpus for identifier shapes, verbatim spans and proper nouns; returned excerpts are untrusted. History search pages backwards through the replying conversation's full local history — never another contact's — with plain-text queries, inclusive local dates, an author filter and a bounded excerpt per match; it is on for the owner's self chat and off elsewhere unless the plan enables it. Meme tools are enabled in the default plan. They match a bounded public Imgflip catalog locally, accept only known template images after byte and signature validation, and never upload conversation text or captions. A submitted reply records up to two tool queries and shortened results for later review. Billed calls reserve against a global daily budget in the journal before dispatch; provider-reported generation costs settle each reservation to its actual amount, and ambiguous outcomes retain the conservative reservation with no retry. The production gateway key itself also carries a provider-enforced daily quota.
+`textbutler habitats show CONTACT` includes an `operations` list. It shows eligible or waiting checkpoints, live evaluations, kept or adopted outcomes, reasons, and any available execution record IDs. A claimed checkpoint without a live evaluator is marked `uncertain`, which doesn't say whether its provider call finished. Cancellation shows as `requested` only while the current evaluator reports an aborted signal, and as `unknown` otherwise, including after the live observation ends. This view reads existing state and does not authorize retries. If the response has to be trimmed to fit its size limit, it reports the omitted entries.
+
+### Tools
+
+Learning can change personality, guidance, context size, reply length, and humor. The owner controls the plan's `webSearch`, `memeSearch`, `historySearch`, and `javascript` flags; evolution cannot change them. JavaScript is off by default. When it's on, each call runs in a fresh QuickJS WebAssembly runtime, receives only copied JSON, and has no host functions, module loader, file system, network, timers, or contact objects. Code, input, output, heap, stack, and CPU are all limited, and the tool record keeps only a SHA-256 code digest and a size-limited JSON result. It exists for pure data transformation, not messaging or memory changes. `memorySearch` is a local read-only tool scoped to this contact. Owner edits and rollback invalidate pending replies and learning for that contact; sends already under way finish through the normal send journal. While automation is paused, `habitats rollback CONTACT REVISION` restores a learned earlier plan from the current owner configuration.
+
+The host runs each permitted tool. Web search uses the gateway's server-side Exa tool. Queries are checked against the private messages for identifier shapes, verbatim spans, and proper nouns, and returned excerpts are untrusted. History search pages backward through the replying conversation's full local history, never another contact's, with plain-text queries, inclusive local dates, an author filter, and a short excerpt per match. It is on for the owner's self chat and off elsewhere unless the plan turns it on. Meme tools are on in the default plan. They match a fixed public Imgflip catalog locally, accept only known template images after checking bytes and signatures, and never upload conversation text or captions. A submitted reply records up to two tool queries and shortened results for later review. Billed calls reserve against a global daily budget in the journal before they run. The provider's reported cost then replaces each reservation with the actual amount, and an ambiguous outcome keeps the conservative reservation without retrying. The production gateway key also carries a daily quota enforced by the provider.
+
+### Exact reply context
+
+The contact agent can use `context-query` to read the original instructions, guidance, selected history and memory, and earlier tool results for its current reply. This keeps the initial prompt small while the original bytes stay available through literal search and UTF-8 slices of at most 2,048 bytes. The host chooses the entries before giving the model a query interface. Queries cannot select another contact, a file path, or an arbitrary content digest.
+
+These reads share the reply's existing limit of two tool calls and three model calls. Revoking the contact cancels access, and the tool record keeps a query digest. Reading context proposes no message and changes no contact settings.
 
 ## Hooks and plugins
 
-The initial lifecycle is `message.received`, `reply.decide`, `reply.compose`, `reply.before-send`, `reply.sent`, `memory.updated`, and `run.failed`. Hooks have a named/versioned owner-installed extension, deterministic registration order, a deadline, and a cancellation signal. Failure before dispatch closes admission. A notification-hook failure after a receipt cannot change that receipt or trigger resend.
+The initial lifecycle is `message.received`, `reply.decide`, `reply.compose`, `reply.before-send`, `reply.sent`, `memory.updated`, and `run.failed`. Each hook comes from a named, versioned, owner-installed extension and has a fixed registration order, a deadline, and a cancellation signal. A hook failure before sending stops the reply. A notification-hook failure after a send cannot change the recorded result or trigger a resend.
 
-Executable extensions are application code with the daemon's trust. They are installed outside contact folders; the agent cannot write them or turn message text into imports. Agent self-evolution means revising guidance and memory, not installing executable code. A future untrusted plugin mode needs its own process or language sandbox and explicit capabilities. In-process hooks are never described as a plugin security boundary.
+Executable extensions are application code with the daemon's trust. They live outside contact folders; the agent cannot write them or turn message text into imports. Agent self-evolution means revising guidance and memory, never installing executable code. A future untrusted plugin mode would need its own process or language sandbox with explicit permissions. In-process hooks are never described as a security boundary.
 
-The daemon reads a bounded private `plugins/extensions.json` manifest and preflights its complete inventory before importing listed TypeScript/JavaScript entry modules. Each default export must match the manifest ID/version and known hook names. Source digests appear in the loaded extension metadata. No directory scanning, package installation or hot reload occurs; changes require a full daemon process restart. The routed agent emits `memory.updated` only after a successful conditional write, with its path and committed revision. A notification failure does not undo that write or replay it.
+The daemon reads a size-limited private `plugins/extensions.json` list and checks every entry before importing the listed TypeScript or JavaScript entry modules. Each default export must match its listed ID and version and use known hook names. Source digests appear in the loaded extension metadata. The daemon never scans directories, installs packages, or hot-reloads; changes require a full daemon restart. The routed agent emits `memory.updated` only after a successful conditional write, with its path and committed revision. A notification failure does not undo or replay that write.
 
-## xcb application contract
+## How TextButler uses xcb
 
-TextButler is an MIT-licensed reference application for
-[xcb](https://github.com/hraness/xcb). AI execution requires a verified TextButler
-bundle whose build validates independently reviewed composition evidence against
-current source bytes and both contact capability profiles. The build embeds
-this application admission separately from xcb's provider admission. Source
-daemon startup carries no composition admission and cannot enable this route. The native `generate` process provides a
-bounded application request/result interface over stdin and stdout. The owner
-pins the physical xcb executable and selects an explicit private state root,
-subscription account and full model key. xcb and the provider executables are
-separate installations; contact memory cannot edit their configuration.
+TextButler is an MIT-licensed reference application for [xcb](https://github.com/hraness/xcb). AI replies require a verified TextButler bundle. Its build checks the current source files and both contact permission profiles against an independently reviewed record in `qualification/`, and embeds that approval separately from xcb's own provider checks. A daemon started from source has no such approval and cannot use this route. The native `generate` process offers a size-limited request and result interface over stdin and stdout. The owner pins the xcb executable file and chooses a private state directory, subscription account, and full model key. xcb and the provider executables are separate installations, and contact memory cannot edit their configuration.
 
-xcb generates with zero provider tools and no inherited coding session. It owns
-provider credentials, runtime admission, operating-system confinement and
-process cleanup. TextButler sends bounded contact context, validates the
-structured response and accepts output only with a settled execution receipt.
-A hash match or a root process exit alone cannot establish this receipt.
-Uncertain cleanup preserves custody and blocks another invocation.
+xcb generates with no provider tools and no inherited coding session. It holds provider credentials, decides which runtimes may run, applies operating-system confinement, and cleans up processes. TextButler sends limited contact context, validates the structured response, and accepts output only once xcb confirms the provider process has finished. A matching hash or the root process exiting is not enough to confirm that. If cleanup is uncertain, the account stays locked and no further call starts.
 
-For replies, the model can propose a TextButler operation. The application
-validates the exact operation and closed input, calls its contact-bound broker,
-and includes a bounded result in the next inference step. Classification
-advertises no operations. The native provider never receives a filesystem or
-messaging tool. The [subscription guide](native-subscription.md) documents setup,
-limits and recovery. Credentials remain in xcb; grant and send authority remain
-in TextButler and GhostGet.
+For replies, the model can propose a TextButler operation. TextButler validates the exact operation and its fixed inputs, calls its contact-bound broker, and includes a shortened result in the next inference step. Classification offers no operations. The native provider never receives a file system or messaging tool. The [subscription guide](native-subscription.md) covers setup, limits, and recovery. Credentials stay in xcb; grants and sending stay in TextButler and GhostGet.
 
-The retained AgentMixer compatibility library supplies shared application types
-and broker helpers. Its historical package identity remains pinned for
-reproducible builds; applications need not import private xcb internals or share
-a source checkout. The native process contract is the subscription boundary.
+The AgentMixer compatibility library supplies shared application types and broker helpers. Its historical package name stays pinned for reproducible builds. Applications don't need to import private xcb internals or share a source checkout; the native process interface is the subscription boundary.
 
-A separately selected Claude API adapter executes a bounded tool loop in the
-trusted host. That route still requires independent packaged-runtime admission,
-an explicit API credential and current model/price evidence. Neither source
-startup nor local distribution integrity provides this admission, and an xcb
-subscription failure cannot switch to API billing.
+A separately selected Claude API adapter runs a limited tool loop in the trusted host. That route still needs its own review of the packaged runtime, an explicit API credential, and current model and price information. Neither starting from source nor a verified local build provides that review, and an xcb subscription failure can never switch to API billing.
 
-The model receives a fixed contact/workspace identity and run ID. File
-operations are brokered and conditional. Public web requests are bounded and
-cannot reach private networks, local sockets or cloud metadata through DNS or
-redirects. Messaging operations stage recipient-bound intents. Credential and
-account controls are never model tools.
+The model receives a fixed contact and workspace identity and a run ID. File operations go through the broker and are conditional. Public web requests are limited and cannot reach private networks, local sockets, or cloud metadata through DNS or redirects. Messaging operations create intents tied to one recipient. Credential and account controls are never model tools.
 
-## GhostGet contract and rich features
+## GhostGet and rich features
 
-WhatsApp follows the same GhostGet ownership boundary. Its private wacli-backed transport provides durable observations and recipient-bound actions; pairing, session state and synchronization stay in GhostGet. The [WhatsApp guide](whatsapp.md) describes setup and action support. TextButler does not embed WPPConnect or invoke wacli directly.
+WhatsApp follows the same split: GhostGet does the messaging work. Its private wacli-based transport provides durable observations and recipient-bound actions, and pairing, session state, and sync stay in GhostGet. The [WhatsApp guide](whatsapp.md) covers setup and supported actions. TextButler does not embed WPPConnect or call wacli directly.
 
-GhostGet owns its provider process and private control socket; TextButler consumes only GhostGet's documented CLI and automation contracts.
+GhostGet runs its own provider process and private control socket. TextButler uses only GhostGet's documented CLI and automation protocol.
 
-Group discovery uses the [versioned group-conversation extension](ghostget-contract.md#group-conversation-extension). Existing direct-conversation bindings and older direct-only clients retain their contract.
+Group discovery uses the [versioned group-conversation extension](ghostget-contract.md#group-conversation-extension). Existing direct-conversation bindings and older direct-only clients keep their current behavior.
 
-The older generic messaging APIs retain expiring route references and owner-confirmed previews. Automation uses a separate explicit owner protocol with durable enrollment, revocable grants and event observations. The iMessage provider negotiates attachments, reactions, stickers, rich links and polls separately; unsupported App Clips and arbitrary experiences remain unavailable. Native Contacts directory discovery is not implemented in this protocol.
+The older generic messaging APIs keep expiring route references and owner-confirmed previews. Automation uses a separate owner protocol with durable enrollment, revocable grants, and event observations. The iMessage provider negotiates attachments, reactions, stickers, rich links, and polls separately; App Clips and arbitrary experiences are not supported. This protocol does not discover contacts from the native Contacts directory.
 
-Text and file sending use the native helper's AppleScript path. The upstream rich-action bridge injects into Messages and requires SIP to be disabled. TextButler and GhostGet never change that security setting or install the injection automatically. Rich actions therefore remain unavailable unless the required bridge is already working. This is a significant installation constraint, not a completed rich-messaging experience on a stock Mac.
+Text and file sending use the native helper's AppleScript path. The upstream rich-action bridge injects code into Messages and requires System Integrity Protection (SIP) to be disabled. TextButler and GhostGet never change that security setting or install the injection. Rich actions are therefore available only when that bridge already works. This is a significant installation requirement: on a stock Mac, rich messaging is not available.
 
-GhostGet 0.18.2 includes the admitted imsg `0.14.1+private-transport.3` helper. Automated rich links use `send.rich` with `fetch_metadata: false`, constructing the URL and host-title card without helper metadata or image fetching. Availability still requires current managed permission and a compatible native bridge; this does not claim network isolation for Messages itself. The host never falls back to fetching an agent-provided URL.
+GhostGet 0.18.2 includes the reviewed imsg helper `0.14.1+private-transport.3`. Automated rich links use `send.rich` with `fetch_metadata: false`, which builds the URL and host-title card without the helper fetching metadata or images. Availability still requires the current managed permission and a compatible native bridge, and this does not isolate Messages itself from the network. The host never falls back to fetching a URL the agent provided.
 
-The [GhostGet integration contract](ghostget-contract.md) documents the implemented binding, grant, event, action and receipt semantics.
+The [GhostGet integration contract](ghostget-contract.md) documents how bindings, grants, events, actions, and send results work.
 
-The TextButler transport supports capability negotiation, conversations, bounded history, cursor-based events, exact preparation, authorization and receipts. File paths become admitted bytes before crossing the boundary. Per-action permission and context checks stop a rich batch when conversation activity changes. Private database access stays inside GhostGet's provider implementation.
+The TextButler transport supports capability negotiation, conversations, limited history, cursor-based events, exact preparation, authorization, and send results. File paths are turned into checked bytes before they reach GhostGet. Per-action permission and context checks stop a rich batch when the conversation changes. Private database access stays inside GhostGet's provider implementation.
 
-Linq's documented iMessage API includes attachments, reactions, stickers, rich links, App Clips, and experiences. App cards and rich links are standalone messages. Those hosted capabilities do not establish availability through native macOS Messages. Optional Linq would be a separate transport with explicit account setup, sender identity, webhook signature verification, replay protection, and the same TextButler policy gates. It is not a way to silently route an owner's personal conversation through a different phone number.
+Linq's documented iMessage API includes attachments, reactions, stickers, rich links, App Clips, and experiences. App cards and rich links are standalone messages. Those hosted features don't make the same features available through native macOS Messages. An optional Linq route would be a separate transport with its own account setup, sender identity, webhook signature verification, replay protection, and the same TextButler policy checks. It would not quietly route an owner's personal conversation through a different phone number.
 
-GhostGet currently imports published Message Like Me bundle contracts. Keep that immutable package a leaf. Do not repoint it at the TextButler runtime. Extract the neutral bundle contracts before reversing a live package dependency, or consume GhostGet's installed CLI contract without a package import in the interim. Preserve historical wire-format identifiers.
+GhostGet currently imports the versioned local-message-bundle contracts from the separately published history-reader package. Keep that published package a leaf: don't repoint it at the TextButler runtime. Before reversing a live package dependency, move the bundle contracts into a neutral package; until then, use GhostGet's installed CLI instead of a package import. Keep historical wire-format identifiers unchanged.
 
-## Admission still required
+## Still to verify before live use
 
-1. Native `TextButler.app` iMessage setup requires exactly GhostGet 0.18.71. Install or update the configured executable, verify its version, and restart or reconnect its TextButler host so capabilities are negotiated again. This version still needs verification with the TextButler native bundle and a live iMessage account. See [current readiness](readiness.md) for available features and the account checks required before enabling replies.
-2. Use a verified TextButler bundle with reviewed composition admission and connect an admitted native xcb build through its zero-tool generation contract. Verify the exact provider/account, both classifier and reply behavior, cancellation and uncertain-custody recovery before enabling automatic replies. The separate Claude API path retains explicit account setup and packaged-runtime admission.
-3. Publish the CLI package with its pinned desktop-foundation SDK dependency and verify the package bytes. A source checkout must never trigger a build at launch.
-4. Keep historical repository and published package identities as compatibility and provenance anchors. The TextButler site is assigned to `textbutler.app`; later identity migrations must preserve immutable artifacts and existing release protections.
+1. Native `TextButler.app` iMessage setup requires exactly GhostGet 0.18.71. Install or update the configured executable, check its version, and restart or reconnect TextButler's GhostGet host so it negotiates capabilities again. This version still needs testing with the TextButler native bundle and a live iMessage account. See [readiness](readiness.md) for what works now and the account checks to run before turning on replies.
+2. Use a verified TextButler bundle with its reviewed build approval, and connect a native xcb build that passes its own checks through the zero-tool generation interface. Before turning on automatic replies, verify the exact provider and account, both classifier and reply behavior, cancellation, and recovery when an account's lock is left uncertain. The separate Claude API route keeps its own account setup and packaged-runtime review.
+3. Publish the CLI package with its pinned desktop-foundation SDK dependency and verify the package bytes. A source checkout must never start a build at launch.
+4. Keep historical repository and published package names for compatibility and traceability. The TextButler site is at `textbutler.app`; later renames must keep immutable artifacts and existing release protections intact.
 
 ## Sources
 
@@ -257,19 +212,3 @@ GhostGet currently imports published Message Like Me bundle contracts. Keep that
 - [Claude Agent SDK permissions](https://platform.claude.com/docs/en/agent-sdk/permissions): tool permission controls.
 - [Linq messages](https://docs.linqapp.com/channel/imessage/api/resources/chats/subresources/messages/): transport-specific rich message behavior.
 - [Linq reactions](https://docs.linqapp.com/channel/imessage/api/resources/messages/methods/add_reaction/): emoji and sticker reactions.
-
-Imported shadow tasks must contain no conversation examples. Labeled research artifacts stay private and cannot be installed into a contact habitat until the host can verify every example belongs to that contact. Explicit shadow evaluation enforces the same rule before calling an executor.
-
-
-### Exact reply context
-
-The contact agent can use `context-query` to read original instructions,
-guidance, selected history and memory, and earlier tool results for its current
-reply. Projection keeps the initial prompt small; the original bytes remain
-available through literal search and UTF-8 slices of at most 2,048 bytes.
-The host chooses the entries before handing the model a query interface.
-Queries cannot select another contact, file path, or arbitrary content digest.
-
-These reads share the reply's existing two-tool and three-model-call limit.
-Contact revocation cancels access, and tool evidence records a query digest.
-Reading context proposes no message and changes no contact settings.

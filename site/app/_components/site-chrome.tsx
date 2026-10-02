@@ -19,7 +19,7 @@ export function SiteHeader() {
         ariaLabel="Primary navigation"
         brand={SITE_NAME}
         brandLabel={`${SITE_NAME} home`}
-        brandMark="/marks/message-like-me.svg"
+        brandMark="/marks/textbutler.svg"
         className="site-header"
         trailing={<ThemeMenuButton aria-label="Appearance" />}
         links={[
@@ -38,19 +38,18 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
     <>
       {path === undefined ? null : (
         <AskAiAboutThis
-          className="message-like-me-ask-ai"
+          className="textbutler-ask-ai"
           url={absoluteUrl(path)}
         />
       )}
       <MarketingSiteFooter
         ariaLabel={SITE_NAME}
         brand={null}
-        brandMark="/marks/message-like-me.svg"
+        brandMark="/marks/textbutler.svg"
         brandHref="/"
         brandLabel={`${SITE_NAME} home`}
         links={[
           { href: '/about', label: 'About' },
-          { href: '/sources', label: 'Legacy history tools' },
           { href: '/docs', label: 'Docs' },
           { href: '/compare', label: 'Compare assistants' },
           { href: '/blog', label: 'Blog' },

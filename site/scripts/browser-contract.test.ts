@@ -271,7 +271,7 @@ test('presentation admission rejects missing atoms, fallback fonts, collection a
     expect(() => assertPresentation({ ...valid, layers: [standalone] }, sample)).toThrow('Shared compiled recipe union missing');
     expect(() => assertPresentation({ ...valid, layers: [...valid.layers, standalone] }, sample)).toThrow('Standalone package recipes');
   }
-  for (const path of ['/docs', '/sources', '/preview', '/blog', '/blog/introducing-textbutler']) {
+  for (const path of ['/docs', '/about', '/preview', '/blog', '/blog/introducing-textbutler']) {
     const preview = path === '/preview';
     const document = { ...valid, preset: null, renderedFonts: [{ isCustomFont: true, glyphCount: 9, postScriptName: 'NebulaSans-Medium' }],
       forms: preview ? 0 : 8, appearanceControls: preview ? [] : valid.appearanceControls, headers: preview ? 0 : 1, footers: preview ? 0 : 1, askAi: preview ? 0 : 1 };

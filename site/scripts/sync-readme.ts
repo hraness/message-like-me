@@ -16,16 +16,6 @@ const documents = [
     output: 'app/readme.generated.ts',
     exportName: 'readmeHtml',
   },
-  {
-    source: 'docs/methodology.md',
-    output: 'app/methodology.generated.ts',
-    exportName: 'methodologyHtml',
-  },
-  {
-    source: 'docs/research.md',
-    output: 'app/research.generated.ts',
-    exportName: 'researchHtml',
-  },
 ] as const;
 
 if (import.meta.main) {

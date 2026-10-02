@@ -137,16 +137,16 @@ export default function CompareGhostReplyPage() {
 
             <h2>What TextButler does</h2>
             <p>
-              TextButler is a headless macOS butler: a CLI, a guided terminal, and a background daemon,
-              with no window or menu bar icon. You turn it on per conversation across iMessage, WhatsApp,
+              TextButler runs on your Mac as a command line, a guided terminal, and a background
+              service, with no window or menu bar icon. You turn it on per conversation across iMessage, WhatsApp,
               and Beeper, and it keeps each conversation’s context in a folder of ordinary files you can
-              open and edit. New installations start paused, and new conversations start disabled.
+              open and edit. New installations start paused, and new conversations start turned off.
             </p>
             <p>
               By default its replies carry a disclosure marker:{' '}
               <code>{'🤖{ … }'}</code>, and it sends <code>{'🤖{ 👀 }'}</code> first so the other person
               knows it’s on it. You can remove the marker per conversation, never in your own chat. By
-              default the butler answers only messages that contain the word “butler”; smart mode
+              default the butler answers only messages that contain the word “butler”; Smart mode
               lets it decide when a reply is clearly wanted. A draft you review sends only in the
               version you approved. {REPLY_WRITERS_SENTENCE} The reply model can’t run commands on your Mac.
             </p>

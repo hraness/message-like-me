@@ -1,18 +1,18 @@
 # Campaigns: paced texts in your own words
 
-Campaigns send to explicitly selected direct conversations. For a group, use the
-reviewed reply workflow so its entire recipient scope is checked before sending.
-
 `textbutler campaign run` sends texts you wrote to enrolled contacts, one at a
 time, at a slow pace. You are the author, so each text goes out exactly as
 written, with no `🤖{ }` wrap. Everything the butler composes keeps its
 disclosure, and this command never runs a model.
 
-A campaign text, like any `textbutler replies send` operator text, is plain
-text from you. Its words are never read as the butler keyword or a command,
-so a text that says "butler", or a product name such as "TextButler", goes out
-unchanged and never switches the butler on, calls it, or is refused. Nothing
-is added to it: no 🤖, no `{ }`, no signature or branding.
+Campaigns send only to direct conversations you select. For a group, use the
+reply review flow so every recipient is checked before sending.
+
+A campaign text, like any operator text sent with `textbutler replies send`, is
+plain text from you. Its words are never read as the butler keyword or a
+command, so a text that says “butler”, or a product name such as “TextButler”,
+goes out unchanged and never switches the butler on, calls it, or is refused.
+Nothing is added to it: no 🤖, no `{ }`, no signature or branding.
 
 Only use it for words you wrote and would send by hand. If an agent drafted a
 message, it goes through `textbutler messages send`, which keeps the wrap.
@@ -37,7 +37,7 @@ Each line of the file is one message:
 Keep campaign files and their state outside any shared repository; they hold
 your contacts' names.
 
-## Running it
+## Run a campaign
 
 ```sh
 textbutler campaign run /absolute/intro.jsonl --dry-run
@@ -93,7 +93,7 @@ The service also enforces the minimum interval between any two of your
 campaign texts, across every person and every campaign file. A rerun after a
 lost confirmation waits out the interval from that send too.
 
-## Resuming and stopping
+## Resume after a stop
 
 Progress lives in `FILE.jsonl.state.json` beside the file, or at `--state`.
 Rerun the same command to resume after a crash or a halt. Each message carries
@@ -133,7 +133,7 @@ a setting you chose.
 
 ## What is recorded
 
-Sent messages are recorded with `operator` provenance. They count as your own
+Sent messages are marked `operator` in the send journal. They count as your own
 words in history and style evidence, end a pending reply like any text you
 type, and do not count against the butler's hourly reply limit. The records
 that make each key send once are kept for about 400 days, longer than other

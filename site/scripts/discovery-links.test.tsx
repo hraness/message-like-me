@@ -35,6 +35,8 @@ test('links the GhostReply comparison from the home FAQ and the about page, and 
   const about = renderToStaticMarkup(<About />);
   const compare = renderToStaticMarkup(<CompareGhostReplyPage />);
   expect(home).toContain(`<a ${COMPARE_LINK}>TextButler compared with GhostReply</a>`);
+  expect(home).toContain('<a href="/compare/openclaw">TextButler compared with OpenClaw</a>');
+  expect(home).toContain('<a href="/compare">All comparisons</a>');
   expect(about).toContain(`${COMPARE_LINK}>Compare with GhostReply</a>`);
   for (const [name, html] of Object.entries({ home, about, compare })) {
     expect(html, name).toContain('href="/compare">Compare assistants</a>');
@@ -53,7 +55,7 @@ test('keeps the home comparison answer identical in the visible FAQ and its JSON
 test('explains why replies are marked on the about page', () => {
   const about = renderToStaticMarkup(<About />);
   expect(about).toContain('>Why replies are marked</h2>');
-  expect(about).toContain('With the default settings');
+  expect(about).toContain('By default, TextButler wraps replies and acknowledgments');
 });
 
 test('describes the default AI route on the comparison page', () => {

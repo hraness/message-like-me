@@ -1,7 +1,7 @@
 # TextButler commands
 
-Everything TextButler does is a command. Add `--json` to any command below and
-it prints one JSON object with `ok`, `schema`, `generatedAt` and either
+Everything TextButler does is a command, and this page lists them all. Add
+`--json` to any command below and it prints one JSON object with `ok`, `schema`, `generatedAt` and either
 `data` or `error`. `textbutler commands --json` prints this list for an
 agent to read.
 
@@ -15,9 +15,9 @@ Each command has one of four kinds:
 - **decide** belongs to a person. Run from an agent or a script, it stops with
   `human-required` (exit 3) and changes nothing. Run in your own terminal, it
   asks you to type a short one-time code shown on that terminal.
-- **decide-legacy** is a decision that worked before the one-time code existed.
-  It keeps working as it did, bound to a digest or a settings revision, and is
-  listed here so you can see it.
+- **decide-legacy** is a decision that predates the one-time code. It works as
+  it always did, tied to a digest or a settings revision, and is listed here so
+  you can see which commands still work that way.
 
 Error codes and exit statuses: `usage` 2, `human-required` 3,
 `owner-unavailable` 4 (the service isn't running), `conflict`,
@@ -25,7 +25,7 @@ Error codes and exit statuses: `usage` 2, `human-required` 3,
 
 ## The service
 
-The background service owns one private socket in your TextButler data folder.
+The background service listens on one private socket in your TextButler data folder.
 Only your macOS user can open it. The CLI checks each command's kind before it
 sends anything, so there is no separate socket for agents.
 

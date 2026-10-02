@@ -1,9 +1,10 @@
 # Contact calculation and memory tools
 
-Each contact plan controls two local tools. `memorySearch` defaults to `true` and
-searches that conversation's retained memory archive. `javascript` defaults to
-`false`; enable it in the owner's complete plan with `habitats configure` while
-automatic replies are paused. Learning preserves both flags.
+Each contact's plan controls two local tools: memory search and a JavaScript
+calculator. `memorySearch` defaults to `true` and searches that conversation's
+memory archive. `javascript` defaults to `false`; turn it on by passing the
+complete plan to `habitats configure` while automatic replies are paused.
+Learning never changes either flag.
 
 Memory search ranks exact words and phrases in the contact's source notes. It
 returns up to eight excerpts with their source IDs, digests, authors and
@@ -19,7 +20,7 @@ a synchronous function body and optional JSON input, available as `input`:
 ```
 
 The result is JSON, such as `{"ok":true,"value":25}`. A failed calculation returns
-a bounded error code. The model may use the remaining tool call to correct it.
+an error code. The model may use its remaining tool call to correct it.
 All tools share the existing limit of two calls per reply.
 
 Each calculation runs in a new QuickJS interpreter compiled to WebAssembly. The
@@ -37,13 +38,13 @@ passes selected data as input. That data stays on the local host during executio
 | Interpreter stack | 256 KiB |
 | Cooperative interrupt | 50 ms, with at most 5,000 interrupt checks |
 | Worker watchdog | 250 ms after worker startup; a calculation that misses this gets a resource-limit result and termination is requested |
-| Worker startup | 2,000 ms maximum before a bounded failure result |
-| Worker admission | One active worker, up to sixteen queued calls, with a 5,000 ms queue wait |
+| Worker startup | 2,000 ms maximum before a failure result |
+| Worker queue | One active worker, up to sixteen queued calls, with a 5,000 ms queue wait |
 | Input/output structure | 16 levels and 1,024 values |
 
 The interpreter checks its deadline during execution and is disposed after every
 call. A separate worker watchdog requests termination if a native engine
-operation fails to reach an interrupt check. The host returns a bounded
+operation fails to reach an interrupt check. The host returns a
 resource-limit result; one worker remains active, and at most sixteen later calls
 wait up to five seconds for its slot. Calls beyond that queue return
 resource-limit. If termination cannot be confirmed, JavaScript stays unavailable
@@ -53,8 +54,8 @@ interpreter and generating the model response take additional time. The
 WebAssembly runtime and worker have fixed overhead outside the QuickJS heap
 limit.
 
-Submitted replies retain tool outcomes for inspection and reflection. JavaScript
-evidence labels the code with its SHA-256 digest. Offline personality evaluation
+Submitted replies keep tool results for inspection and reflection. The
+JavaScript tool record identifies the code by its SHA-256 digest. Offline personality evaluation
 does not execute either tool and cannot measure tool behavior from a text replay.
 
 The implementation uses the pinned `quickjs-emscripten-core` and embedded

@@ -297,7 +297,7 @@ Automation: send replies through Messages
   Privacy & Security › Automation, then run app setup again.
 
 Install the app and run app setup from a source checkout: see "Give
-iMessage access" in docs/textbutler/getting-started.md. Then run
+TextButler access to iMessage" in docs/textbutler/getting-started.md. Then run
 textbutler doctor to check both.
 
 Which chats get automatic replies

@@ -17,6 +17,7 @@ import {
 import { portfolioRelatedGroups } from '@hraness/design-kit/portfolio';
 import { agentSetupTargets } from '@hraness/design-kit';
 import Link from 'next/link';
+import { Fragment } from 'react';
 
 import { AgentSetup } from './_components/landing/agent-setup';
 import { PhoneSlot } from './_components/landing/phone-slot';
@@ -64,16 +65,17 @@ export const metadata = pageMetadata({
 
 const HERO_BOUNDARY = 'For macOS. New installs start paused until you choose which chats it can answer.';
 
-type HomeQuestion = Readonly<{ question: string; answer: string; link?: Readonly<{ href: string; label: string }> }>;
+type HomeLink = Readonly<{ href: string; label: string }>;
+type HomeQuestion = Readonly<{ question: string; answer: string; links?: readonly HomeLink[] }>;
 
 const HOME_QUESTIONS: readonly HomeQuestion[] = [
   {
     question: 'Does it read all my messages?',
-    answer: 'It answers only in conversations you turn on. Keyword mode waits for “butler”; Smart mode can recognize a request for help without it. Conversation notes stay on your Mac. A local model writes replies there too; optional web search sends queries through your saved Gateway key.',
+    answer: 'It answers only in conversations you turn on. In Keyword mode it waits for “butler”; in Smart mode it can recognize a request for help without the keyword. Each conversation’s notes stay on your Mac, and a local model writes replies there too. Optional web search sends queries through your saved Gateway key.',
   },
   {
     question: 'Will people know it’s not me?',
-    answer: 'By default, replies and acknowledgments carry the 🤖{ } marker. You can change or remove it for individual people, but your own chat always keeps a visible marker.',
+    answer: 'Yes, by default. Replies and acknowledgments carry the 🤖{ } marker. You can change or remove it for one person at a time, but your own chat always keeps a visible marker.',
   },
   {
     question: 'Which AI writes the replies?',
@@ -81,7 +83,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'What does it cost?',
-    answer: 'TextButler is free and open source. Local replies have no model API bill. With a Gateway key, Vercel bills you, and TextButler stops spending at $1 a day. With a subscription, it uses the plan you already pay for.',
+    answer: 'TextButler is free and MIT licensed. Local replies have no model API bill. With a Gateway key, Vercel bills you, and TextButler stops spending at $1 a day. With a subscription, it uses the plan you already pay for.',
   },
   {
     question: 'Do I need Ollama?',
@@ -89,7 +91,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Does it work on my iPhone?',
-    answer: 'Your friends and your phone see the messages as usual. TextButler itself runs only on a Mac that’s awake and signed in. There’s no iPhone, Windows, or Linux version.',
+    answer: 'Replies show up on your iPhone and your friends’ phones as usual, but TextButler itself runs only on a Mac that’s awake and signed in. There’s no iPhone, Windows, or Linux version.',
   },
   {
     question: 'Does it answer in group chats?',
@@ -97,12 +99,16 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Can I read a reply before it goes out?',
-    answer: 'Yes. Ask for a draft instead of an automatic reply. The draft shows every word and who it goes to, and it sends exactly that only when you confirm it with its review code. Drafts expire after 15 minutes. You can also type your own reply from the guided terminal.',
+    answer: 'Yes. Ask for a draft instead of an automatic reply. The draft shows every word and who it goes to, and nothing is sent until you confirm it with its review code. Drafts expire after 15 minutes. You can also type your own reply in the guided terminal.',
   },
   {
     question: 'How is it different from Smart Reply, GhostReply, or OpenClaw?',
-    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. TextButler can answer in the conversations you enable, using a model you choose and notes you can edit. It marks replies as AI by default, and you control the reply mode and marker per conversation.',
-    link: { href: '/compare/ghostreply', label: 'TextButler compared with GhostReply' },
+    answer: 'Smart Reply in Apple Messages and Writing Help in WhatsApp suggest replies that you send yourself. GhostReply is a paid Mac app that answers iMessages in your texting style. OpenClaw is an open-source assistant you message, and it can run commands on your computer. TextButler answers only in the conversations you turn on, keeps notes you can edit for each one, and its reply model can’t run commands on your Mac. It marks replies as AI by default, and you control the reply mode and marker per conversation.',
+    links: [
+      { href: '/compare/openclaw', label: 'TextButler compared with OpenClaw' },
+      { href: '/compare/ghostreply', label: 'TextButler compared with GhostReply' },
+      { href: '/compare', label: 'All comparisons' },
+    ],
   },
   {
     question: 'What about Telegram and Signal?',
@@ -110,11 +116,7 @@ const HOME_QUESTIONS: readonly HomeQuestion[] = [
   },
   {
     question: 'Is textbutler.app collecting anything?',
-    answer: 'Only anonymous visit counts. textbutler.app counts page views, page load speed, and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. It has no message upload, contact import, account, or drafting form, and it never sees your messages. Your Mac keeps each conversation’s notes. When you choose a hosted AI option, it handles the context it receives under its own data policies.',
-  },
-  {
-    question: 'What happened to Message Like Me?',
-    answer: 'TextButler replaced it. Its history readers and methodology are still available as legacy tools on the legacy history page. Installing them doesn’t install TextButler or turn on automatic replies.',
+    answer: 'Only anonymous visit counts. textbutler.app counts page views, page load speed, and a few clicks, such as copying the setup prompt, with PostHog. It sets no cookies, doesn’t identify you, and doesn’t record sessions. The site has no upload, account, or form, and it never sees your messages. If you choose a hosted AI option, that provider handles the context it receives under its own data policies.',
   },
 ];
 
@@ -143,13 +145,13 @@ export default function Home() {
       <SiteHeader />
       <main id="main-content" tabIndex={-1}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
-        <MarketingPage className="mlm-page textbutler-page">
+        <MarketingPage className="tb-page textbutler-page">
           <ProductHero
             backdrop={false}
             align="start"
             layout="split"
             actions={[{ href: '#setup', label: marketing.hero.primaryAction, emphasis: 'secondary' }]}
-            className="mlm-marketing-hero tb-hero"
+            className="tb-marketing-hero tb-hero"
             frame={<HeroStage />}
             heading={SITE_HEADLINE}
             headingId="textbutler-title"
@@ -228,7 +230,7 @@ export default function Home() {
               <div className="tb-support__block">
                 <h3>{marketingHeading("your-mac")}</h3>
                 <ul className="tb-support__list">
-                  <li><div className="tb-support__head"><strong>Mac only</strong></div><p>It runs quietly in the background, with no window and no menu bar icon. There’s no iPhone, Windows, or Linux version.</p></li>
+                  <li><div className="tb-support__head"><strong>Mac only</strong></div><p>It runs in the background, with no window and no menu bar icon. There’s no iPhone, Windows, or Linux version.</p></li>
                   <li><div className="tb-support__head"><strong>Open source</strong></div><p>Free and MIT licensed.</p></li>
                   <li><div className="tb-support__head"><strong>Nothing sent to this site</strong></div><p>This website never receives your messages.</p></li>
                 </ul>
@@ -292,14 +294,13 @@ export default function Home() {
             </figure>
           </MarketingSection>
 
-          <MarketingQuestionList className="mlm-marketing-questions" heading={marketingHeading("questions-title")} headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, link, question }) => ({ answer: link ? <><p>{answer}</p><p><Link href={link.href}>{link.label}</Link></p></> : <p>{answer}</p>, question }))} />
+          <MarketingQuestionList className="tb-marketing-questions" heading={marketingHeading("questions-title")} headingId="questions-title" id="questions" label="FAQ" questions={HOME_QUESTIONS.map(({ answer, links, question }) => ({ answer: links ? <><p>{answer}</p><p>{links.map((link, index) => <Fragment key={link.href}>{index > 0 ? ' · ' : null}<Link href={link.href}>{link.label}</Link></Fragment>)}</p></> : <p>{answer}</p>, question }))} />
           <MarketingRelated
             groups={portfolioRelatedGroups(["peopleblade", "soulscrape", "kb", "wrench", "xcb", "aicharts"])}
             heading="Other tools from our studio"
             headingId="related-title"
           />
-          <MarketingCallToAction actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="mlm-marketing-cta" footnote={HERO_BOUNDARY} heading={marketingHeading("closing-title")} headingId="closing-title" id="closing" summary="Ask your agent to set up TextButler, then choose a conversation and review the first reply." />
-          <p className="legacy-note">Looking for the Message Like Me history tools? <Link href="/sources">View legacy history sources.</Link></p>
+          <MarketingCallToAction actions={[{ href: '#setup', label: marketing.hero.primaryAction }, { href: GETTING_STARTED_URL, label: 'Read the setup guide', emphasis: 'secondary' }]} className="tb-marketing-cta" footnote={HERO_BOUNDARY} heading={marketingHeading("closing-title")} headingId="closing-title" id="closing" summary="Ask your agent to set up TextButler, then choose a conversation and review the first reply." />
         </MarketingPage>
       </main>
       <SiteFooter path="/" />

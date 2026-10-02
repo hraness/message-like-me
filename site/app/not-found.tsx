@@ -17,9 +17,6 @@ const PAGE_LABELS: Readonly<Record<string, string>> = {
   '/about': 'About',
   '/blog': 'Blog',
   '/docs': 'Documentation',
-  '/methodology': 'Methodology',
-  '/research': 'Research and prior art',
-  '/sources': 'Legacy history sources',
 };
 
 // Route labels are capped at 48 characters; long post titles end in an ellipsis.

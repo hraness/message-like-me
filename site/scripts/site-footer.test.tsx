@@ -13,12 +13,9 @@ import CompareOpenClawPage from '../app/compare/openclaw/page.tsx';
 import CompareHubPage from '../app/compare/page.tsx';
 import ComparePokePage from '../app/compare/poke/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
-import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
 import Home from '../app/page.tsx';
 import Preview from '../app/preview/page.tsx';
-import ResearchPage from '../app/research/page.tsx';
-import SourcesPage from '../app/sources/page.tsx';
 import { CANONICAL_PAGE_PATHS } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
@@ -31,10 +28,7 @@ const publicPages: readonly Readonly<{
 }>[] = [
   { name: '/', render: Home },
   { name: '/about', render: AboutPage },
-  { name: '/sources', render: SourcesPage },
   { name: '/docs', render: DocsPage },
-  { name: '/methodology', render: MethodologyPage },
-  { name: '/research', render: ResearchPage },
   { name: '/compare', render: CompareHubPage },
   { name: '/compare/openclaw', render: CompareOpenClawPage },
   { name: '/compare/hermes-agent', render: CompareHermesPage },
@@ -84,12 +78,12 @@ test('renders the in-flow content footer and one shared Hraness footer on every 
     expect(html.indexOf('data-hraness-marketing="footer"'), page.name)
       .toBeLessThan(html.indexOf('id="hraness-site-footer"'));
     expect(html, page.name).toContain('<footer aria-label="TextButler"');
-    expect(html, page.name).toContain('src="/marks/message-like-me.svg"');
+    expect(html, page.name).toContain('src="/marks/textbutler.svg"');
     expect(html, page.name).toContain('hraness-marketing-footer__name');
     expect(html, page.name).toContain('AI in your messages · Mac only · MIT source · in development');
     expect(html, page.name).toContain('aria-label="Footer navigation"');
     expect(html, page.name).toContain('href="/about"');
-    expect(html, page.name).toContain('href="/sources"');
+    expect(html, page.name).not.toContain('href="/sources"');
     expect(html, page.name).not.toContain('product-brand-mark');
 
     expect(html.match(/id="hraness-site-footer"/gu), page.name).toHaveLength(1);

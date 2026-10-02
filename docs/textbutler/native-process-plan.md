@@ -1,9 +1,12 @@
 # AgentMixer native process boundary
 
-AgentMixer owns provider policy and account leases. A shared native process
-transport owns an exact admitted process scope and byte streams. Applications
-own durable custody records, credentials, workspaces, artifact admission and
-recovery. Sharing the process implementation must preserve those owners.
+This design record plans how AgentMixer and TextButler can share one native
+process implementation for provider runtimes without changing who is
+responsible for what. AgentMixer decides provider policy and leases accounts. A
+shared native process transport runs one approved process scope and carries its
+byte streams. Applications keep credentials, workspaces, and recovery, decide
+which built artifacts they accept, and keep durable custody records (records
+that an account or process may still be in use and must not be reused yet).
 
 This plan starts from `a878d72d37ed86fd0cb3a3b78924a1221ce0135a`. AgentMixer now
 lives in the standalone `hraness/agentmixer` repository as the published
@@ -192,7 +195,7 @@ admission and application factory wiring remain pending:
 Acceptance requires migration of actual consumers and removal of replaced
 process ownership, with no fallback that equates root exit with scope join.
 The migrated source passed 339 focused tests with 2016 assertions across 11 files,
-followed by the relay-receipt regression suite (86 tests,836 assertions) and a
+followed by the relay-receipt regression suite (86 tests, 836 assertions) and a
 final strict package typecheck. These checks use synthetic providers. They do
 not establish shared artifact installation or live runtime qualification.
 
@@ -206,9 +209,10 @@ bun x --no-install tsc --noEmit -p agentmixer/tsconfig.json
 git diff --check
 ```
 
-The integration owner runs the complete repository `bun run check` gate,
-including `check:textbutler`, after convergence. Use the installed host
-scheduler for the repository gate, process custody/recovery checks and native
-work; native qualification needs the applicable platform lane. Preserve the
-documented reviewed branch and artifact delivery gates. This private package
-change supplies no live provider, Mac/Windows support or daily-driver claim.
+After the branches come together, whoever integrates them runs the full
+repository check, `bun run check`, including `check:textbutler`. Run the
+repository check, process custody and recovery checks, and native work through
+the installed host scheduler; native testing needs the matching platform. Keep
+the documented review and artifact delivery checks. This private package change
+does not add a live provider or Mac or Windows support, and does not make the
+feature ready for daily use.

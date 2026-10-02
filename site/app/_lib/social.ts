@@ -16,7 +16,7 @@ export const socialSite = defineSocialImageSite({
   description: marketing.tagline,
   domain: 'textbutler.app',
   palette: 'gruvbox',
-  keepTogether: ['Claude Code', 'Message Like Me'],
+  keepTogether: ['Claude Code'],
 });
 
 export const SOCIAL_IMAGE_ALT = socialImageAlt(socialSite);

@@ -1,10 +1,10 @@
 # Messaging apps
 
-TextButler can use native iMessage and WhatsApp connections through GhostGet,
-or a Beeper connection for several messaging apps at once. For a Mac with
-iMessage, WhatsApp, Signal, Telegram and Instagram, Beeper is the simplest
-shared connection. Each conversation still needs its own enrollment and reply
-settings. An available connection does not by itself enable automatic replies.
+TextButler connects to iMessage and WhatsApp natively through GhostGet, or to
+several messaging apps at once through Beeper. If you use iMessage, WhatsApp,
+Signal, Telegram, and Instagram on one Mac, Beeper is the simplest single
+connection. Each conversation still has to be added with its own reply
+settings, and connecting an app never turns on automatic replies by itself.
 
 ## Direct and group conversations
 
@@ -19,7 +19,7 @@ group membership stops replies until you select the group again.
 | --- | --- | --- |
 | iMessage | GhostGet's native Mac connection, or Beeper on that Mac | Keep the native connection for users who do not use Beeper. Apple's Messages framework creates iOS conversation extensions; it is not a Mac inbox API. |
 | WhatsApp | GhostGet's reviewed linked-device connection, or Beeper | The official WhatsApp Business Platform is a separate business integration, not a connection to an ordinary personal inbox. |
-| Signal | Beeper | A future `signal-cli` connection is possible, but it is unofficial and needs separate maintenance and qualification. |
+| Signal | Beeper | A future `signal-cli` connection is possible, but it is unofficial and would need its own maintenance and testing. |
 | Telegram | Beeper, subject to the content-use limits below | Telegram's official TDLib supports personal client sessions. A direct connector is a future option, not currently implemented in TextButler. |
 | Instagram | Beeper | Meta's official messaging API supports professional accounts. It does not cover the same personal-inbox use case. |
 
@@ -40,20 +40,20 @@ as a way to create sticker packs and iOS conversation extensions.
    connections under **Settings → Integrations**; some releases use
    **Settings → Developers**. Authorize GhostGet using its supported Beeper
    account setup. Keep credentials out of contact folders.
-3. Use a GhostGet release that includes Beeper owner automation. This support
-   entered GhostGet's 0.18.14 source. It requires the reviewed Beeper adapter
-   and pinned Beeper CLI; an older read-only export setup is insufficient.
-4. Allow GhostGet's exact Beeper automation read and text-send operations for
-   that account. Then select its account ID in TextButler setup.
-5. Enroll a single conversation, inspect its identity, and start with a reviewed
-   reply. Enable automatic replies separately after the connection and selected
-   agent account pass their checks.
+3. Use a GhostGet release that includes Beeper owner automation, which first
+   appeared in GhostGet's 0.18.14 source. It requires the reviewed Beeper
+   adapter and pinned Beeper CLI; an older read-only export setup won't work.
+4. Allow GhostGet's Beeper automation read and text-send operations for that
+   account. Then select its account ID in TextButler setup.
+5. Add a single conversation, check its identity, and start with a reply you
+   review yourself. Turn on automatic replies separately, after the connection
+   and the selected agent account pass their checks.
 
-The current GhostGet automation route supports Beeper text sends and bounded
-conversation history. Beeper's wider API also offers attachments and other
-actions, but those are not yet admitted through this TextButler route. The
-connection requires Beeper Desktop to remain open. Restart and reconnect should
-finish catching up before new messages can trigger a reply.
+Through GhostGet's current automation route, TextButler can send text through
+Beeper and read recent conversation history. Beeper's wider API also offers
+attachments and other actions, but TextButler doesn't use them yet. Beeper
+Desktop must stay open. After a restart or reconnect, TextButler finishes
+catching up before new messages can trigger a reply.
 See the [GhostGet owner contract](ghostget-contract.md) and
 [Beeper authentication](https://developers.beeper.com/desktop-api/auth/).
 
@@ -64,23 +64,23 @@ See [Beeper's iMessage setup guide](https://help.beeper.com/en_US/chat-networks/
 
 ## What “sent” means
 
-Beeper returns a pending message ID when it accepts a send request. That is not
-proof of delivery. The API can resolve that ID through a subsequent message
-read; delivery status is available only when the network reports it. TextButler
-must preserve an uncertain result without sending the message again.
+Beeper returns a pending message ID when it accepts a send request. That isn't
+proof of delivery. A later message read can resolve the ID, and delivery status
+is available only when the network reports it. TextButler keeps an uncertain
+result as uncertain and never sends the message again.
 See [Beeper's send contract](https://developers.beeper.com/desktop-api-reference/resources/messages/methods/send/).
 
 The optional Beeper WebSocket stream is experimental. Its sequence numbers
-apply to one connection, so they are not durable restart cursors. A production
-connector needs bounded catch-up reads after reconnection. GhostGet currently
-owns the durable observation boundary for TextButler.
+apply to one connection, so they can't mark a resume point across restarts. A
+production connector would need to read what it missed after reconnecting.
+GhostGet currently keeps TextButler's durable record of new messages.
 See [Beeper's event stream](https://developers.beeper.com/desktop-api/websocket-experimental/).
 
-## Expansion without Beeper
+## Options without Beeper
 
-**iMessage and WhatsApp:** Improve the existing GhostGet setup and recovery
-paths first. Text and file support on iMessage should work with ordinary Mac
-permissions; advanced native actions depend on separately configured support.
+**iMessage and WhatsApp:** The next step is improving the existing GhostGet
+setup and recovery. Text and files on iMessage should work with ordinary Mac
+permissions; advanced native actions need separately configured support.
 The current WhatsApp connection uses a reviewed private build of
 [wacli](https://github.com/openclaw/wacli), an unofficial linked-device client.
 Its pairing and update requirements are part of the integration.
@@ -104,8 +104,8 @@ See [Telegram's API terms](https://core.telegram.org/api/terms) and
 **Signal:** A future GhostGet adapter could link `signal-cli` to an existing
 account, receive messages through its daemon, and submit exact recipient-bound
 sends. The project explicitly calls itself unofficial and warns that versions
-older than three months may stop working. This adds a linked device and a
-maintenance obligation; it is not an official Signal integration.
+older than three months may stop working. It would add a linked device and
+ongoing maintenance, and it is not an official Signal integration.
 See [the signal-cli project](https://github.com/AsamK/signal-cli).
 
 **WhatsApp Business and Instagram professional accounts:** These are viable
@@ -117,12 +117,12 @@ group messaging. Neither route should be offered as a replacement for a
 personal inbox. See Meta's [WhatsApp Cloud API collection](https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api)
 and [Instagram Send API](https://www.postman.com/meta/instagram/folder/uxudqu0/send-api).
 
-For personal Instagram, keep Beeper as the supported connection path. Avoid
-adding an independent private-API or browser-session connector until it has a
-maintained provider contract and reliable account recovery.
+For personal Instagram, Beeper remains the supported connection. Don't add a
+separate private-API or browser-session connector until it has a maintained
+provider interface and reliable account recovery.
 
 These recommendations reflect documentation checked on September 19, 2026.
-Synthetic tests establish parser, permission and recovery behavior. A live
-acceptance check still needs the intended account, one exact recipient and an
-authorized message; it must verify reconnect and uncertain-send behavior as
-well as the first successful request.
+Tests with simulated accounts cover parsing, permissions, and recovery. A live
+check still needs the intended account, one specific recipient, and a message
+the owner approved, and it must test reconnecting and uncertain sends as well
+as the first successful request.

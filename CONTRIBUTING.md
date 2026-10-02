@@ -1,10 +1,10 @@
 # Contributing
 
-Issues and focused pull requests are welcome. Describe the behavior that should
-change, include a minimal synthetic fixture when one helps, and keep unrelated
-cleanup out of the same patch.
+Issues and focused pull requests are welcome. Describe the behavior you want
+changed, include a small synthetic fixture when it helps, and keep unrelated
+cleanup out of the same change.
 
-Install the pinned toolchain and run the complete gate:
+Install the pinned toolchain and run the full check:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -16,12 +16,16 @@ Use Bun 1.3.14. Do not add another package manager or lockfile.
 ## Protect private data
 
 Never use a real Messages database, message, handle, contact name, group title,
-attachment, profile, study or Ensoul packet, private path, or installation key in a test,
-snapshot, issue, commit, example, or diagnostic. Build SQLite fixtures from
-synthetic conversations whose people and content never existed.
+attachment, conversation note, profile, study or Ensoul packet, private path,
+API key, or installation key in a test, snapshot, issue, commit, example, or
+diagnostic. Build fixtures from synthetic conversations whose people and
+content never existed.
 
-Preserve these boundaries in the legacy Message Like Me history tools under
-`src/`:
+The TextButler runtime under `packages/` sends messages and calls AI providers.
+[`docs/textbutler/architecture.md`](docs/textbutler/architecture.md) describes
+those paths and their limits, and `AGENTS.md` lists the rules that govern them.
+
+The history-analysis code under `src/` has stricter rules. Keep them intact:
 
 - `chat.db` is opened read-only and query-only; ingestion never changes
   Messages or its source files.
@@ -38,10 +42,6 @@ Preserve these boundaries in the legacy Message Like Me history tools under
 - Local IDs remain HMAC-derived, and owned data paths remain physical and
   private.
 
-The TextButler runtime under `packages/` sends messages and calls AI providers.
-[`docs/textbutler/architecture.md`](docs/textbutler/architecture.md) describes
-those paths and their limits, and `AGENTS.md` lists the rules that govern them.
-
 ## Tests and contracts
 
 Pair parser, schema, SQL, path, and CLI changes with deterministic examples.
@@ -55,20 +55,20 @@ database reads, message counts, text bytes, lists, study examples, and profile
 fields before expensive work or publication. Parse foreign values from
 `unknown` and reject unsupported schema changes instead of guessing.
 
-Product-specific skill changes belong under `skills/message-like-me/`; the
+Changes to the history-analysis skill belong in its folder under `skills/`; the
 copied standalone Ensoul skill lives under `skills/ensoul/` and must remain a
 complete attributed vendored copy rather than a dependency. Keep each
 `SKILL.md` focused on routing and shared boundaries, put substantial
 mode-specific instructions in linked references, and keep each
 `agents/openai.yaml` consistent with its skill. The installer must publish both
-skills without leaving a partial pair. Run the complete gate after changing
+skills without leaving a partial pair. Run the full check after changing
 packaged skill files.
 
 The packed consumer must work from the standalone public repository without a
 sibling checkout, private package, ambient Messages database, or network
 access.
 
-## Informational-site browser check
+## Website browser check
 
 Check the site with `bun run --cwd site check`. The required **Site** CI job
 installs the Chromium revision pinned by this site's Playwright dependency and
@@ -89,7 +89,7 @@ browser lanes, and admit only the headless browser check to the browser lane.
 Do not wrap the combined verifier in a browser lane. Supplemental checks do not
 replace the committed candidate's complete CI gate.
 
-The 24 cases cover the editorial landing, documentation, legacy source catalog,
+The 24 cases cover the homepage, documentation, about page,
 frame-safe preview, blog index, and launch article in both system appearances at
 desktop and touch widths.
 They check actual rendered fonts, compiled stylesheet layers, Paper and preset
@@ -100,24 +100,25 @@ browser profile remain in ignored `site/.browser-artifacts/` for review.
 This check starts and stops its own loopback server and fresh browser. It blocks
 external requests, uses no personal browser profile or inherited credentials,
 and never launches a messaging reader, desktop app, agent, account check, or data
-entry workflow. The README's exact external skills.sh badge image is replaced
-with a labeled repository SVG fixture and recorded in the receipt; the external
-badge service is not verified. All other request failures remain fatal. This is
+entry workflow. The shared footer’s consent-region request gets a declared
+synthetic response; any other request failure is fatal. This is
 not live provider or production-delivery verification. The script-free preview
 must expose its restrictive CSP and block its framework scripts and manifest;
 only those exact policy blocks are recorded separately from unexpected failures.
 Every case settles requests, joins context teardown and route handlers, then
 checks late failures before accepting evidence. Unexpected server exits fail.
 
-By contributing, you agree that your contribution is licensed under the MIT
-License.
-
 ## Command runtime changes
 
 Read [the command runtime and private-publication contract](docs/command-runtime.md)
 before changing command services, scope ownership, or receipt recovery. Run
 `bun run check:effect` when editing a governed Effect module or its policy, and
-retain the complete `bun run check` gate. Changes to the architecture checker,
+still run the full `bun run check`. Changes to the architecture checker,
 its policy, or a public protocol graph ship like any other change: open the pull
 request, enable auto-merge, and let the `Required` CI check decide. Expected
 failures must stay explicit; adapters do not grant network or messaging authority.
+
+## License
+
+By contributing, you agree that your contribution is licensed under the MIT
+License.

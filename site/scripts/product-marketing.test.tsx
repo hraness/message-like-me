@@ -9,7 +9,7 @@ import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
 import { checkMarketingSnapshot } from '../styles/vendor/hraness-marketing/check.mjs';
-import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS, SOFTWARE_VERSION } from '../app/_lib/site.ts';
+import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -57,7 +57,7 @@ test('renders TextButler with early model choices and setup', () => {
   const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
   expect(header).toContain('aria-label="TextButler home"');
   expect(header).toContain('hraness-foil-mark');
-  expect(header).toContain('src="/marks/message-like-me.svg"');
+  expect(header).toContain('src="/marks/textbutler.svg"');
   expect(header).not.toContain('src="/icon.png"');
   expect(html).toContain('data-foil=""');
   expect(html).toContain('TextButler');
@@ -85,8 +85,7 @@ test('renders TextButler with early model choices and setup', () => {
   expect(html).toContain('Choose a group, review its members, and turn on replies.');
   expect(html).not.toContain('Built on your Mac');
   expect(html).toContain('After you write in a chat, it pauses for the human cooldown you set (5 minutes by default).');
-  expect(html).not.toContain(`TextButler v${SOFTWARE_VERSION}`);
-  expect(html).toContain('Installing them doesn’t install TextButler or turn on automatic replies.');
+  expect(html).not.toMatch(/message like me|messagelikeme|\/sources"/iu);
   expect(html).toContain('Only anonymous visit counts. textbutler.app counts page views');
   expect(html).toContain('It sets no cookies, doesn’t identify you, and doesn’t record sessions.');
   expect(html).toContain('"@type":"FAQPage"');
@@ -115,7 +114,7 @@ test('keeps delivery vocabulary off the product pages', async () => {
     home: textBeforeRelated(renderToStaticMarkup(<Home />)),
     about: textBeforeRelated(renderToStaticMarkup(<About />)),
     preview: textBeforeRelated(renderToStaticMarkup(<Preview />)),
-    discovery: discovery.slice(0, discovery.indexOf('## Legacy Message Like Me history tools')).toLowerCase(),
+    discovery: discovery.toLowerCase(),
   };
   for (const [name, copy] of Object.entries(pages)) {
     expect(copy.length, name).toBeGreaterThan(0);
@@ -210,14 +209,14 @@ test('admits the released finite marketing snapshot and scopes it to the landing
 
 test('keeps machine-readable setup and reply controls consistent with the landing', async () => {
   const discovery = await getDiscoveryText().text();
-  expect(discovery).toContain('New installations start paused and new conversations start disabled.');
-  expect(discovery).toContain('Use the installed TextButler command for automatic replies.');
+  expect(discovery).toContain('New installations start paused and new conversations start turned off.');
+  expect(discovery).toContain('Automatic AI replies need the installed TextButler command');
   expect(discovery).toContain(REPLY_WRITERS_SENTENCE);
   expect(discovery).toContain('ollama pull qwen3:4b-instruct-2507-q4_K_M');
   expect(discovery).toContain(AGENT_SETUP_PROMPT);
   expect(discovery).toContain('Smart mode can recognize a request for help without the keyword');
   expect(discovery).toContain('carry an AI marker by default');
-  expect(discovery).toContain('web search sends queries through a saved Gateway key even when a local model writes the reply');
+  expect(discovery).toContain('web search sends queries through a saved Gateway key, even when a local model writes the reply');
   expect(discovery).not.toMatch(/85% sure|Works today|In testing|Coming soon/iu);
 });
 

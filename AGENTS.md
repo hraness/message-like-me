@@ -83,11 +83,15 @@ notarization remain outside this local installation scope.
 
 - Use Bun 1.3.14 and run `bun run check` before handing off a change. Do not add
   another package manager or lockfile.
-- Keep the legacy `@hraness/message-like-me` package description exact: “A
-  local-first CLI and Agent Skill for studying private messaging history and
-  drafting messages that sound like you.” It describes the published history
-  tools, not Textbutler; take Textbutler's own description from the portfolio
-  registry and its status from `SITE_STATUS` in `site/app/_lib/site.ts`.
+- Public material never references or links Message Like Me, its package, its
+  `messagelikeme` command, or `messagelikeme.com`; that prototype is retired.
+  Public material is the site (pages, metadata, structured data, `llms.txt`,
+  sitemap, blog), README.md, CONTRIBUTING.md, SECURITY.md, and
+  `docs/textbutler/`. Take TextButler's description from the portfolio registry
+  and its status from `SITE_STATUS` in `site/app/_lib/site.ts`. The frozen
+  package description in `package.json` stays exact until a reviewed identity
+  migration: “A local-first CLI and Agent Skill for studying private messaging
+  history and drafting messages that sound like you.”
 - Follow `STYLE.md` for public site, documentation, README, release, and
   Agent Skill prose.
 - Follow the shared [Hraness README guidelines](https://github.com/hraness/.github/blob/main/README_GUIDELINES.md).
@@ -143,7 +147,7 @@ notarization remain outside this local installation scope.
   GitHub repository is `hraness/textbutler` with unchanged numeric ID
   `1342143606`; follow the version-neutral identity migration in the publishing
   runbook. Treat `textbutler.app` as an informational project page, never as
-  a data plane; `messagelikeme.com` redirects there.
+  a data plane.
 - Keep CLI commands namespaced as `ingest imessage|x-archive|contacts|bundle`,
   `sources list|show`,
   `contacts list|show|resolve`,

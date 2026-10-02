@@ -3,7 +3,7 @@ import { GITHUB_URL, PAGE_LAST_MODIFIED, pageMetadata } from '../_lib/site';
 import { readmeHtml } from '../readme.generated';
 
 const description =
-  'Set up TextButler on your Mac, connect iMessage, WhatsApp, or Beeper, and turn the butler on for one conversation. The legacy Message Like Me tools have their own section.';
+  'Set up TextButler on your Mac, connect iMessage, WhatsApp, or Beeper, and turn the butler on for one conversation at a time.';
 
 export const metadata = pageMetadata({
   title: 'Documentation',
