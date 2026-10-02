@@ -1,14 +1,9 @@
-import { PhoneFit } from '@hraness/textmockups';
-import '@hraness/textmockups/phone.css';
-import './phone-overrides.css';
-import type { CSSProperties, Ref } from 'react';
 
 import type { Conversation, Perspective } from './conversations';
 import { conversationScene, describeConversation, type SceneTheme } from './scene';
-import styles from './phone.module.css';
+import { PhoneView, type PhoneTheme, type SceneVariant } from './phone-view';
 
-export type PhoneTheme = 'auto' | 'light' | 'dark';
-export type PlaybackPhase = 'final' | 'playing' | 'hold' | 'fading';
+export type { PhoneTheme, PlaybackPhase } from './phone-view';
 
 export interface PhoneMockProps {
   readonly conversation: Conversation;
@@ -28,14 +23,7 @@ export interface PhoneMockProps {
   /** Overrides the generated accessible name (a full reading of the conversation). */
   readonly label?: string;
   readonly className?: string;
-  /** Ref to the root element (the player observes it for scroll-into-view). */
-  readonly ref?: Ref<HTMLDivElement>;
-  /** Internal: the playback second from `PhoneMockPlayer`. Absent draws the finished conversation. */
-  readonly time?: number;
-  readonly phase?: PlaybackPhase;
 }
-
-const DEVICE_WIDTH = 393;
 
 /**
  * A code-rendered iPhone showing a synthetic conversation, drawn by
@@ -44,53 +32,21 @@ const DEVICE_WIDTH = 393;
  * JavaScript, blog image capture and video scenes. `PhoneMockPlayer` adds
  * scripted playback on top of the same markup.
  */
-export function PhoneMock({
-  conversation,
-  perspective = 'owner',
-  theme = 'auto',
-  maxWidth,
-  screenHeight,
-  crop,
-  label,
-  className,
-  ref,
-  time,
-  phase = 'final',
-}: PhoneMockProps) {
-  const themes: readonly SceneTheme[] = theme === 'auto' ? ['light', 'dark'] : [theme];
-  const style = maxWidth ? ({ '--phone-max-width': `${maxWidth}px` } as CSSProperties) : undefined;
-  const phone = (
-    <div
-      ref={ref}
-      className={className ? `${styles.root} ${className}` : styles.root}
-      data-tb-phone=""
-      data-app={conversation.app}
-      data-phase={phase}
-      data-phone-theme={theme}
-      role="img"
-      aria-label={label ?? describeConversation(conversation, perspective)}
-      style={style}
-    >
-      {themes.map((sceneTheme) => (
-        <div key={sceneTheme} className={styles.variant} data-variant={theme === 'auto' ? sceneTheme : undefined}>
-          <PhoneFit
-            scene={conversationScene(conversation, { perspective, theme: sceneTheme, screenHeight })}
-            time={time}
-            watermark={false}
-          />
-        </div>
-      ))}
-    </div>
-  );
-  if (crop === undefined) return phone;
-  if (!Number.isFinite(crop) || crop <= 0) throw new RangeError('Phone crop must be positive.');
+export function PhoneMock({ conversation, perspective = 'owner', theme = 'auto', screenHeight, label, ...rest }: PhoneMockProps) {
   return (
-    <div
-      className={styles.crop}
-      data-phone-crop=""
-      style={{ '--crop-ratio': `${DEVICE_WIDTH} / ${crop}`, ...(maxWidth ? { '--crop-max': `${maxWidth}px` } : {}) } as CSSProperties}
-    >
-      {phone}
-    </div>
+    <PhoneView
+      {...rest}
+      app={conversation.app}
+      label={label ?? describeConversation(conversation, perspective)}
+      scenes={sceneVariants(conversation, perspective, theme, screenHeight)}
+      theme={theme}
+    />
   );
 }
+
+/** The validated scene for each appearance the phone draws: both for `auto`, one otherwise. */
+export function sceneVariants(conversation: Conversation, perspective: Perspective, theme: PhoneTheme, screenHeight?: number): SceneVariant[] {
+  const themes: readonly SceneTheme[] = theme === 'auto' ? ['light', 'dark'] : [theme];
+  return themes.map((sceneTheme) => ({ theme: sceneTheme, scene: conversationScene(conversation, { perspective, theme: sceneTheme, screenHeight }) }));
+}
+
