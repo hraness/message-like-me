@@ -15,7 +15,6 @@ export function DocumentPage({
   sourceUrl,
   dateModified,
   sourceOwnsHeading = false,
-  legacyNote,
 }: {
   eyebrow: string;
   title: string;
@@ -25,7 +24,6 @@ export function DocumentPage({
   sourceUrl: string;
   dateModified: string;
   sourceOwnsHeading?: boolean;
-  legacyNote?: string;
 }) {
   const articleJsonLd = {
     '@context': 'https://schema.org',
@@ -68,7 +66,6 @@ export function DocumentPage({
             <a href={sourceUrl}>View on GitHub ↗</a>
           </header>
         )}
-        {legacyNote && <p className="legacy-note">{legacyNote}</p>}
         <article
           className="readme-prose document-prose"
           dangerouslySetInnerHTML={{ __html: html }}

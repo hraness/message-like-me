@@ -130,7 +130,7 @@ export const launchKitOptions: LaunchKitOptions = {
   publicInstall: false,
   tagline: launchMessaging.tagline,
   canonicalUrl: LAUNCH_POST_URL,
-  forbiddenNames: ['GhostReply'],
+  forbiddenNames: ['GhostReply', 'Message Like Me'],
 };
 
 export const socialKit: SocialKit = buildSocialKit(launchBeats, launchMessaging, launchRelease, LAUNCH_POST_URL);

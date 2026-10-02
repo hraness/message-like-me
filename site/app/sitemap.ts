@@ -24,10 +24,7 @@ const lastModified = (path: keyof typeof PAGE_LAST_MODIFIED): Date => new Date(`
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: absoluteUrl('/'), lastModified: lastModified('/'), changeFrequency: 'weekly', priority: 1 },
-    { url: absoluteUrl('/sources'), lastModified: lastModified('/sources'), changeFrequency: 'monthly', priority: 0.6 },
     { url: absoluteUrl('/docs'), lastModified: lastModified('/docs'), changeFrequency: 'monthly', priority: 0.9 },
-    { url: absoluteUrl('/methodology'), lastModified: lastModified('/methodology'), changeFrequency: 'monthly', priority: 0.6 },
-    { url: absoluteUrl('/research'), lastModified: lastModified('/research'), changeFrequency: 'monthly', priority: 0.6 },
     { url: absoluteUrl('/about'), lastModified: lastModified('/about'), changeFrequency: 'monthly', priority: 0.7 },
     { url: absoluteUrl('/compare'), lastModified: lastModified('/compare'), changeFrequency: 'monthly', priority: 0.7 },
     ...COMPARISON_PATHS.map((path) => ({ url: absoluteUrl(path), lastModified: lastModified(path), changeFrequency: 'monthly' as const, priority: 0.6 })),

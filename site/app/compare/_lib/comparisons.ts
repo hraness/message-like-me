@@ -63,7 +63,7 @@ export const TEXTBUTLER_HUB: HubSummary = {
 };
 
 const TEXTBUTLER_WHAT_IT_DOES = [
-  'TextButler is a headless macOS butler: a command line, a guided terminal, and a background service, with no window or menu bar icon. GhostGet, a separate Mac tool, connects it to iMessage, WhatsApp, and Beeper. You turn it on one direct or group conversation at a time; new installations start paused and new conversations start disabled.',
+  'TextButler runs on your Mac as a command line, a guided terminal, and a background service, with no window or menu bar icon. GhostGet, a separate Mac tool, connects it to iMessage, WhatsApp, and Beeper. You turn it on one direct or group conversation at a time; new installations start paused, and new conversations start turned off.',
   `Once a conversation is on, TextButler answers by default only messages that contain the word “butler”, and it waits 5 minutes after you last wrote there. Replies go out from your own account wrapped in a marker, such as 🤖{ On Monday Sam said Friday at 6:30. }, which you can change or clear per conversation. Each conversation keeps its own notes as ordinary files on your Mac. ${REPLY_WRITERS_SENTENCE} The reply model works only with that conversation’s notes, optional web search, and proposed messages; it gets no shell and no other files on your Mac.`,
 ];
 

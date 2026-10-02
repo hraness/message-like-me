@@ -12,11 +12,8 @@ import CompareOpenClawPage from '../app/compare/openclaw/page.tsx';
 import CompareHubPage from '../app/compare/page.tsx';
 import ComparePokePage from '../app/compare/poke/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
-import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
 import Home from '../app/page.tsx';
-import ResearchPage from '../app/research/page.tsx';
-import SourcesPage from '../app/sources/page.tsx';
 import {
   absoluteUrl,
   CANONICAL_PAGE_PATHS,
@@ -39,10 +36,7 @@ const canonicalPages: readonly Readonly<{
 }>[] = [
   { path: '/', render: Home },
   { path: '/about', render: AboutPage },
-  { path: '/sources', render: SourcesPage },
   { path: '/docs', render: DocsPage },
-  { path: '/methodology', render: MethodologyPage },
-  { path: '/research', render: ResearchPage },
   { path: '/compare', render: CompareHubPage },
   { path: '/compare/openclaw', render: CompareOpenClawPage },
   { path: '/compare/hermes-agent', render: CompareHermesPage },
@@ -65,7 +59,7 @@ function assertAskAiLinks(html: string, path: CanonicalPagePath): void {
   expect(absoluteUrl(path)).toBe(expectedSubject);
   expect(nav).toContain('>Ask AI about this<');
   expect(nav).toContain('class="hraness-ask-ai-about-this');
-  expect(nav).toContain('message-like-me-ask-ai');
+  expect(nav).toContain('textbutler-ask-ai');
   expect(nav).not.toContain('data-analytics-');
   expect(anchors).toHaveLength(providerHosts.length);
 
@@ -115,11 +109,11 @@ test('loads the portable UI foundation without a second standalone recipe sheet'
 
   expect(css).toContain("@import '@hraness/ui/compiler-foundation.css';");
   expect(css).not.toMatch(/@hraness\/ui\/(?:components|reset|styles|stylex|tailwind)\.css/u);
-  expect(css).toContain('nav.message-like-me-ask-ai {');
+  expect(css).toContain('nav.textbutler-ask-ai {');
   expect(css).toContain(
-    'nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"] {',
+    'nav.textbutler-ask-ai [data-slot="ask-ai-about-this-link"] {',
   );
   expect(css).toContain(
-    'nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"]:hover,',
+    'nav.textbutler-ask-ai [data-slot="ask-ai-about-this-link"]:hover,',
   );
 });

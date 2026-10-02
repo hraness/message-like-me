@@ -22,11 +22,11 @@ describe('social images', () => {
     expect(socialSite.palette).toBe('gruvbox');
     expect(socialSite.icon).toBeUndefined();
     expect(socialSite.theme).toBeUndefined();
-    const headerMark = await readFile(resolve(siteRoot, 'public/marks/message-like-me.svg'), 'utf8');
+    const headerMark = await readFile(resolve(siteRoot, 'public/marks/textbutler.svg'), 'utf8');
     expect(SOCIAL_BRAND_MARK_SVG).toBe(headerMark.trim());
     expect(socialSite.brandMark).toBe(SOCIAL_BRAND_MARK_SVG);
     const chrome = await readFile(resolve(siteRoot, 'app/_components/site-chrome.tsx'), 'utf8');
-    expect(chrome).toContain('brandMark="/marks/message-like-me.svg"');
+    expect(chrome).toContain('brandMark="/marks/textbutler.svg"');
     const layout = await readFile(resolve(siteRoot, 'app/layout.tsx'), 'utf8');
     expect(layout).toContain('data-palette="gruvbox"');
   });

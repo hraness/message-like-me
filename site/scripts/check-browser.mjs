@@ -262,7 +262,7 @@ try {
           appearanceControls: [...document.querySelectorAll('.hraness-marketing-header details[data-hraness-appearance-menu] fieldset input[type=radio]')].filter(input => input.form === null).map(input => ({name: input.name, value: input.value, legend: input.closest('fieldset').querySelector('legend')?.textContent})),
           headers: document.querySelectorAll('.hraness-marketing-header').length,
           footers: document.querySelectorAll('.hraness-marketing-footer').length,
-          askAi: document.querySelectorAll('.message-like-me-ask-ai').length,
+          askAi: document.querySelectorAll('.textbutler-ask-ai').length,
           preset: document.querySelector('[data-hraness-marketing-preset]')?.getAttribute('data-hraness-marketing-preset') ?? null,
           headingFont: style.fontFamily, headingSize: Number.parseFloat(style.fontSize),
           headingLeading: Number.parseFloat(style.lineHeight), headingWeight: style.fontWeight,

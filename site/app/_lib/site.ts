@@ -44,17 +44,11 @@ export const AGENT_CLI_URL = `${GITHUB_URL}/blob/main/docs/textbutler/agent-cli.
 export const SUBSCRIPTION_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/textbutler/native-subscription.md`;
 export const GHOSTGET_SETUP_URL = 'https://ghostget.com/docs/tutorials/getting-started';
 export const XCB_URL = 'https://github.com/hraness/xcb';
-// The immutable legacy release coordinate; not a TextButler app version.
-export const SOFTWARE_VERSION = '0.8.24';
-export const RELEASE_URL = `${GITHUB_URL}/releases/tag/v${SOFTWARE_VERSION}`;
 
 export const CANONICAL_PAGE_PATHS = [
   '/',
   '/about',
-  '/sources',
   '/docs',
-  '/methodology',
-  '/research',
   '/compare',
   '/compare/openclaw',
   '/compare/hermes-agent',
@@ -126,12 +120,9 @@ export function pageMetadata({
 // hand: Vercel builds from shallow clones, so Git history is not available.
 // The docs page publishes its dateModified from this table too.
 export const PAGE_LAST_MODIFIED = {
-  '/': '2026-10-01',
-  '/sources': '2026-09-11',
-  '/docs': '2026-10-01',
-  '/methodology': '2026-09-11',
-  '/research': '2026-09-11',
-  '/about': '2026-10-01',
+  '/': '2026-10-02',
+  '/docs': '2026-10-02',
+  '/about': '2026-10-02',
   '/compare': '2026-10-02',
   '/compare/openclaw': '2026-10-02',
   '/compare/hermes-agent': '2026-10-02',

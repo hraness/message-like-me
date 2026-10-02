@@ -12,14 +12,17 @@ caveats, or generic illustration captions. Keep necessary feature and setup
 conditions in concise supporting copy beside the claim, and keep qualification,
 admission, composition and custody vocabulary off the pages. Verify capabilities
 and the supported installation path before making public claims.
-Retained Message Like Me source documentation describes the legacy history
-reader. Preserve immutable artifact versions and the production delivery gates
-below until their reviewed publication-identity migration is complete.
+Public material on this site never references or links Message Like Me, its
+package, its commands, or `messagelikeme.com`; that prototype is retired. Its
+former pages (`/sources`, `/methodology`, `/research`) permanently redirect to
+current pages through `retiredPageRedirects` in `next.config.ts`; keep those
+redirects and add no page, link, FAQ, metadata, or `llms.txt` entry for it.
+Preserve the production delivery gates below.
 
 # Contents
 
-- `app/` – the public Textbutler project page, its legacy Message Like Me pages,
-  metadata, and visual system.
+- `app/` – the public TextButler project page, its docs, about, blog, and
+  comparison pages, metadata, and visual system.
 - `content/blog/` – blog post bodies in Markdown. Post metadata lives in
   `app/_lib/blog-posts.ts` and each post's review record in
   `app/_lib/blog-admissions.ts`; `bun run sync:readme` renders the bodies.
@@ -55,14 +58,7 @@ below until their reviewed publication-identity migration is complete.
   ellipsis, clipping, or smaller text to force a fit.
 - Keep the page informational. It must never accept, upload, transmit, or
   request message history, contact data, study packets, profiles, or drafts.
-- Where the site describes the legacy Message Like Me package, keep its
-  description exact: “A local-first CLI and Agent Skill for studying private
-  messaging history and drafting messages that sound like you.” Route legacy
-  installation to the exact public npm version and its immutable GitHub
-  artifact mirror.
-- Describe the legacy Message Like Me CLI as local-first, bring-your-own-agent,
-  source-aware, and drafts-only. Never imply that the site analyzes data or that
-  Message Like Me sends messages.
+- Never imply that the site analyzes, stores, or receives message data.
 - Share images come only from the shared `@hraness/web-discovery`
   social-image template via the site's single `defineSocialImageSite`
   declaration in `app/_lib/social.ts`. Pages pass copy only (headline,

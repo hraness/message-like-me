@@ -72,11 +72,11 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   --hraness-marketing-mono-font: var(--font-mono);
 }
 
-.mlm-page {
+.tb-page {
   padding-block-end: clamp(1rem, 4vw, 2.5rem);
 }
 
-.mlm-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
+.tb-marketing-hero .hraness-marketing-hero__heading { max-inline-size: 20ch; }
 
 /* The landing keeps the released editorial preset for its sizes and rhythm,
  * but sets headings in the sans display role, turns patterns off, and keeps
@@ -207,8 +207,8 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   .hraness-marketing-question__answer,
   .hraness-marketing-maker__links,
   .hraness-marketing-proof-frame__caption,
-  .mlm-install-note,
-  .mlm-section-link
+  .tb-install-note,
+  .tb-section-link
 ) a {
   color: var(--primary);
   text-decoration-line: underline;
@@ -216,13 +216,13 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   text-underline-offset: 0.16em;
 }
 
-.mlm-section-link {
+.tb-section-link {
   margin: 0;
   font-weight: 500;
 }
 
 /* The illustrative draft and its plain-language reading notes. */
-.mlm-frame {
+.tb-frame {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   min-height: 21rem;
@@ -315,91 +315,8 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 .terminal-result { color: var(--code-accent); }
 .terminal-result + p { margin-top: 0.7rem; }
 
-/* Supported sources as cards. Shared with /sources. */
-.source-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-}
-.source-card {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: clamp(1.25rem, 2.5vw, 1.5rem);
-  border: 1px solid var(--line);
-  border-radius: 0.875rem;
-  background: var(--surface);
-}
-.source-card-heading {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-}
-.source-icon {
-  display: block;
-  flex: 0 0 auto;
-  shape-rendering: geometricPrecision;
-  width: 48px;
-  height: 48px;
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
-}
-.source-kind {
-  margin: 0 0 0.15rem;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-.source-card h3 {
-  margin: 0;
-  font-family: var(--hraness-type-h3-font);
-  font-size: var(--hraness-type-h3-size);
-  font-weight: var(--hraness-type-h3-weight);
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-.source-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
-.source-badges span {
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-.source-badges span:first-child {
-  border-color: color-mix(in srgb, var(--primary) 32%, transparent);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  color: var(--primary);
-}
-.source-summary {
-  margin: 1rem 0 0;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-.source-boundary {
-  margin: 0.6rem 0 1.1rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-.source-boundary strong { color: var(--ink); font-weight: 600; }
-.source-command {
-  display: block;
-  margin-top: auto;
-  max-width: 100%;
-  padding: 0.85rem 0 0;
-  background: transparent;
-  border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
 /* What it is not: the contrast card inside the split section. */
-.mlm-contrast {
+.tb-contrast {
   display: grid;
   gap: 0.75rem;
   padding: clamp(1.5rem, 3vw, 2.25rem);
@@ -407,13 +324,13 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   border-radius: 0.875rem;
   background: var(--surface);
 }
-.mlm-contrast__label {
+.tb-contrast__label {
   margin: 0;
   color: var(--muted);
   font-size: 0.875rem;
   font-weight: 500;
 }
-.mlm-contrast p:not(.mlm-contrast__label) {
+.tb-contrast p:not(.tb-contrast__label) {
   margin: 0;
   max-inline-size: none;
   color: var(--muted);
@@ -457,7 +374,7 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
   overflow-wrap: anywhere;
   white-space: normal;
 }
-.mlm-install-note {
+.tb-install-note {
   margin: 0.25rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
@@ -465,7 +382,7 @@ body > :where(main, .textbutler-marketing) { flex: 1 0 auto; }
 }
 
 /* Ask AI row and footer. */
-nav.message-like-me-ask-ai {
+nav.textbutler-ask-ai {
   --ui-border: var(--line);
   --ui-foreground: var(--ink);
   --ui-muted: var(--paper-deep);
@@ -482,7 +399,7 @@ nav.message-like-me-ask-ai {
   padding: 1.75rem var(--gutter);
 }
 
-nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-label"] {
+nav.textbutler-ask-ai [data-slot="ask-ai-about-this-label"] {
   font-family: var(--font-text);
   font-size: 0.85rem;
   font-weight: 500;
@@ -490,7 +407,7 @@ nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-label"] {
   text-transform: none;
 }
 
-nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"] {
+nav.textbutler-ask-ai [data-slot="ask-ai-about-this-link"] {
   border-radius: 0.5rem;
   color: var(--ui-muted-foreground);
   font-family: var(--font-text);
@@ -499,18 +416,18 @@ nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"] {
   text-decoration: none;
 }
 
-nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"]:hover,
-nav.message-like-me-ask-ai [data-slot="ask-ai-about-this-link"]:focus-visible {
+nav.textbutler-ask-ai [data-slot="ask-ai-about-this-link"]:hover,
+nav.textbutler-ask-ai [data-slot="ask-ai-about-this-link"]:focus-visible {
   color: var(--ui-foreground);
   text-decoration: none;
 }
 
-nav.message-like-me-ask-ai + footer {
+nav.textbutler-ask-ai + footer {
   border-top: 0;
   padding-top: 0;
 }
 
-/* Document pages: about, sources, docs, methodology, research, not found. */
+/* Document pages: about, docs, not found. */
 .eyebrow {
   margin: 0 0 1rem;
   color: var(--muted);
@@ -692,84 +609,18 @@ nav.message-like-me-ask-ai + footer {
   padding: clamp(3rem, 6vw, 4.5rem) 0;
   border-bottom: 1px solid var(--line);
 }
-.about-sources > div:last-child p,
-.source-directory .section-heading > p:last-child,
-.beeper-workflow-intro > p:last-child,
-.source-privacy > p:last-child {
+.about-sources > div:last-child p {
   margin: 1rem 0 0;
   color: var(--muted);
   font-size: 1.05rem;
   line-height: 1.55;
 }
-.about-sources a,
-.source-links a {
+.about-sources a {
   display: inline-block;
   margin-top: 1.25rem;
   font-weight: 500;
 }
-.source-directory { padding: clamp(3rem, 6vw, 4.5rem) 0; }
 .section-heading { max-width: 40rem; }
-.source-grid-full { margin-top: 2.5rem; }
-.beeper-workflow {
-  margin-inline: calc(-1 * var(--gutter));
-  padding: clamp(3rem, 6vw, 4.5rem) var(--gutter);
-  background: var(--inverse);
-  color: var(--inverse-foreground);
-}
-.beeper-workflow + .beeper-workflow { border-top: 1px solid color-mix(in srgb, var(--inverse-foreground) 16%, transparent); }
-.beeper-workflow h2,
-.beeper-workflow h3 { color: inherit; }
-.beeper-workflow .eyebrow,
-.beeper-workflow-intro > p:last-child,
-.workflow-steps p { color: color-mix(in srgb, var(--inverse-foreground) 74%, transparent); }
-.beeper-workflow-intro { max-width: 40rem; }
-.workflow-steps { list-style: none; margin: 2.5rem 0 0; padding: 0; }
-.workflow-steps > li {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: 2.5rem minmax(0, 1fr);
-  padding: 1.75rem 0;
-  border-top: 1px solid color-mix(in srgb, var(--inverse-foreground) 20%, transparent);
-}
-.workflow-steps > li:last-child { border-bottom: 1px solid color-mix(in srgb, var(--inverse-foreground) 20%, transparent); }
-.workflow-steps > li > span {
-  padding-top: 0.3rem;
-  color: var(--accent-on-inverse);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-.workflow-steps h3 { margin: 0; font-family: var(--hraness-type-h3-font); font-size: var(--hraness-type-h3-size); font-weight: var(--hraness-type-h3-weight); }
-.workflow-steps p { margin: 0.6rem 0 0; max-width: 46rem; line-height: 1.55; }
-.workflow-steps p code {
-  color: var(--accent-on-inverse);
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-}
-.workflow-steps .workflow-command {
-  display: block;
-  margin-top: 0.9rem;
-  max-width: 100%;
-  color: var(--accent-on-inverse);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-.beeper-boundary {
-  margin-top: 2rem;
-  max-width: 46rem;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid color-mix(in srgb, var(--inverse-foreground) 24%, transparent);
-  border-radius: 0.875rem;
-  color: color-mix(in srgb, var(--inverse-foreground) 80%, transparent);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-.beeper-boundary strong { color: var(--inverse-foreground); }
-.source-links { display: flex; flex-wrap: wrap; gap: 0.75rem 1.75rem; margin-top: 1.5rem; }
-.beeper-workflow .source-links a { color: var(--inverse-foreground); margin-top: 0; }
-.source-privacy { max-width: 46rem; padding: clamp(3rem, 6vw, 4.5rem) 0 0.5rem; }
 .document-next {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -859,7 +710,7 @@ nav.message-like-me-ask-ai + footer {
 .privacy-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #39b86a; }
 
 @media (max-width: 48rem) {
-  .mlm-frame { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .tb-frame { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .terminal-card { border-left: 0; border-top: 1px solid var(--line); }
   .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .about-grid,
@@ -870,18 +721,10 @@ nav.message-like-me-ask-ai + footer {
   .document-prose { margin-left: 0; }
 }
 @media (max-width: 32rem) {
-  .mlm-marketing-hero .hraness-marketing-action,
-  .mlm-marketing-cta .hraness-marketing-action,
+  .tb-marketing-hero .hraness-marketing-action,
+  .tb-marketing-cta .hraness-marketing-action,
   .button { width: 100%; }
   .bubble { max-width: 90%; }
-}
-@media (forced-colors: active) {
-  .source-icon {
-    background: Canvas;
-    color: CanvasText;
-    forced-color-adjust: none;
-    outline: 1px solid CanvasText;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -938,14 +781,14 @@ html { scrollbar-color: var(--muted) var(--paper); }
   overflow-x: auto;
 }
 .workspace-example p { margin: 0.9rem 0 0; color: var(--muted); max-width: 48ch; font-size: 0.95rem; }
-.workspace-example a, .tb-steps a, .legacy-note a { color: var(--primary); text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.workspace-example a, .tb-steps a { color: var(--primary); text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 
 .architecture-rows { margin: 0; border-block-end: 1px solid var(--line); }
 .architecture-rows > div { display: grid; grid-template-columns: minmax(10rem, 0.4fr) minmax(0, 1fr); gap: 2rem; padding-block: 1.25rem; border-block-start: 1px solid var(--line); }
 .architecture-rows dt { font-size: 1.05rem; font-weight: 600; }
 .architecture-rows dt a { color: inherit; text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
 .architecture-rows dd { margin: 0; color: var(--muted); max-width: 62ch; }
-.mlm-section-link { margin-block-start: 1.25rem; }
+.tb-section-link { margin-block-start: 1.25rem; }
 
 /* The one development-status statement, set apart from the steps. */
 .tb-status { margin: 0 0 2rem; max-width: 62ch; padding-inline-start: 1rem; border-inline-start: 2px solid var(--primary); color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
@@ -968,8 +811,6 @@ html { scrollbar-color: var(--muted) var(--paper); }
 .tb-details summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .provider-marks { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; align-items: center; }
 .tb-steps .provider-marks, .about-grid .provider-marks { margin: 0.6rem 0 0; color: inherit; }
-.legacy-note { margin-block: 1.5rem 0; color: var(--muted); font-size: 0.95rem; max-width: 75ch; }
-.document-page > .legacy-note { margin-bottom: 1.5rem; }
 
 @media (max-width: 48rem) {
   .architecture-rows > div { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }

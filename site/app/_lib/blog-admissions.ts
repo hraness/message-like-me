@@ -56,8 +56,8 @@ export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
       source('Ownership, contact data and send transactions', 'docs/textbutler/architecture.md'),
       source('Uncertain send handling', 'packages/textbutler/src/runtime.ts'),
     ],
-    observations: ['The GhostGet connection is the current live transport; the legacy Message Like Me export importer is a separate historical path.', 'Selecting a conversation creates a disabled contact, and importing recent history does not enable replies.'],
-    harmIfWrong: 'A reader could install the retired export tools expecting live replies, or mistake send acceptance for delivery.',
+    observations: ['The GhostGet connection is the current live transport; the older history-bundle export importer is a separate path.', 'Selecting a conversation creates a disabled contact, and importing recent history does not enable replies.'],
+    harmIfWrong: 'A reader could install the older history export tools expecting live replies, or mistake send acceptance for delivery.',
     refreshTriggers: ['GhostGet messaging connection changes', 'Beeper support or required app lifetime changes', 'Conversation selection, draft review or uncertain-send handling changes'],
   },
   {

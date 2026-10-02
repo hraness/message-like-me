@@ -402,9 +402,9 @@ async function checkVersionContracts(manifest: JsonRecord): Promise<string[]> {
   if (sourceVersion.trim() !== expectedSource) {
     problems.push(`src/version.ts must match package version ${version}`);
   }
-  const expectedInstall = `@hraness/message-like-me@${version}`;
-  if (!readme.includes(expectedInstall)) {
-    problems.push(`README.md npm install must match package version ${version}`);
+  // Public material never names or links the retired history package.
+  if (/message like me|messagelikeme|@hraness\/message-like-me/iu.test(readme)) {
+    problems.push("README.md must not reference the retired history package");
   }
   if (!readme.startsWith("# TextButler\n\n")) {
     problems.push("README.md must identify TextButler");

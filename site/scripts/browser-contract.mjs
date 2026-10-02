@@ -106,7 +106,7 @@ export async function verifyOwnedChromium(browser, executablePath, expectedVersi
 
 export function browserCases() {
   return [1440, 390].flatMap((width) => ['light', 'dark'].flatMap((theme) =>
-    ['/', '/docs', '/sources', '/preview', '/blog', '/blog/introducing-textbutler'].map((path) => ({ width, theme, path }))));
+    ['/', '/docs', '/about', '/preview', '/blog', '/blog/introducing-textbutler'].map((path) => ({ width, theme, path }))));
 }
 
 // Pin the synthetic presentation state instead of inheriting host accessibility

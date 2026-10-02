@@ -38,10 +38,18 @@ export const frameSafePreviewHeaders = [
   { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
 ] as const;
 
+// Retired pages and where their readers go now.
+export const retiredPageRedirects = [
+  { source: '/sources', destination: '/#supports' },
+  { source: '/methodology', destination: '/about' },
+  { source: '/research', destination: '/about' },
+] as const;
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   async redirects() {
     return [
+      ...retiredPageRedirects.map(({ source, destination }) => ({ source, destination, permanent: true })),
       {
         source: '/:path*',
         has: [{ type: 'host', value: 'www.messagelikeme.com' }],
