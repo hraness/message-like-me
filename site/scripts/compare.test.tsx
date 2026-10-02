@@ -48,7 +48,8 @@ function byType(html: string, type: string): JsonLd | undefined {
 }
 
 function decode(html: string): string {
-  return html.replaceAll('&amp;', '&').replaceAll('&#x27;', '\'').replaceAll('&quot;', '"');
+  // Decode &amp; last so an escaped entity is never unescaped twice.
+  return html.replaceAll('&#x27;', '\'').replaceAll('&quot;', '"').replaceAll('&amp;', '&');
 }
 
 test('the hub lists every comparison page and the hub table covers each one', () => {
