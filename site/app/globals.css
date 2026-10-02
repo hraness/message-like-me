@@ -1013,3 +1013,10 @@ a[href] {
   text-underline-offset: 0.2em;
 }
 a[href]:where(:hover, :focus-visible) { text-decoration-color: currentColor; }
+
+/* Comparison pages: the date each product's public pages were last checked. */
+.compare-checked { color: var(--muted); font-size: 0.875rem; }
+/* The hub table keeps readable columns and scrolls inside its own region on phones. */
+.compare-hub-table { overflow-x: auto; margin-block: 0 0.5rem; }
+.compare-hub-table table { min-width: 40rem; margin: 0; }
+.compare-hub-table tr[data-highlight] > * { background: var(--paper-deep); }

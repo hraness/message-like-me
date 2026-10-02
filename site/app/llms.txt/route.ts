@@ -18,6 +18,7 @@ import {
 } from '../_lib/site';
 import { MESSAGING_APPS, REPLY_WRITERS } from '../_lib/landing';
 import { blogPostPath, indexableBlogPosts } from '../_lib/blog';
+import { COMPARISONS_CHECKED_ON, HUB_ENTRIES, HUB_FRAMING } from '../compare/_lib/comparisons';
 
 export function GET() {
   const body = [
@@ -28,6 +29,22 @@ export function GET() {
     `${SITE_WHAT_IT_IS} It is a headless macOS command line and background service with no window or menu bar icon, and a coding agent such as Claude Code, Codex, or Devin can set it up by following the written guide.`,
     '',
     'The website is informational. It never receives private message history, contacts, profiles, or drafts.',
+    '',
+    '## Key facts',
+    '- Platform: macOS only. The Mac must stay awake and signed in. There is no iPhone, Windows, or Linux version.',
+    '- Price and license: free and open source under the MIT license.',
+    '- Messaging apps: iMessage, WhatsApp, and Beeper, connected through GhostGet.',
+    '- Where it answers: only in the direct and group conversations you turn on, from your own account.',
+    '- Default trigger: messages that contain the word “butler”; Smart mode is optional.',
+    '- Disclosure: replies are wrapped in 🤖{ } by default; the marker is configurable per conversation.',
+    '- Memory: editable notes for each conversation, stored as ordinary files on your Mac.',
+    `- Reply writers: ${REPLY_WRITERS_SENTENCE}`,
+    `- Source: ${GITHUB_URL}`,
+    '',
+    '## How TextButler compares',
+    HUB_FRAMING,
+    `Comparisons checked on ${COMPARISONS_CHECKED_ON} against each product’s public pages: ${absoluteUrl('/compare')}`,
+    ...HUB_ENTRIES.map(({ hubLine, name, path }) => `- [TextButler compared with ${name}](${absoluteUrl(path)}): ${hubLine}`),
     '',
     '## Start with a conversation',
     SITE_STATUS,
@@ -79,7 +96,8 @@ export function GET() {
     `- ${absoluteUrl('/methodology')}`,
     `- ${absoluteUrl('/research')}`,
     `- ${absoluteUrl('/about')}`,
-    `- ${absoluteUrl('/compare/ghostreply')}`,
+    `- ${absoluteUrl('/compare')}`,
+    ...HUB_ENTRIES.map(({ path }) => `- ${absoluteUrl(path)}`),
     '',
     '## Blog',
     `- ${absoluteUrl('/blog')}`,

@@ -55,6 +55,11 @@ export const CANONICAL_PAGE_PATHS = [
   '/docs',
   '/methodology',
   '/research',
+  '/compare',
+  '/compare/openclaw',
+  '/compare/hermes-agent',
+  '/compare/poke',
+  '/compare/meta-ai-whatsapp',
   '/compare/ghostreply',
 ] as const;
 
@@ -74,12 +79,17 @@ export function pageMetadata({
   title,
   description,
   path,
+  image,
 }: {
   title: string;
   description: string;
   path: CanonicalPagePath;
+  // A page-specific share card rendered by that route's opengraph-image.
+  image?: Readonly<{ path: SitePath; alt: string }>;
 }): Metadata {
   const url = absoluteUrl(path);
+  const imageUrl = absoluteUrl(image?.path ?? '/opengraph-image');
+  const imageAlt = image?.alt ?? SOCIAL_IMAGE_ALT;
   const resolvedTitle = path === '/' ? { absolute: title } : title;
   const socialTitle = path === '/' ? title : `${title} | ${SITE_NAME}`;
   return {
@@ -93,11 +103,11 @@ export function pageMetadata({
       title: socialTitle,
       description,
       images: [{
-        url: absoluteUrl('/opengraph-image'),
+        url: imageUrl,
         width: 1200,
         height: 630,
         type: 'image/png',
-        alt: SOCIAL_IMAGE_ALT,
+        alt: imageAlt,
       }],
     },
     twitter: {
@@ -105,8 +115,8 @@ export function pageMetadata({
       title: socialTitle,
       description,
       images: [{
-        url: absoluteUrl('/opengraph-image'),
-        alt: SOCIAL_IMAGE_ALT,
+        url: imageUrl,
+        alt: imageAlt,
       }],
     },
   };
@@ -122,5 +132,10 @@ export const PAGE_LAST_MODIFIED = {
   '/methodology': '2026-09-11',
   '/research': '2026-09-11',
   '/about': '2026-10-01',
-  '/compare/ghostreply': '2026-10-01',
+  '/compare': '2026-10-02',
+  '/compare/openclaw': '2026-10-02',
+  '/compare/hermes-agent': '2026-10-02',
+  '/compare/poke': '2026-10-02',
+  '/compare/meta-ai-whatsapp': '2026-10-02',
+  '/compare/ghostreply': '2026-10-02',
 } as const;

@@ -10,8 +10,12 @@ import {
   serializeJsonLd,
   SUBSCRIPTION_GUIDE_URL,
 } from '../../_lib/site';
+import { socialImageAltFor } from '../../_lib/social';
+import { compareBreadcrumbJsonLd, comparisonWebPageJsonLd, faqJsonLd } from '../../_lib/structured-data';
+import { CheckedOn } from '../_components/comparison-page';
+import { GHOSTREPLY_CARD, GHOSTREPLY_HUB_ENTRY } from '../_lib/comparisons';
 
-const GHOSTREPLY_URL = 'https://ghostreply.lol';
+const GHOSTREPLY_URL = GHOSTREPLY_HUB_ENTRY.officialUrl;
 const GHOSTREPLY_PRIVACY_URL = 'https://ghostreply.lol/privacy.html';
 const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-safe.html';
 
@@ -22,6 +26,7 @@ export const metadata = pageMetadata({
   title: 'GhostReply alternative: TextButler compared',
   description,
   path: '/compare/ghostreply',
+  image: { path: '/compare/ghostreply/opengraph-image', alt: socialImageAltFor(GHOSTREPLY_CARD) },
 });
 
 const questions = [
@@ -47,27 +52,31 @@ const questions = [
   },
 ] as const;
 
-const faqJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: questions.map(({ answer, question }) => ({
-    '@type': 'Question',
-    name: question,
-    acceptedAnswer: { '@type': 'Answer', text: answer },
-  })),
-};
+const jsonLd = [
+  comparisonWebPageJsonLd({
+    name: 'TextButler compared with GhostReply',
+    description,
+    other: { name: 'GhostReply', url: GHOSTREPLY_URL },
+    path: '/compare/ghostreply',
+  }),
+  compareBreadcrumbJsonLd('TextButler and GhostReply', '/compare/ghostreply'),
+  faqJsonLd(questions),
+];
 
 export default function CompareGhostReplyPage() {
   return (
     <>
       <SiteHeader />
       <main className="document-page" id="main-content" tabIndex={-1}>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqJsonLd) }}
-        />
+        {jsonLd.map((data) => (
+          <script
+            dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
+            key={data['@type']}
+            type="application/ld+json"
+          />
+        ))}
         <header className="document-hero">
-          <p className="eyebrow">Compare</p>
+          <p className="eyebrow"><Link href="/compare">Compare</Link></p>
           <h1>TextButler compared with GhostReply</h1>
           <p>
             GhostReply writes iMessage replies in your style. TextButler gives you a choice
@@ -92,6 +101,7 @@ export default function CompareGhostReplyPage() {
             ]}
             note={<>TextButler Gateway usage stops at $1 a day. GhostReply includes 10 free replies before purchase. <a href="#comparison-sources">Sources</a>.</>}
           />
+          <CheckedOn />
 
           <h2>Which one fits</h2>
           <p>
@@ -164,6 +174,7 @@ export default function CompareGhostReplyPage() {
           </p>
         </article>
         <nav className="document-next" aria-label="Learn more">
+          <Link href="/compare">All comparisons</Link>
           <Link href="/docs">Read the project docs</Link>
           <Link href="/about">About TextButler</Link>
         </nav>

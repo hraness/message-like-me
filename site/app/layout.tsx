@@ -12,6 +12,7 @@ import {
   SITE_TITLE,
   SOCIAL_IMAGE_ALT,
 } from './_lib/site';
+import { APPLICATION_ID, ORGANIZATION_ID, WEBSITE_ID } from './_lib/structured-data';
 import '@hraness/design-kit/fonts.css';
 import './globals.css';
 
@@ -82,9 +83,9 @@ export const viewport: Viewport = {
   ],
 };
 
-const websiteId = `${absoluteUrl('/')}#website`;
-const applicationId = `${absoluteUrl('/')}#application`;
-const organizationId = 'https://hraness.com/#organization';
+const websiteId = WEBSITE_ID;
+const applicationId = APPLICATION_ID;
+const organizationId = ORGANIZATION_ID;
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [

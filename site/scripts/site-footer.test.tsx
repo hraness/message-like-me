@@ -7,6 +7,11 @@ import { HRANESS_HOME_URL } from '@hraness/site-footer';
 
 import AboutPage from '../app/about/page.tsx';
 import CompareGhostReplyPage from '../app/compare/ghostreply/page.tsx';
+import CompareHermesPage from '../app/compare/hermes-agent/page.tsx';
+import CompareMetaAiPage from '../app/compare/meta-ai-whatsapp/page.tsx';
+import CompareOpenClawPage from '../app/compare/openclaw/page.tsx';
+import CompareHubPage from '../app/compare/page.tsx';
+import ComparePokePage from '../app/compare/poke/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
 import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
@@ -30,6 +35,11 @@ const publicPages: readonly Readonly<{
   { name: '/docs', render: DocsPage },
   { name: '/methodology', render: MethodologyPage },
   { name: '/research', render: ResearchPage },
+  { name: '/compare', render: CompareHubPage },
+  { name: '/compare/openclaw', render: CompareOpenClawPage },
+  { name: '/compare/hermes-agent', render: CompareHermesPage },
+  { name: '/compare/poke', render: ComparePokePage },
+  { name: '/compare/meta-ai-whatsapp', render: CompareMetaAiPage },
   { name: '/compare/ghostreply', render: CompareGhostReplyPage },
   { name: 'not-found', render: NotFound },
 ];

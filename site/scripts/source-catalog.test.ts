@@ -39,7 +39,12 @@ describe('supported source presentation', () => {
       ['/methodology', '2026-09-11T00:00:00.000Z'],
       ['/research', '2026-09-11T00:00:00.000Z'],
       ['/about', '2026-10-01T00:00:00.000Z'],
-      ['/compare/ghostreply', '2026-10-01T00:00:00.000Z'],
+      ['/compare', '2026-10-02T00:00:00.000Z'],
+      ['/compare/openclaw', '2026-10-02T00:00:00.000Z'],
+      ['/compare/hermes-agent', '2026-10-02T00:00:00.000Z'],
+      ['/compare/poke', '2026-10-02T00:00:00.000Z'],
+      ['/compare/meta-ai-whatsapp', '2026-10-02T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-10-02T00:00:00.000Z'],
     ]);
   });
 
