@@ -14,8 +14,8 @@ New installations start paused, and every conversation starts with automatic rep
 
 [GhostGet](https://ghostget.com) connects TextButler to messaging apps on your Mac. It handles reading and sending; TextButler decides whether to answer and prepares the reply. This example uses the default keyword mode with the AI marker on.
 
-![In default keyword mode, a request passes through GhostGet and TextButler’s checks, then returns as a marked reply](/diagrams/d1-one-message-narrow.light@2x.png#gh-light-mode-only)
-![In default keyword mode, a request passes through GhostGet and TextButler’s checks, then returns as a marked reply](/diagrams/d1-one-message-narrow.dark@2x.png#gh-dark-mode-only)
+![In default keyword mode, a request passes through GhostGet and TextButler’s checks, then returns as a marked reply](/diagrams/d1-one-message-wide.light@2x.png#gh-light-mode-only)
+![In default keyword mode, a request passes through GhostGet and TextButler’s checks, then returns as a marked reply](/diagrams/d1-one-message-wide.dark@2x.png#gh-dark-mode-only)
 
 When a message arrives in an enabled conversation, TextButler checks the conversation, the response mode, recent activity from you, and the reply limit. A burst of messages gets time to settle before it answers. If you have just written in the chat, it skips the request instead of saving it for later.
 

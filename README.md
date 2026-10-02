@@ -89,8 +89,8 @@ test with someone you trust on the account you’ll use.
 
 ## How it works
 
-![One message, start to finish: a friend’s message reaches GhostGet on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.light%402x.png#gh-light-mode-only)
-![One message, start to finish: a friend’s message reaches GhostGet on your Mac, passes five checks, gets 🤖{ 👀 } right away, then your notes and the chat are read, your chosen model writes, and a marked reply goes back](site/public/diagrams/d1-one-message-wide.dark%402x.png#gh-dark-mode-only)
+![One message, start to finish: a friend’s message arrives through GhostGet on your Mac, passes five checks and gets 🤖{ 👀 } right away, then your notes and the recent chat are read, your chosen model writes, and the marked reply goes back to the chat](site/public/diagrams/d1-one-message-wide.light%402x.png#gh-light-mode-only)
+![One message, start to finish: a friend’s message arrives through GhostGet on your Mac, passes five checks and gets 🤖{ 👀 } right away, then your notes and the recent chat are read, your chosen model writes, and the marked reply goes back to the chat](site/public/diagrams/d1-one-message-wide.dark%402x.png#gh-dark-mode-only)
 
 1. **Someone texts you.** They write in a direct or group chat you’ve turned on.
    GhostGet passes the message to TextButler, running in the background on your

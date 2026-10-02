@@ -61,16 +61,31 @@ const PUBLIC_ROOT = resolve(import.meta.dir, "..", "public");
 
 // Local PNGs get their intrinsic CSS size (half the pixels for @2x files) and
 // lazy loading, so images reserve their box and the hidden theme copy never loads.
+function localPngSize(path: string): { width: number; height: number } | undefined {
+  const decoded = decodeURIComponent(path);
+  const file = join(PUBLIC_ROOT, decoded);
+  if (!file.startsWith(PUBLIC_ROOT) || !existsSync(file)) return undefined;
+  const header = readFileSync(file).subarray(0, 24);
+  if (header.toString("ascii", 1, 4) !== "PNG") return undefined;
+  const scale = /@2x\.png$/u.test(decoded) ? 2 : /@3x\.png$/u.test(decoded) ? 3 : 1;
+  return { width: Math.round(header.readUInt32BE(16) / scale), height: Math.round(header.readUInt32BE(20) / scale) };
+}
+
+// A diagram exported as a `-wide` / `-narrow` pair (public/diagrams) becomes a
+// <picture> that swaps to the narrow file below 900px, matching DiagramFigure.
+const NARROW_DIAGRAM_MEDIA = "(max-width: 899px)";
+
 function sizeLocalImages(html: string): string {
   return html.replace(/<img ([^>]*?)src="(\/[^"#]+\.png)(#[^"]*)?"([^>]*?)\s*\/?>/gu, (tag, before: string, path: string, fragment: string | undefined, after: string) => {
-    const file = join(PUBLIC_ROOT, decodeURIComponent(path));
-    if (!file.startsWith(PUBLIC_ROOT) || !existsSync(file)) return tag;
-    const header = readFileSync(file).subarray(0, 24);
-    if (header.toString("ascii", 1, 4) !== "PNG") return tag;
-    const scale = /@2x\.png$/u.test(decodeURIComponent(path)) ? 2 : /@3x\.png$/u.test(decodeURIComponent(path)) ? 3 : 1;
-    const width = Math.round(header.readUInt32BE(16) / scale);
-    const height = Math.round(header.readUInt32BE(20) / scale);
-    return `<img ${before}src="${path}${fragment ?? ""}"${after} width="${width}" height="${height}" loading="lazy" decoding="async">`;
+    const size = localPngSize(path);
+    if (size === undefined) return tag;
+    const img = `<img ${before}src="${path}${fragment ?? ""}"${after} width="${size.width}" height="${size.height}" loading="lazy" decoding="async">`;
+    const narrowPath = /^\/diagrams\/[^/]+-wide\.(?:light|dark)(?:@|%40)2x\.png$/u.test(path)
+      ? path.replace(/-wide\.(light|dark)/u, "-narrow.$1")
+      : undefined;
+    const narrow = narrowPath === undefined ? undefined : localPngSize(narrowPath);
+    if (narrowPath === undefined || narrow === undefined) return img;
+    return `<picture><source media="${NARROW_DIAGRAM_MEDIA}" srcset="${narrowPath}" width="${narrow.width}" height="${narrow.height}">${img}</picture>`;
   });
 }
 
