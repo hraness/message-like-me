@@ -1,6 +1,6 @@
 import { AgentSession, MockupRoot, TerminalFrame, type AgentTurn } from '@hraness/design-kit/mockups';
 
-import { heroConversation, PhoneMock, PhoneMockPlayer } from '../_components/phone';
+import { heroConversation, MockupCredit, PhoneMock, PhoneMockPlayer } from '../_components/phone';
 import { AGENT_SETUP_PROMPT } from '../_lib/site';
 import { beeperConversation, DRAFT_REVIEW_LINES, markerMessages, whatsappConversation } from './samples';
 import { WritersShowcase } from './writers';
@@ -27,14 +27,18 @@ const OTHER_APPS = {
 
 /**
  * The phone chat. `messages` plays the hero exchange; `whatsapp` and `beeper`
- * use synthetic conversations; `others` shows those two side by side.
+ * use synthetic conversations; `others` shows those two side by side under one
+ * “Made with Textmock” credit. Pass `credit={false}` where the frame is exported.
  */
-export function ThreadMockup({ app = 'messages', play = false }: Readonly<{ app?: ThreadApp; play?: boolean }>) {
+export function ThreadMockup({ app = 'messages', play = false, credit = true }: Readonly<{ app?: ThreadApp; play?: boolean; credit?: boolean }>) {
   if (app === 'others') {
     return (
-      <div className="tbm-phone-pair">
-        <ThreadMockup app="whatsapp" />
-        <ThreadMockup app="beeper" />
+      <div className="tbm-phone-group">
+        <div className="tbm-phone-pair">
+          <ThreadMockup app="whatsapp" credit={false} />
+          <ThreadMockup app="beeper" credit={false} />
+        </div>
+        {credit ? <MockupCredit /> : null}
       </div>
     );
   }
@@ -45,6 +49,7 @@ export function ThreadMockup({ app = 'messages', play = false }: Readonly<{ app?
       {play
         ? <PhoneMockPlayer controls conversation={conversation} label={label} maxWidth={360} />
         : <PhoneMock conversation={conversation} label={label} maxWidth={360} screenHeight={700} />}
+      {credit ? <MockupCredit /> : null}
     </div>
   );
 }

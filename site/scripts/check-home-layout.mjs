@@ -34,7 +34,9 @@ export async function inspectHomeLayout(page, { enforceDesktopColumns = true } =
       })),
       crops: [...document.querySelectorAll('[data-phone-crop]')].map(viewport => {
         const frame = box(viewport);
-        return { frame, replies: [...viewport.querySelectorAll('[data-marked]')].map(box) };
+        // The butler's replies are the marked 🤖{ } bubbles in the visible appearance.
+        const replies = [...viewport.querySelectorAll('.tm-bubble')].filter(bubble => bubble.textContent.trimStart().startsWith('🤖{') && bubble.getClientRects().length > 0);
+        return { frame, replies: replies.map(box) };
       }),
     };
   });

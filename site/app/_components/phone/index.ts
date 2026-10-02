@@ -1,4 +1,5 @@
-export { PhoneMock, type PhoneMockProps, type PhoneTheme } from './phone-mock';
+export { PhoneMock, type PhoneMockProps, type PhoneTheme, type PlaybackPhase } from './phone-mock';
 export { PhoneMockPlayer, type PhoneMockPlayerProps } from './phone-mock-player';
-export { describeConversation } from './messages-thread';
+export { MockupCredit } from './credit';
+export { conversationScene, describeConversation, sideFor } from './scene';
 export * from './conversations';

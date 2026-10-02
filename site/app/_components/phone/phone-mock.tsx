@@ -1,11 +1,14 @@
+import { PhoneFit } from '@hraness/textmockups';
+import '@hraness/textmockups/phone.css';
+import './phone-overrides.css';
 import type { CSSProperties, Ref } from 'react';
 
 import type { Conversation, Perspective } from './conversations';
-import { describeConversation, MessagesScreen, type PlaybackPhase } from './messages-thread';
-import { PhoneFrame } from './phone-frame';
+import { conversationScene, describeConversation, type SceneTheme } from './scene';
 import styles from './phone.module.css';
 
 export type PhoneTheme = 'auto' | 'light' | 'dark';
+export type PlaybackPhase = 'final' | 'playing' | 'hold' | 'fading';
 
 export interface PhoneMockProps {
   readonly conversation: Conversation;
@@ -16,8 +19,8 @@ export interface PhoneMockProps {
   /** Maximum rendered width in CSS pixels. The phone scales down to its container. */
   readonly maxWidth?: number;
   /**
-   * Screen height in iOS points (default 844, a full iPhone). A shorter screen
-   * crops the empty top of a short thread so the device hugs the conversation.
+   * Device height in points (default 852, a full iPhone). A shorter device
+   * crops the empty top of a short thread so the phone hugs the conversation.
    */
   readonly screenHeight?: number;
   /** Show only the top of the complete device, in device points, with a quiet fade. */
@@ -27,14 +30,16 @@ export interface PhoneMockProps {
   readonly className?: string;
   /** Ref to the root element (the player observes it for scroll-into-view). */
   readonly ref?: Ref<HTMLDivElement>;
-  /** Internal: playback state from `PhoneMockPlayer`. */
-  readonly visibleCount?: number;
-  readonly typingId?: string;
+  /** Internal: the playback second from `PhoneMockPlayer`. Absent draws the finished conversation. */
+  readonly time?: number;
   readonly phase?: PlaybackPhase;
 }
 
+const DEVICE_WIDTH = 393;
+
 /**
- * A code-rendered iPhone showing a synthetic Messages conversation.
+ * A code-rendered iPhone showing a synthetic conversation, drawn by
+ * @hraness/textmockups (the renderer behind textmock.com).
  * Static and server-safe (no scripts): use it in pages that must render without
  * JavaScript, blog image capture and video scenes. `PhoneMockPlayer` adds
  * scripted playback on top of the same markup.
@@ -49,35 +54,43 @@ export function PhoneMock({
   label,
   className,
   ref,
-  visibleCount,
-  typingId,
-  phase,
+  time,
+  phase = 'final',
 }: PhoneMockProps) {
-  const vars: Record<string, string> = {};
-  if (maxWidth) vars['--phone-max-width'] = `${maxWidth}px`;
-  if (screenHeight) vars['--phone-h'] = String(screenHeight + 22);
-  const style = Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined;
+  const themes: readonly SceneTheme[] = theme === 'auto' ? ['light', 'dark'] : [theme];
+  const style = maxWidth ? ({ '--phone-max-width': `${maxWidth}px` } as CSSProperties) : undefined;
   const phone = (
     <div
       ref={ref}
       className={className ? `${styles.root} ${className}` : styles.root}
-      data-phone-theme={theme === 'auto' ? undefined : theme}
+      data-tb-phone=""
+      data-app={conversation.app}
+      data-phase={phase}
+      data-phone-theme={theme}
       role="img"
       aria-label={label ?? describeConversation(conversation, perspective)}
       style={style}
     >
-      <PhoneFrame screen={conversation.app === 'whatsapp' ? 'wallpaper' : 'plain'}>
-        <MessagesScreen
-          conversation={conversation}
-          perspective={perspective}
-          visibleCount={visibleCount}
-          typingId={typingId}
-          phase={phase}
-        />
-      </PhoneFrame>
+      {themes.map((sceneTheme) => (
+        <div key={sceneTheme} className={styles.variant} data-variant={theme === 'auto' ? sceneTheme : undefined}>
+          <PhoneFit
+            scene={conversationScene(conversation, { perspective, theme: sceneTheme, screenHeight })}
+            time={time}
+            watermark={false}
+          />
+        </div>
+      ))}
     </div>
   );
   if (crop === undefined) return phone;
   if (!Number.isFinite(crop) || crop <= 0) throw new RangeError('Phone crop must be positive.');
-  return <div className={styles.crop} data-phone-crop="" style={{ '--crop-h': String(crop), ...(maxWidth ? { '--crop-max': `${maxWidth}px` } : {}) } as CSSProperties}>{phone}</div>;
+  return (
+    <div
+      className={styles.crop}
+      data-phone-crop=""
+      style={{ '--crop-ratio': `${DEVICE_WIDTH} / ${crop}`, ...(maxWidth ? { '--crop-max': `${maxWidth}px` } : {}) } as CSSProperties}
+    >
+      {phone}
+    </div>
+  );
 }

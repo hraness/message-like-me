@@ -7,7 +7,10 @@
  *   one space inside each brace (config.ts DEFAULT_DISCLOSURE + disclosureMarkers);
  * - the 👀 acknowledgment is an ordinary marked text message, never a tapback;
  * - the butler never gets a typing indicator (the Mac sends, nothing types);
- * - timestamps are day-level section headers only.
+ * - timestamps are day-level section headers, plus the small clock WhatsApp
+ *   draws inside each bubble (`time`).
+ *
+ * `scene.ts` turns a conversation into a Textmock scene for @hraness/textmockups.
  */
 
 export type PhoneApp = 'imessage' | 'whatsapp' | 'neutral';
@@ -49,6 +52,8 @@ export interface Message {
   readonly reaction?: Reaction;
   /** Milliseconds of stillness before this message (or its typing dots) in playback. */
   readonly waitMs?: number;
+  /** Clock time WhatsApp prints inside the bubble, e.g. `6:52 PM`. */
+  readonly time?: string;
 }
 
 export type ThreadItem = SectionHeader | Message;
@@ -148,9 +153,9 @@ export const staysOutConversation: Conversation = {
   contact: { name: 'Jordan', initial: 'J' },
   items: [
     { kind: 'header', id: 'h1', day: 'Today' },
-    { kind: 'message', id: 'm1', from: 'contact', text: 'running 10 late, sorry!!', waitMs: 500 },
-    { kind: 'message', id: 'm2', from: 'owner', text: 'all good, grabbing a table', waitMs: 1200 },
-    { kind: 'message', id: 'm3', from: 'contact', text: 'butler can you remind Sam I owe him for last time', waitMs: 1200 },
+    { kind: 'message', id: 'm1', from: 'contact', text: 'running 10 late, sorry!!', waitMs: 500, time: '6:52 PM' },
+    { kind: 'message', id: 'm2', from: 'owner', text: 'all good, grabbing a table', waitMs: 1200, time: '6:53 PM' },
+    { kind: 'message', id: 'm3', from: 'contact', text: 'butler can you remind Sam I owe him for last time', waitMs: 1200, time: '6:54 PM' },
   ],
 };
 
@@ -162,11 +167,11 @@ export const whatsappReplyConversation: Conversation = {
   contact: { name: 'Jordan', initial: 'J' },
   items: [
     { kind: 'header', id: 'h1', day: 'Sat' },
-    { kind: 'message', id: 'm1', from: 'owner', text: 'Lucia’s at 8 on Thursday? I’ll book it' },
+    { kind: 'message', id: 'm1', from: 'owner', text: 'Lucia’s at 8 on Thursday? I’ll book it', time: '2:10 PM' },
     { kind: 'header', id: 'h2', day: 'Today' },
-    { kind: 'message', id: 'm2', from: 'contact', text: 'butler is Thursday still Lucia’s at 8?', waitMs: 500 },
-    { kind: 'message', id: 'm3', from: 'butler', text: marked('👀'), waitMs: 600 },
-    { kind: 'message', id: 'm4', from: 'butler', text: marked('Yes. On Saturday Sam said Lucia’s at 8 on Thursday, and that he’d book it.'), waitMs: 1400 },
+    { kind: 'message', id: 'm2', from: 'contact', text: 'butler is Thursday still Lucia’s at 8?', waitMs: 500, time: '11:02 AM' },
+    { kind: 'message', id: 'm3', from: 'butler', text: marked('👀'), waitMs: 600, time: '11:02 AM' },
+    { kind: 'message', id: 'm4', from: 'butler', text: marked('Yes. On Saturday Sam said Lucia’s at 8 on Thursday, and that he’d book it.'), waitMs: 1400, time: '11:03 AM' },
   ],
 };
 
