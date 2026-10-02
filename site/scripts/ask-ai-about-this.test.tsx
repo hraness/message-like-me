@@ -6,6 +6,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import AboutPage from '../app/about/page.tsx';
 import CompareGhostReplyPage from '../app/compare/ghostreply/page.tsx';
+import CompareHermesPage from '../app/compare/hermes-agent/page.tsx';
+import CompareMetaAiPage from '../app/compare/meta-ai-whatsapp/page.tsx';
+import CompareOpenClawPage from '../app/compare/openclaw/page.tsx';
+import CompareHubPage from '../app/compare/page.tsx';
+import ComparePokePage from '../app/compare/poke/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
 import MethodologyPage from '../app/methodology/page.tsx';
 import NotFound from '../app/not-found.tsx';
@@ -38,6 +43,11 @@ const canonicalPages: readonly Readonly<{
   { path: '/docs', render: DocsPage },
   { path: '/methodology', render: MethodologyPage },
   { path: '/research', render: ResearchPage },
+  { path: '/compare', render: CompareHubPage },
+  { path: '/compare/openclaw', render: CompareOpenClawPage },
+  { path: '/compare/hermes-agent', render: CompareHermesPage },
+  { path: '/compare/poke', render: ComparePokePage },
+  { path: '/compare/meta-ai-whatsapp', render: CompareMetaAiPage },
   { path: '/compare/ghostreply', render: CompareGhostReplyPage },
 ];
 

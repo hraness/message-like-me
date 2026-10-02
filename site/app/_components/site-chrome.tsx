@@ -52,7 +52,7 @@ export function SiteFooter({ path }: Readonly<{ path?: SitePath }>) {
           { href: '/about', label: 'About' },
           { href: '/sources', label: 'Legacy history tools' },
           { href: '/docs', label: 'Docs' },
-          { href: '/compare/ghostreply', label: 'Compare with GhostReply' },
+          { href: '/compare', label: 'Compare assistants' },
           { href: '/blog', label: 'Blog' },
           { href: GITHUB_URL, label: 'GitHub' },
         ]}

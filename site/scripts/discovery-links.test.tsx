@@ -30,13 +30,14 @@ test('names iMessage, WhatsApp, and Mac in the home title within 60 characters',
   expect(SITE_TITLE.length).toBeLessThanOrEqual(60);
 });
 
-test('links the GhostReply comparison from the home FAQ, the footer, and the about page', () => {
+test('links the GhostReply comparison from the home FAQ and the about page, and the compare hub from the footer', () => {
   const home = renderToStaticMarkup(<Home />);
   const about = renderToStaticMarkup(<About />);
   const compare = renderToStaticMarkup(<CompareGhostReplyPage />);
   expect(home).toContain(`<a ${COMPARE_LINK}>TextButler compared with GhostReply</a>`);
+  expect(about).toContain(`${COMPARE_LINK}>Compare with GhostReply</a>`);
   for (const [name, html] of Object.entries({ home, about, compare })) {
-    expect(html, name).toContain(`${COMPARE_LINK}>Compare with GhostReply</a>`);
+    expect(html, name).toContain('href="/compare">Compare assistants</a>');
   }
 });
 

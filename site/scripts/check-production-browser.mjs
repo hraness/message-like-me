@@ -11,7 +11,7 @@ import { inspectHomeLayout } from './check-home-layout.mjs';
 // Only public read-only production pages: no application commands, credentials,
 // personal data, form submission, or deployment operations are used here.
 const origin = "https://textbutler.app";
-const paths = ["/", "/about", "/docs", "/sources", "/methodology", "/research", "/compare/ghostreply", "/blog", "/blog/introducing-textbutler", "/preview", "/missing-production-verification"];
+const paths = ["/", "/about", "/docs", "/sources", "/methodology", "/research", "/compare", "/compare/openclaw", "/compare/hermes-agent", "/compare/poke", "/compare/meta-ai-whatsapp", "/compare/ghostreply", "/blog", "/blog/introducing-textbutler", "/preview", "/missing-production-verification"];
 const artifacts = resolve(import.meta.dirname, '../.production-browser', String(Date.now()));
 const executablePath = await pinnedBrowserExecutable(chromium.executablePath(), process.env.PRODUCTION_BROWSER_EXECUTABLE);
 const { defaultArgs, expectedVersion } = pinnedChromiumDefinition();
