@@ -46,6 +46,29 @@ function escapeXml(value: string): string {
 //   edge id "thin-*"   -> 1.25px hairline branch; other edges 1.75px
 //   edge id "dash-*"   -> dashed hairline
 //   shape id "under-*" -> drawn beneath the connectors (lane and band fills)
+//   shape id "bubble-in-*" / "bubble-out-*" -> chat bubble with a tail at the
+//                      bottom left (received) or bottom right (sent)
+function bubblePath(x: number, y: number, w: number, h: number, r: number, side: 'in' | 'out'): string {
+  const radius = Math.min(r, h / 2);
+  const tail = 6;
+  const b = y + h;
+  if (side === 'out') {
+    const right = x + w;
+    return [
+      `M ${x + radius} ${y}`, `H ${right - radius}`, `A ${radius} ${radius} 0 0 1 ${right} ${y + radius}`,
+      `V ${b - 10}`, `Q ${right} ${b - 1} ${right + tail} ${b}`, `Q ${right - 3} ${b + 1} ${right - 10} ${b - 2}`,
+      `Q ${right - 13} ${b} ${right - radius} ${b}`, `H ${x + radius}`, `A ${radius} ${radius} 0 0 1 ${x} ${b - radius}`,
+      `V ${y + radius}`, `A ${radius} ${radius} 0 0 1 ${x + radius} ${y}`, 'Z',
+    ].join(' ');
+  }
+  return [
+    `M ${x + radius} ${y}`, `H ${x + w - radius}`, `A ${radius} ${radius} 0 0 1 ${x + w} ${y + radius}`,
+    `V ${b - radius}`, `A ${radius} ${radius} 0 0 1 ${x + w - radius} ${b}`, `H ${x + radius}`,
+    `Q ${x + 13} ${b} ${x + 10} ${b - 2}`, `Q ${x + 3} ${b + 1} ${x - tail} ${b}`, `Q ${x} ${b - 1} ${x} ${b - 10}`,
+    `V ${y + radius}`, `A ${radius} ${radius} 0 0 1 ${x + radius} ${y}`, 'Z',
+  ].join(' ');
+}
+
 function finish(svg: string, name: string): string {
   const entry = meta[name];
   if (entry === undefined) throw new Error(`design/diagrams/diagrams.meta.json has no entry for ${name}`);
@@ -56,6 +79,11 @@ function finish(svg: string, name: string): string {
   out = out.replace('aria-labelledby="diagram-title"', 'aria-labelledby="diagram-title diagram-desc"');
   out = out.replace(/(<g data-shape-id="dash-[^"]*"[^>]*><(?:rect|ellipse)\b)/g, '$1 stroke-dasharray="5 6"');
   out = out.replace(/(<g data-shape-id="ghost-[^"]*"[^>]*><(?:rect|ellipse)\b[^>]*?)stroke-width="[^"]*"/g, '$1stroke-width="0"');
+  out = out.replace(
+    /(<g data-shape-id="bubble-(in|out)-[^"]*"[^>]*>)<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)" rx="([\d.]+)"([^>]*?)\/>/g,
+    (_match, head: string, side: 'in' | 'out', x: string, y: string, w: string, h: string, r: string, rest: string) =>
+      `${head}<path d="${bubblePath(Number(x), Number(y), Number(w), Number(h), Number(r), side)}"${rest}/>`,
+  );
   out = out.replace(/(<g data-edge-id="([^"]*)"><path\b[^>]*?)stroke-width="[^"]*"/g, (_match, head: string, id: string) => {
     const width = id.startsWith('thin-') || id.startsWith('dash-') ? 1.25 : 1.75;
     const dash = id.startsWith('dash-') ? ' stroke-dasharray="4 5"' : '';

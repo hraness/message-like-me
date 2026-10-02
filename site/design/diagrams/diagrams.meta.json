@@ -1,11 +1,11 @@
 {
   "d1-one-message-wide": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, same members, said “butler”, you’re quiet, under 12 an hour. TextButler sends 🤖{ 👀 } back through GhostGet right away, reads the room (your notes and the recent chat), and a local model, your key, or your subscription writes the reply. The marked reply 🤖{ … } goes back through GhostGet to the phone."
+    "desc": "Maya asks “Butler, what time did Sam say?” in a chat. On your Mac it goes through four steps: 1, it arrives through GhostGet; 2, all checks pass and 🤖{ 👀 } is sent right away; 3, TextButler reads your notes and the recent chat; 4, your chosen model writes the reply. The marked reply 🤖{ Friday at 6:30 } goes back through GhostGet and appears in the chat under 🤖{ 👀 }."
   },
   "d1-one-message-narrow": {
     "title": "One message, start to finish",
-    "desc": "A friend's phone sends “Butler, what time…”. Inside your Mac, GhostGet passes it to five checks: turned on, same members, said “butler”, you’re quiet, under 12 an hour. 🤖{ 👀 } goes back through GhostGet, it reads the room (your notes and the recent chat), a local model, your key, or your subscription writes the reply, and the marked reply 🤖{ … } goes back through GhostGet to their phone."
+    "desc": "Maya asks “Butler, what time did Sam say?”. Inside your Mac: 1, it arrives through GhostGet; 2, all checks pass, then 🤖{ 👀 } is sent; 3, TextButler reads your notes and the recent chat; 4, your chosen model writes the reply. The marked reply 🤖{ Friday at 6:30 } goes back through GhostGet."
   },
   "d2-words-local-wide": {
     "title": "Where your words go: a local model",

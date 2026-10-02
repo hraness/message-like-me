@@ -1,0 +1,93 @@
+{
+  "inspectedOn": "2026-10-02",
+  "tool": "SlopCamera",
+  "version": "3.9.1",
+  "command": "bun run diagrams (host-run --lane=browser); d1 sources regenerated for the compact layout",
+  "exitCode": 0,
+  "browser": {
+    "kind": "Google Chrome for Testing",
+    "playwright": "1.62.0",
+    "revision": "chromium-1234",
+    "version": "151.0.7922.34",
+    "identityAndVersionVerified": true,
+    "singleMergedDisabledFeaturesVerified": true,
+    "muted": true,
+    "ownedBrowserClosed": true
+  },
+  "findings": [
+    "d1 redrawn as one band: a Maya chat card with tailed received/sent bubbles, four numbered steps (Arrives, Checks, Reads, Writes) inside Your Mac, and one orthogonal return line into the chat. The empty phone outline and diagonal return arrows are gone.",
+    "The 🤖{ 👀 } acknowledgment is folded into step 2 and shown in the chat thread instead of a separate branch.",
+    "d1 step text matches the post: step 2 says the checks pass without a count, step 4 says “your chosen model” in both variants.",
+    "d1 wide is 1000x332 (was 1200x752) so 14-16px text stays legible in the blog column; d1 narrow is 400x616 (was 400x1556).",
+    "Narrow d2 variants compressed to 400x660/678 (were 984/1010), d3 narrow to 400x650 (was 858), d4 to 440x560 (was 692) with tailed reply bubbles.",
+    "Blog post now embeds the wide d1 pair; the Markdown renderer emits a <picture> with the narrow file below 900px.",
+    "Inspected d1 wide light/dark and narrow light/dark (including a 360px downscale), d2 key/local narrow, d3 narrow, d4 light/dark: no overlaps, no wrapped bubble labels, text fits in both themes."
+  ],
+  "lint": {
+    "categories": [
+      "label-overflow",
+      "short-arrow",
+      "small-target",
+      "too-many-elements"
+    ],
+    "interpretation": "Notes come from step badges, the chat avatar, bubbles, chips, toggles and adjacent-step chevrons; no claim of strict success.",
+    "notesPerLayout": {
+      "d1-one-message-wide": 21,
+      "d1-one-message-narrow": 14,
+      "d2-words-local-narrow": 3,
+      "d2-words-key-narrow": 3,
+      "d2-words-subscription-narrow": 3,
+      "d3-who-does-what-narrow": 21,
+      "d4-five-checks": 23
+    }
+  },
+  "dimensions": {
+    "d1-one-message-wide": "1000x332",
+    "d1-one-message-narrow": "400x616",
+    "d2-words-local-narrow": "400x678",
+    "d2-words-key-narrow": "400x660",
+    "d2-words-subscription-narrow": "400x660",
+    "d3-who-does-what-narrow": "400x650",
+    "d4-five-checks": "440x560"
+  },
+  "sha256": {
+    "site/design/diagrams/d1-one-message-wide.diagram.json": "9bbf8570fe268fbcd4d84afdbba693be50a71c23e95e60bca5c6ab19f734f621",
+    "site/public/diagrams/d1-one-message-wide.light.svg": "122df483fb9b79efb5618d2a71877510b19116de4c99937cc32855fe9e3a7870",
+    "site/public/diagrams/d1-one-message-wide.light@2x.png": "2461bba0d180ea3e38dfe909e8595204e43349abc6ecce919ab0a8bf958dde50",
+    "site/public/diagrams/d1-one-message-wide.dark.svg": "39e029c69ad69f77ebdbb29d461f24bdb6f8f08108c1d83796c9ec6c85710d0c",
+    "site/public/diagrams/d1-one-message-wide.dark@2x.png": "2e1395f54ba21872f9e0728c94bd3837cb07c17323e73f900467c932ef7df677",
+    "site/design/diagrams/d1-one-message-narrow.diagram.json": "69077aa4bf153d6bfd2efd6f095699eb06693f8cc53d0f64a31d92423a67371f",
+    "site/public/diagrams/d1-one-message-narrow.light.svg": "70004a0fa1685aa3e450e2a718d682fde4c99ba0d287a2c483f89ed5f6bbb6d2",
+    "site/public/diagrams/d1-one-message-narrow.light@2x.png": "97052c8e247613b1d9d5d289cc2c1eefa73b4b8f3bec13f7238823d69b5841ee",
+    "site/public/diagrams/d1-one-message-narrow.dark.svg": "6a33467c2c21d92fe809c40cc40cf422e2a85fc3d15d1656425e004ab5d8263c",
+    "site/public/diagrams/d1-one-message-narrow.dark@2x.png": "cd58ced8a47f0e2fd87e77a7f6707e0cd593b0c3ccffab4e62d7ea324626adf3",
+    "site/design/diagrams/d2-words-local-narrow.diagram.json": "1ef0aa9667ff34e9f0e879d11141cfe17839fad94bcaf986dd0421f8ea9ddd2a",
+    "site/public/diagrams/d2-words-local-narrow.light.svg": "6812ce41762b962ab22241165ec76deb8a687ea4ea0b0cb9a51f0320cae46ac0",
+    "site/public/diagrams/d2-words-local-narrow.light@2x.png": "b3159109183fc1144e56002e4b6e99074e16db369fb8f7bf2b720b8664e736d9",
+    "site/public/diagrams/d2-words-local-narrow.dark.svg": "2ac6365e7d9c6594734b0eab028d220a13108112cc8886e1436d75b250df5000",
+    "site/public/diagrams/d2-words-local-narrow.dark@2x.png": "374cf745fe5bba5a03395fb23e8262daebf0452647c169a0a18bc25a383afbe2",
+    "site/design/diagrams/d2-words-key-narrow.diagram.json": "7f28fa809a78fab570896c226d29dfa6cb701d212bc01fe1a05494bcd7c0574f",
+    "site/public/diagrams/d2-words-key-narrow.light.svg": "e9d0de3355f15a5a90bbd1b232843cdd73635268450d8a7e50826858c1fbd90e",
+    "site/public/diagrams/d2-words-key-narrow.light@2x.png": "681cd81c96b093e3338d3779a5b24042fcba9aa864e95701fccf613eb0f1b8bb",
+    "site/public/diagrams/d2-words-key-narrow.dark.svg": "dce0a9cfdbc97109886072ef78479e7cd775a129b66a55e4dcd2f6f474cd8d60",
+    "site/public/diagrams/d2-words-key-narrow.dark@2x.png": "07bd440d5add0cfe47a297c84541dc2edde879584866d3e38cc462b51b797456",
+    "site/design/diagrams/d2-words-subscription-narrow.diagram.json": "ccb6b0b186b50b24e57b5a38fae33370da0e8941b0489297443d87af7c267a89",
+    "site/public/diagrams/d2-words-subscription-narrow.light.svg": "8c2a2f0947e9dffaf765f2c51376950892f025d67b2a06d2ccb9b6b308766bd9",
+    "site/public/diagrams/d2-words-subscription-narrow.light@2x.png": "bd2713d834c5461a7f06f9295350b5d1e66e7386917b3ee8b2fbe7acb5b5e701",
+    "site/public/diagrams/d2-words-subscription-narrow.dark.svg": "105a7efa7138db73f7af0e54a99d55500003f10f1a1c9a928f59cb36126d7c14",
+    "site/public/diagrams/d2-words-subscription-narrow.dark@2x.png": "7526dd767a80a19b384d97a2405cbb5b2f90580a8a98316f994484b631120b31",
+    "site/design/diagrams/d3-who-does-what-narrow.diagram.json": "0a44757584df81eab03df1055b5f4f9cad703f9d4c0ba1b3192bed6bc8e7e0ad",
+    "site/public/diagrams/d3-who-does-what-narrow.light.svg": "e059a25a446b17dfd12ee05a5768a00859b29c56508153cb2089bf04f03ff317",
+    "site/public/diagrams/d3-who-does-what-narrow.light@2x.png": "2ca891d07a9180b80e27d60b5495f36ed9da244f35c4a5f611dfe58378c327ee",
+    "site/public/diagrams/d3-who-does-what-narrow.dark.svg": "288d21d3c011b2c7e6ac8d5ed18d66a904c0b689fbe3ef12a1eb1471a2e5a819",
+    "site/public/diagrams/d3-who-does-what-narrow.dark@2x.png": "b16dffcdc9a3f680464cece169f4836aad9e96e82a492c6632446cd506e8532b",
+    "site/design/diagrams/d4-five-checks.diagram.json": "51bd196eddb0bbbc412b451e71b7b2b1e17444f9f4aa5f493b6d3bf6b411ec87",
+    "site/public/diagrams/d4-five-checks.light.svg": "8d0ed77d712b404fd8e7e831b76314f24e2a93aca051bbd7a7d6a732112494a7",
+    "site/public/diagrams/d4-five-checks.light@2x.png": "e6fe8926b49315c153adc46225159faad3d57abb9e04ca061ca4697144a42e11",
+    "site/public/diagrams/d4-five-checks.dark.svg": "8accc7eda4a7adc241e235dcd540a507d44016f940d86ea7e05fd1c91309ade5",
+    "site/public/diagrams/d4-five-checks.dark@2x.png": "220076d3ea144fbe8bf9b2d5828ecfbf16ae67db4d46c698ca604e85d81a624c",
+    "site/design/diagrams/diagrams.meta.json": "178f89a640d7481a65c53c9d609c46cecb2244d0307679ea93d573676c536a91"
+  },
+  "updatedAt": "2026-10-02T17:00:13.761269+00:00",
+  "reviewer": "Agent visual review (Claude Code subagent); not human-reviewed"
+}

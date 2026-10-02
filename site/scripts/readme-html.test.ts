@@ -33,6 +33,15 @@ describe("renderReadmeHtml", () => {
     expect(html).toContain('src="/launch/hero%402x.png#gh-light-mode-only"');
   });
 
+  test("serves a wide/narrow diagram pair as one responsive picture", () => {
+    const html = renderReadmeHtml("![Flow](site/public/diagrams/d1-one-message-wide.light%402x.png#gh-light-mode-only)");
+    expect(html).toContain('<picture><source media="(max-width: 899px)" srcset="/diagrams/d1-one-message-narrow.light%402x.png"');
+    expect(html).toContain('src="/diagrams/d1-one-message-wide.light%402x.png#gh-light-mode-only"');
+    expect(html).toContain("</picture>");
+    const single = renderReadmeHtml("![Checks](site/public/diagrams/d4-five-checks.light%402x.png)");
+    expect(single).not.toContain("<picture>");
+  });
+
   test.each([
     "[unsafe](javascript:alert(1))",
     "[unsafe](data:text/html,hello)",
