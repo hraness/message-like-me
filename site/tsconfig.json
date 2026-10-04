@@ -32,5 +32,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "scripts/phone-scene.test.ts"]
+  "exclude": ["node_modules"]
 }
