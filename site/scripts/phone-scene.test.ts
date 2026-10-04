@@ -5,8 +5,9 @@ import { createElement } from 'react';
 import { PhoneFit } from '@hraness/textmockups';
 import { conversations } from '../app/_components/phone/conversations';
 import { conversationScene, schedule, sideFor } from '../app/_components/phone/scene';
+import { storyPhone } from '../../video/story/phone';
 
-for (const conversation of Object.values(conversations)) {
+for (const conversation of [...Object.values(conversations), storyPhone]) {
   test(`${conversation.id} uses shared scenes in both themes and perspectives`, () => {
     for (const perspective of ['owner', 'contact'] as const) for (const theme of ['light', 'dark'] as const) {
       const scene = conversationScene(conversation, { perspective, theme });

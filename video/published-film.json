@@ -4,11 +4,12 @@
     "version": "0.3.4"
   },
   "browserVersion": "151.0.7922.34",
-  "sourceSha256": "52d41b67dda362464563749db9e0e45033fdaf0f8a37cfb358b626d21949a39f",
-  "durationSeconds": 42,
+  "sourceSha256": "fe1c89e3bb6b869a6edc3256a490ce9202edce9094826bff4a14ad7184c71c0e",
+  "durationSeconds": 29.5,
   "width": 1920,
   "height": 1080,
-  "fps": 30,
-  "filmSha256": "2a2d53f3b8481df0e6fe5ab060d206818efeac44ba5eead5d343e1c4434283ae",
-  "posterSha256": "ef388c54b836f3910a4f8ff0e60c43724a0a7f784790998e4702c267bd0828d2"
+  "fps": 60,
+  "sharedPhoneSha256": "7281f0043ffa7fcdfc55c8f2c9b877a1fcbb802bc43787468fe0d51919c5bfa3",
+  "filmSha256": "a4e238f464cd9696fc045635f14679e6c7ca271229f3768d400934097fa73460",
+  "posterSha256": "c4aae8b43dc73bceea96bd9fccd2681a1f5085ad453f698dbeef91feda56e385"
 }
