@@ -1,0 +1,20 @@
+{
+  "renderer": {
+    "name": "@hraness/textmockups",
+    "version": "0.3.4"
+  },
+  "browserVersion": "151.0.7922.34",
+  "width": 489,
+  "height": 746,
+  "phone": {
+    "left": 48,
+    "top": 48,
+    "right": 441,
+    "bottom": 698,
+    "platform": "imessage",
+    "bubbles": 2,
+    "styled": true
+  },
+  "pngSha256": "7281f0043ffa7fcdfc55c8f2c9b877a1fcbb802bc43787468fe0d51919c5bfa3",
+  "sceneSha256": "8c9d5ab131ad6980e2d9660b3047b112b11e8f678ab3fe16fcb811fddc0a95ab"
+}

@@ -33,13 +33,9 @@ export default () => defineStory({
       ghosts: ["3 unread", "Missed question", "Reply later", "12 new messages", "Typing…"],
     },
     { kind: "reveal", tagline: "An AI butler for the chats you choose." },
-    { kind: "chat", headline: "They text the butler. It answers, marked as AI.", accents: ["marked"], label: "iMessage · Sam", sample: true, exchanges: [
-      {
-        you: "butler, when does the farmers market open on Saturday?",
-        agent: "🤖{ It opens at 8 a.m. on Saturday, by the fountain. }",
-        card: { kicker: "Marked as AI", title: "Every reply is wrapped in 🤖{ } by default", body: "Your friends keep using their usual messaging app." },
-      },
-    ] },
+    { kind: "gallery", headline: "They text the butler. It answers, marked as AI.", accents: ["marked"], sample: true, seconds: 5.134,
+      items: [{ image: join(import.meta.dir, 'shared-phone.png'), caption: "Your friends keep using their usual messaging app." }],
+    },
     {
       kind: "stats", headline: "It waits its turn.", accents: ["waits"],
       items: [
