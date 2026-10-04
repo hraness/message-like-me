@@ -46,6 +46,10 @@ export const retiredPageRedirects = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // Production builds deploy only this directory, so the build's type check
+  // leaves out tests that read sibling sources such as ../video; `bun run
+  // typecheck` still checks them.
+  typescript: { tsconfigPath: 'tsconfig.build.json' },
   outputFileTracingRoot: process.cwd(),
   async redirects() {
     return [
