@@ -44,8 +44,8 @@ export const launchFacts = {
     source: 'packages/textbutler/src/contact-habitat.ts HABITAT_LIMITS.memoryEntries: 64',
   },
   filmSeconds: {
-    value: '42',
-    source: 'site/public/launch/textbutler-launch.mp4, 42.07 seconds long (ffprobe), said in whole seconds beside the film',
+    value: '30',
+    source: 'site/public/launch/textbutler-launch.mp4, 29.5 seconds long (ffprobe), said in whole seconds beside the film',
   },
   replyWriters: {
     value: 'three',

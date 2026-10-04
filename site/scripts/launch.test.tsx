@@ -65,7 +65,7 @@ test('the retained launch kit renders every beat and links to its introduction',
 
 test('the film length is the launch fact, in whole seconds of the real mp4', async () => {
   const { statSync } = await import('node:fs');
-  expect(LAUNCH_FILM_SECONDS).toBe(42);
+  expect(LAUNCH_FILM_SECONDS).toBe(30);
   expect(String(LAUNCH_FILM_SECONDS)).toBe(launchFacts.filmSeconds.value);
   expect(statSync(resolve(import.meta.dir, '../public/launch/textbutler-launch.mp4')).size).toBeGreaterThan(0);
 });
