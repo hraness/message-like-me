@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { captionsFromTimeline } from "@hraness/slopcamera/local/html-film";
 import { HtmlSceneInputSchema } from "@hraness/slopcamera/local/html-overlay";
 
-import { moduleCss } from "./css-modules.ts";
+import { moduleCss, importedCss } from "./css-modules.ts";
 import { filmTimeline, type FilmCopy } from "./timeline.ts";
 import { launchFilmCopy } from "./facts.ts";
 
@@ -127,7 +127,7 @@ const slots: Record<string, string> = {
   ...Object.fromEntries(mockupSlots.map(({ id, element }) => [id, renderToStaticMarkup(element)])),
 };
 // Rendering above loaded the site's CSS modules; their scoped styles go first.
-slots["PRODUCT_CSS"] = [moduleCss(), ...(film.productCss ?? []).map(path => readFileSync(resolve(here, path), "utf8"))].join("\n");
+slots["PRODUCT_CSS"] = [moduleCss(), importedCss(), ...(film.productCss ?? []).map(path => readFileSync(resolve(here, path), "utf8"))].join("\n");
 
 let html = read("film.html");
 for (const [key, value] of Object.entries(slots)) html = html.replaceAll(`{{${key}}}`, () => value);

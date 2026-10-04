@@ -17,7 +17,24 @@ bun build.ts --aspect 9:16    # native portrait cut
 
 Renders land under `artifacts/` (ignored); `out/export.json` names the MP4.
 
-The site still embeds the earlier hand-made film
-(`site/public/launch/textbutler-launch.mp4`). This source does not replace it
-yet: the product stage frames the phone partly off camera while it moves
-across the Mac-side panels, so it needs a layout pass before its cuts ship.
+The site film is generated from these sources, including the same
+`@hraness/textmockups` phone and stylesheet used on the site. The phone stays
+fully framed during its scene and fades out before the camera moves across the
+Mac-side panels.
+
+For ordinary browser captures, install the site and video dependencies, then
+use the pinned Playwright browser rather than the native Slopcamera runtime:
+
+```sh
+PLAYWRIGHT_SKIP_BROWSER_GC=1 bun node_modules/playwright-core/cli.js install chromium
+bun run check
+host-run --mode=shared --lane=browser --label=textbutler-film-preview -- bun run capture:stills
+host-run --mode=shared --lane=browser --label=textbutler-film -- bun run capture:publish
+```
+
+The first capture writes preview frames under `out/stills/`. The publish
+capture checks complete phone framing, renders the full film, verifies its
+codec, size and duration, and copies the MP4 and poster to the site's existing
+launch paths. `published-film.json` records their hashes and renderer version;
+the site tests verify those bytes. It never launches installed Chrome or
+activates the native-runtime exception.

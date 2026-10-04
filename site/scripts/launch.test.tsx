@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -68,6 +69,22 @@ test('the film length is the launch fact, in whole seconds of the real mp4', asy
   expect(LAUNCH_FILM_SECONDS).toBe(42);
   expect(String(LAUNCH_FILM_SECONDS)).toBe(launchFacts.filmSeconds.value);
   expect(statSync(resolve(import.meta.dir, '../public/launch/textbutler-launch.mp4')).size).toBeGreaterThan(0);
+});
+
+test('published launch media matches its shared-renderer source record', async () => {
+  const record = JSON.parse(await source('video/published-film.json')) as {
+    renderer: { name: string; version: string }; durationSeconds: number; width: number; height: number; fps: number;
+    filmSha256: string; posterSha256: string;
+  };
+  const consumer = JSON.parse(await source('site/package.json')) as { dependencies: Record<string, string> };
+  expect(record.renderer.name).toBe('@hraness/textmockups');
+  expect(consumer.dependencies[record.renderer.name]).toBe(`https://github.com/hraness/textmockups/releases/download/v${record.renderer.version}/hraness-textmockups-${record.renderer.version}.tgz`);
+  expect(record.durationSeconds).toBe(Number(launchFacts.filmSeconds.value));
+  expect([record.width, record.height, record.fps]).toEqual([1920, 1080, 30]);
+  for (const [name, digest] of [['textbutler-launch.mp4', record.filmSha256], ['textbutler-launch-poster.webp', record.posterSha256]] as const) {
+    const bytes = await readFile(resolve(repo, 'site/public/launch', name));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(digest);
+  }
 });
 
 // Any numeric facts used by the evergreen article resolve from the same source.

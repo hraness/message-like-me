@@ -11,18 +11,21 @@
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
+import { pinnedBrowserExecutable, pinnedChromiumDefinition, ownedChromiumLaunchOptions, verifyOwnedChromium } from './browser-contract.mjs';
 
 const siteRoot = resolve(import.meta.dir, '..');
 const outDir = join(siteRoot, 'public', 'launch');
 const phoneDir = process.env.STILLS_PHONE_DIR;
 const base = process.env.STILLS_BASE_URL ?? 'http://localhost:3217';
-const executablePath =
-  process.env.TEXTBUTLER_BROWSER_EXECUTABLE ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const executablePath = await pinnedBrowserExecutable(chromium.executablePath(), process.env.TEXTBUTLER_BROWSER_EXECUTABLE);
+const { defaultArgs, expectedVersion } = pinnedChromiumDefinition();
 const scales = [2, 3] as const;
 
 await mkdir(outDir, { recursive: true });
-const browser = await chromium.launch({ executablePath, headless: true });
+const browser = await chromium.launch(ownedChromiumLaunchOptions(executablePath, defaultArgs));
 try {
+  const proof = await verifyOwnedChromium(browser, executablePath, expectedVersion);
+  console.log(`Browser: ${proof.executable} (${proof.browserVersion})`);
   for (const scale of scales) {
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: scale, reducedMotion: 'reduce', bypassCSP: true });
     const page = await context.newPage();
@@ -49,5 +52,6 @@ try {
     await context.close();
   }
 } finally {
-  await browser.close();
+  try { await Promise.all(browser.contexts().map(context => context.close())); }
+  finally { await browser.close(); }
 }

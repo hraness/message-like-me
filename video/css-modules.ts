@@ -11,6 +11,7 @@ import { plugin } from "bun";
 
 const PREFIX = "tbf-";
 const sheets = new Map<string, string>();
+const globals = new Map<string, string>();
 
 /** Prefixes class selectors, leaving strings, url() values and numbers alone. */
 export function scopeCss(css: string): string {
@@ -34,11 +35,18 @@ plugin({
         contents: `export default new Proxy({}, { get: (_, key) => typeof key === "string" ? ${JSON.stringify(PREFIX)} + key : undefined });`,
       };
     });
-    build.onLoad({ filter: /\.css$/u }, () => ({ loader: "js", contents: "export default {};" }));
+    build.onLoad({ filter: /\.css$/u }, ({ path }) => {
+      if (!globals.has(path)) globals.set(path, readFileSync(path, "utf8"));
+      return { loader: "js", contents: "export default {};" };
+    });
   },
 });
 
 /** Every CSS module the rendered components loaded, scoped to match their markup. */
 export function moduleCss(): string {
   return [...sheets.values()].join("\n");
+}
+
+export function importedCss(): string {
+  return [...globals.values()].join("\n");
 }

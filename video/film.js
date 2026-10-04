@@ -222,12 +222,14 @@ function mark(t) {
 
 /** Camera target for a step, in window coordinates. */
 function stepCamera(step, baseZoom, content, rects) {
+  const focus = rects.get(step.focus);
+  const fittedZoom = Math.min((L.win.w - 48) / focus.w, (L.win.h - 48) / focus.h);
   return camera({
     viewport: { w: L.win.w, h: L.win.h },
     content,
-    focus: rects.get(step.focus),
-    zoom: Math.max(baseZoom, Math.min(baseZoom * (step.zoom ?? 1.45), 1.4)),
-    anchor: 0.45,
+    focus,
+    zoom: Math.min(fittedZoom, Math.max(baseZoom, Math.min(baseZoom * (step.zoom ?? 1.45), 1.4))),
+    anchor: 0.5,
   });
 }
 
@@ -275,6 +277,10 @@ function walk(t) {
   }
   cam = cameraBetween(cam, rest, inOutCubic(prog(t, last.end - 1.4, last.end - 0.4)));
   surface.style.transform = cameraTransform(cam);
+  const phone = surface.querySelector('[data-film="phone"]');
+  const phoneOpacity = steps.length > 1 ? 1 - prog(t, T.act(steps[1].id).start - 0.3, T.act(steps[1].id).start + 0.15) : 1;
+  phone.style.opacity = String(phoneOpacity);
+  phone.style.visibility = phoneOpacity > 0 ? 'visible' : 'hidden';
   // Paint the mockup's own page below its natural height, so a short mockup in a tall
   // window never leaves a blank band. The camera above still frames the measured content.
   surface.style.minHeight = `${Math.ceil(Math.max(content.h, (L.win.h - cam.ty) / cam.z))}px`;

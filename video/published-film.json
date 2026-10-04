@@ -1,0 +1,14 @@
+{
+  "renderer": {
+    "name": "@hraness/textmockups",
+    "version": "0.3.4"
+  },
+  "browserVersion": "151.0.7922.34",
+  "sourceSha256": "52d41b67dda362464563749db9e0e45033fdaf0f8a37cfb358b626d21949a39f",
+  "durationSeconds": 42,
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "filmSha256": "2a2d53f3b8481df0e6fe5ab060d206818efeac44ba5eead5d343e1c4434283ae",
+  "posterSha256": "ef388c54b836f3910a4f8ff0e60c43724a0a7f784790998e4702c267bd0828d2"
+}
