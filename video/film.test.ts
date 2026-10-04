@@ -5,6 +5,10 @@ import { filmTimeline, type FilmCopy } from './timeline';
 import { launchFilmCopy } from './facts';
 import { launchFacts } from '../site/app/launch/facts';
 import storyConfig from './story/story.config';
+import { storyPhone } from './story/phone';
+import { expectPhoneScene } from '../site/scripts/phone-scene-assertions';
+
+test('the story phone uses shared scenes in both themes and perspectives', () => expectPhoneScene(storyPhone));
 
 test('the film includes the same scoped renderer stylesheet as the site', async () => {
   await import('./mockups');

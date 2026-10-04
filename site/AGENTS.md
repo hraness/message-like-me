@@ -29,6 +29,9 @@ Preserve the production delivery gates below.
 - `public/` – finite site-wide images and browser assets.
 - `package.json`, `next.config.ts`, `postcss.config.mjs`, and `bun.lock` – the
   checked native Next.js build deployed from this directory to Vercel.
+- Keep site app and test imports inside this deployment root. Film-specific
+  tests belong in `../video/film.test.ts`; shared renderer assertions live in
+  `scripts/phone-scene-assertions.ts`.
 
 # Guidelines
 
