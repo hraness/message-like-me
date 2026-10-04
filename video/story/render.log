@@ -1,0 +1,26 @@
+{"id":"textbutler","seconds":29.5,"posterAt":12.17,"acts":5,"formats":["wide","square"],"htmlBytes":448241}
+wide: frame 1/1770 (8.5 fps)
+wide: frame 301/1770 (11.0 fps)
+wide: frame 601/1770 (11.0 fps)
+wide: frame 901/1770 (11.2 fps)
+wide: frame 1201/1770 (11.1 fps)
+wide: frame 1501/1770 (11.2 fps)
+wide: frame 1770/1770 (11.1 fps)
+{"fmt":"wide","out":"/Users/benguo/Documents/textbutler-story-film-20261004/video/story/build/master-wide.mp4","width":1920,"height":1080,"fps":60,"frames":1770}
+square: frame 1/885 (8.5 fps)
+square: frame 301/885 (13.3 fps)
+square: frame 601/885 (13.1 fps)
+square: frame 885/885 (13.1 fps)
+{"fmt":"square","out":"/Users/benguo/Documents/textbutler-story-film-20261004/video/story/build/master-square.mp4","width":1080,"height":1080,"fps":30,"frames":885}
+total 22800
+drwxr-xr-x@ 11 benguo  staff      352 Oct  4 14:04 .
+drwxr-xr-x@ 26 benguo  staff      832 Oct  4 14:03 ..
+-rw-r--r--@  1 benguo  staff  3874229 Oct  4 14:03 textbutler-launch-1080p.mp4
+-rw-r--r--@  1 benguo  staff  1512146 Oct  4 14:04 textbutler-launch-1080p.webm
+-rw-r--r--@  1 benguo  staff  2254875 Oct  4 14:04 textbutler-launch-1x1.mp4
+-rw-r--r--@  1 benguo  staff   113271 Oct  4 14:04 textbutler-launch-poster.jpg
+-rw-r--r--@  1 benguo  staff  1238223 Oct  4 14:04 textbutler-launch-poster.png
+-rw-r--r--@  1 benguo  staff    63918 Oct  4 14:04 textbutler-launch-poster.webp
+-rw-r--r--@  1 benguo  staff   432528 Oct  4 14:04 textbutler-launch-preview.mp4
+-rw-r--r--@  1 benguo  staff    58465 Oct  4 14:04 textbutler-launch-social.jpg
+-rw-r--r--@  1 benguo  staff      709 Oct  4 14:04 textbutler-launch.en.vtt

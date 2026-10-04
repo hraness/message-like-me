@@ -1,0 +1,6 @@
+{
+  "copies": [
+    ["textbutler-launch-1080p.mp4", "../../site/public/launch/textbutler-launch.mp4"],
+    ["textbutler-launch-poster.webp", "../../site/public/launch/textbutler-launch-poster.webp"]
+  ]
+}
