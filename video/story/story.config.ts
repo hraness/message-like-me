@@ -57,5 +57,5 @@ export default () => defineStory({
     lead: "Ask your coding agent:", prompt: "Set up TextButler from textbutler.app",
     terms: `${LAUNCH_STATUS} · Free and MIT licensed · Runs on your Mac`, url: "textbutler.app", finePrint: "Sample chats. People shown are fictional.",
   },
-  formats: ["wide", "square"],
+  formats: ["wide", "square", "portrait"],
 });
