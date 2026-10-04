@@ -161,6 +161,30 @@ For AI replies, start the service from the installed copy:
 `~/.local/bin/textbutler daemon install`. A service started with
 `bun run textbutler` from the checkout doesn’t write AI replies.
 
+### When TextButler doesn't reply
+
+Start with read-only checks from the installed copy:
+
+```sh
+~/.local/bin/textbutler doctor
+~/.local/bin/textbutler status
+~/.local/bin/textbutler daemon status
+```
+
+- If replies are paused or the conversation is off, that is expected: new
+  installs start paused with no chats enabled. Review the conversation before
+  you turn it on using [Stay in control](#stay-in-control).
+- If the service is disconnected, inspect `daemon status` and follow the
+  [setup guide](docs/textbutler/getting-started.md). A service launched from the
+  checkout does not write AI replies; use the installed copy.
+- If the service is running but ignores a message, check that the chat is
+  selected and that the message contains “butler” in the default keyword mode.
+  Your recent reply, the hourly reply limit, or a changed group membership can
+  also prevent a reply. See [How it works](#how-it-works).
+
+If a send could not be confirmed, inspect status before repeating it. A missing
+confirmation does not mean the message was not sent.
+
 ### Review a reply before it sends
 
 ```sh
