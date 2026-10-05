@@ -40,9 +40,7 @@ export const frameSafePreviewHeaders = [
 
 // Retired pages and where their readers go now.
 export const retiredPageRedirects = [
-  { source: '/sources', destination: '/#supports' },
-  { source: '/methodology', destination: '/about' },
-  { source: '/research', destination: '/about' },
+  { source: '/compare/poke', destination: '/compare' },
 ] as const;
 
 const nextConfig: NextConfig = {

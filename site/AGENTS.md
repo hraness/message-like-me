@@ -14,9 +14,11 @@ admission, composition and custody vocabulary off the pages. Verify capabilities
 and the supported installation path before making public claims.
 Public material on this site never references or links Message Like Me, its
 package, its commands, or `messagelikeme.com`; that prototype is retired. Its
-former pages (`/sources`, `/methodology`, `/research`) permanently redirect to
-current pages through `retiredPageRedirects` in `next.config.ts`; keep those
-redirects and add no page, link, FAQ, metadata, or `llms.txt` entry for it.
+former pages (`/sources`, `/methodology`, `/research`) return a real 404,
+because no current page answers their questions; add no page, link, redirect,
+FAQ, metadata, or `llms.txt` entry for it. `retiredPageRedirects` in
+`next.config.ts` keeps a permanent redirect only where the destination answers
+the same question, such as `/compare/poke` to the comparison hub.
 Preserve the production delivery gates below.
 
 # Contents

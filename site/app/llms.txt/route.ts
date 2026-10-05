@@ -18,7 +18,10 @@ import {
 } from '../_lib/site';
 import { MESSAGING_APPS, REPLY_WRITERS } from '../_lib/landing';
 import { blogPostPath, indexableBlogPosts } from '../_lib/blog';
-import { COMPARISONS_CHECKED_ON, HUB_ENTRIES, HUB_FRAMING } from '../compare/_lib/comparisons';
+import { isIndexableComparison } from '../compare/_lib/comparison-admissions';
+import { COMPARISONS_CHECKED_ON, HUB_ENTRIES, HUB_FRAMING, HUB_PAGE_ENTRIES } from '../compare/_lib/comparisons';
+
+const COMPARISON_PATHS = HUB_PAGE_ENTRIES.map(({ path }) => path).filter(isIndexableComparison);
 
 export function GET() {
   const body = [
@@ -44,7 +47,7 @@ export function GET() {
     '## How TextButler compares',
     HUB_FRAMING,
     `Comparisons checked on ${COMPARISONS_CHECKED_ON} against each product’s public pages: ${absoluteUrl('/compare')}`,
-    ...HUB_ENTRIES.map(({ hubLine, name, path }) => `- [TextButler compared with ${name}](${absoluteUrl(path)}): ${hubLine}`),
+    ...HUB_ENTRIES.map(({ hubLine, name, path }) => `- [TextButler compared with ${name}](${absoluteUrl(path !== undefined && isIndexableComparison(path) ? path : '/compare')}): ${hubLine}`),
     '',
     '## Before you start',
     SITE_STATUS,
@@ -89,7 +92,7 @@ export function GET() {
     `- ${absoluteUrl('/docs')}`,
     `- ${absoluteUrl('/about')}`,
     `- ${absoluteUrl('/compare')}`,
-    ...HUB_ENTRIES.map(({ path }) => `- ${absoluteUrl(path)}`),
+    ...COMPARISON_PATHS.map((path) => `- ${absoluteUrl(path)}`),
     '',
     '## Blog',
     `- ${absoluteUrl('/blog')}`,

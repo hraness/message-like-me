@@ -10,7 +10,6 @@ import CompareHermesPage from '../app/compare/hermes-agent/page.tsx';
 import CompareMetaAiPage from '../app/compare/meta-ai-whatsapp/page.tsx';
 import CompareOpenClawPage from '../app/compare/openclaw/page.tsx';
 import CompareHubPage from '../app/compare/page.tsx';
-import ComparePokePage from '../app/compare/poke/page.tsx';
 import DocsPage from '../app/docs/page.tsx';
 import NotFound from '../app/not-found.tsx';
 import Home from '../app/page.tsx';
@@ -40,7 +39,6 @@ const canonicalPages: readonly Readonly<{
   { path: '/compare', render: CompareHubPage },
   { path: '/compare/openclaw', render: CompareOpenClawPage },
   { path: '/compare/hermes-agent', render: CompareHermesPage },
-  { path: '/compare/poke', render: ComparePokePage },
   { path: '/compare/meta-ai-whatsapp', render: CompareMetaAiPage },
   { path: '/compare/ghostreply', render: CompareGhostReplyPage },
 ];

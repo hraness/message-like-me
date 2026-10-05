@@ -17,7 +17,7 @@ test('renders the complete README with one source-owned heading and working anch
   expect(html).not.toMatch(/message like me|messagelikeme|message-like-me/iu);
   for (const fragment of html.matchAll(/href="#([^"]+)"/gu)) expect(html).toContain(`id="${fragment[1]}"`);
   expect(html).toContain('"headline":"TextButler"');
-  expect(html).toContain('"dateModified":"2026-10-02"');
+  expect(html).toContain('"dateModified":"2026-10-04"');
   expect(css).toContain('.readme-prose img { height: auto; max-width: 100%; }');
 });
 

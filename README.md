@@ -181,6 +181,18 @@ Start with read-only checks from the installed copy:
   selected and that the message contains “butler” in the default keyword mode.
   Your recent reply, the hourly reply limit, or a changed group membership can
   also prevent a reply. See [How it works](#how-it-works).
+- TextButler answers only while the Mac is awake and signed in. `doctor` ends
+  every report with “Replies need your Mac awake and signed in.” Closing the
+  terminal doesn't stop the service.
+- If `doctor` says your messaging apps are set up but not loaded, or you just
+  updated GhostGet, run `~/.local/bin/textbutler daemon install` to restart the
+  service so it reconnects and checks each app again. If an app no longer shows
+  as connected, sign in to it again with GhostGet. Beeper also needs Beeper
+  Desktop open.
+- If iMessage chats stop loading, the **macOS access for iMessage** step in
+  `doctor` names the setting to turn back on for TextButler.
+- If the **AI replies** step isn't done, nothing can write a reply yet. Choose
+  one in [Pick what writes replies](#pick-what-writes-replies).
 
 If a send could not be confirmed, inspect status before repeating it. A missing
 confirmation does not mean the message was not sent.

@@ -1,29 +1,43 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { socialImageFit, socialImageSiteDetails } from '@hraness/web-discovery/social-image/card';
+import {
+  articleAdmissionPasses,
+  articleAdmissionScore,
+  articleDaysBetween,
+  articleProvenanceSentence,
+  assertArticleAdmissions,
+} from '@hraness/design-kit';
 
 import * as ghostreplyImage from '../app/compare/ghostreply/opengraph-image.tsx';
 import * as hermesImage from '../app/compare/hermes-agent/opengraph-image.tsx';
 import * as metaAiImage from '../app/compare/meta-ai-whatsapp/opengraph-image.tsx';
 import * as openclawImage from '../app/compare/openclaw/opengraph-image.tsx';
 import * as hubImage from '../app/compare/opengraph-image.tsx';
-import * as pokeImage from '../app/compare/poke/opengraph-image.tsx';
 import CompareGhostReplyPage, { metadata as ghostreplyMetadata } from '../app/compare/ghostreply/page.tsx';
 import CompareHermesPage from '../app/compare/hermes-agent/page.tsx';
 import CompareMetaAiPage from '../app/compare/meta-ai-whatsapp/page.tsx';
 import CompareOpenClawPage, { metadata as openclawMetadata } from '../app/compare/openclaw/page.tsx';
 import CompareHubPage, { metadata as hubMetadata } from '../app/compare/page.tsx';
-import ComparePokePage from '../app/compare/poke/page.tsx';
+import {
+  COMPARISON_ADMISSIONS,
+  comparisonAdmission,
+  comparisonProvenance,
+} from '../app/compare/_lib/comparison-admissions.ts';
 import {
   COMPARISONS,
   COMPARISONS_CHECKED_ON,
   GHOSTREPLY_CARD,
   HUB_CARD,
+  HUB_DESCRIPTION,
   HUB_ENTRIES,
+  HUB_PAGE_ENTRIES,
   HUB_QUESTIONS,
+  POKE_HUB_ENTRY,
 } from '../app/compare/_lib/comparisons.ts';
 import { GET as getLlmsText } from '../app/llms.txt/route.ts';
 import sitemap from '../app/sitemap.ts';
+import nextConfig from '../next.config.ts';
 import { SITE_NAME } from '../app/_lib/site.ts';
 import { socialSite } from '../app/_lib/social.ts';
 
@@ -31,7 +45,6 @@ const pages = {
   '/compare': CompareHubPage,
   '/compare/openclaw': CompareOpenClawPage,
   '/compare/hermes-agent': CompareHermesPage,
-  '/compare/poke': ComparePokePage,
   '/compare/meta-ai-whatsapp': CompareMetaAiPage,
   '/compare/ghostreply': CompareGhostReplyPage,
 } as const;
@@ -53,20 +66,30 @@ function decode(html: string): string {
 }
 
 test('the hub lists every comparison page and the hub table covers each one', () => {
-  expect(HUB_ENTRIES.map(({ path }) => path)).toEqual([
+  expect(HUB_ENTRIES.map(({ name }) => name)).toEqual(['OpenClaw', 'Hermes Agent', 'Poke', 'Meta AI in WhatsApp', 'GhostReply']);
+  expect(HUB_PAGE_ENTRIES.map(({ path }) => path)).toEqual([
     '/compare/openclaw',
     '/compare/hermes-agent',
-    '/compare/poke',
     '/compare/meta-ai-whatsapp',
     '/compare/ghostreply',
   ]);
   const hub = renderToStaticMarkup(<CompareHubPage />);
-  for (const { name, path } of HUB_ENTRIES) {
+  for (const { name, path } of HUB_PAGE_ENTRIES) {
     expect(hub).toContain(`href="${path}"`);
     expect(hub).toContain(`<th scope="row"><a href="${path}">${name}</a></th>`);
   }
   const collection = byType(hub, 'CollectionPage') as { mainEntity: { numberOfItems: number } } | undefined;
-  expect(collection?.mainEntity.numberOfItems).toBe(HUB_ENTRIES.length);
+  expect(collection?.mainEntity.numberOfItems).toBe(HUB_PAGE_ENTRIES.length);
+});
+
+test('Poke is folded into its hub row, question, and sources', async () => {
+  const hub = renderToStaticMarkup(<CompareHubPage />);
+  expect(hub).toContain('<th scope="row">Poke</th>');
+  expect(hub).not.toContain('href="/compare/poke"');
+  for (const { href } of POKE_HUB_ENTRY.sources) expect(hub).toContain(`href="${href}"`);
+  expect(HUB_QUESTIONS.map(({ question }) => question)).toContain('Does Poke reply to my friends for me?');
+  const redirects = await nextConfig.redirects?.() ?? [];
+  expect(redirects.find(({ source }) => source === '/compare/poke')).toMatchObject({ destination: '/compare', permanent: true });
 });
 
 test('every compare page shows its checked date, a breadcrumb, and a visible FAQ that matches its JSON-LD', () => {
@@ -107,9 +130,12 @@ test('compare pages use their own share cards, canonical URLs, and short titles'
   expect(JSON.stringify(ghostreplyMetadata.twitter)).toContain('https://textbutler.app/compare/ghostreply/opengraph-image');
   for (const comparison of COMPARISONS) {
     expect(`${comparison.title} | ${SITE_NAME}`.length, comparison.slug).toBeLessThanOrEqual(60);
-    expect(comparison.description.length, comparison.slug).toBeLessThanOrEqual(200);
   }
-  const routes = [hubImage, ghostreplyImage, openclawImage, hermesImage, pokeImage, metaAiImage];
+  for (const description of [HUB_DESCRIPTION, ...COMPARISONS.map((comparison) => comparison.description)]) {
+    expect(description.length, description).toBeGreaterThanOrEqual(110);
+    expect(description.length, description).toBeLessThanOrEqual(160);
+  }
+  const routes = [hubImage, ghostreplyImage, openclawImage, hermesImage, metaAiImage];
   const cards = [HUB_CARD, GHOSTREPLY_CARD, ...COMPARISONS.map(({ card }) => card)];
   for (const [index, route] of routes.entries()) {
     expect(route.alt).toContain(cards[index]?.headline ?? '');
@@ -126,10 +152,41 @@ test('llms.txt and the sitemap carry every comparison', async () => {
   expect(llms.indexOf('## How TextButler compares')).toBeGreaterThan(llms.indexOf('## Key facts'));
   expect(llms).toContain('https://textbutler.app/compare');
   const urls = sitemap().map(({ url }) => url);
-  for (const { path } of HUB_ENTRIES) {
+  for (const { path } of HUB_PAGE_ENTRIES) {
     expect(llms).toContain(`(https://textbutler.app${path})`);
     expect(urls).toContain(`https://textbutler.app${path}`);
   }
+  expect(llms).toContain('- [TextButler compared with Poke](https://textbutler.app/compare): ');
+  expect(llms).not.toContain('https://textbutler.app/compare/poke');
+  expect(urls).not.toContain('https://textbutler.app/compare/poke');
   expect(urls).toContain('https://textbutler.app/compare');
   expect(HUB_QUESTIONS.length).toBeGreaterThan(0);
+});
+
+test('every comparison URL has a valid admission record', () => {
+  expect(() => assertArticleAdmissions(COMPARISON_ADMISSIONS)).not.toThrow();
+  expect(COMPARISON_ADMISSIONS.map(({ href }) => href).toSorted()).toEqual([...Object.keys(pages), '/compare/poke'].toSorted());
+  for (const admission of COMPARISON_ADMISSIONS) {
+    expect(admission.review?.reviewerType, admission.href).toBe('ai');
+    expect(admission.review?.reviewedOn, admission.href).toBe(COMPARISONS_CHECKED_ON);
+    expect(admission.humanReview, admission.href).toBeNull();
+    const days = articleDaysBetween(COMPARISONS_CHECKED_ON as `${number}-${number}-${number}`, admission.reassessOn);
+    expect(days, admission.href).toBeGreaterThanOrEqual(28);
+    expect(days, admission.href).toBeLessThanOrEqual(56);
+    for (const source of admission.sources) expect(source.checkedOn, source.url).toBe(COMPARISONS_CHECKED_ON);
+  }
+});
+
+test('only pages that pass admission are indexable, and each shows its review note', () => {
+  for (const [path, Page] of Object.entries(pages)) {
+    const admission = comparisonAdmission(path);
+    expect(admission.lifecycle, path).toBe('indexable');
+    expect(articleAdmissionPasses(admission.scores), path).toBe(true);
+    const html = renderToStaticMarkup(<Page />);
+    expect(decode(html), path).toContain(articleProvenanceSentence(comparisonProvenance(path)));
+  }
+  const poke = comparisonAdmission('/compare/poke');
+  expect(poke.lifecycle).toBe('archived');
+  expect(articleAdmissionScore(poke.scores)).toBe(8);
+  expect(articleAdmissionPasses(poke.scores)).toBe(false);
 });

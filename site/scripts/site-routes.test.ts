@@ -33,29 +33,37 @@ describe('site routes', () => {
 
     expect(routeDates).toEqual([
       ['/', '2026-10-02T00:00:00.000Z'],
-      ['/docs', '2026-10-02T00:00:00.000Z'],
+      ['/docs', '2026-10-04T00:00:00.000Z'],
       ['/about', '2026-10-02T00:00:00.000Z'],
-      ['/compare', '2026-10-02T00:00:00.000Z'],
-      ['/compare/openclaw', '2026-10-02T00:00:00.000Z'],
-      ['/compare/hermes-agent', '2026-10-02T00:00:00.000Z'],
-      ['/compare/poke', '2026-10-02T00:00:00.000Z'],
-      ['/compare/meta-ai-whatsapp', '2026-10-02T00:00:00.000Z'],
-      ['/compare/ghostreply', '2026-10-02T00:00:00.000Z'],
+      ['/compare', '2026-10-04T00:00:00.000Z'],
+      ['/compare/openclaw', '2026-10-04T00:00:00.000Z'],
+      ['/compare/hermes-agent', '2026-10-04T00:00:00.000Z'],
+      ['/compare/meta-ai-whatsapp', '2026-10-04T00:00:00.000Z'],
+      ['/compare/ghostreply', '2026-10-04T00:00:00.000Z'],
     ]);
   });
 
-  test('sends retired pages to current pages with permanent redirects', async () => {
+  test('returns a real 404 for the retired prototype pages', async () => {
     const redirects = await nextConfig.redirects?.() ?? [];
     for (const path of RETIRED_PATHS) {
-      const redirect = redirects.find((entry) => entry.source === path);
-      expect(redirect, path).toBeDefined();
-      expect(redirect?.permanent, path).toBe(true);
-      const destination = new URL(redirect?.destination ?? '', 'https://textbutler.app');
-      expect(CANONICAL_PAGE_PATHS as readonly string[], path).toContain(destination.pathname);
+      expect(redirects.find((entry) => entry.source === path), path).toBeUndefined();
     }
-    expect(retiredPageRedirects.map(({ source }) => source)).toEqual([...RETIRED_PATHS]);
     const routes = await readdir(resolve(siteRoot, 'app'));
     for (const path of RETIRED_PATHS) expect(routes, path).not.toContain(path.slice(1));
+  });
+
+  test('redirects a folded page only to a page that answers the same question', async () => {
+    const redirects = await nextConfig.redirects?.() ?? [];
+    expect(retiredPageRedirects.map(({ source }) => source)).toEqual(['/compare/poke']);
+    for (const { destination, source } of retiredPageRedirects) {
+      const redirect = redirects.find((entry) => entry.source === source);
+      expect(redirect?.permanent, source).toBe(true);
+      expect(redirect?.destination, source).toBe(destination);
+      expect(CANONICAL_PAGE_PATHS as readonly string[], source).toContain(destination);
+      expect(CANONICAL_PAGE_PATHS as readonly string[], source).not.toContain(source);
+    }
+    const compareRoutes = await readdir(resolve(siteRoot, 'app/compare'));
+    expect(compareRoutes).not.toContain('poke');
   });
 
   test('never links or names the retired prototype on public pages', async () => {

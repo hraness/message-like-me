@@ -17,10 +17,9 @@ Every comparison leads with this difference, stated fairly.
 | Page | Questions it answers | Primary terms |
 |---|---|---|
 | `/` | What is TextButler? How do I set it up? Which AI writes replies? | AI assistant for iMessage, WhatsApp AI auto reply on Mac, AI butler for group chats |
-| `/compare` | Which AI assistant you can text fits me? How is TextButler different from personal agents? | AI assistant you can text, personal AI agent comparison, OpenClaw alternatives |
+| `/compare` | Which AI assistant you can text fits me? How is TextButler different from personal agents? Does Poke reply to my friends? | AI assistant you can text, personal AI agent comparison, OpenClaw alternatives, Poke AI alternative |
 | `/compare/openclaw` | Can OpenClaw answer my friends? OpenClaw vs TextButler for iMessage | OpenClaw alternative, OpenClaw iMessage, OpenClaw group chat |
 | `/compare/hermes-agent` | Hermes Agent vs TextButler; Hermes iMessage and WhatsApp setup | Hermes Agent alternative, Hermes Agent iMessage, Nous Research Hermes messaging |
-| `/compare/poke` | Poke vs TextButler; does Poke reply to my friends? | Poke AI alternative, Poke iMessage assistant, AI assistant you text |
 | `/compare/meta-ai-whatsapp` | Can I use my own model in WhatsApp? Meta AI vs TextButler | Meta AI WhatsApp alternative, own AI in WhatsApp chats |
 | `/compare/ghostreply` | GhostReply vs TextButler; are AI replies disclosed? | GhostReply alternative, iMessage AI auto reply |
 | `/docs`, `/about` | How it works, why replies are marked | TextButler docs, AI reply disclosure |
@@ -38,8 +37,18 @@ Every comparison leads with this difference, stated fairly.
   write "Not described" rather than "No".
 - A new comparison needs: an entry in `COMPARISONS`, a route folder with
   `page.tsx` and `opengraph-image.tsx`, its path in `CANONICAL_PAGE_PATHS` and
-  `PAGE_LAST_MODIFIED`, and the page in the Ask AI and footer tests. The hub,
-  sitemap, and `llms.txt` pick it up from `HUB_ENTRIES`.
+  `PAGE_LAST_MODIFIED`, an admission record in
+  `app/compare/_lib/comparison-admissions.ts`, and the page in the Ask AI and
+  footer tests. The hub, sitemap, and `llms.txt` pick it up from `HUB_ENTRIES`
+  once its record is `indexable`.
+- Each comparison URL has an admission record: reader question, sources with
+  check dates, a score out of 12, the reviewer and reviewer type, and a
+  reassessment date 28 to 56 days after review. A page needs at least 9 with no
+  zero to be indexable, and it shows the drafting and review note from that
+  record.
+- Poke has a hub row and a hub question but no page of its own (it scored 8 of
+  12, because Poke never answers your contacts). `/compare/poke` redirects to
+  `/compare`.
 - Leave out products whose facts can't be read from an official page. For
   example, OpenAI's 1-800-ChatGPT help article blocked automated reading on
   2026-10-02, so ChatGPT on WhatsApp has no page yet.

@@ -52,7 +52,6 @@ export const CANONICAL_PAGE_PATHS = [
   '/compare',
   '/compare/openclaw',
   '/compare/hermes-agent',
-  '/compare/poke',
   '/compare/meta-ai-whatsapp',
   '/compare/ghostreply',
 ] as const;
@@ -121,12 +120,11 @@ export function pageMetadata({
 // The docs page publishes its dateModified from this table too.
 export const PAGE_LAST_MODIFIED = {
   '/': '2026-10-02',
-  '/docs': '2026-10-02',
+  '/docs': '2026-10-04',
   '/about': '2026-10-02',
-  '/compare': '2026-10-02',
-  '/compare/openclaw': '2026-10-02',
-  '/compare/hermes-agent': '2026-10-02',
-  '/compare/poke': '2026-10-02',
-  '/compare/meta-ai-whatsapp': '2026-10-02',
-  '/compare/ghostreply': '2026-10-02',
+  '/compare': '2026-10-04',
+  '/compare/openclaw': '2026-10-04',
+  '/compare/hermes-agent': '2026-10-04',
+  '/compare/meta-ai-whatsapp': '2026-10-04',
+  '/compare/ghostreply': '2026-10-04',
 } as const;
