@@ -13,7 +13,7 @@
     }
   },
   "sources": {
-    "bun.lock": "3a5fd59cdfdd77bf92d7fec308e2c6145ebda477f6a291a110fc15a2bcbd0679",
+    "bun.lock": "a0d1c39b60dcce97b07ff2b67a3f0a6967348b07951f3a63ad3a1604e812bd16",
     "package.json": "ea3f88bcc79893c2cae022153f4157208d9a69702b660823c36d1c8dccb92b0a",
     "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
     "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
@@ -61,7 +61,7 @@
     "scripts/xcb-integration-admission.ts": "81428dd407f793fd38b4b7116ffb0f0d53e1f7276b6ecd2773298d2b37e16d11"
   },
   "validation": {
-    "command": "/Users/benguo/.bun/bin/host-run --mode=shared --lane=compute --label=textbutler-context-admission-focused -- /Users/benguo/.bun/bin/bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/history-search.test.ts",
-    "receiptSha256": "dfac1a59cfb064072726bb7e0cae0ebdc5ccf445f5fa479517be46263a932dfe"
+    "command": "bun test scripts/xcb-integration-admission.test.ts packages/textbutler/src/habitat-agent.test.ts packages/textbutler/src/habitat-program.test.ts packages/textbutler/src/contact-habitat.test.ts packages/textbutler/src/history-search.test.ts",
+    "receiptSha256": "e3884ded277cb4992300835523b4d4501a6cf725c9344a84200f35d8b2ed1434"
   }
 }
