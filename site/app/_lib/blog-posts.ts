@@ -34,6 +34,19 @@ export type BlogPost = Readonly<{
 
 export const BLOG_POSTS: readonly BlogPost[] = [
   {
+    slug: 'marked-replies',
+    title: 'How TextButler replies stay marked',
+    dek: 'The model proposes; trusted code wraps every text in the contact’s visible symbols, non-text replies get a disclosed companion first, and a private journal keeps the record even if the wrap is cleared.',
+    eyebrow: 'Explainer',
+    published: '2026-10-05',
+    tags: ['textbutler', 'messaging', 'disclosure', 'ai-labeling', 'honest-agents', 'local-first'],
+    relationIds: [],
+    card: {
+      headline: 'How replies stay marked',
+      description: 'The marker lives in the send path.',
+    },
+  },
+  {
     slug: 'introducing-textbutler',
     title: 'Introducing TextButler',
     dek: 'Choose which conversations an assistant can answer, how it identifies itself, and where replies are written. Start with one reviewed draft.',

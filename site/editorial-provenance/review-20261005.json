@@ -1,0 +1,21 @@
+{
+  "reviewer": "Devin (SWE-2 Max model) independent AI editorial review",
+  "reviewerType": "ai",
+  "reviewedAt": "2026-10-05T00:00:00.000000+00:00",
+  "reviews": {
+    "site/content/blog/marked-replies.md": {
+      "sha256": "e4d500795fd8851772879b3d0b31c9bc66e036fa4207bf1c166d4c30f2f6f024",
+      "verdict": "approve-written-body",
+      "scores": {
+        "readerUtility": 2,
+        "originalEvidence": 1,
+        "factualConfidence": 2,
+        "hostFit": 2,
+        "voiceIntegrity": 2,
+        "maintenanceValue": 2
+      },
+      "followUpReviews": [],
+      "reason": "Claims verified against docs/textbutler/architecture.md (send transaction and disclosure section: grapheme-checked wrap, non-text companion ordering and stop rule, sent_messages journal-first attribution, fifteen-minute digest-bound drafts, operator send idempotency and 400-day journal, learning limits) and packages/textbutler/src/config.ts, attribution.ts, and runtime.ts at the pinned evidence commit. No version pins, no delivery vocabulary, honest limits preserved."
+    }
+  }
+}
