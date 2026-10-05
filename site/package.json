@@ -28,7 +28,7 @@
     "@hraness/textmockups": "https://github.com/hraness/textmockups/releases/download/v0.3.4/hraness-textmockups-0.3.4.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.19",
     "@hraness/web-discovery": "github:hraness/web-discovery#v0.13.0",
-    "next": "16.3.3",
+    "next": "16.3.8",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -41,7 +41,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.3.8",
     "lightningcss": "1.33.0",
     "playwright-core": "1.62.0",
     "typescript": "6.0.3"
