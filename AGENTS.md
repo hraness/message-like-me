@@ -176,82 +176,26 @@ notarization remain outside this local installation scope.
   Ensoul skill is vendored source, never a runtime dependency. Preflight and
   install both complete skills for Codex, Claude, and generic Agent Skill
   targets at user or project scope without leaving a partial pair.
-- Follow `docs/publishing.md` for the one-time production controls, stable
-  release, and reviewed-`main` recovery procedure. Treat an immutable annotated
-  stable `v*` tag matching every checked version
+- Follow `docs/publishing.md` for the stable release procedure. Treat an
+  immutable annotated stable `v*` tag matching every checked version
   identity at a reviewed commit in current `main` history as a
   release request. Publish only after the complete root, site, packed-consumer,
   synthetic macOS gate, and exact-tarball macOS/Linux gates pass. Build the
   package once, publish the immutable Latest GitHub Release with that tarball
   plus `SHA256SUMS` first, then publish the same tarball through npm trusted
-  publishing before the separate current-`main` promotion workflow
-  fast-forwards the established `website-production` ref with an exact
-  expected-old lease. Keep the tag workflow's write scope split: only the
+  publishing. Keep the tag workflow's write scope split: only the
   GitHub publication job gets `contents: write`, only the npm publication job
   gets `id-token: write`, and a separate read-only job admits exact bytes and
   provenance. Treat every SHA-pinned setup and artifact action in those jobs as
   part of the privileged release TCB. Keep the GitHub token scoped to the
-  dependency-free publisher step. Keep the dedicated status-signing App's
-  private key inside the main-only `production-ref-writer-key` environment and
-  expose it only to a fresh dependency-free, hash-pinned promotion job. Keep
-  that environment free of required reviewers, wait timers, and custom
-  deployment-protection rules, with administrator bypass disabled. Routine
-  promotion proceeds through the existing machine gates without a human
-  confirmation. Independent agent review of workflow-control transitions
-  precedes their exact digest dispatch. Refresh the complete administrative
-  controls census at setup, control-configuration or workflow-authority
-  changes, and drift or interrupted-authority recovery. Routine releases rely
-  on the existing per-run source, artifact, App, rules, denial, lease, and
-  provider gates. Before environment admission, and
-  again in that job before reading the key, require
-  complete non-shallow history. The complete range must either preserve the
-  baseline `.github/workflows` tree OID with no digest, or match the exact
-  independently reviewed v2 control-epoch receipt and digest for every ordered
-  commit and workflow-tree transition.
-  Mint only the numeric one-repository `statuses:write` plus `metadata:read`
-  App token. Require that App to be the pinned source of one exact-SHA success
-  status, prove its readback, and revoke that token. Let only the same job's
-  scoped `GITHUB_TOKEN` first prove denial while the exact App context is
-  terminal `error`; accept only GitHub's singular exact GH013 violation payload
-  for the protected ref plus the singular exact `remote: -` reason for the
-  context ending `is errored.`. Before exact comparison, normalize only one
-  consistent known Git non-TTY display suffix: zero, one, or eight ASCII
-  spaces on both semantic remote lines. Reject every other trailing byte,
-  suffix length, or mixed framing. Treat mutable Git progress, transport ordering,
-  and helper-label framing as diagnostics rather than proof; the fixed Git
-  executable, remote, arguments, and refspec bind the operation. Never accept
-  the contradictory `is expected` or a missing-status interpretation. Then
-  let that same job's scoped `GITHUB_TOKEN` perform the leased ref move, then
-  mint a separate
-  status-only token to replace the success with a proven terminal non-success
-  status before revoking the second token. The status App must have neither `contents:write` nor
-  `workflows:write`, and it must not be a ref-ruleset bypass actor. A reviewed
-  workflow-control epoch requires the transition-scoped v2 digest protocol in
-  the runbook: one no-digest run must fail before key admission while publishing
-  the complete ordered commit and workflow-tree inventory, and one fresh manual
-  attempt-1 dispatch may carry only the independently reviewed exact digest.
-  Recompute that inventory before environment admission and again before
-  reading the key. Never expand the status App, mint a temporary broad
-  credential, or move the ref out of band. Require the bounded read-only
-  provider outcome gate to finish.
-  Already-exact recovery must not enter the key environment. Recovery may
-  revalidate only an existing immutable, artifact-complete Latest Release and
-  exact npm version and must never create either one. It may accept the
-  exact-SHA Production deployment that an earlier consumed site-route authority
-  created on that commit, never one that predates that authority's admitted
-  success. A later positive attempt
+  dependency-free publisher step. A later positive attempt
   may finish the same exact tag, commit, and tarball only when Sigstore binds
-  the actual run ID and an allowed positive attempt. Keep Vercel Production
-  Branch on `website-production`; `main` and pull requests are preview sources.
-  If a runner interruption may leave a success status, disable both routine
-  promotion workflows and use only the target-bound terminal-authority cleanup
-  in the publishing runbook after its 36-day complete attempt inventory and
-  65-minute token-expiry quarantine. A hard cancellation can prevent token
-  revocation and receipt persistence, so absent evidence starts a fresh
-  quarantine rather than authorizing a retry. Cleanup may append only a distinct
-  App-authored terminal `error`; it never moves a ref or creates restart
-  authority. Require owner-admin before/after proof of empty ruleset bypasses,
-  and treat every incomplete cleanup receipt as continued quarantine.
+  the actual run ID and an allowed positive attempt.
+- Vercel's production branch is `main` like every other Hraness site: the
+  GitHub integration deploys `main` to production automatically and pull
+  requests produce previews. There is no separate promotion ref, writer
+  workflow, canary, or status-authority step, and no manual deploy or dispatch
+  in the routine path.
 
 <!-- hraness-public-copy:start -->
 - Public copy (websites, READMEs, docs, package and GitHub descriptions, CLI help, `llms.txt`, generated pages) follows `STYLE.md`, synced from hraness/.github. Text a model writes for publication also follows `GENERATION_STYLE.md`.
