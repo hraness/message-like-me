@@ -207,7 +207,15 @@ jobs:
         working-directory: site
       - name: Install the pinned candidate browser
         working-directory: site
-        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+        run: |
+          set -euo pipefail
+          sudo "$(command -v bun)" ../scripts/browser-acquisition.ts
+          config=/etc/apt/apt.conf.d/99-browser-acquisition
+          sudo test ! -e "$config"
+          sudo test ! -L "$config"
+          trap 'sudo rm -f "$config"' EXIT
+          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "1";' | sudo tee "$config" >/dev/null
+          bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
       - name: Check the committed informational site in Chromium
         working-directory: site
         run: |

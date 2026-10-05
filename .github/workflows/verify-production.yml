@@ -22,7 +22,15 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Install the pinned Chromium browser
         working-directory: site
-        run: bun node_modules/playwright-core/cli.js install --with-deps chromium
+        run: |
+          set -euo pipefail
+          sudo "$(command -v bun)" ../scripts/browser-acquisition.ts
+          config=/etc/apt/apt.conf.d/99-browser-acquisition
+          sudo test ! -e "$config"
+          sudo test ! -L "$config"
+          trap 'sudo rm -f "$config"' EXIT
+          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "1";' | sudo tee "$config" >/dev/null
+          bun node_modules/playwright-core/cli.js install --with-deps chromium
       - name: Inspect public production pages without writes
         run: bun site/scripts/check-production-browser.mjs
       - name: Retain production screenshots and receipt
