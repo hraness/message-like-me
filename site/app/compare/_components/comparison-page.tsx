@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { articleProvenanceSentence } from '@hraness/design-kit';
 import { MarketingComparison } from '@hraness/design-kit/react/server';
 
 import { SiteFooter, SiteHeader } from '../../_components/site-chrome';
@@ -9,7 +8,6 @@ import {
   comparisonWebPageJsonLd,
   faqJsonLd,
 } from '../../_lib/structured-data';
-import { comparisonProvenance } from '../_lib/comparison-admissions';
 import {
   COMPARISONS_CHECKED_ON,
   TEXTBUTLER_SOURCES,
@@ -24,10 +22,6 @@ export function CheckedOn() {
       product’s own public pages.
     </p>
   );
-}
-
-export function ComparisonReview({ path }: Readonly<{ path: string }>) {
-  return <p className="compare-checked">{articleProvenanceSentence(comparisonProvenance(path))}</p>;
 }
 
 export function SourceList({ sources }: Readonly<{ sources: readonly Source[] }>) {
@@ -77,7 +71,6 @@ export function ComparisonPage({ comparison }: Readonly<{ comparison: Comparison
             note={<>{comparison.note} <a href="#comparison-sources">Sources</a>.</>}
           />
           <CheckedOn />
-          <ComparisonReview path={path} />
 
           <h2>Which one fits</h2>
           <p>{comparison.chooseOther}</p>

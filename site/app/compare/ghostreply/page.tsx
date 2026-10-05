@@ -12,7 +12,7 @@ import {
 } from '../../_lib/site';
 import { socialImageAltFor } from '../../_lib/social';
 import { compareBreadcrumbJsonLd, comparisonWebPageJsonLd, faqJsonLd } from '../../_lib/structured-data';
-import { CheckedOn, ComparisonReview } from '../_components/comparison-page';
+import { CheckedOn } from '../_components/comparison-page';
 import { comparisonRobots } from '../_lib/comparison-admissions';
 import { GHOSTREPLY_CARD, GHOSTREPLY_HUB_ENTRY } from '../_lib/comparisons';
 
@@ -106,7 +106,6 @@ export default function CompareGhostReplyPage() {
             note={<>TextButler Gateway usage stops at $1 a day. GhostReply includes 10 free replies before purchase. <a href="#comparison-sources">Sources</a>.</>}
           />
           <CheckedOn />
-          <ComparisonReview path="/compare/ghostreply" />
 
           <h2>Which one fits</h2>
           <p>
