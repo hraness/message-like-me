@@ -90,19 +90,32 @@ function visibleText(html: string): string {
 
 describe('blog admission records', () => {
   test('independent review hashes match the published bodies', async () => {
-    const receipt = JSON.parse(await readFile(resolve(siteRoot, 'editorial-provenance/review-20261001.json'), 'utf8')) as {
+    type Receipt = {
       reviewer: string;
       reviewerType: string;
       reviews: Record<string, { sha256: string; verdict: string }>;
     };
-    expect(receipt.reviewerType).toBe('ai');
+    const provenanceDir = resolve(siteRoot, 'editorial-provenance');
+    const receipts = new Map<string, Receipt>();
+    const receiptFor = async (reviewedOn: string | undefined): Promise<Receipt> => {
+      if (reviewedOn === undefined) throw new Error('A reviewed post has no review date.');
+      const name = `review-${reviewedOn.replaceAll('-', '')}.json`;
+      const cached = receipts.get(name);
+      if (cached !== undefined) return cached;
+      const receipt = JSON.parse(await readFile(resolve(provenanceDir, name), 'utf8')) as Receipt;
+      receipts.set(name, receipt);
+      return receipt;
+    };
     for (const post of BLOG_POSTS) {
+      const admission = admissionFor(post);
+      const receipt = await receiptFor(admission.review?.reviewedOn);
+      expect(receipt.reviewerType).toBe('ai');
       const path = `site/content/blog/${post.slug}.md`;
       const reviewed = receipt.reviews[path];
       expect(reviewed?.verdict, path).toBe('approve-written-body');
       const body = await readFile(resolve(siteRoot, '..', path));
       expect(createHash('sha256').update(body).digest('hex'), path).toBe(reviewed?.sha256);
-      expect(admissionFor(post).review?.reviewer, path).toBe(receipt.reviewer);
+      expect(admission.review?.reviewer, path).toBe(receipt.reviewer);
     }
   });
 
@@ -118,16 +131,20 @@ describe('blog admission records', () => {
     expect(generateStaticParams().map(({ slug }) => slug)).toEqual(BLOG_POSTS.map((post) => post.slug));
   });
 
-  test('record the disclosed AI review and no human review', () => {
+  test('record the disclosed AI review and any human-editor record', () => {
     for (const admission of BLOG_ADMISSIONS) {
       expect(admission.review?.reviewerType, admission.href).toBe('ai');
-      expect(admission.humanReview, admission.href).toBeNull();
+      if (admission.humanReview !== null) {
+        expect(admission.humanReview.reviewer, admission.href).toBe('Ben Guo');
+        expect(admission.humanReview.reviewerType, admission.href).toBe('human-editor');
+      }
       expect(admission.drafting, admission.href).toBe('ai-from-source');
     }
   });
 
   test('lists reviewed articles with current runtime relations', () => {
     expect(indexableBlogPosts().map(blogPostPath)).toEqual([
+      '/blog/marked-replies',
       '/blog/introducing-textbutler',
       '/blog/how-textbutler-uses-xcb',
       '/blog/how-textbutler-uses-algal',

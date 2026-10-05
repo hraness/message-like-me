@@ -22,6 +22,41 @@ const shared = {
 export const BLOG_ADMISSIONS: readonly ArticleAdmission[] = [
   {
     ...shared,
+    review: { reviewer: 'Devin (SWE-2 Max model) independent AI editorial review', reviewerType: 'ai', reviewedOn: '2026-10-05' },
+    humanReview: { reviewer: 'Ben Guo', reviewerType: 'human-editor', reviewedOn: '2026-10-05' },
+    reassessOn: '2026-11-05',
+    href: '/blog/marked-replies',
+    readerJob: 'Understand how a TextButler reply stays visibly marked as the assistant’s, what happens for message types that cannot carry a label, and what clearing the markers does and does not change.',
+    nonObviousAnswer: 'Marking is applied by trusted send code, not the model: every text action is wrapped in the contact’s three disclosure symbols, non-text replies send a disclosed companion first, a private sends journal marks each accepted message butler or operator so cleared markers never hide the record, and reviewed drafts are bound to the exact context and disclosure settings they previewed.',
+    originalContribution: 'Walks the send path from model proposal through the grapheme-checked wrap, the companion rule for non-text replies, the journal-first attribution rule, the fifteen-minute digest-bound drafts, the operator send path, and the limits on what contact learning may change, from the architecture document and source modules.',
+    hostFit: 'The product’s own explanation of its disclosure design, on the product’s own host; complements the introduction’s message walkthrough and the ALGAL post’s learning limits.',
+    nearestUrls: [
+      { url: 'https://textbutler.app/blog/introducing-textbutler', distinction: 'The introduction shows the default marked reply in one conversation; this post explains the mechanism that keeps every reply marked.' },
+      { url: 'https://textbutler.app/blog/how-textbutler-uses-algal', distinction: 'The ALGAL post covers optional learning; this post covers what learning cannot touch, including disclosure.' },
+      { url: 'https://textbutler.app/', distinction: 'The homepage states the clearly-marked claim; this post shows the mechanism behind it.' },
+    ],
+    sources: [
+      source('Disclosure symbols, grapheme checks, and wrap detection', 'packages/textbutler/src/config.ts'),
+      source('Journal-first attribution of sent messages', 'packages/textbutler/src/attribution.ts'),
+      source('Send transaction, disclosure, companion, drafts, journal, and operator sends', 'docs/textbutler/architecture.md'),
+      source('Reply processing and uncertain sends', 'packages/textbutler/src/runtime.ts'),
+      source('Disclosure defaults in getting started', 'docs/textbutler/getting-started.md'),
+    ],
+    observations: [
+      'The wrap, companion, journal-first attribution, draft binding, operator-send rules, and learning limits are documented in docs/textbutler/architecture.md and implemented in packages/textbutler/src/config.ts, attribution.ts, and runtime.ts.',
+      'The post keeps the opt-in nature of cleared markers beside the journal guarantee: clearing the wrap removes the visible label but never hides output from the owner’s own history.',
+    ],
+    harmIfWrong: 'A reader could believe the marker is a model instruction that can be forgotten, that clearing symbols hides assistant output from history, or that learning can change disclosure.',
+    refreshTriggers: [
+      'Change to disclosure symbol validation or wrapping in packages/textbutler/src/config.ts',
+      'Change to the companion rule, action ordering, or eight-action limit',
+      'Change to journal-first attribution or the sent_messages origin handling',
+      'Change to draft expiry, binding, or the operator send path',
+      'TextButler rename',
+    ],
+  },
+  {
+    ...shared,
     href: '/blog/introducing-textbutler',
     readerJob: 'Understand how an assistant joins one selected conversation and choose when and where replies are written.',
     nonObviousAnswer: 'Keyword mode and visible AI markers are defaults with separate controls; enabling a conversation, choosing a reply model and sending a reviewed draft are distinct decisions.',
