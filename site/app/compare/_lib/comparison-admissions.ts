@@ -1,9 +1,7 @@
 import {
-  articleProvenanceFromAdmission,
   isArticleIndexable,
   type ArticleAdmission,
   type ArticleIsoDate,
-  type ArticleProvenanceRecord,
   type ArticleSourceRecord,
 } from '@hraness/design-kit';
 import { NOINDEX_ROBOTS } from '@hraness/web-discovery';
@@ -18,7 +16,7 @@ const textbutlerSource = (title: string, path: string): ArticleSourceRecord =>
 const shared = {
   owner: 'Hraness (TextButler)',
   drafting: 'ai',
-  review: { reviewer: 'Devin (AI) comparison review', reviewerType: 'ai', reviewedOn: CHECKED_ON },
+  review: { reviewer: 'Devin independent editorial review (AI), 2026-10-04', reviewerType: 'ai', reviewedOn: CHECKED_ON },
   humanReview: null,
   reassessOn: '2026-11-01',
   hostFit: 'TextButler owns the portfolio comparison for assistants that answer chats; GhostGet compares only ways agents reach the web.',
@@ -212,10 +210,6 @@ export function comparisonAdmission(path: string): ArticleAdmission {
 export function isIndexableComparison(path: string): boolean {
   const admission = COMPARISON_ADMISSIONS.find((entry) => entry.href === path);
   return admission !== undefined && isArticleIndexable(admission);
-}
-
-export function comparisonProvenance(path: string): ArticleProvenanceRecord {
-  return articleProvenanceFromAdmission(comparisonAdmission(path));
 }
 
 export function comparisonRobots(path: string): Pick<Metadata, 'robots'> {

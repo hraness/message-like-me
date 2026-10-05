@@ -85,7 +85,7 @@ const openclaw: Comparison = {
   officialUrl: OPENCLAW_URL,
   title: 'OpenClaw vs TextButler for iMessage chats',
   description:
-    'OpenClaw is an open-source agent you message to get tasks done, while TextButler answers people in your chats. Compare apps, tools, groups, and reply labels.',
+    'OpenClaw is an open-source agent you message to get tasks done, while TextButler answers people in your chats. Compare tools, group chats, and reply labels.',
   heading: 'TextButler compared with OpenClaw',
   lede:
     'OpenClaw is a general-purpose agent you message from more than 20 chat apps, and it can work across your files, browser, and shell. TextButler does one job: it answers in the iMessage, WhatsApp, and Beeper conversations you choose, marks those replies as AI, and keeps notes for each conversation.',
@@ -113,7 +113,7 @@ const openclaw: Comparison = {
     {
       heading: 'What OpenClaw does',
       paragraphs: [
-        'OpenClaw describes itself as an open-source AI assistant that runs on your own computer. It installs with a script or npm and a setup command, runs on macOS, Windows, and Linux, and is stewarded by the OpenClaw Foundation, a US non-profit. Its site says there is no subscription and no hosted tier. You bring hosted, subscription-backed, gateway, or local models.',
+        'OpenClaw describes itself as an open-source AI assistant that runs on your own computer. It installs as a desktop app or with a script or npm and a setup command, runs on macOS, Windows, and Linux, and is stewarded by the OpenClaw Foundation, a US non-profit. Its site says there is no subscription and no hosted tier. You bring hosted, subscription-backed, gateway, or local models.',
         'You talk to it from chat apps such as WhatsApp, Telegram, Discord, Slack, Signal, and iMessage. On a Mac, its iMessage channel uses the imsg tool on the Mac that is signed in to Messages, and its docs also describe a dedicated macOS user with a separate iMessage identity. The agent keeps persistent memory and can handle email, calendars, browsing, forms, files, and shell commands. Its README says tools run on the host for the main session unless you configure sandboxing.',
         'OpenClaw’s group docs say it lives on your own messaging accounts, so it can see and answer in groups you belong to. Groups are blocked until you allowlist them, and group replies need a mention by default. Unknown people who message it directly get a pairing code, and their messages are not processed until you approve them. Its message settings can add a prefix you choose to each reply, such as the agent’s name or the model.',
       ],
@@ -181,7 +181,7 @@ const hermes: Comparison = {
     { label: 'Chat apps', values: ['iMessage, WhatsApp, Beeper', 'Telegram, WhatsApp, Slack, Discord, Signal, iMessage, and more'] },
     { label: 'Runs on', values: ['Your Mac', 'Mac, Windows, Linux, or a server'] },
     { label: 'Suggested WhatsApp number', values: ['Your own, as a linked device', 'A dedicated bot number'] },
-    { label: 'Group chats', values: ['Groups you select, “butler” keyword by default', 'Admitted groups; mention optional'] },
+    { label: 'Group chats', values: ['Groups you select, “butler” keyword by default', 'Groups you allow; mention optional'] },
     { label: 'Marks replies as AI', values: ['🤖{ } by default', '“☤ Hermes Agent” header on WhatsApp by default'] },
     { label: 'AI', values: ['Ollama, Gateway key, or subscription through xcb', 'Your provider or Nous Portal'] },
   ],
@@ -196,7 +196,7 @@ const hermes: Comparison = {
       paragraphs: [
         'Hermes Agent is an MIT-licensed agent from Nous Research that keeps conversations, memories, and skills across sessions and writes new skills as it works. It has desktop apps for macOS and Windows, a terminal installer for Linux, and an optional hosted deployment. You bring your own model provider or buy credits through Nous Portal.',
         'Its messaging gateway is one background process, run as a launchd agent on macOS, that connects to Telegram, Discord, Slack, WhatsApp, Signal, SMS, email, iMessage through BlueBubbles or Photon, and many more apps. By default the gateway ignores anyone who is not on an allowlist or paired through a one-time code.',
-        'For WhatsApp, its docs recommend a dedicated phone number for the bot, with a self-chat mode on your own number for testing, because the bridge is unofficial, and its replies start with a “☤ Hermes Agent” header by default. For iMessage, it uses either the Apple ID signed in to Messages on an always-on Mac running BlueBubbles Server, or a line that Photon, a hosted service, assigns to the agent. In admitted groups it answers every message by default; you can require a mention instead.',
+        'For WhatsApp, its docs recommend a dedicated phone number for the bot, with a self-chat mode on your own number for testing, because the bridge is unofficial, and its replies start with a “☤ Hermes Agent” header by default. For iMessage, it uses either the Apple ID signed in to Messages on an always-on Mac running BlueBubbles Server, or a line that Photon, a hosted service, assigns to the agent. In groups you allow, it answers every message by default; you can require a mention instead.',
       ],
     },
     { heading: 'What TextButler does', paragraphs: TEXTBUTLER_WHAT_IT_DOES },
@@ -210,7 +210,7 @@ const hermes: Comparison = {
     {
       question: 'Where does each one run?',
       answer:
-        'Hermes Agent runs on your computer or a server. For iMessage it uses an always-on Mac running BlueBubbles Server with your Apple ID, or Photon, a hosted service that gives the agent its own iMessage line. TextButler runs only on your Mac, which must stay awake and signed in.',
+        'Hermes Agent runs on your computer or a server. For iMessage it uses an always-on Mac running BlueBubbles Server with your Apple ID, or Photon, a hosted service that assigns the agent an iMessage line: one from a shared pool on its free tier, or a dedicated number on its paid tier. TextButler runs only on your Mac, which must stay awake and signed in.',
     },
     {
       question: 'Do they mark AI replies?',
@@ -282,7 +282,7 @@ const metaAi: Comparison = {
   ],
   note: 'Meta AI facts come from WhatsApp’s Meta AI page.',
   chooseOther:
-    'Choose Meta AI for an assistant that is already in WhatsApp on every phone, with no setup, for questions, images, and summaries of unread messages.',
+    'Choose Meta AI for an assistant already built into WhatsApp, with no setup where it is available, for questions, images, and summaries of unread messages.',
   chooseTextButler:
     'Choose TextButler for an assistant that uses your chosen model, keeps notes you can edit for each conversation, and also works in iMessage and Beeper.',
   sections: [

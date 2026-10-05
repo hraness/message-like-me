@@ -44,8 +44,8 @@ Every comparison leads with this difference, stated fairly.
 - Each comparison URL has an admission record: reader question, sources with
   check dates, a score out of 12, the reviewer and reviewer type, and a
   reassessment date 28 to 56 days after review. A page needs at least 9 with no
-  zero to be indexable, and it shows the drafting and review note from that
-  record.
+  zero to be indexable. The review stays in the record: `STYLE.md` keeps
+  AI-drafting notes to essays and blog posts, so comparison pages show none.
 - Poke has a hub row and a hub question but no page of its own (it scored 8 of
   12, because Poke never answers your contacts). `/compare/poke` redirects to
   `/compare`.

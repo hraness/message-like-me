@@ -5,7 +5,6 @@ import {
   articleAdmissionPasses,
   articleAdmissionScore,
   articleDaysBetween,
-  articleProvenanceSentence,
   assertArticleAdmissions,
 } from '@hraness/design-kit';
 
@@ -22,7 +21,6 @@ import CompareHubPage, { metadata as hubMetadata } from '../app/compare/page.tsx
 import {
   COMPARISON_ADMISSIONS,
   comparisonAdmission,
-  comparisonProvenance,
 } from '../app/compare/_lib/comparison-admissions.ts';
 import {
   COMPARISONS,
@@ -177,13 +175,16 @@ test('every comparison URL has a valid admission record', () => {
   }
 });
 
-test('only pages that pass admission are indexable, and each shows its review note', () => {
+// STYLE.md keeps AI-drafting notes to essays and blog posts; comparison pages
+// keep their review in the record and carry no drafting note.
+test('only pages that pass admission are indexable, and none carries a drafting note', () => {
   for (const [path, Page] of Object.entries(pages)) {
     const admission = comparisonAdmission(path);
     expect(admission.lifecycle, path).toBe('indexable');
     expect(articleAdmissionPasses(admission.scores), path).toBe(true);
-    const html = renderToStaticMarkup(<Page />);
-    expect(decode(html), path).toContain(articleProvenanceSentence(comparisonProvenance(path)));
+    const html = decode(renderToStaticMarkup(<Page />));
+    expect(html, path).not.toContain('Drafted with AI');
+    expect(html, path).not.toContain(admission.review?.reviewer ?? 'no reviewer');
   }
   const poke = comparisonAdmission('/compare/poke');
   expect(poke.lifecycle).toBe('archived');

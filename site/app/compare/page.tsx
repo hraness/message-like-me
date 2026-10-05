@@ -5,7 +5,7 @@ import { SiteFooter, SiteHeader } from '../_components/site-chrome';
 import { absoluteUrl, GITHUB_URL, pageMetadata, PAGE_LAST_MODIFIED, serializeJsonLd } from '../_lib/site';
 import { socialImageAltFor } from '../_lib/social';
 import { COMPARE_BREADCRUMB, faqJsonLd, SEARCH_SITE } from '../_lib/structured-data';
-import { CheckedOn, ComparisonReview } from './_components/comparison-page';
+import { CheckedOn } from './_components/comparison-page';
 import { comparisonRobots, isIndexableComparison } from './_lib/comparison-admissions';
 import {
   HUB_CARD,
@@ -100,7 +100,6 @@ export default function ComparePage() {
             from {POKE_HUB_ENTRY.sources.map(({ href, label }) => <a href={href} key={href}>{label}</a>)}.
           </p>
           <CheckedOn />
-          <ComparisonReview path="/compare" />
 
           <h2>Comparisons</h2>
           <ul>
