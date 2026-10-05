@@ -1,7 +1,7 @@
 {
   "renderer": {
     "name": "@hraness/textmockups",
-    "version": "0.3.4"
+    "version": "0.4.0"
   },
   "browserVersion": "151.0.7922.34",
   "sourceSha256": "fe1c89e3bb6b869a6edc3256a490ce9202edce9094826bff4a14ad7184c71c0e",
@@ -10,6 +10,6 @@
   "height": 1080,
   "fps": 60,
   "sharedPhoneSha256": "7281f0043ffa7fcdfc55c8f2c9b877a1fcbb802bc43787468fe0d51919c5bfa3",
-  "filmSha256": "a4e238f464cd9696fc045635f14679e6c7ca271229f3768d400934097fa73460",
+  "filmSha256": "19662a2eb49c4170b8520f6c935a046b915be57b3be0da883cc4685af1ad325e",
   "posterSha256": "c4aae8b43dc73bceea96bd9fccd2681a1f5085ad453f698dbeef91feda56e385"
 }
