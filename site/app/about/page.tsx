@@ -7,7 +7,7 @@ export const metadata = pageMetadata({ title: 'About', description: 'Why TextBut
 const aboutJsonLd = { '@context': 'https://schema.org', '@type': 'AboutPage', name: `About ${SITE_NAME}`, url: absoluteUrl('/about'), description: SITE_DESCRIPTION, mainEntity: { '@id': `${absoluteUrl('/')}#application` }, isPartOf: { '@id': `${absoluteUrl('/')}#website` } };
 
 export default function AboutPage() {
-  return <><SiteHeader /><main className="document-page" id="main-content" tabIndex={-1}>
+  return <><SiteHeader /><main className="document-page" id="main-content" tabIndex={-1} data-hraness-landscape="page">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(aboutJsonLd) }} />
     <header className="document-hero"><h1>Why TextButler works the way it does</h1><p>{SITE_WHAT_IT_IS} It runs in the background on your Mac with no window, and your coding agent can set it up.</p><a href={GITHUB_URL}>View the source on GitHub</a></header>
     <section className="about-grid" aria-label="Product principles">

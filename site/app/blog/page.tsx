@@ -56,7 +56,7 @@ export default function BlogIndexPage() {
   return (
     <>
       <SiteHeader />
-      <main className="blog-page" id="main-content" tabIndex={-1}>
+      <main className="blog-page" id="main-content" tabIndex={-1} data-hraness-landscape="page">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }} />
         <ArticleIndex
           heading="Blog"

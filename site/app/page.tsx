@@ -145,7 +145,7 @@ export default function Home() {
       <SiteHeader />
       <main id="main-content" tabIndex={-1}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
-        <MarketingPage className="tb-page textbutler-page product-landscape">
+        <MarketingPage className="tb-page textbutler-page" landscape="page">
           <ProductHero
             backdrop={false}
             align="start"
