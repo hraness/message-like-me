@@ -71,7 +71,7 @@ export default function CompareGhostReplyPage() {
   return (
     <>
       <SiteHeader />
-      <main className="document-page" id="main-content" tabIndex={-1}>
+      <main className="document-page" id="main-content" tabIndex={-1} data-hraness-landscape="page">
         {jsonLd.map((data) => (
           <script
             dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
