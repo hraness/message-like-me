@@ -5,24 +5,30 @@ import { SiteFooter, SiteHeader } from '../_components/site-chrome';
 import { absoluteUrl, GITHUB_URL, pageMetadata, PAGE_LAST_MODIFIED, serializeJsonLd } from '../_lib/site';
 import { socialImageAltFor } from '../_lib/social';
 import { COMPARE_BREADCRUMB, faqJsonLd, SEARCH_SITE } from '../_lib/structured-data';
-import { CheckedOn } from './_components/comparison-page';
+import { CheckedOn, ComparisonReview } from './_components/comparison-page';
+import { comparisonRobots, isIndexableComparison } from './_lib/comparison-admissions';
 import {
   HUB_CARD,
   HUB_DESCRIPTION,
   HUB_ENTRIES,
   HUB_FRAMING,
+  HUB_PAGE_ENTRIES,
   HUB_QUESTIONS,
   HUB_TITLE,
+  POKE_HUB_ENTRY,
   TEXTBUTLER_HUB,
   type HubSummary,
 } from './_lib/comparisons';
 
-export const metadata = pageMetadata({
-  title: HUB_TITLE,
-  description: HUB_DESCRIPTION,
-  path: '/compare',
-  image: { path: '/compare/opengraph-image', alt: socialImageAltFor(HUB_CARD) },
-});
+export const metadata = {
+  ...pageMetadata({
+    title: HUB_TITLE,
+    description: HUB_DESCRIPTION,
+    path: '/compare',
+    image: { path: '/compare/opengraph-image', alt: socialImageAltFor(HUB_CARD) },
+  }),
+  ...comparisonRobots('/compare'),
+};
 
 const HUB_COLUMNS: readonly Readonly<{ label: string; key: keyof HubSummary }>[] = [
   { label: 'What you talk to', key: 'youTalkTo' },
@@ -30,6 +36,11 @@ const HUB_COLUMNS: readonly Readonly<{ label: string; key: keyof HubSummary }>[]
   { label: 'Runs on', key: 'runsOn' },
   { label: 'Price', key: 'price' },
   { label: 'Marks replies as AI', key: 'disclosure' },
+];
+
+const HUB_ROWS: readonly Readonly<{ name: string; hub: HubSummary; highlight: boolean; path?: string }>[] = [
+  { name: 'TextButler', hub: TEXTBUTLER_HUB, highlight: true },
+  ...HUB_ENTRIES.map(({ hub, name, path }) => ({ hub, name, highlight: false, ...(path === undefined ? {} : { path }) })),
 ];
 
 export default function ComparePage() {
@@ -40,7 +51,7 @@ export default function ComparePage() {
       description: HUB_DESCRIPTION,
       dateModified: PAGE_LAST_MODIFIED['/compare'],
       breadcrumb: COMPARE_BREADCRUMB,
-      items: HUB_ENTRIES.map(({ name, path }) => ({
+      items: HUB_PAGE_ENTRIES.filter(({ path }) => isIndexableComparison(path)).map(({ name, path }) => ({
         name: `TextButler and ${name}`,
         url: absoluteUrl(path) as `https://${string}`,
       })),
@@ -75,8 +86,8 @@ export default function ComparePage() {
                 </tr>
               </thead>
               <tbody>
-                {[{ name: 'TextButler', path: undefined, hub: TEXTBUTLER_HUB }, ...HUB_ENTRIES].map(({ hub, name, path }) => (
-                  <tr data-highlight={path === undefined ? '' : undefined} key={name}>
+                {HUB_ROWS.map(({ highlight, hub, name, path }) => (
+                  <tr data-highlight={highlight ? '' : undefined} key={name}>
                     <th scope="row">{path === undefined ? name : <Link href={path}>{name}</Link>}</th>
                     {HUB_COLUMNS.map(({ key }) => <td key={key}>{hub[key]}</td>)}
                   </tr>
@@ -84,12 +95,16 @@ export default function ComparePage() {
               </tbody>
             </table>
           </div>
-          <p className="compare-checked">Each comparison page lists the sources behind its row.</p>
+          <p className="compare-checked">
+            Each comparison page lists the sources behind its row. Poke’s row comes
+            from {POKE_HUB_ENTRY.sources.map(({ href, label }) => <a href={href} key={href}>{label}</a>)}.
+          </p>
           <CheckedOn />
+          <ComparisonReview path="/compare" />
 
           <h2>Comparisons</h2>
           <ul>
-            {HUB_ENTRIES.map(({ hubLine, name, path }) => (
+            {HUB_PAGE_ENTRIES.map(({ hubLine, name, path }) => (
               <li key={path}>
                 <Link href={path}>TextButler and {name}</Link>: {hubLine}
               </li>

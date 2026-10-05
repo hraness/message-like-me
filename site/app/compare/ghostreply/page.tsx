@@ -12,7 +12,8 @@ import {
 } from '../../_lib/site';
 import { socialImageAltFor } from '../../_lib/social';
 import { compareBreadcrumbJsonLd, comparisonWebPageJsonLd, faqJsonLd } from '../../_lib/structured-data';
-import { CheckedOn } from '../_components/comparison-page';
+import { CheckedOn, ComparisonReview } from '../_components/comparison-page';
+import { comparisonRobots } from '../_lib/comparison-admissions';
 import { GHOSTREPLY_CARD, GHOSTREPLY_HUB_ENTRY } from '../_lib/comparisons';
 
 const GHOSTREPLY_URL = GHOSTREPLY_HUB_ENTRY.officialUrl;
@@ -22,12 +23,15 @@ const GHOSTREPLY_SAFETY_URL = 'https://ghostreply.lol/is-ai-imessage-auto-reply-
 const description =
   'Compare GhostReply and TextButler by reply controls, conversation memory, AI model choices, and where message context goes.';
 
-export const metadata = pageMetadata({
-  title: 'GhostReply alternative: TextButler compared',
-  description,
-  path: '/compare/ghostreply',
-  image: { path: '/compare/ghostreply/opengraph-image', alt: socialImageAltFor(GHOSTREPLY_CARD) },
-});
+export const metadata = {
+  ...pageMetadata({
+    title: 'GhostReply alternative: TextButler compared',
+    description,
+    path: '/compare/ghostreply',
+    image: { path: '/compare/ghostreply/opengraph-image', alt: socialImageAltFor(GHOSTREPLY_CARD) },
+  }),
+  ...comparisonRobots('/compare/ghostreply'),
+};
 
 const questions = [
   {
@@ -102,6 +106,7 @@ export default function CompareGhostReplyPage() {
             note={<>TextButler Gateway usage stops at $1 a day. GhostReply includes 10 free replies before purchase. <a href="#comparison-sources">Sources</a>.</>}
           />
           <CheckedOn />
+          <ComparisonReview path="/compare/ghostreply" />
 
           <h2>Which one fits</h2>
           <p>
