@@ -9,7 +9,7 @@ import About from '../app/about/page.tsx';
 import Preview from '../app/preview/page.tsx';
 import { GET as getDiscoveryText } from '../app/llms.txt/route.ts';
 import { checkMarketingSnapshot } from '../styles/vendor/hraness-marketing/check.mjs';
-import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_STATUS } from '../app/_lib/site.ts';
+import { AGENT_SETUP_PROMPT, GETTING_STARTED_URL, GITHUB_URL, REPLY_WRITERS_SENTENCE, SITE_HEADLINE, SITE_STATUS } from '../app/_lib/site.ts';
 
 const siteRoot = resolve(import.meta.dir, '..');
 
@@ -49,7 +49,7 @@ function textBeforeRelated(html: string): string {
 test('renders TextButler with early model choices and setup', () => {
   const html = renderToStaticMarkup(<Home />);
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe('An AI butler in your messaging apps.');
+  expect(/<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1]).toBe(SITE_HEADLINE);
   for (const role of ['header', 'hero', 'section', 'flow', 'questions', 'cta', 'footer']) {
     expect(html).toContain(`data-hraness-marketing="${role}"`);
   }
