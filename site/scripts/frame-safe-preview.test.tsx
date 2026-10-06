@@ -3,13 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import nextConfig, { frameSafePreviewHeaders } from '../next.config.ts';
 import PreviewPage, { metadata } from '../app/preview/page.tsx';
-import { SITE_STATUS } from '../app/_lib/site.ts';
+import { SITE_HEADLINE, SITE_STATUS } from '../app/_lib/site.ts';
 
 test('server-renders a script-independent preview with the site status and no navigation', () => {
   const html = renderToStaticMarkup(<PreviewPage />);
 
   expect(html.match(/<h1\b/gu)).toHaveLength(1);
-  expect(html).toContain('An AI butler in your messaging apps.');
+  expect(html).toContain(SITE_HEADLINE);
   expect(html).toContain(SITE_STATUS);
   expect(html).toContain('local model through Ollama');
   expect(html).not.toContain('(in testing)');

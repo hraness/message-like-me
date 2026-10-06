@@ -13,7 +13,7 @@ export const socialSite = defineSocialImageSite({
   brand: marketing.names.name,
   brandMark: SOCIAL_BRAND_MARK_SVG,
   // The home hero headline, set whole as the home card's headline.
-  description: marketing.tagline,
+  description: marketing.hero.heading,
   domain: 'textbutler.app',
   palette: 'gruvbox',
   keepTogether: ['Claude Code'],
