@@ -13,8 +13,8 @@
     }
   },
   "sources": {
-    "bun.lock": "a0d1c39b60dcce97b07ff2b67a3f0a6967348b07951f3a63ad3a1604e812bd16",
-    "package.json": "ea3f88bcc79893c2cae022153f4157208d9a69702b660823c36d1c8dccb92b0a",
+    "bun.lock": "b501554b23d7bbff55a1b4552be15067e1ede47b8b84b779fc820310307d7756",
+    "package.json": "29863e347460938adbf311188f94801a1c5366a34be9b5fd6ccd63d7bfcf795c",
     "packages/control/src/index.ts": "9e3e3f1085c3dfa29f7fd35d694ae537aa18b12454468652a28cca76ce92276e",
     "packages/textbutler/src/cli.ts": "809bf0d67bdb66befb5e8536037df6467d05c4ce3c3c2643d616d77ccbf098d0",
     "packages/textbutler/src/contact-capabilities.ts": "6f10a826057a49fc234d791c504ef466dd5cffa3ccafd8527fd97a29e0f0d014",
