@@ -6,8 +6,6 @@
 > can edit. Reply labels are on by default and configurable per person.
 >
 > Ask your agent to set it up: https://textbutler.app
->
-> — Ben Guo
 
 ![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-light%402x.png#gh-light-mode-only)
 ![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-dark%402x.png#gh-dark-mode-only)
