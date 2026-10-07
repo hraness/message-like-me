@@ -8,3 +8,19 @@ updates:
       github-actions:
         patterns:
           - "*"
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      bun-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: bun
+    directory: /site
+    schedule:
+      interval: weekly
+    groups:
+      site-dependencies:
+        patterns:
+          - "*"
