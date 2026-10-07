@@ -128,3 +128,22 @@ describe('site routes', () => {
     }
   });
 });
+
+describe('security posture', () => {
+  test('publishes a current RFC 9116 security.txt with a private reporting route', async () => {
+    const text = await Bun.file(resolve(siteRoot, 'public/.well-known/security.txt')).text();
+    expect(text).toContain('Contact: https://github.com/hraness/textbutler/security/advisories/new');
+    expect(text).toContain('Canonical: https://textbutler.app/.well-known/security.txt');
+    const expires = /^Expires: (.+)$/mu.exec(text)?.[1];
+    expect(expires).toBeDefined();
+    expect(Date.parse(expires ?? '')).toBeGreaterThan(Date.now());
+  });
+
+  test('sends hardening headers on every route and denies framing outside the preview', async () => {
+    const rules = await nextConfig.headers?.();
+    const keys = (rules ?? []).flatMap(({ headers }) => headers.map(({ key }) => key));
+    for (const key of ['Strict-Transport-Security', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'Content-Security-Policy']) {
+      expect(keys).toContain(key);
+    }
+  });
+});

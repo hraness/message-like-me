@@ -28,7 +28,6 @@ export const frameSafePreviewHeaders = [
       "base-uri 'none'",
       "font-src 'self' data:",
       "form-action 'none'",
-      'frame-ancestors https://hraness.com https://www.hraness.com',
       "img-src 'self' data:",
       "object-src 'none'",
       "script-src 'none'",
@@ -74,9 +73,8 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: `${contentSecurityPolicy}; frame-ancestors 'none'`,
+            value: contentSecurityPolicy,
           },
-          { key: 'X-Frame-Options', value: 'DENY' },
         ],
       },
       { source: '/preview', headers: [...frameSafePreviewHeaders] },
