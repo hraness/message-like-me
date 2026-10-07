@@ -1,5 +1,12 @@
 # TextButler
 
+> 💬 TextButler is an AI butler for your messages, running on your Mac. Turn it
+> on for the iMessage, WhatsApp, or Beeper chats you choose, and it drafts or
+> sends replies from your shared history and notes on each person, in files you
+> can edit. Reply labels are on by default and configurable per person.
+>
+> Ask your agent to set it up: https://textbutler.app
+
 ![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-light%402x.png#gh-light-mode-only)
 ![AI in your messages: a friend asks “Butler, what time did Sam say?” in iMessage, and a reply marked 🤖{ } answers from what Sam wrote earlier.](site/public/launch/readme-hero-dark%402x.png#gh-dark-mode-only)
 
