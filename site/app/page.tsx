@@ -19,6 +19,7 @@ import { agentSetupTargets } from '@hraness/design-kit';
 import Link from 'next/link';
 import { Fragment } from 'react';
 
+import { FounderNote } from './_components/founder-note';
 import { AgentSetup } from './_components/landing/agent-setup';
 import { PhoneSlot } from './_components/landing/phone-slot';
 import './_components/landing/landing.css';
@@ -157,6 +158,14 @@ export default function Home() {
             headingId="textbutler-title"
             name=""
             summary={marketing.hero.summary}
+          />
+
+          <FounderNote
+            emoji="💬"
+            paragraphs={[
+              "TextButler is an AI butler for your messages, running on your Mac. Turn it on for the iMessage, WhatsApp, or Beeper chats you choose, and it drafts or sends replies using your shared history and the notes you keep on each person, all in files you can edit. Replies carry a label by default, configurable per person.",
+            ]}
+            action={{ label: "Ask your agent to set it up:", href: "https://textbutler.app" }}
           />
 
           <section aria-labelledby="status-title" className="tb-status-band" id="status">

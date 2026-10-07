@@ -246,3 +246,14 @@ test('keeps manual installation in its setup guide after the agent prompt', () =
   expect(html).not.toContain('git clone');
   expect(html.indexOf('Copy setup prompt')).toBeLessThan(html.indexOf('id="install"'));
 });
+
+test('the home page sets the founder note in a serif face below the hero', async () => {
+  const html = renderToStaticMarkup(<Home />);
+  expect(html).toContain('founder-note');
+  expect(html).toContain('Ask your agent to set it up:');
+  expect(html.indexOf('textbutler-title')).toBeLessThan(html.indexOf('founder-note'));
+  expect(html).not.toContain('Ben Guo');
+  const css = await readFile(resolve(siteRoot, 'app/globals.css'), 'utf8');
+  expect(css).toContain('"Instrument Serif"');
+  expect(css).not.toMatch(/georgia/iu);
+});
