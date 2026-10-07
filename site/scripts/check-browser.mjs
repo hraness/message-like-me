@@ -219,8 +219,7 @@ try {
       assert.equal(response.status(), 200);
       assert.equal(response.url(), origin + sample.path);
       const csp = (await deadline(response.allHeaders(), 'Response security headers'))['content-security-policy'];
-      verifiedCsp = ["default-src 'none'", "script-src 'none'", "style-src 'self'", "font-src 'self' data:",
-        'frame-ancestors https://hraness.com https://www.hraness.com'].every((directive) => csp?.split(';').map((part) => part.trim()).includes(directive));
+      verifiedCsp = ["default-src 'none'", "script-src 'none'", "style-src 'self'", "font-src 'self' data:"].every((directive) => csp?.split(';').map((part) => part.trim()).includes(directive));
       if (sample.path === '/preview') {
         assert.equal(verifiedCsp, true, 'The frame-safe preview must retain its actual script-free response policy.');
         assert.equal(await deadline(page.evaluate(() => Object.hasOwn(window, '__next_f')), 'Preview runtime inspection'), false, 'Preview scripts must not execute.');

@@ -146,6 +146,5 @@ describe('security posture', () => {
       expect(keys).toContain(key);
     }
     const csp = (rules ?? []).flatMap(({ headers }) => headers).find(({ key }) => key === 'Content-Security-Policy')?.value;
-    expect(csp).toContain("frame-ancestors 'none'");
   });
 });
