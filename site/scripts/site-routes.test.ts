@@ -145,6 +145,5 @@ describe('security posture', () => {
     for (const key of ['Strict-Transport-Security', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'Content-Security-Policy']) {
       expect(keys).toContain(key);
     }
-    const csp = (rules ?? []).flatMap(({ headers }) => headers).find(({ key }) => key === 'Content-Security-Policy')?.value;
   });
 });
